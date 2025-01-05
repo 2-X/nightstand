@@ -86,6 +86,6 @@ This project is intended to be entirely ran on an 8 sleep pod
 If you find this project helpful and would like to support its continued development, you can send a tip to my Bitcoin address.   
 
 BTC Address:
-bc1q9lufvly76gwrrlyt27hc2djywnxf2slnpfr9zx
+bc1qjapkufh65gs68v2mkvrzq2ney3vnvv87jdxxg6
 
 Thank you for your support!
