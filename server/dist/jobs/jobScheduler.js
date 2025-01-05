@@ -7,6 +7,7 @@ import settingsDB from '../db/settings.js';
 import { schedulePowerOff, schedulePowerOn } from './powerScheduler.js';
 import { scheduleTemperatures } from './temperatureScheduler.js';
 import { schedulePriming } from './primeScheduler.js';
+import config from '../config.js';
 async function setupJobs() {
     logger.info('Scheduling jobs...');
     await settingsDB.read();
@@ -31,7 +32,7 @@ async function setupJobs() {
     logger.info('Done scheduling jobs!');
 }
 // Monitor the JSON file and refresh jobs on change
-chokidar.watch('./lowdb/').on('change', () => {
+chokidar.watch(config.dbFolder).on('change', () => {
     logger.debug('Detected DB change, reloading...');
     setupJobs();
 });
