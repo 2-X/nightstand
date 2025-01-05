@@ -7,12 +7,23 @@ Installing this is not recommended if you're not comfortable with linux or progr
 
 See disclaimer and license @ LICENSE.md
 
+
 ## Is it reversible?
-As far as I can tell, it should be reversible by simply [resetting the firmware](docs/pod_teardown/10_firmware_reset.jpeg) on your device and setting it up as a new pod again. (ASSUMING you ONLY followed the instructions within this repo)
+Yes, I tested reversing it on my pod 3 by  [resetting the firmware](docs/pod_teardown/10_firmware_reset.jpeg). After the reset, setup your pod as a new pod again.
+
 
 ## Tested and confirmed compatible devices
 Check the back of your pod where you plug in the water tubes, 
 - Pod 3 - FCC ID: 2AYXT61100001
+  - *It should work on other pod 3 models with the OS on a microSD card, the steps would actually be easier since you wouldn't need the tools required below. If someone wants to give it a shot, follow the steps here to get ssh & root access https://blopker.com/writing/04-zerosleep-1/
+- Pod 4
+
+
+## Tools required
+- [TC2070-IDC ($50)](https://www.tag-connect.com/product/tc2070-idc)
+- [FTDI FT232RL ($13)](https://www.amazon.com/gp/product/B07TXVRQ7V/)
+- [Dupont wires ($7)](https://www.amazon.com/Elegoo-EL-CP-004-Multicolored-Breadboard-arduino/dp/B01EV70C78)
+- PSA - The instructions contained here are specific to mac and linux. If you have Windows, you'll have to figure that out yourself (it's do-able, I just refuse to use Windows)
 
 
 ## Known bugs
