@@ -63,4 +63,4 @@ echo "Updating device time"
 date -s "$(curl -s --head http://google.com | grep ^Date: | sed 's/Date: //g')"
 
 echo "Installation complete! The Free Sleep server is running and will start automatically on boot."
-echo "See free-sleep logs with journalctl -u free-sleep.service"
+echo "See free-sleep logs with journalctl -u free-sleep --no-pager --output=cat"

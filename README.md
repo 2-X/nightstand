@@ -26,9 +26,6 @@ Check the back of your pod where you plug in the water tubes,
 - PSA - The instructions contained here are specific to mac and linux. If you have Windows, you'll have to figure that out yourself (it's do-able, I just refuse to use Windows)
 
 
-## Known bugs
-- If you have firewall rules setup, sometimes the date gets out of sync, THIS WILL BREAK SCHEDULING. Fixing this is on my to-do list...
-
 ## Features
 - Allows complete control of device WITHOUT requiring internet access. If you lose internet, your pod WILL NOT turn off, it will continue working! You can completely block WAN internet access if you'd like too. (I blocked all internet access from my pod on my router...)
 - WARNING: This will bypass blocked devices, please use responsibly.

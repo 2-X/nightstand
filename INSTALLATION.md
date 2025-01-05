@@ -214,7 +214,7 @@ http://192.168.1.50:3000/
    2. Login as root to your device with your minicom session again and paste the output of these commands
 ```
 systemctl list-units --type=service --no-pager
-journalctl -u free-sleep.service --no-pager
+journalctl -u free-sleep --no-pager --output=cat
 ps aux
 find /home/dac/free-sleep/server -path /home/dac/free-sleep/server/node_modules -prune -o -type f -print
 which npm
@@ -225,25 +225,12 @@ iptables -L
 ```
 
 
-
-
+You can view logs with `journalctl -u free-sleep --no-pager --output=cat` 
 I will eventually add a shell script to execute to upgrade free-sleep. Feel free to create pull requests to add new features or fix bugs. Thanks! 
 
----
 
-
-### Known bugs
-- If you have firewall rules setup, sometimes the date gets out of sync, THIS WILL BREAK SCHEDULING. Fixing this is on my to-do list...
-```
-# Check your system date and time with this
-date
-
-# If it's not synced, you can fix it with (firewall rules must be off `iptables -F`)
-date -s "$(curl -s --head http://google.com | grep ^Date: | sed 's/Date: //g')"
-```
 
 ---
-
 
 ## These last steps are optional
 
@@ -263,8 +250,4 @@ This will ask for a public key, ssh access is on port 8822 (ex: `ssh root@<POD_I
 ```
 sh /home/dac/free-sleep/scripts/setup_ssh.sh
 ```
-
-
-
-
 
