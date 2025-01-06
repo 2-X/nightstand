@@ -6,12 +6,11 @@ export const TimeSchema = z.string().regex(timeRegexFormat, 'Invalid time format
 export const TemperatureSchema = z.number().int().min(55).max(110);
 export const AlarmSchema = z.object({
     time: TimeSchema,
-    vibrationIntensityStart: z.number().int().min(1).max(10),
-    vibrationIntensityEnd: z.number().int().min(1).max(10),
+    vibrationIntensity: z.number().int().min(1).max(100),
+    vibrationPattern: z.enum(['double', 'rise']),
     duration: z.number().int().positive().min(0).max(180),
     enabled: z.boolean(),
     alarmTemperature: TemperatureSchema,
-    // TODO: Add snooze
 }).strict();
 export const DailyScheduleSchema = z.object({
     temperatures: z.record(TimeSchema, TemperatureSchema),

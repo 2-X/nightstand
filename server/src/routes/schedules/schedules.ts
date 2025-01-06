@@ -1,10 +1,12 @@
 import _ from 'lodash';
 import express, { Request, Response } from 'express';
+import { partialUtil } from 'zod/lib/helpers/partialUtil';
+import DeepPartial = partialUtil.DeepPartial;
+import { Schedules } from '../../db/schedulesSchema.js';
 import logger from '../../logger.js';
-
-const router = express.Router();
-
 import schedulesDB from '../../db/schedules.js';
+
+
 import {
   DailySchedule,
   DayOfWeek,
@@ -12,9 +14,8 @@ import {
   Side,
   SideSchedule,
 } from '../../db/schedulesSchema.js';
-import { Schedules } from '../../db/schedulesSchema.js';
-import { partialUtil } from 'zod/lib/helpers/partialUtil';
-import DeepPartial = partialUtil.DeepPartial;
+
+const router = express.Router();
 
 
 router.get('/schedules', async (req: Request, res: Response) => {

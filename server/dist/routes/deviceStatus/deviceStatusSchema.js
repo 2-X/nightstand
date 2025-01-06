@@ -5,6 +5,7 @@ const SideStatusSchema = z.object({
     targetTemperatureF: z.number().min(55, { message: "Temperature must be at least 55°F" }).max(110, { message: "Temperature cannot exceed 110°F" }),
     secondsRemaining: z.number(),
     isOn: z.boolean(),
+    isAlarmVibrating: z.boolean(),
 }).strict();
 export const DeviceStatusSchema = z.object({
     left: SideStatusSchema,

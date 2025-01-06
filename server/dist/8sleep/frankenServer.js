@@ -45,7 +45,7 @@ export class Franken {
         const command = 'DEVICE_STATUS';
         const commandNumber = frankenCommands[command];
         const response = await this.sendMessage(commandNumber);
-        return loadDeviceStatus(response);
+        return await loadDeviceStatus(response);
     }
     close() {
         const socket = this.socket;

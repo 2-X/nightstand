@@ -9,6 +9,7 @@ import { schedulePowerOff, schedulePowerOn } from './powerScheduler.js';
 import { scheduleTemperatures } from './temperatureScheduler.js';
 import { schedulePriming } from './primeScheduler.js';
 import config from '../config.js';
+import { scheduleAlarm } from './alarmScheduler.js';
 
 
 async function setupJobs() {
@@ -27,22 +28,24 @@ async function setupJobs() {
 
   const schedulesData = schedulesDB.data;
   const settingsData = settingsDB.data;
+
   Object.entries(schedulesData).forEach(([side, sideSchedule]) => {
     Object.entries(sideSchedule).forEach(([day, schedule]) => {
       schedulePowerOn(settingsData, side as Side, day as DayOfWeek, schedule.power);
       schedulePowerOff(settingsData, side as Side, day as DayOfWeek, schedule.power);
-      scheduleTemperatures(settingsData, side as Side, day as DayOfWeek, schedule.temperatures)
+      scheduleTemperatures(settingsData, side as Side, day as DayOfWeek, schedule.temperatures);
+      scheduleAlarm(settingsData, side as Side, day as DayOfWeek, schedule);
     });
   });
   schedulePriming(settingsData);
 
-  logger.info('Done scheduling jobs!')
+  logger.info('Done scheduling jobs!');
 }
 
 
 // Monitor the JSON file and refresh jobs on change
 chokidar.watch(config.dbFolder).on('change', () => {
-  logger.debug('Detected DB change, reloading...')
+  logger.debug('Detected DB change, reloading...');
   setupJobs();
 });
 

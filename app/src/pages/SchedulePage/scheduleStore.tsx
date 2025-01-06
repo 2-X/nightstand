@@ -2,8 +2,8 @@ import _ from 'lodash';
 import { create } from 'zustand';
 import { DailySchedule, DayOfWeek, Schedules } from '@api/schedulesSchema.ts';
 import { DeepPartial } from 'ts-essentials';
-import { AccordionExpanded } from './SchedulingPage.types.ts';
-import { DaysSelected } from './SchedulingPage.types.ts';
+import { AccordionExpanded } from './SchedulePage.types.ts';
+import { DaysSelected } from './SchedulePage.types.ts';
 import { useAppStore } from '@state/appStore.tsx';
 
 

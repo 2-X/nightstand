@@ -32,7 +32,6 @@ export default function EndTime() {
         },
       }
     );
-    return isValid;
   };
 
   const disabled = !selectedSchedule?.power.enabled || isUpdating;

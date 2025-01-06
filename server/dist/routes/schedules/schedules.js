@@ -1,9 +1,9 @@
 import _ from 'lodash';
 import express from 'express';
 import logger from '../../logger.js';
-const router = express.Router();
 import schedulesDB from '../../db/schedules.js';
 import { SchedulesSchema, } from '../../db/schedulesSchema.js';
+const router = express.Router();
 router.get('/schedules', async (req, res) => {
     await schedulesDB.read();
     res.json(schedulesDB.data);

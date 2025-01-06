@@ -17,9 +17,9 @@ export const schedulePowerOn = (settingsData: Settings, side: Side, day: DayOfWe
   onRule.hour = onHour;
   onRule.minute = onMinute;
   onRule.tz = settingsData.timeZone;
-  logger.debug(`Scheduling power on for ${side} on ${day} at ${power.on} at ${power.onTemperature}°F`);
+  logger.debug(`Scheduling power on for ${side} side on ${day} at ${power.on} at ${power.onTemperature}°F`);
   schedule.scheduleJob(`${side}-${day}-power-on`, onRule, async () => {
-    logger.info(`Executing scheduled power on job for ${side} on ${day} at ${power.on} at ${power.onTemperature}°F`);
+    logger.info(`Executing scheduled power on job for ${side} side on ${day} at ${power.on} at ${power.onTemperature}°F`);
     await updateDeviceStatus({
       [side]: {
         isOn: true,
@@ -51,9 +51,9 @@ export const schedulePowerOff = (settingsData: Settings, side: Side, day: DayOfW
   offRule.hour = offHour;
   offRule.minute = offMinute;
   offRule.tz = settingsData.timeZone;
-  logger.debug(`Scheduling power off job for ${side} on ${day} at ${power.off}`);
+  logger.debug(`Scheduling power off job for ${side} side on ${day} at ${power.off}`);
   schedule.scheduleJob(`${side}-${day}-power-off`, offRule, async () => {
-    logger.info(`Executing scheduled power off job for ${side} on ${day} at ${power.off}`);
+    logger.info(`Executing scheduled power off job for ${side} side on ${day} at ${power.off}`);
     await updateDeviceStatus({
       [side]: {
         isOn: false,

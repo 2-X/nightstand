@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { DeviceStatus } from '../routes/deviceStatus/deviceStatusSchema.js';
 import logger from '../logger.js';
+import memoryDB from '../db/memoryDB.js';
 
 const RawDeviceData = z.object({
   tgHeatLevelR: z.string().regex(/^-?\d+$/, { message: 'tgHeatLevelR must be a numeric value in a string' }),
@@ -49,10 +50,11 @@ const calculateTempInF = (value: string): number => {
 };
 
 // The default naming convention was ugly... This remaps the keys to human-readable names
-export function loadDeviceStatus(response: string): DeviceStatus {
+export async function loadDeviceStatus(response: string): Promise<DeviceStatus> {
   const rawDeviceData = parseRawDeviceData(response);
   const leftSideSecondsRemaining = Number(rawDeviceData.heatTimeL);
   const rightSideSecondsRemaining = Number(rawDeviceData.heatTimeR);
+  await memoryDB.read();
 
   return {
     left: {
@@ -60,12 +62,14 @@ export function loadDeviceStatus(response: string): DeviceStatus {
       targetTemperatureF: calculateTempInF(rawDeviceData.tgHeatLevelL),
       secondsRemaining: leftSideSecondsRemaining,
       isOn: leftSideSecondsRemaining > 0,
+      isAlarmVibrating: memoryDB.data.left.isAlarmVibrating,
     },
     right: {
       currentTemperatureF: calculateTempInF(rawDeviceData.heatLevelR),
       targetTemperatureF: calculateTempInF(rawDeviceData.tgHeatLevelR),
       secondsRemaining: rightSideSecondsRemaining,
       isOn: rightSideSecondsRemaining > 0,
+      isAlarmVibrating: memoryDB.data.right.isAlarmVibrating,
     },
     sensorLabel: rawDeviceData.sensorLabel,
     waterLevel: rawDeviceData.waterLevel,

@@ -18,6 +18,7 @@ import ApplyToOtherDaysAccordion from './ApplyToOtherDaysAccordion.tsx';
 import TemperatureAdjustmentsAccordion from './TemperatureAdjustmentsAccordion.tsx';
 import { useAppStore } from '@state/appStore.tsx';
 import { postSchedules } from '@api/schedules';
+import AlarmAccordion from './AlarmAccordion.tsx';
 
 
 export default function SchedulePage() {
@@ -78,6 +79,7 @@ export default function SchedulePage() {
         selectedSchedule?.power.enabled && (
           <>
             <TemperatureAdjustmentsAccordion/>
+            <AlarmAccordion />
             <ApplyToOtherDaysAccordion/>
           </>
         )

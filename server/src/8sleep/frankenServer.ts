@@ -2,7 +2,7 @@ import { Socket } from 'net';
 
 import { SequentialQueue } from './sequentialQueue.js';
 import { MessageStream } from './messageStream.js';
-import { PromiseStreams, PromiseWriteStream, PromiseStream } from './promiseStream.js';
+import { PromiseStream, PromiseStreams, PromiseWriteStream } from './promiseStream.js';
 import { FrankenCommand, frankenCommands } from './deviceApi.js';
 
 import { UnixSocketServer } from './unixSocketServer.js';
@@ -59,7 +59,7 @@ export class Franken {
     const command: FrankenCommand = 'DEVICE_STATUS';
     const commandNumber = frankenCommands[command];
     const response = await this.sendMessage(commandNumber);
-    return loadDeviceStatus(response);
+    return await loadDeviceStatus(response);
   }
 
   public close() {

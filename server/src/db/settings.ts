@@ -1,3 +1,4 @@
+import _ from 'lodash';
 import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
 
@@ -22,6 +23,8 @@ const defaultData: Settings = {
 const file = new JSONFile<Settings>(`${config.dbFolder}settingsDB.json`);
 const settingsDB = new Low<Settings>(file, defaultData);
 await settingsDB.read();
+// Allows us to add default values to the settings if users have existing settingsDB.json data
+settingsDB.data = _.merge({}, defaultData, settingsDB.data);
 await settingsDB.write();
 
 export default settingsDB;

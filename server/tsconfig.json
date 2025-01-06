@@ -9,6 +9,7 @@
     "baseUrl": ".",
     "rootDir": "./src",
     "outDir": "./dist",
+    "skipLibCheck": true
   },
   "ts-node": {
     "esm": true,

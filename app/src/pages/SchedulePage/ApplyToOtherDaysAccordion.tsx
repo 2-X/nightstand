@@ -1,6 +1,6 @@
 import { Accordion, AccordionSummary, Box, Checkbox, FormControlLabel, FormGroup, Typography } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { AccordionExpanded } from './SchedulingPage.types.ts';
+import { AccordionExpanded } from './SchedulePage.types.ts';
 import { DayOfWeek } from '@api/schedulesSchema.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { useScheduleStore } from './scheduleStore';

@@ -3,13 +3,13 @@ import { getFranken } from '../../8sleep/frankenServer.js';
 import { DeviceStatusSchema } from './deviceStatusSchema.js';
 import logger from '../../logger.js';
 import { updateDeviceStatus } from './updateDeviceStatus.js';
+import memoryDB from '../../db/memoryDB.js';
 
 const router = express.Router();
 
 router.get('/deviceStatus', async (req: Request, res: Response) => {
   const franken = await getFranken();
   const resp = await franken.getDeviceStatus();
-
   res.json(resp);
 });
 

@@ -1,6 +1,7 @@
 import { executeFunction } from '../../8sleep/deviceApi.js';
 import logger from '../../logger.js';
 import settingsDB from '../../db/settings.js';
+import memoryDB from '../../db/memoryDB.js';
 const calculateLevelFromF = (temperatureF) => {
     const level = (temperatureF - 82.5) / 27.5 * 100;
     return Math.round(level).toString();
@@ -11,7 +12,7 @@ const updateSide = async (side, sideStatus) => {
     const controlBothSides = settings.left.awayMode || settings.right.awayMode;
     const updateLeft = side === 'left' || controlBothSides;
     const updateRight = side === 'right' || controlBothSides;
-    const { isOn, targetTemperatureF, secondsRemaining } = sideStatus;
+    const { isOn, targetTemperatureF, secondsRemaining, isAlarmVibrating } = sideStatus;
     if (controlBothSides) {
         logger.debug('One side is in away mode, updating both sides...');
     }
@@ -35,6 +36,14 @@ const updateSide = async (side, sideStatus) => {
             await executeFunction('LEFT_TEMP_DURATION', seconds);
         if (updateRight)
             await executeFunction('RIGHT_TEMP_DURATION', seconds);
+    }
+    if (isAlarmVibrating !== undefined) {
+        logger.debug('Can only set isAlarmVibrating to false for now...');
+        if (!isAlarmVibrating)
+            await executeFunction('ALARM_CLEAR', "empty");
+        await memoryDB.read();
+        memoryDB.data[side].isAlarmVibrating = false;
+        await memoryDB.write();
     }
 };
 export const updateDeviceStatus = async (deviceStatus) => {

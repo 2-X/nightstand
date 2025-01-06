@@ -8,6 +8,7 @@ import { schedulePowerOff, schedulePowerOn } from './powerScheduler.js';
 import { scheduleTemperatures } from './temperatureScheduler.js';
 import { schedulePriming } from './primeScheduler.js';
 import config from '../config.js';
+import { scheduleAlarm } from './alarmScheduler.js';
 async function setupJobs() {
     logger.info('Scheduling jobs...');
     await settingsDB.read();
@@ -26,6 +27,7 @@ async function setupJobs() {
             schedulePowerOn(settingsData, side, day, schedule.power);
             schedulePowerOff(settingsData, side, day, schedule.power);
             scheduleTemperatures(settingsData, side, day, schedule.temperatures);
+            scheduleAlarm(settingsData, side, day, schedule);
         });
     });
     schedulePriming(settingsData);
