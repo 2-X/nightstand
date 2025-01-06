@@ -34,7 +34,7 @@ Check the back of your pod where you plug in the water tubes,
   - Set power on/off times 
   - Schedule temperature adjustments.
   - Schedule daily time to prime the pod
-  - Alarms (WORK IN PROGRESS)
+  - Alarms
 - Settings customization: Configure timezones, away mode
 - Responsive design for desktop and mobile.
 
@@ -78,7 +78,6 @@ This project is intended to be entirely ran on an 8 sleep pod
 ![Behavior](docs/free_sleep.gif)
 
 ## Future planned work
-- Adding support for alarms and scheduling
 - Making the UI "prettier"
 - Identifying sources for advanced metrics (HRV, heart rate, snoring)
 

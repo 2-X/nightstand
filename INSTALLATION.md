@@ -11,7 +11,14 @@
 3. Set up the pod as a new pod in the app
 
 ## Setup
-Follow the images in [docs/pod_teardown](docs/pod_teardown) to take apart your pod & setup the JTAG connection. For pod 4, the way to take apart the pod is a little different. Will have instructions for that later
+
+### For the pod 4
+Just take off the front grill cover of the pod, you should be able to access the circuit board directly there. Once you get that off, skip to image 6 here [docs/pod_teardown/6_connecting_tag.jpeg](docs/pod_teardown/6_connecting_tag.jpeg)
+
+
+### For the pod 3
+Follow the images in [docs/pod_teardown](docs/pod_teardown) to take apart your pod & setup the JTAG connection. 
+
 
 
 ---
