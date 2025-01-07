@@ -19,13 +19,6 @@ Check the back of your pod where you plug in the water tubes,
 - Pod 4
 
 
-## Tools required
-- [TC2070-IDC ($50)](https://www.tag-connect.com/product/tc2070-idc)
-- [FTDI FT232RL ($13)](https://www.amazon.com/gp/product/B07TXVRQ7V/)
-- [Dupont wires ($7)](https://www.amazon.com/Elegoo-EL-CP-004-Multicolored-Breadboard-arduino/dp/B01EV70C78)
-- PSA - The instructions contained here are specific to mac and linux. If you have Windows, you'll have to figure that out yourself (it's do-able, I just refuse to use Windows)
-
-
 ## Features
 - Allows complete control of device WITHOUT requiring internet access. If you lose internet, your pod WILL NOT turn off, it will continue working! You can completely block WAN internet access if you'd like too. (I blocked all internet access from my pod on my router...)
 - WARNING: This will bypass blocked devices, please use responsibly.
