@@ -1,30 +1,36 @@
 # REQUIREMENTS
+
 ## Compatability
 - Pod 3 - FCC ID: 2AYXT61100001 (The FCC ID is located in the back of the pod where you plug in the water tubes)
-
 - Pod 4
 
 
-## What to do if you want to undo everything and go back to the eight sleep app
+## Tools required
+- [TC2070-IDC ($50)](https://www.tag-connect.com/product/tc2070-idc)
+- [FTDI FT232RL ($13)](https://www.amazon.com/gp/product/B07TXVRQ7V/)
+- [Dupont wires ($7)](https://www.amazon.com/Elegoo-EL-CP-004-Multicolored-Breadboard-arduino/dp/B01EV70C78)
+- PSA - The instructions contained here are specific to mac and linux. If you have Windows, you'll have to figure that out yourself (it's do-able, I just refuse to use Windows)
+
+---
+
+## How to revert changes and go back to using your Eight Sleep through their app
 1. If you already had your pod added to your 8 sleep account in your app, go to your 8 sleep app and manage your pod, remove the pod from your account
 2. [Reset the firmware again as you did here](docs/pod_teardown/10_firmware_reset.jpeg)
 3. Set up the pod as a new pod in the app
 
 ## Setup
 
-### For the pod 4
+### For the Pod 4
 Just take off the front grill cover of the pod, you should be able to access the circuit board directly there. Once you get that off, skip to image 6 here [docs/pod_teardown/6_connecting_tag.jpeg](docs/pod_teardown/6_connecting_tag.jpeg)
 
 
-### For the pod 3
-Follow the images in [docs/pod_teardown](docs/pod_teardown) to take apart your pod & setup the JTAG connection. 
-
-
+### For the Pod 3
+Follow the images in [docs/pod_teardown](docs/pod_teardown) to take apart your pod & set up the JTAG connection.
 
 ---
 
 ### 1. Connect to device
-- Your pod should be unplugged at this point. It doesn't not need a connection to the cover or power at this point.
+- Your pod should be unplugged at this point. It doesn't need a connection to the cover or power at this point.
 - Connect your FTDI FT232RL to your computer 
 - Your FTDI FT232RL should be connected to the tag connect cable. See the following images:
   - [8_tx_and_rx.jpeg](docs/pod_teardown/8_tx_and_rx.jpeg)
@@ -36,11 +42,11 @@ Follow the images in [docs/pod_teardown](docs/pod_teardown) to take apart your p
 
 ### 2. Get the minicom session ready on your computer
 - The baud rate is 921600
-- If for some reason you're using a different device, you'll need to figure that out yourself
+- Run `ls /dev/tty*`, you should see your FT232RL listed under something like `tty.usbserial-B0010NHK`
 ```
 minicom -b 921600 -o -D /dev/tty.usbserial-B0010NHK
 ```
-- You should see this screen (at least on mac), if you don't run `ls /dev/tty*`, your device might be under something else
+- You should see this screen (at least on Mac), if you don't run `ls /dev/tty*`, your device might be under something else
 
 ![docs/installation/0_minicom.png](docs/installation/0_minicom.png)
 
@@ -164,7 +170,7 @@ nmcli connection reload
 
 
 ### 12. THIS STEP IS FOR POD 4 USERS ONLY! POD 3 USERS SKIP THIS STEP
-Your firmware uses a different dac.sock path location, all you need to do is run this command. This tell the free-sleep app where to establish a dac.sock connection
+Your firmware has a different `dac.sock` path location, all you need to do is run this command. This tell the free-sleep app where to establish a dac.sock connection
 ```
 echo '/home/dac/app/sewer/dac.sock' > /home/dac/dac_sock_path.txt
 ```
@@ -172,7 +178,7 @@ echo '/home/dac/app/sewer/dac.sock' > /home/dac/dac_sock_path.txt
 ---
 
 
-### 13. Install the free-sleep app, this will setup a systemctl service that auto runs on boot
+### 13. Install the free-sleep app, this will set up a systemctl service that auto runs on boot
 ```
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/throwaway31265/free-sleep/main/scripts/install.sh)"
 ```
@@ -180,7 +186,7 @@ echo '/home/dac/app/sewer/dac.sock' > /home/dac/dac_sock_path.txt
 ---
 
 
-### 14. Get your pods IP address
+### 14. Get your pod's IP address
 
 ```
 # Yours will be different, that's okay
@@ -191,7 +197,7 @@ nmcli -g ip4.address device show wlan0
 ---
 
 
-### 15. With a device connected to the SAME Wi-Fi network you setup in step 11, navigate to your pod's IP address (port 3000)
+### 15. With a device connected to the SAME Wi-Fi network you set up in step 11, navigate to your pod's IP address (port 3000)
 
 SET YOUR TIME ZONE, OR ELSE SCHEDULING WILL NOT WORK! This can be done on the settings page of the web app. See screenshot below
 
@@ -217,7 +223,7 @@ http://192.168.1.50:3000/
 5. Physically verify the temps change (lay on the cover, use a thermometer, whatever)
 6. If the temps change, you're all set! 
 7. If it's not working
-   1. Create an issue in github with the output from your minicom session
+   1. Create an issue in GitHub with the output from your minicom session
    2. Login as root to your device with your minicom session again and paste the output of these commands
 ```
 systemctl list-units --type=service --no-pager
