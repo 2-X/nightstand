@@ -66,24 +66,28 @@ The server exposes RESTful endpoints for interaction:
 **GET**:
 - Description: Retrieves the current status of the device.
 - Sample Response:
+
 ```json
 {
   "left": {
     "currentTemperatureF": 83,
     "targetTemperatureF": 90,
     "secondsRemaining": 300,
+    "isAlarmVibrating": true,
     "isOn": true
   },
   "right": {
     "currentTemperatureF": 83,
     "targetTemperatureF": 92,
     "secondsRemaining": 400,
+    "isAlarmVibrating": false,
     "isOn": true
   },
   "waterLevel": "true",
   "isPriming": false,
   // I'm unsure what these 2 things below are for, but these come from the device itself
   "sensorLabel": "\"00000-0000-000-00000\"",
+  // This is the light settings, encoded in CBOR format (see the ninesleep repo for more details)
   "settings": "<>"
 }
 ```
@@ -182,8 +186,8 @@ The server exposes RESTful endpoints for interaction:
       },
       "alarm": {
         "time": "08:00",
-        "vibrationIntensityStart": 1,
-        "vibrationIntensityEnd": 5,
+        "vibrationIntensity": 1,
+        "vibrationPattern": "rise",
         "duration": 10,
         "enabled": true,
         "alarmTemperature": 78
