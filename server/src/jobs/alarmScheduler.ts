@@ -28,14 +28,14 @@ export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek
     alarmRule.dayOfWeek = getDayOfWeekIndex(day) + 1;
   }
 
-  const [alarmHour, alarmMinute] = dailySchedule.alarm.time.split(':').map(Number);
+  const { time } = dailySchedule.alarm;
+  const [alarmHour, alarmMinute] = time.split(':').map(Number);
   alarmRule.hour = alarmHour;
   alarmRule.minute = alarmMinute;
   alarmRule.tz = settingsData.timeZone;
-
   logger.debug(`Scheduling alarm job for ${side} side on ${day} at ${dailySchedule.alarm.time}`);
 
-  schedule.scheduleJob(`${side}-${day}-alarm`, alarmRule, async () => {
+  schedule.scheduleJob(`${side}-${day}-${time}-alarm`, alarmRule, async () => {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const currentTime = moment.tz(settingsData.timeZone!);
     const alarmTimeEpoch = currentTime.unix();

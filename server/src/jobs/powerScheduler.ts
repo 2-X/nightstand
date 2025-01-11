@@ -14,11 +14,13 @@ export const schedulePowerOn = (settingsData: Settings, side: Side, day: DayOfWe
   const onRule = new schedule.RecurrenceRule();
   onRule.dayOfWeek = getDayOfWeekIndex(day);
   const [onHour, onMinute] = power.on.split(':').map(Number);
+  const time =  power.on;
   onRule.hour = onHour;
   onRule.minute = onMinute;
   onRule.tz = settingsData.timeZone;
+
   logger.debug(`Scheduling power on for ${side} side on ${day} at ${power.on} at ${power.onTemperature}°F`);
-  schedule.scheduleJob(`${side}-${day}-power-on`, onRule, async () => {
+  schedule.scheduleJob(`${side}-${day}-${time}-power-on`, onRule, async () => {
     logger.info(`Executing scheduled power on job for ${side} side on ${day} at ${power.on} at ${power.onTemperature}°F`);
     await updateDeviceStatus({
       [side]: {
@@ -46,13 +48,13 @@ export const schedulePowerOff = (settingsData: Settings, side: Side, day: DayOfW
   } else {
     offRule.dayOfWeek = getDayOfWeekIndex(day) + 1;
   }
-
-  const [offHour, offMinute] = power.off.split(':').map(Number);
+  const time = power.off;
+  const [offHour, offMinute] = time.split(':').map(Number);
   offRule.hour = offHour;
   offRule.minute = offMinute;
   offRule.tz = settingsData.timeZone;
   logger.debug(`Scheduling power off job for ${side} side on ${day} at ${power.off}`);
-  schedule.scheduleJob(`${side}-${day}-power-off`, offRule, async () => {
+  schedule.scheduleJob(`${side}-${day}-${time}-power-off`, offRule, async () => {
     logger.info(`Executing scheduled power off job for ${side} side on ${day} at ${power.off}`);
     await updateDeviceStatus({
       [side]: {

@@ -1,4 +1,5 @@
 import express from 'express';
+import schedule from 'node-schedule';
 import logger from './logger.js';
 import { getFranken, getFrankenServer } from './8sleep/frankenServer.js';
 import './jobs/jobScheduler.js';
@@ -29,6 +30,7 @@ async function gracefulShutdown(signal) {
         logger.error({ error });
         process.exit(1);
     }, 10000);
+    await schedule.gracefulShutdown();
     // If we already got Franken instances, close them
     try {
         if (server) {

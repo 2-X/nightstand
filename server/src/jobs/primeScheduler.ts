@@ -9,12 +9,14 @@ export const schedulePriming = (settingsData: Settings) => {
   if (timeZone === null) return;
   if (!primePodDaily.enabled) return;
   const dailyRule = new schedule.RecurrenceRule();
-  const [onHour, onMinute] = primePodDaily.time.split(':').map(Number);
+  const { time } = primePodDaily;
+  const [onHour, onMinute] = time.split(':').map(Number);
   dailyRule.hour = onHour;
   dailyRule.minute = onMinute;
   dailyRule.tz = timeZone;
+
   logger.debug(`Scheduling daily prime job at ${primePodDaily.time}`);
-  schedule.scheduleJob(`daily-priming`, dailyRule, async () => {
+  schedule.scheduleJob(`daily-priming-${time}`, dailyRule, async () => {
     logger.info(`Executing scheduled prime job`);
     await updateDeviceStatus({ isPriming: true });
   });

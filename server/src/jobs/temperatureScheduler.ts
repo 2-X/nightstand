@@ -17,7 +17,7 @@ const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time
   onRule.tz = timeZone;
 
   logger.debug(`Scheduling temperature adjustment job for ${side} side on ${day} at ${time} at ${temperature}°F`);
-  schedule.scheduleJob(`${side}-${day}-temperature-adjustment`, onRule, async () => {
+  schedule.scheduleJob(`${side}-${day}-${time}-${temperature}-temperature-adjustment`, onRule, async () => {
     logger.info(`Executing scheduled temperature adjustment job for ${side} side on ${day} at ${time} at ${temperature}°F`);
     await updateDeviceStatus({
       [side]: {

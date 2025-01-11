@@ -14,17 +14,18 @@ import { scheduleAlarm } from './alarmScheduler.js';
 
 async function setupJobs() {
   logger.info('Scheduling jobs...');
+
+  // Clear existing jobs
+  logger.info('Canceling old jobs...');
+  Object.keys(schedule.scheduledJobs).forEach((jobName) => {
+    logger.debug(`Canceled job: ${jobName}`);
+    schedule.cancelJob(jobName);
+  });
+
   await settingsDB.read();
   await schedulesDB.read();
 
   moment.tz.setDefault(settingsDB.data.timeZone || 'UTC');
-
-  // Clear existing jobs
-  Object.keys(schedule.scheduledJobs).forEach((jobName) => {
-    logger.info('Canceling old jobs...');
-    logger.debug(`Canceled job: ${jobName}`);
-    schedule.cancelJob(jobName);
-  });
 
   const schedulesData = schedulesDB.data;
   const settingsData = settingsDB.data;
