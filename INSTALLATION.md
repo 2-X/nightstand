@@ -15,7 +15,7 @@
 
 ## How to revert changes and go back to using your Eight Sleep through their app
 1. If you already had your pod added to your 8 sleep account in your app, go to your 8 sleep app and manage your pod, remove the pod from your account
-2. Just reset the firmware
+2. Reset the firmware
     1. [Pod 3](docs/pod_3_teardown/6_firmware_reset.jpeg)
     1. [Pod 4](docs/pod_4_teardown/3_reset_firmware.png)
 3. Set up the pod as a new pod in the app
