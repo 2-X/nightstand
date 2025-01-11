@@ -9,7 +9,7 @@ See disclaimer and license @ LICENSE.md
 
 
 ## Is it reversible?
-Yes, I tested reversing it on my pod 3 by  [resetting the firmware](docs/pod_3_teardown/10_firmware_reset.jpeg). After the reset, setup your pod as a new pod again.
+Yes, I tested reversing it on my pod 3 by  [resetting the firmware](docs/pod_3_teardown/6_firmware_reset.jpeg). After the reset, setup your pod as a new pod again.
 
 
 ## Tested and confirmed compatible devices
@@ -21,21 +21,20 @@ Check the back of your pod where you plug in the water tubes,
 
 ## Features
 - Allows complete control of device WITHOUT requiring internet access. If you lose internet, your pod WILL NOT turn off, it will continue working! You can completely block WAN internet access if you'd like too. (I blocked all internet access from my pod on my router...)
-- WARNING: This will bypass blocked devices, please use responsibly.
-- Dynamic temperature control with real-time updates.
+- WARNING: This will bypass blocked devices, please use responsibly
+- Dynamic temperature control with real-time updates
 - Schedule management: 
   - Set power on/off times 
-  - Schedule temperature adjustments.
+  - Schedule temperature adjustments
   - Schedule daily time to prime the pod
   - Alarms
-- Settings customization: Configure timezones, away mode
-- Responsive design for desktop and mobile.
+- Settings customization: Configure timezones, away mode, brightness of LED on pod
+- Website works on desktop and mobile
 
 ## Limitations
 - Requires your device to be on the same Wi-Fi as the pod
 - No authentication is implemented
-- Does not have sleep statistics available (like HRV, hear rate, REM time, snore time, etc.)
-  - (I'm happy to take a look at adding that if someone can help find where that's stored)
+- Does not have sleep statistics available (HRV, hear rate, REM time, snore time, etc.), this is a WIP
 
 --- 
 
