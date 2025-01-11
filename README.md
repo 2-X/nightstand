@@ -9,7 +9,7 @@ See disclaimer and license @ LICENSE.md
 
 
 ## Is it reversible?
-Yes, I tested reversing it on my pod 3 by  [resetting the firmware](docs/pod_teardown/10_firmware_reset.jpeg). After the reset, setup your pod as a new pod again.
+Yes, I tested reversing it on my pod 3 by  [resetting the firmware](docs/pod_3_teardown/10_firmware_reset.jpeg). After the reset, setup your pod as a new pod again.
 
 
 ## Tested and confirmed compatible devices

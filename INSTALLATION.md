@@ -15,28 +15,30 @@
 
 ## How to revert changes and go back to using your Eight Sleep through their app
 1. If you already had your pod added to your 8 sleep account in your app, go to your 8 sleep app and manage your pod, remove the pod from your account
-2. [Reset the firmware again as you did here](docs/pod_teardown/10_firmware_reset.jpeg)
+2. Just reset the firmware
+    1. [Pod 3](docs/pod_3_teardown/6_firmware_reset.jpeg)
+    1. [Pod 4](docs/pod_4_teardown/3_reset_firmware.png)
 3. Set up the pod as a new pod in the app
 
 ## Setup
 
-### For the Pod 4
-Just take off the front grill cover of the pod, you should be able to access the circuit board directly there. Once you get that off, skip to image 6 here [docs/pod_teardown/6_connecting_tag.jpeg](docs/pod_teardown/6_connecting_tag.jpeg)
-
-
-### For the Pod 3
-Follow the images in [docs/pod_teardown](docs/pod_teardown) to take apart your pod & set up the JTAG connection.
+1. Reset the firmware for your device
+    1. [Pod 3](docs/pod_3_teardown/6_firmware_reset.jpeg)
+    1. [Pod 4](docs/pod_4_teardown/3_reset_firmware.png)
+1. Follow the steps to teardown your device and get access to the circuit board
+   1. [Pod 3](docs/pod_3_teardown) 
+   1. [Pod 4](docs/pod_4_teardown)
 
 ---
 
 ### 1. Connect to device
-- Your pod should be unplugged at this point. It doesn't need a connection to the cover or power at this point.
-- Connect your FTDI FT232RL to your computer 
-- Your FTDI FT232RL should be connected to the tag connect cable. See the following images:
-  - [8_tx_and_rx.jpeg](docs/pod_teardown/8_tx_and_rx.jpeg)
-  - [9_module_connection.png](docs/pod_teardown/9_module_connection.png) 
-  - [docs/pod_teardown/11_pod_3_board_connection.jpeg](docs/pod_teardown/11_pod_3_board_connection.jpeg)
 
+1. Your pod should be unplugged at this point. It doesn't need a connection to the mattress cover OR power at this point
+1. Using dupont wires, connect your tag-connect cable to your FTDI FT232RL following the images in [docs/jtag/](docs/jtag/)
+1. Connect your tag-connect cable to the circuit board 
+   1. [Pod 3](docs/pod_3_teardown/7_pod_3_board_connection.jpeg)
+   1. [Pod 4](docs/pod_4_teardown/2_circuit_board.png)
+1. Connect your FTDI FT232RL to your computer 
 
 ---
 

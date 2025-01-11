@@ -12,7 +12,7 @@ export const frankenCommands = {
   ALARM_LEFT: '5',
   ALARM_RIGHT: '6',
   // FORMAT: '7',
-  // SET_SETTINGS: '8',
+  SET_SETTINGS: '8',
   LEFT_TEMP_DURATION: '9',
   RIGHT_TEMP_DURATION: '10',
   TEMP_LEVEL_LEFT: '11',

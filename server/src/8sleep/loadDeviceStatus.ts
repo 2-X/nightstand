@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { DeviceStatus } from '../routes/deviceStatus/deviceStatusSchema.js';
 import logger from '../logger.js';
 import memoryDB from '../db/memoryDB.js';
+import cbor from 'cbor';
+import _ from 'lodash';
 
 const RawDeviceData = z.object({
   tgHeatLevelR: z.string().regex(/^-?\d+$/, { message: 'tgHeatLevelR must be a numeric value in a string' }),
@@ -49,6 +51,23 @@ const calculateTempInF = (value: string): number => {
   }
 };
 
+export const SETTINGS_KEY_MAPPING = {
+  gl: 'gainLeft',
+  gr: 'gainRight',
+  lb: 'ledBrightness',
+};
+
+export const INVERTED_SETTINGS_KEY_MAPPING = _.invert(SETTINGS_KEY_MAPPING);
+const decodeSettings = (rawSettings: string): DeviceStatus['settings'] => {
+  // Convert hex string to a buffer
+  const cborBuffer = Buffer.from(rawSettings.replace(/"/g, ''), 'hex');
+  const decoded = cbor.decode(cborBuffer);
+  // @ts-ignore
+  const renamedDecoded = _.mapKeys(decoded, (value, key) => SETTINGS_KEY_MAPPING[key] || key);
+  return renamedDecoded as DeviceStatus['settings'];
+}
+
+
 // The default naming convention was ugly... This remaps the keys to human-readable names
 export async function loadDeviceStatus(response: string): Promise<DeviceStatus> {
   const rawDeviceData = parseRawDeviceData(response);
@@ -74,6 +93,6 @@ export async function loadDeviceStatus(response: string): Promise<DeviceStatus> 
     sensorLabel: rawDeviceData.sensorLabel,
     waterLevel: rawDeviceData.waterLevel,
     isPriming: rawDeviceData.priming === 'true',
-    settings: rawDeviceData.settings,
+    settings: decodeSettings(rawDeviceData.settings),
   };
 }

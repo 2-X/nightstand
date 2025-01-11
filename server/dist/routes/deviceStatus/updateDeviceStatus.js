@@ -1,7 +1,10 @@
+import _ from 'lodash';
+import cbor from 'cbor';
 import { executeFunction } from '../../8sleep/deviceApi.js';
 import logger from '../../logger.js';
 import settingsDB from '../../db/settings.js';
 import memoryDB from '../../db/memoryDB.js';
+import { INVERTED_SETTINGS_KEY_MAPPING } from '../../8sleep/loadDeviceStatus.js';
 const calculateLevelFromF = (temperatureF) => {
     const level = (temperatureF - 82.5) / 27.5 * 100;
     return Math.round(level).toString();
@@ -46,6 +49,13 @@ const updateSide = async (side, sideStatus) => {
         await memoryDB.write();
     }
 };
+const updateSettings = async (settings) => {
+    // @ts-ignore
+    const renamedSettings = _.mapKeys(settings, (value, key) => INVERTED_SETTINGS_KEY_MAPPING[key] || key);
+    const encodedBuffer = cbor.encode(renamedSettings);
+    const hexString = encodedBuffer.toString('hex');
+    await executeFunction('SET_SETTINGS', hexString);
+};
 export const updateDeviceStatus = async (deviceStatus) => {
     logger.info(`Updating deviceStatus...`);
     if (deviceStatus.isPriming)
@@ -54,5 +64,7 @@ export const updateDeviceStatus = async (deviceStatus) => {
         await updateSide('left', deviceStatus.left);
     if (deviceStatus?.right)
         await updateSide('right', deviceStatus.right);
+    if (deviceStatus?.settings)
+        await updateSettings(deviceStatus.settings);
     logger.info('Finished updating device status');
 };

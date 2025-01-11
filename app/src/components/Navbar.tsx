@@ -11,25 +11,27 @@ import ScheduleIcon from '@mui/icons-material/Schedule';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppStore, Side } from '@state/appStore.tsx';
+import { useTheme } from '@mui/material/styles';
 
 type Page = {
   title: string;
   route: string;
   icon: React.ReactElement;
-  side: Side;
+  side: Side | undefined;
 };
 
 const pages: Page[] = [
-  { title: 'Left Side', route: '/left/', icon: <HomeIcon />, side: 'left' },
-  { title: 'Right Side', route: '/right/', icon: <HomeIcon />, side: 'right' },
-  { title: 'Schedules', route: '/schedules/', icon: <ScheduleIcon />, side: 'left' },
-  { title: 'Settings', route: '/settings/', icon: <SettingsIcon />, side: 'left' },
+  { title: 'Left Side', route: '/left/', icon: <HomeIcon/>, side: 'left' },
+  { title: 'Right Side', route: '/right/', icon: <HomeIcon/>, side: 'right' },
+  { title: 'Schedules', route: '/schedules/', icon: <ScheduleIcon/>, side: undefined },
+  { title: 'Settings', route: '/settings/', icon: <SettingsIcon/>, side: undefined },
 ];
 
 export default function Navbar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { isUpdating, setSide } = useAppStore();
+  const theme = useTheme(); // Access the Material-UI theme
   const currentTitle = pages.find((page) => page.route === pathname)?.title;
 
   const [mobileNavValue, setMobileNavValue] = React.useState(
@@ -37,35 +39,57 @@ export default function Navbar() {
   );
 
   useEffect(() => {
-    const page = pages.find((page) => page.route === pathname)
+    const page = pages.find((page) => page.route === pathname);
     if (page?.side) setSide(page.side);
   }, [pathname]);
 
   // Handle navigation for both desktop and mobile
-  const handleNavigation = (route: string, side: Side) => {
-    setSide(side);
+  const handleNavigation = (route: string, newSide: Side | undefined) => {
+    if (newSide) setSide(newSide);
     navigate(route);
   };
 
   const handleMobileNavChange = (_event: React.SyntheticEvent, newValue: number) => {
     setMobileNavValue(newValue);
-    handleNavigation(pages[newValue].route, pages[newValue].side);
+    handleNavigation(pages[newValue].route, pages[newValue]?.side);
   };
 
+  const gradient = `linear-gradient(
+  90deg,
+  ${theme.palette.background.default},
+  ${theme.palette.primary.dark},
+  ${theme.palette.background.default},
+  ${theme.palette.primary.dark},
+  ${theme.palette.background.default}
+)`;
+  // const isUpdating = true;
   return (
     <>
+      {/* Loading Bar */}
+      <Box
+        sx={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '20px',
+          background: isUpdating ? gradient : 'transparent',
+          backgroundSize: '200% 100%',
+          animation: isUpdating ? 'slide-gradient 4s linear infinite reverse' : 'none',
+          zIndex: 1201,
+        }}
+      />
       {/* Desktop Navigation */}
       <AppBar position="static" sx={{ display: { xs: 'none', md: 'flex' } }}>
         <Toolbar>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             {currentTitle || 'App Title'}
           </Typography>
-          {/* Desktop Navigation Buttons */}
           <Box sx={{ display: 'flex', gap: 2 }}>
-            {pages.map(({ title, route, side }) => (
+            {pages.map(({ title, route, side: newSide }) => (
               <Button
                 key={route}
-                onClick={() => handleNavigation(route, side)}
+                onClick={() => handleNavigation(route, newSide)}
                 sx={{ color: 'white' }}
                 variant={pathname === route ? 'outlined' : 'text'}
                 disabled={isUpdating}
@@ -92,8 +116,7 @@ export default function Navbar() {
           onChange={handleMobileNavChange}
           sx={{ width: '100%' }}
         >
-          {
-            pages.map(({ title, icon }, index) => (
+          {pages.map(({ title, icon }, index) => (
             <BottomNavigationAction
               key={index}
               label={title}
@@ -103,6 +126,19 @@ export default function Navbar() {
           ))}
         </BottomNavigation>
       </Box>
+      <style>
+        {`
+@keyframes slide-gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+        `}
+      </style>
     </>
   );
 }

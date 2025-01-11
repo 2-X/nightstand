@@ -13,5 +13,10 @@ export const DeviceStatusSchema = z.object({
     sensorLabel: z.string(),
     waterLevel: z.string(),
     isPriming: z.boolean(),
-    settings: z.string(),
+    settings: z.object({
+        v: z.number(),
+        gainLeft: z.number(),
+        gainRight: z.number(),
+        ledBrightness: z.number(),
+    }),
 }).strict();

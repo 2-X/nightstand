@@ -100,10 +100,11 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 
   changesPresent: false,
   checkForChanges: () => {
-    const { selectedDay, selectedSchedule, originalSchedules } = get();
+    const { selectedDay, selectedSchedule, originalSchedules, selectedDays } = get();
     if (!originalSchedules) return;
     const { side } = useAppStore.getState();
-    const changesPresent = !_.isEqual(originalSchedules[side][selectedDay], selectedSchedule);
+    const changesPresent = !_.isEqual(originalSchedules[side][selectedDay], selectedSchedule) || _.some(selectedDays, value => value === true);
+
     set({ changesPresent });
   },
 
@@ -133,13 +134,14 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 
   selectedDays: { ...DEFAULT_DAYS_SELECTED },
   toggleSelectedDay: (day) => {
-    const { selectedDays } = get();
+    const { selectedDays, checkForChanges } = get();
     set({
       selectedDays: {
         ...selectedDays,
         [day]: !selectedDays[day],
       }
     });
+    checkForChanges();
   },
 
   originalSchedules: undefined,

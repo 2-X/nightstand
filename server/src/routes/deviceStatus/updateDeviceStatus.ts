@@ -1,11 +1,13 @@
+import _ from 'lodash';
 import { DeepPartial } from 'ts-essentials';
+import cbor from 'cbor';
 
 import { DeviceStatus, SideStatus } from './deviceStatusSchema.js';
 import { executeFunction } from '../../8sleep/deviceApi.js';
 import logger from '../../logger.js';
 import settingsDB from '../../db/settings.js';
 import memoryDB from '../../db/memoryDB.js';
-
+import { INVERTED_SETTINGS_KEY_MAPPING } from '../../8sleep/loadDeviceStatus.js';
 
 const calculateLevelFromF = (temperatureF: number) => {
   const level = (temperatureF - 82.5) / 27.5 * 100;
@@ -53,12 +55,20 @@ const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideSt
 };
 
 
+const updateSettings = async (settings: Partial<DeviceStatus['settings']>) => {
+  // @ts-ignore
+  const renamedSettings = _.mapKeys(settings, (value, key) => INVERTED_SETTINGS_KEY_MAPPING[key] || key);
+  const encodedBuffer = cbor.encode(renamedSettings);
+  const hexString = encodedBuffer.toString('hex');
+  await executeFunction('SET_SETTINGS', hexString);
+}
+
 export const updateDeviceStatus = async (deviceStatus: DeepPartial<DeviceStatus>) => {
   logger.info(`Updating deviceStatus...`);
 
   if (deviceStatus.isPriming) await executeFunction('PRIME');
   if (deviceStatus?.left) await updateSide('left', deviceStatus.left);
   if (deviceStatus?.right) await updateSide('right', deviceStatus.right);
-
+  if (deviceStatus?.settings) await updateSettings(deviceStatus.settings);
   logger.info('Finished updating device status');
 };

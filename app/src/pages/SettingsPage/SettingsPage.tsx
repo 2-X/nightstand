@@ -1,4 +1,3 @@
-import Typography from '@mui/material/Typography';
 import { DeepPartial } from 'ts-essentials';
 
 import AwayModeSwitch from './AwayModeSwitch.tsx';
@@ -10,6 +9,7 @@ import { useAppStore } from '@state/appStore.tsx';
 import DailyPriming from './DailyPriming.tsx';
 import LicenseModal from './LicenseModal.tsx';
 import PrimeControl from './PrimeControl.tsx';
+import LedBrightnessSlider from './LedBrightnessSlider.tsx';
 
 
 export default function SettingsPage() {
@@ -32,16 +32,18 @@ export default function SettingsPage() {
   };
 
   return (
-    <PageContainer>
+    <PageContainer sx={{ mb: 10 }}>
       <TimeZoneSelector settings={settings} updateSettings={updateSettings}/>
+      <br />
       <DailyPriming settings={settings} updateSettings={updateSettings}/>
-      <PrimeControl />
-      <Typography variant="h5">Left Side</Typography>
+      <PrimeControl/>
+      <br />
       <AwayModeSwitch side="left" settings={settings} updateSettings={updateSettings}/>
-
-      <Typography variant="h5">Right Side</Typography>
       <AwayModeSwitch side="right" settings={settings} updateSettings={updateSettings}/>
-      <LicenseModal />
+      <br />
+      <LedBrightnessSlider/>
+      <br />
+      <LicenseModal/>
     </PageContainer>
   );
 }

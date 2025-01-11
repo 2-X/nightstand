@@ -10,6 +10,7 @@ import SettingsPage from './pages/SettingsPage/SettingsPage';
 import Layout from './components/Layout';
 import { AppStoreProvider } from '@state/appStore.tsx';
 import SchedulePage from './pages/SchedulePage/SchedulePage.tsx';
+import ErrorBoundary from './components/ErrorBoundary.tsx';
 
 const darkTheme = createTheme({
   palette: {
@@ -26,8 +27,8 @@ const queryClient = new QueryClient({
 });
 
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
+const App = () => {
+  return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={darkTheme}>
         <AppStoreProvider>
@@ -46,5 +47,13 @@ createRoot(document.getElementById('root')!).render(
         </AppStoreProvider>
       </ThemeProvider>
     </QueryClientProvider>
+  )
+};
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>
 );

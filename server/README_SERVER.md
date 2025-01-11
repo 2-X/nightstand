@@ -85,15 +85,20 @@ The server exposes RESTful endpoints for interaction:
   },
   "waterLevel": "true",
   "isPriming": false,
-  // I'm unsure what these 2 things below are for, but these come from the device itself
+  "settings": {
+    // We're unsure what v does
+    "v": 1,
+    // The gain here has to do with the sensors
+    "gainLeft": 1, 
+    "gainRight": 1, 
+    "ledBrightness": 1, 
+  },
   "sensorLabel": "\"00000-0000-000-00000\"",
-  // This is the light settings, encoded in CBOR format (see the ninesleep repo for more details)
-  "settings": "<>"
 }
 ```
 
 **POST**:
-- Updates the device, you don't have to specify everyth
+- Updates the device, you don't have to specify everything
 - Sample Request Body:
 ```json
 {
@@ -325,7 +330,6 @@ server/
    ```
 
 ---
-
 
 
 ## License
