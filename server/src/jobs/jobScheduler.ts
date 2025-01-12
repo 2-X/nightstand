@@ -21,6 +21,7 @@ async function setupJobs() {
     logger.debug(`Canceled job: ${jobName}`);
     schedule.cancelJob(jobName);
   });
+  await schedule.gracefulShutdown();
 
   await settingsDB.read();
   await schedulesDB.read();
