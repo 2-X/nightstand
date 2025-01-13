@@ -14,7 +14,7 @@ import AlarmVibrationSlider from './AlarmVibrationSlider.tsx';
 import AlarmDuration from './AlarmDuration.tsx';
 import AlarmPattern from './AlarmPattern.tsx';
 import React from 'react';
-
+import AlarmIcon from '@mui/icons-material/Alarm';
 
 const ACCORDION_NAME: AccordionExpanded = 'alarm';
 
@@ -48,8 +48,10 @@ export default function AlarmAccordion() {
       expanded={accordionExpanded === ACCORDION_NAME}
       onChange={() => setAccordionExpanded(ACCORDION_NAME)}
     >
-      <AccordionSummary expandIcon={<ExpandMoreIcon/>}>
-        <Typography>Alarm</Typography>
+      <AccordionSummary expandIcon={<ExpandMoreIcon/>} >
+        <Typography sx={{display: 'flex', alignItems: 'center', gap: 3}}>
+          <AlarmIcon /> Vibration alarm
+        </Typography>
       </AccordionSummary>
       <Box sx={{ width: '100%' }}>
         <Row>

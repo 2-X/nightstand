@@ -16,6 +16,7 @@ import moment from 'moment-timezone';
 import { useScheduleStore } from './scheduleStore';
 import { useAppStore } from '@state/appStore.tsx';
 import { DailySchedule } from '@api/schedulesSchema.ts';
+import ThermostatIcon from '@mui/icons-material/Thermostat';
 
 const ACCORDION_NAME = 'temperatureAdjustments';
 const TEMPERATURES_LIST = _.range(55, 111); // Generates a range from 55 to 110 inclusive
@@ -96,9 +97,9 @@ export default function TemperatureAdjustmentsAccordion() {
       expanded={accordionExpanded === ACCORDION_NAME}
       onChange={() => setAccordionExpanded(ACCORDION_NAME)}
     >
-      <AccordionSummary expandIcon={<ExpandMore/>}>
-        <Typography>
-          Temperature adjustments
+      <AccordionSummary expandIcon={<ExpandMore/>} >
+        <Typography sx={{alignItems: 'center', display: 'flex', gap: 3}}>
+          <ThermostatIcon /> Temperature adjustments
         </Typography>
       </AccordionSummary>
       <AccordionDetails>

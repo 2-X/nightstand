@@ -4,7 +4,7 @@ import { AccordionExpanded } from './SchedulePage.types.ts';
 import { DayOfWeek } from '@api/schedulesSchema.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { useScheduleStore } from './scheduleStore';
-
+import EventRepeatIcon from '@mui/icons-material/EventRepeat';
 
 export const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -26,7 +26,9 @@ export default function ApplyToOtherDaysAccordion() {
       onChange={() => setAccordionExpanded(ACCORDION_NAME)}
     >
       <AccordionSummary expandIcon={<ExpandMoreIcon/>}>
-        <Typography>Apply settings to other days</Typography>
+        <Typography sx={{display: 'flex', alignItems: 'center', gap: 3}}>
+          <EventRepeatIcon /> Apply settings to other days
+        </Typography>
       </AccordionSummary>
       <Box sx={{ mt: -2, p: 2 }}>
         <FormGroup>
