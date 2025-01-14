@@ -3,6 +3,7 @@ import { DeepPartial } from 'ts-essentials';
 import AwayModeSwitch from './AwayModeSwitch.tsx';
 import PageContainer from '../PageContainer.tsx';
 import TimeZoneSelector from './TimeZoneSelector.tsx';
+import TemperatureFormatSelector from './TemperatureFormatSelector.tsx';
 import { Settings } from '@api/settingsSchema.ts';
 import { postSettings, useSettings } from '@api/settings.ts';
 import { useAppStore } from '@state/appStore.tsx';
@@ -34,6 +35,7 @@ export default function SettingsPage() {
   return (
     <PageContainer sx={{ mb: 10 }}>
       <TimeZoneSelector settings={settings} updateSettings={updateSettings}/>
+      <TemperatureFormatSelector settings={settings} updateSettings={updateSettings} />
       <br />
       <DailyPriming settings={settings} updateSettings={updateSettings}/>
       <PrimeControl/>

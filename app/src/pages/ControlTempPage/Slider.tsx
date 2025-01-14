@@ -13,6 +13,7 @@ type SliderProps = {
   currentTargetTemp: number;
   currentTemperatureF: number;
   refetch: any;
+  displayCelsius: boolean;
 }
 
 function getTemperatureColor(temp: number) {
@@ -22,7 +23,7 @@ function getTemperatureColor(temp: number) {
   return '#d32f2f';
 }
 
-export default function Slider({ isOn, currentTargetTemp, refetch, currentTemperatureF }: SliderProps) {
+export default function Slider({ isOn, currentTargetTemp, refetch, currentTemperatureF, displayCelsius }: SliderProps) {
   const { isUpdating, setIsUpdating, side } = useAppStore();
   const [sliderTemp, setSliderTemp] = useState(55);
   const sliderColor = getTemperatureColor(sliderTemp);
@@ -110,6 +111,7 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
             sliderColor={sliderColor}
             currentTargetTemp={currentTargetTemp}
             currentTemperatureF={currentTemperatureF}
+            displayCelsius={displayCelsius}
           />
         )}
     </div>
