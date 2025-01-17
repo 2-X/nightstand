@@ -3,6 +3,15 @@
 ## Overview
 Express server intended to run on the 8 sleep pod.  
 
+
+## Developing
+- You can run `npm run dev` on your pod in `free-sleep/server/`. This uses nodemon to restart the express server with your changes
+- Personally, I use IntellIJ and have deployment options setup so whenever I make a change to the server app on my mac, the changes get auto uploaded to the pod. I think VSCode has a similar feature (might strain resources on your pod more than IntelliJ though)
+    - [IntelliJ documentation for this config](https://www.jetbrains.com/help/idea/tutorial-deployment-in-product.html#downloading)
+    - [VSCode](https://code.visualstudio.com/docs/remote/ssh)
+- It's also possible to run a vite server in the app and point it to this express server [app/README_APP.md](../app/README_APP.md)
+
+
 ## Features
 - DOES NOT DEPEND ON INTERNET, if your internet goes out, your device will still run
 - API capabilities

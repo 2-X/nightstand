@@ -7,6 +7,8 @@ REPO_DIR="/home/dac/free-sleep"
 SERVER_DIR="$REPO_DIR/server"
 SERVICE_FILE="/etc/systemd/system/free-sleep.service"
 
+# -----------------------------------------------------------------------------------------------------
+
 # Step 1: Download the repository
 echo "Downloading the repository..."
 curl -L -o "$ZIP_FILE" "$REPO_URL"
@@ -23,9 +25,30 @@ echo "Setting up the installation directory..."
 mv free-sleep-main "$REPO_DIR"
 chown -R dac:dac "$REPO_DIR"
 
+# -----------------------------------------------------------------------------------------------------
+
+# Install volta
+sudo -u dac bash -c 'curl https://get.volta.sh | bash'
+
+
+if sudo -u dac bash -c 'command -v volta' > /dev/null 2>&1; then
+    echo "Volta is already installed for user 'dac'."
+else
+    echo "Volta is not installed. Installing for user 'dac'..."
+    sudo -u dac bash -c 'curl https://get.volta.sh | bash'
+    echo -e '\nexport VOLTA_HOME="/home/dac/.volta"\nexport PATH="$VOLTA_HOME/bin:$PATH"\n' >> /home/root/.profile
+fi
+
+# This will skip automatically if this node version is already installed
+sudo -u dac bash -c "cd /home/dac/free-sleep/server && volta install node@22.13.0"
+
+# -----------------------------------------------------------------------------------------------------
+
 # Step 4: Install dependencies as user dac
 echo "Installing dependencies..."
 sudo -u dac bash -c "cd $SERVER_DIR && npm install"
+
+# -----------------------------------------------------------------------------------------------------
 
 # Step 5: Create a systemd service file
 echo "Creating systemd service file at $SERVICE_FILE..."
@@ -35,11 +58,13 @@ Description=Free Sleep Server
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/npm run start
+ExecStart=/home/dac/.volta/bin/npm run start
 WorkingDirectory=$SERVER_DIR
 Restart=always
 User=dac
 Environment=NODE_ENV=production
+Environment=VOLTA_HOME=/home/dac/.volta
+Environment=PATH=/home/dac/.volta/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
 
 [Install]
 WantedBy=multi-user.target
@@ -61,6 +86,8 @@ systemctl status free-sleep.service --no-pager
 # Sometimes the device time gets reset to 2010, this resets the device time
 echo "Updating device time"
 date -s "$(curl -s --head http://google.com | grep ^Date: | sed 's/Date: //g')"
+
+# -----------------------------------------------------------------------------------------------------
 
 echo "Installation complete! The Free Sleep server is running and will start automatically on boot."
 echo "See free-sleep logs with journalctl -u free-sleep --no-pager --output=cat"

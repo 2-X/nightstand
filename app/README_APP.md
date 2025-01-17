@@ -5,6 +5,13 @@ This application is a React-based frontend designed to manage the 8 sleep pod's 
 It communicates with the backend API to fetch, update, and synchronize data. 
 The app uses Material-UI for styling and layout, Zustand for state management, and React Query for API interaction.
 
+
+## Developing
+- You can run a vite dev server to hot reload your app changes here. This tells axios to make API requests at a different IP (see [app/src/api/api.ts](app/src/api/api.ts))
+- `VITE_POD_IP=<YOUR_POD_IP> npm run dev`
+- `VITE_POD_IP=192.168.1.50 npm run dev`
+- It's also possible to run a nodemon server to reload your changes in the server side. See [server/README_SERVER.md](../server/README_SERVER.md)
+
 ---
 
 ## Key Features
