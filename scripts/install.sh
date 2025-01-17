@@ -40,7 +40,7 @@ else
 fi
 
 # This will skip automatically if this node version is already installed
-sudo -u dac bash -c "cd /home/dac/free-sleep/server && volta install node@22.13.0"
+sudo -u dac bash -c "source /home/dac/.profile && cd /home/dac/free-sleep/server && volta install node@22.13.0"
 
 # -----------------------------------------------------------------------------------------------------
 
