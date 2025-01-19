@@ -6,17 +6,24 @@ import Box from '@mui/material/Box';
 export default function Layout() {
   return (
     <Box
+      id="Layout"
       sx={{
         display: 'flex',
         flexDirection: 'column',
-        minHeight: '100vh',
+        flexGrow: 1,
+        alignItems: 'center',
+        gap: 2,
+        paddingTop: 4,
+        padding: 0,
+        margin: 0,
+        width: '100vw',
+        justifyContent: 'center',
+        overscrollBehavior: 'none',
       }}
     >
-      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-        {/* Renders current route */}
-        <Outlet />
-      </Box>
-      <Navbar />
+      {/* Renders current route */}
+      <Outlet/>
+      <Navbar/>
     </Box>
   );
 }

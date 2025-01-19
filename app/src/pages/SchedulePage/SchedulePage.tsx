@@ -68,7 +68,7 @@ export default function SchedulePage() {
         width: '100%',
         maxWidth: { xs: '100%', sm: '800px' },
         mx: 'auto',
-        pb: 15,
+        mb: 15,
       }}
     >
       <SideControl/>

@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
 import CircularSlider from 'react-circular-slider-svg';
-import { DeepPartial } from 'ts-essentials';
-import { DeviceStatus } from '@api/deviceStatusSchema.ts';
 import { postDeviceStatus } from '@api/deviceStatus.ts';
 import { useAppStore } from '@state/appStore';
 import styles from './Slider.module.scss';
 import TemperatureLabel from './TemperatureLabel.tsx';
-
+import TemperatureButtons from './TemperatureButtons.tsx';
+import { useControlTempStore } from './controlTempStore.tsx';
+import { useTheme } from '@mui/material/styles';
+import { useResizeDetector } from 'react-resize-detector';
 
 type SliderProps = {
   isOn: boolean;
@@ -16,7 +16,8 @@ type SliderProps = {
   displayCelsius: boolean;
 }
 
-function getTemperatureColor(temp: number) {
+function getTemperatureColor(temp: number | undefined) {
+  if (temp === undefined) return '#262626';
   if (temp <= 70) return '#1c54b2';
   if (temp <= 82) return '#5393ff';
   if (temp <= 95) return '#db5858';
@@ -24,25 +25,15 @@ function getTemperatureColor(temp: number) {
 }
 
 export default function Slider({ isOn, currentTargetTemp, refetch, currentTemperatureF, displayCelsius }: SliderProps) {
+  const { deviceStatus, setDeviceStatus } = useControlTempStore();
   const { isUpdating, setIsUpdating, side } = useAppStore();
-  const [sliderTemp, setSliderTemp] = useState(55);
-  const sliderColor = getTemperatureColor(sliderTemp);
-  const [isPostingTempChange, setIsPostingTempChange] = useState(false);
-  const [isUserInteracting, setIsUserInteracting] = useState(false);
-
-  // Sync sliderTemp with currentTargetTemp when the API response updates
-  useEffect(() => {
-    if (!isUserInteracting && !isPostingTempChange) {
-      setSliderTemp(currentTargetTemp);
-    }
-  }, [currentTargetTemp, isUserInteracting]);
+  const { width, ref } = useResizeDetector();
+  const theme = useTheme();
+  const sliderColor = getTemperatureColor(deviceStatus?.[side].targetTemperatureF);
 
   const handleControlFinished = async () => {
-    setIsPostingTempChange(true);
-    setIsUserInteracting(false);
-    const deviceStatus: DeepPartial<DeviceStatus> = {
-      [side]: { targetTemperatureF: sliderTemp },
-    };
+    if (!deviceStatus) return;
+
     setIsUpdating(true);
     await postDeviceStatus(deviceStatus)
       .then(() => {
@@ -55,45 +46,35 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
       })
       .finally(() => {
         setIsUpdating(false);
-        setIsPostingTempChange(false);
       });
   };
 
   const disabled = !isOn || isUpdating;
-  const arcBackgroundColor = '#2E2E2EFF';
-
-
-  let val: number;
-  if (isPostingTempChange || isUserInteracting) {
-    val = sliderTemp
-  } else {
-    val = (isOn) ? sliderTemp || currentTargetTemp : 55
-  }
+  const arcBackgroundColor = theme.palette.grey[800];
 
   return (
-    <div style={{ position: 'relative', display: 'inline-block', width: 400, height: 250 }}>
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block', width: '100%'  }}>
       {/* Circular Slider */}
       <div className={`${styles.Slider} ${disabled && styles.Disabled}`}>
         <CircularSlider
           disabled={disabled}
           onControlFinished={handleControlFinished}
-          size={400}
-          trackWidth={40}
+          size={width}
+          trackWidth={30}
           minValue={55}
           maxValue={110}
-          startAngle={90}
-          endAngle={270}
+          startAngle={60}
+          endAngle={300}
           angleType={{
             direction: 'cw',
             axis: '-y'
           }}
           handle1={{
-            value: val,
+            value: deviceStatus?.[side]?.targetTemperatureF || 55,
             onChange: (value) => {
               if (disabled) return;
-              if (Math.round(value) !== sliderTemp) {
-                setSliderTemp(Math.round(value))
-                setIsUserInteracting(true);
+              if (Math.round(value) !== deviceStatus?.[side]?.targetTemperatureF) {
+                setDeviceStatus({ [side]: { targetTemperatureF: Math.round(value) } });
               }
             },
 
@@ -102,19 +83,18 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
           arcBackgroundColor={arcBackgroundColor}
         />
       </div>
-
-      {/* Overlay Text */}
+      <TemperatureLabel
+        isOn={isOn}
+        sliderTemp={deviceStatus?.[side]?.targetTemperatureF || 55}
+        sliderColor={sliderColor}
+        currentTargetTemp={currentTargetTemp}
+        currentTemperatureF={currentTemperatureF}
+        displayCelsius={displayCelsius}
+      />
       {
         isOn && (
-          <TemperatureLabel
-            sliderTemp={sliderTemp}
-            sliderColor={sliderColor}
-            currentTargetTemp={currentTargetTemp}
-            currentTemperatureF={currentTemperatureF}
-            displayCelsius={displayCelsius}
-          />
+          <TemperatureButtons refetch={refetch}/>
         )}
     </div>
-
   );
 };

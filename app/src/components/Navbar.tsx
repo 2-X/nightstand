@@ -33,7 +33,6 @@ export default function Navbar() {
   const { isUpdating, setSide } = useAppStore();
   const theme = useTheme(); // Access the Material-UI theme
   const currentTitle = pages.find((page) => page.route === pathname)?.title;
-
   const [mobileNavValue, setMobileNavValue] = React.useState(
     pages.findIndex((page) => page.route === pathname)
   );
@@ -62,7 +61,6 @@ export default function Navbar() {
   ${theme.palette.primary.dark},
   ${theme.palette.background.default}
 )`;
-  // const isUpdating = true;
   return (
     <>
       {/* Loading Bar */}
@@ -80,7 +78,15 @@ export default function Navbar() {
         }}
       />
       {/* Desktop Navigation */}
-      <AppBar position="static" sx={{ display: { xs: 'none', md: 'flex' } }}>
+      <AppBar
+        position="static"
+        color="transparent"
+        sx={{
+          display: { xs: 'none', md: 'flex' },
+          borderTop: `1px solid ${theme.palette.grey[700]}`,
+          boxShadow: 'none',
+        }}
+      >
         <Toolbar>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             {currentTitle || 'App Title'}
@@ -109,12 +115,13 @@ export default function Navbar() {
           position: 'fixed',
           bottom: 0,
           justifyContent: 'space-between',
+          borderTop: `1px solid ${theme.palette.grey[700]}`,
         }}
       >
         <BottomNavigation
           value={mobileNavValue}
           onChange={handleMobileNavChange}
-          sx={{ width: '100%' }}
+          sx={{ width: '100%', backgroundColor: theme.palette.background.default }}
         >
           {pages.map(({ title, icon }, index) => (
             <BottomNavigationAction

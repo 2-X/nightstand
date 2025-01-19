@@ -34,7 +34,7 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
   };
 
   return (
-    <Button variant="contained" disabled={isUpdating} onClick={handleOnClick}>
+    <Button variant="outlined" disabled={isUpdating} onClick={handleOnClick}>
       {isOn ? 'Turn off' : 'Turn on'}
     </Button>
   );

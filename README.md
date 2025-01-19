@@ -63,11 +63,12 @@ This project is intended to be entirely ran on an 8 sleep pod
 
 ## App screenshots
 
-![Temperature control](docs/temperature.png)
-![Scheduling](docs/scheduling.png)
-![Temperature adjustments](docs/temp_adjustments.png)
+![Device on](docs/on.png)
+![Device off](docs/off.png)
+![Schedules](docs/schedules.png)
+![Scheduled temperature adjustments](docs/scheduled_temperatures.png)
+![Scheduled alarms](docs/scheduled_alarms.png)
 ![Settings](docs/settings.png)
-![Behavior](docs/free_sleep.gif)
 
 ## Future planned work
 - Making the UI "prettier"

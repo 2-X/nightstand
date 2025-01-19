@@ -11,10 +11,19 @@ import Layout from './components/Layout';
 import { AppStoreProvider } from '@state/appStore.tsx';
 import SchedulePage from './pages/SchedulePage/SchedulePage.tsx';
 import ErrorBoundary from './components/ErrorBoundary.tsx';
+import { GlobalStyles } from '@mui/material';
 
 const darkTheme = createTheme({
   palette: {
     mode: 'dark',
+    background: {
+      default: '#010101'
+    },
+    grey: {
+      500: '#606060',
+      700: '#272727',
+      800: '#262626',
+    }
   },
 });
 
@@ -33,6 +42,13 @@ const App = () => {
       <ThemeProvider theme={darkTheme}>
         <AppStoreProvider>
           <CssBaseline/>
+          <GlobalStyles
+            styles={{
+              'html, body': {
+                overscrollBehavior: 'none', // Prevent rubber-banding
+              },
+            }}
+          />
           <BrowserRouter basename="/">
             <Routes>
               <Route path="/" element={<Layout/>}>
