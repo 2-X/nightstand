@@ -114,8 +114,10 @@ export default function Navbar() {
           width: '100%',
           position: 'fixed',
           bottom: 0,
+          height: '80px',
           justifyContent: 'space-between',
           borderTop: `1px solid ${theme.palette.grey[700]}`,
+          backgroundColor: theme.palette.background.default,
         }}
       >
         <BottomNavigation

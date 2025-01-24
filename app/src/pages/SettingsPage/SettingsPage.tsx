@@ -33,7 +33,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <PageContainer sx={{ mb: 10 }}>
+    <PageContainer sx={{ mb: 15 }}>
       <TimeZoneSelector settings={settings} updateSettings={updateSettings}/>
       <TemperatureFormatSelector settings={settings} updateSettings={updateSettings} />
       <br />
