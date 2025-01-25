@@ -103,6 +103,7 @@ export default function Navbar() {
           justifyContent: 'space-between',
           borderTop: `1px solid ${theme.palette.grey[700]}`,
           backgroundColor: theme.palette.background.default,
+          zIndex: 10,
         }}
       >
         <BottomNavigation
