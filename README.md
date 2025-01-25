@@ -65,9 +65,9 @@ This project is intended to be entirely ran on an 8 sleep pod
 
 ![Device on](docs/on.png)
 ![Device off](docs/off.png)
-![Schedules](docs/schedules.png)
+![Device off](docs/water_notification.png)
 ![Scheduled temperature adjustments](docs/scheduled_temperatures.png)
-![Scheduled alarms](docs/scheduled_alarms.png)
+![Scheduled alarms](docs/alarm_schedule.png)
 ![Settings](docs/settings.png)
 
 ## Future planned work
