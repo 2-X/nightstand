@@ -1,7 +1,7 @@
 {
   "name": "Free Sleep",
   "short_name": "Free Sleep",
-  "start_url": "/temperature/",
+  "start_url": "/temperature",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#000000",
