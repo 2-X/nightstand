@@ -66,11 +66,11 @@ const App = () => {
             <Routes>
               <Route path="/" element={<Layout/>}>
                 <Route index element={<SettingsPage/>}/>
-                <Route path="temperature/" element={<ControlTempPage/>}/>
-                <Route path="left/" element={<ControlTempPage/>}/>
-                <Route path="right/" element={<ControlTempPage/>}/>
-                <Route path="settings/" element={<SettingsPage/>}/>
-                <Route path="schedules/" element={<SchedulePage/>}/>
+                <Route path="temperature" element={<ControlTempPage/>}/>
+                <Route path="left" element={<ControlTempPage/>}/>
+                <Route path="right" element={<ControlTempPage/>}/>
+                <Route path="settings" element={<SettingsPage/>}/>
+                <Route path="schedules" element={<SchedulePage/>}/>
               </Route>
             </Routes>
           </BrowserRouter>

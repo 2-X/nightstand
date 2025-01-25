@@ -20,7 +20,7 @@ function TemperatureIcon() {
 }
 
 export const PAGES: Page[] = [
-  { title: 'Temperature', route: '/temperature/', icon: <TemperatureIcon/> },
-  { title: 'Schedules', route: '/schedules/', icon: <ScheduleIcon/>  },
-  { title: 'Settings', route: '/settings/', icon: <SettingsIcon/> },
+  { title: 'Temperature', route: '/temperature', icon: <TemperatureIcon/> },
+  { title: 'Schedules', route: '/schedules', icon: <ScheduleIcon/>  },
+  { title: 'Settings', route: '/settings', icon: <SettingsIcon/> },
 ];
