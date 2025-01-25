@@ -1,7 +1,5 @@
 export class SequentialQueue {
-    constructor() {
-        this.executing = Promise.resolve();
-    }
+    executing = Promise.resolve();
     execInternal(f) {
         const current = this.executing;
         const newPromise = new Promise(async (resolve) => {

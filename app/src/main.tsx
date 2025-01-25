@@ -19,6 +19,9 @@ const darkTheme = createTheme({
     background: {
       default: '#010101'
     },
+    text: {
+      secondary: '#87868BFF'
+    },
     grey: {
       500: '#606060',
       700: '#272727',
@@ -47,12 +50,23 @@ const App = () => {
               'html, body': {
                 overscrollBehavior: 'none', // Prevent rubber-banding
               },
+              '.sticky-mask': {
+                position: 'fixed',
+                top: '-20px',  // Place it slightly outside the viewport
+                left: 0,
+                width: '100%',
+                height: '20px',  // Adjust the height to mask the overscroll
+                backgroundColor: '#fff',  // Match background to blend in
+                zIndex: 9999,  // Ensure it's above other content
+                pointerEvents: 'none',  // Allow interactions to pass through
+              },
             }}
           />
           <BrowserRouter basename="/">
             <Routes>
               <Route path="/" element={<Layout/>}>
                 <Route index element={<SettingsPage/>}/>
+                <Route path="temperature/" element={<ControlTempPage/>}/>
                 <Route path="left/" element={<ControlTempPage/>}/>
                 <Route path="right/" element={<ControlTempPage/>}/>
                 <Route path="settings/" element={<SettingsPage/>}/>

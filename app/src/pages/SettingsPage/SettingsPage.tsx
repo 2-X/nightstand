@@ -1,6 +1,6 @@
 import { DeepPartial } from 'ts-essentials';
 
-import AwayModeSwitch from './AwayModeSwitch.tsx';
+import SideSettings from './SideSettings.tsx';
 import PageContainer from '../PageContainer.tsx';
 import TimeZoneSelector from './TimeZoneSelector.tsx';
 import TemperatureFormatSelector from './TemperatureFormatSelector.tsx';
@@ -11,6 +11,9 @@ import DailyPriming from './DailyPriming.tsx';
 import LicenseModal from './LicenseModal.tsx';
 import PrimeControl from './PrimeControl.tsx';
 import LedBrightnessSlider from './LedBrightnessSlider.tsx';
+import Donate from './Donate.tsx';
+import DiscordLink from './DiscordLink.tsx';
+import Divider from './Divider.tsx';
 
 
 export default function SettingsPage() {
@@ -18,6 +21,8 @@ export default function SettingsPage() {
   const { setIsUpdating } = useAppStore();
 
   const updateSettings = (settings: DeepPartial<Settings>) => {
+    // console.log(`SettingsPage.tsx:21 | settings: `, settings);
+    // return
     setIsUpdating(true);
 
     postSettings(settings)
@@ -36,15 +41,23 @@ export default function SettingsPage() {
     <PageContainer sx={{ mb: 15 }}>
       <TimeZoneSelector settings={settings} updateSettings={updateSettings}/>
       <TemperatureFormatSelector settings={settings} updateSettings={updateSettings} />
-      <br />
+
+      <Divider />
       <DailyPriming settings={settings} updateSettings={updateSettings}/>
       <PrimeControl/>
+
+      <Divider />
+      <SideSettings side="left" settings={settings} updateSettings={updateSettings}/>
       <br />
-      <AwayModeSwitch side="left" settings={settings} updateSettings={updateSettings}/>
-      <AwayModeSwitch side="right" settings={settings} updateSettings={updateSettings}/>
-      <br />
+      <SideSettings side="right" settings={settings} updateSettings={updateSettings}/>
+      <Divider />
       <LedBrightnessSlider/>
-      <br />
+
+      <Divider />
+      <DiscordLink />
+      <Divider />
+      <Donate />
+      <Divider />
       <LicenseModal/>
     </PageContainer>
   );

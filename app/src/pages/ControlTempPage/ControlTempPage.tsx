@@ -6,21 +6,22 @@ import AlarmDismissal from './AlarmDismissal.tsx';
 import AwayNotification from './AwayNotification.tsx';
 import PageContainer from '../PageContainer.tsx';
 import PowerButton from './PowerButton.tsx';
+import SideControl from '../../components/SideControl.tsx';
 import Slider from './Slider.tsx';
-import { useDeviceStatus } from '@api/deviceStatus';
 import WaterNotification from './WaterNotification.tsx';
-import { useSettings } from '@api/settings.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { useControlTempStore } from './controlTempStore.tsx';
+import { useDeviceStatus } from '@api/deviceStatus';
+import { useSettings } from '@api/settings.ts';
 import { useTheme } from '@mui/material/styles';
 
 
 export default function ControlTempPage() {
   const { data: deviceStatusOriginal, isError, refetch } = useDeviceStatus();
+  const { setOriginalDeviceStatus, deviceStatus } = useControlTempStore();
   const { data: settings } = useSettings();
   const { isUpdating, side } = useAppStore();
   const theme = useTheme()
-  const { setOriginalDeviceStatus, deviceStatus } = useControlTempStore();
 
   useEffect(() => {
     if (!deviceStatusOriginal) return;
@@ -40,6 +41,7 @@ export default function ControlTempPage() {
         maxWidth: '400px',
       },
     }}>
+      <SideControl />
       <Slider
         isOn={sideStatus?.isOn || false}
         currentTargetTemp={sideStatus?.targetTemperatureF || 55}

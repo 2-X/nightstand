@@ -55,6 +55,6 @@ export const scheduleAlarm = (settingsData, side, day, dailySchedule) => {
             await memoryDB.read();
             memoryDB.data[side].isAlarmVibrating = false;
             await memoryDB.write();
-        }, dailySchedule.alarm.duration * 1000);
+        }, dailySchedule.alarm.duration * 1_000);
     });
 };

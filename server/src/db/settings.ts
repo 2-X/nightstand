@@ -10,9 +10,11 @@ const defaultData: Settings = {
   timeZone: null,
   temperatureFormat: 'fahrenheit',
   left: {
+    name: 'Left',
     awayMode: false,
   },
   right: {
+    name: 'Right',
     awayMode: false,
   },
   primePodDaily: {

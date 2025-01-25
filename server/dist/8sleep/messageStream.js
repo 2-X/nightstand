@@ -1,8 +1,10 @@
 export class MessageStream {
+    stream;
+    separator;
+    buffer = Buffer.alloc(0);
     constructor(stream, separator = Buffer.from('\n\n')) {
         this.stream = stream;
         this.separator = separator;
-        this.buffer = Buffer.alloc(0);
     }
     async readMessage() {
         while (true) {

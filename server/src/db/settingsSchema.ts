@@ -9,6 +9,7 @@ const Temperatures = z.enum(TEMPERATURES)
 export type TemperatureFormat = z.infer<typeof Temperatures>;
 
 const SideSettingsSchema = z.object({
+  name: z.string().min(1).max(20),
   awayMode: z.boolean(),
 }).strict();
 

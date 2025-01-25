@@ -29,7 +29,7 @@ async function gracefulShutdown(signal) {
         const error = new Error('Could not close connections in time. Forcing shutdown.');
         logger.error({ error });
         process.exit(1);
-    }, 10000);
+    }, 10_000);
     await schedule.gracefulShutdown();
     // If we already got Franken instances, close them
     try {

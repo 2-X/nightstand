@@ -5,6 +5,7 @@ import { TimeSchema } from './schedulesSchema.js';
 export const TEMPERATURES = ['celsius', 'fahrenheit'];
 const Temperatures = z.enum(TEMPERATURES);
 const SideSettingsSchema = z.object({
+    name: z.string().min(1).max(20),
     awayMode: z.boolean(),
 }).strict();
 export const SettingsSchema = z.object({

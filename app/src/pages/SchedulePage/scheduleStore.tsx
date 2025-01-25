@@ -5,9 +5,9 @@ import { DeepPartial } from 'ts-essentials';
 import { AccordionExpanded } from './SchedulePage.types.ts';
 import { DaysSelected } from './SchedulePage.types.ts';
 import { useAppStore } from '@state/appStore.tsx';
+import { LOWERCASE_DAYS } from './days';
 
 
-const DAYS_OF_WEEK: DayOfWeek[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 type Validations = {
   endTimeIsValid: boolean;
@@ -77,11 +77,11 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
     });
   },
 
-  selectDay: (selectedDayIndex) => {
+  selectDay: (newSelectedDayIndex) => {
     const { originalSchedules, reloadScheduleData } = get();
     if (!originalSchedules) return;
-    const selectedDay = DAYS_OF_WEEK[selectedDayIndex];
-    set({ selectedDay, selectedDayIndex });
+    const selectedDay = LOWERCASE_DAYS[newSelectedDayIndex];
+    set({ selectedDay, selectedDayIndex: newSelectedDayIndex });
     reloadScheduleData();
   },
 

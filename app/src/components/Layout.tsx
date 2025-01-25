@@ -13,12 +13,10 @@ export default function Layout() {
         flexGrow: 1,
         alignItems: 'center',
         gap: 2,
-        paddingTop: 4,
-        padding: 0,
+        // padding: 0,
         margin: 0,
         width: '100vw',
         justifyContent: 'center',
-        overscrollBehavior: 'none',
       }}
     >
       {/* Renders current route */}

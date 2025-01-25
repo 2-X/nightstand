@@ -20,15 +20,21 @@ export default function PageContainer({ children, sx }: React.PropsWithChildren<
         flexGrow: 1,
         alignItems: 'center',
         gap: 2,
-        padding: 6,
+        // padding: 6,
         margin: 0,
         width: '100vw',
         justifyContent: 'center',
-        [theme.breakpoints.down('sm')]: {
+        [theme.breakpoints.up('sm')]: {
           width: '90%',
           padding: 0,
           paddingTop: 6,
-
+          paddingBottom: 6,
+          maxWidth: '700px'
+        },
+        [theme.breakpoints.down('sm')]: {
+          width: '90%',
+          padding: 0,
+          paddingTop: 2,
         },
         ...sx,
       }}

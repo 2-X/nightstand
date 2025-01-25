@@ -28,6 +28,10 @@ const FIRMWARE_MAP = {
     },
 };
 class Config {
+    static instance;
+    dbFolder;
+    remoteDevMode;
+    dacSockPath;
     constructor() {
         this.remoteDevMode = process.platform === 'darwin';
         this.dacSockPath = this.detectSockPath();

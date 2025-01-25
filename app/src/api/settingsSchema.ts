@@ -1,14 +1,15 @@
 // WARNING! - Any changes here MUST be the same between app/src/api & server/src/db/
 
 import { z } from 'zod';
-import { TIME_ZONES } from './timeZones';
-import { TimeSchema } from './schedulesSchema';
+import { TIME_ZONES } from './timeZones.js';
+import { TimeSchema } from './schedulesSchema.js';
 
 export const TEMPERATURES = ['celsius', 'fahrenheit'] as const;
 const Temperatures = z.enum(TEMPERATURES)
 export type TemperatureFormat = z.infer<typeof Temperatures>;
 
 const SideSettingsSchema = z.object({
+  name: z.string().min(1).max(20),
   awayMode: z.boolean(),
 }).strict();
 

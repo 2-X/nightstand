@@ -8,12 +8,17 @@ import { loadDeviceStatus } from './loadDeviceStatus.js';
 import { wait } from './promises.js';
 import config from '../config.js';
 export class Franken {
+    writeStream;
+    messageStream;
+    sequentialQueue;
+    socket;
     constructor(writeStream, messageStream, sequentialQueue, socket) {
         this.writeStream = writeStream;
         this.messageStream = messageStream;
         this.sequentialQueue = sequentialQueue;
         this.socket = socket;
     }
+    static separator = Buffer.from('\n\n');
     async sendMessage(message) {
         logger.debug(`Sending message to sock | message: ${message}`);
         const responseBytes = await this.sequentialQueue.exec(async () => {
@@ -59,8 +64,8 @@ export class Franken {
         return new Franken(stream, messageStream, new SequentialQueue(), socket);
     }
 }
-Franken.separator = Buffer.from('\n\n');
 class FrankenServer {
+    server;
     constructor(server) {
         this.server = server;
     }

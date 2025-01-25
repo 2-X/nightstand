@@ -7,6 +7,9 @@ async function unlink(path) {
     await toPromise((cb) => unlinkCb(path, cb));
 }
 export class UnixSocketServer {
+    server;
+    lastConnection;
+    resolveWaiting;
     constructor(server) {
         this.server = server;
         this.server.on('connection', this.onConnection.bind(this));
