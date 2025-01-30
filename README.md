@@ -62,7 +62,7 @@ This project is intended to be entirely ran on an 8 sleep pod
 ---
 
 ## App screenshots
-
+![App](docs/app.gif)
 ![Device on](docs/on.png)
 ![Device off](docs/off.png)
 ![Device off](docs/water_notification.png)
