@@ -1,11 +1,10 @@
 # Free Sleep: 8 Sleep Manager
 
-## WARNING
-This software is very new and may require troubleshooting debugging on your end. If you need help, you're welcome to reach out on github here.
-
-Installing this is not recommended if you're not comfortable with linux or programming.
-
-See disclaimer and license @ LICENSE.md
+## Follow us on Discord!
+https://discord.gg/JpArXnBgEj
+- Feature requests
+- Updates
+- Support
 
 
 ## Is it reversible?
