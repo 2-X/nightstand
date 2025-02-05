@@ -1,11 +1,15 @@
 # Free Sleep: 8 Sleep Manager
 
+
 ## Follow us on Discord!
 https://discord.gg/JpArXnBgEj
 - Feature requests
 - Updates
 - Support
 
+## [HOW TO INSTALL](./INSTALLATION.md)
+
+---  
 
 ## Is it reversible?
 Yes, I tested reversing it on my pod 3 by  [resetting the firmware](docs/pod_3_teardown/6_firmware_reset.jpeg). After the reset, setup your pod as a new pod again.
