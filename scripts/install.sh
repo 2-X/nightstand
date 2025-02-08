@@ -88,6 +88,57 @@ echo "Updating device time"
 date -s "$(curl -s --head http://google.com | grep ^Date: | sed 's/Date: //g')"
 
 # -----------------------------------------------------------------------------------------------------
+# Setup ability to reboot pod without sudo permission for dac user
+USERNAME="dac"
+SUDOERS_FILE="/etc/sudoers.d/$USERNAME"
+SUDOERS_RULE="$USERNAME ALL=(ALL) NOPASSWD: /sbin/reboot"
 
-echo "Installation complete! The Free Sleep server is running and will start automatically on boot."
-echo "See free-sleep logs with journalctl -u free-sleep --no-pager --output=cat"
+# 2. Check if the sudoers rule already exists
+if sudo grep -Fxq "$SUDOERS_RULE" "$SUDOERS_FILE" 2>/dev/null; then
+    echo "Rule for '$USERNAME' reboot permissions already exists."
+else
+    echo "$SUDOERS_RULE" | sudo tee "$SUDOERS_FILE" > /dev/null
+    sudo chmod 440 "$SUDOERS_FILE"
+    echo "Passwordless permission for reboot granted to '$USERNAME'."
+fi
+
+# -----------------------------------------------------------------------------------------------------
+# Setup data folder
+
+# Create directories if they don't exist
+mkdir -p /persistent/free-sleep-data/logs/
+mkdir -p /persistent/free-sleep-data/lowdb/
+
+grep -oP '(?<=DAC_SOCKET=)[^ ]*dac.sock' /opt/eight/bin/frank.sh > /persistent/free-sleep-data/dac_sock_path.txt
+
+# DO NOT REMOVE, OLD VERSIONS WILL LOSE settings & schedules
+# Migrate old config/DB to new /persistent/free-sleep-data/
+FILES_TO_MOVE=(
+  "/home/dac/free-sleep-database/settingsDB.json:/persistent/free-sleep-data/lowdb/settingsDB.json"
+  "/home/dac/free-sleep-database/schedulesDB.json:/persistent/free-sleep-data/lowdb/schedulesDB.json"
+  "/home/dac/dac_sock_path.txt:/persistent/free-sleep-data/dac_sock_path.txt"
+)
+
+# Loop through each file and move if it exists
+for entry in "${FILES_TO_MOVE[@]}"; do
+  IFS=":" read -r SOURCE_FILE DESTINATION <<< "$entry"
+
+  if [ -f "$SOURCE_FILE" ]; then
+    mv "$SOURCE_FILE" "$DESTINATION"
+    echo "Moved $SOURCE_FILE to $DESTINATION"
+  fi
+done
+
+
+# Change ownership recursively (-R flag)
+chown -R dac:dac /persistent/free-sleep-data/
+
+# Set directory permissions
+chmod 770 /persistent/free-sleep-data/
+chmod g+s /persistent/free-sleep-data/
+
+# -----------------------------------------------------------------------------------------------------
+
+echo -e "\033[0;32mInstallation complete! The Free Sleep server is running and will start automatically on boot.\033[0m"
+echo -e "\033[0;32mSee free-sleep logs with journalctl -u free-sleep --no-pager --output=cat\033[0m"
+
