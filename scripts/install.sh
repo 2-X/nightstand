@@ -41,6 +41,41 @@ fi
 
 # This will skip automatically if this node version is already installed
 sudo -u dac bash -c "source /home/dac/.profile && cd /home/dac/free-sleep/server && volta install node@22.13.0"
+# -----------------------------------------------------------------------------------------------------
+# Setup data folder
+
+# Create directories if they don't exist
+mkdir -p /persistent/free-sleep-data/logs/
+mkdir -p /persistent/free-sleep-data/lowdb/
+
+grep -oP '(?<=DAC_SOCKET=)[^ ]*dac.sock' /opt/eight/bin/frank.sh > /persistent/free-sleep-data/dac_sock_path.txt
+
+# DO NOT REMOVE, OLD VERSIONS WILL LOSE settings & schedules
+# Migrate old config/DB to new /persistent/free-sleep-data/
+FILES_TO_MOVE=(
+  "/home/dac/free-sleep-database/settingsDB.json:/persistent/free-sleep-data/lowdb/settingsDB.json"
+  "/home/dac/free-sleep-database/schedulesDB.json:/persistent/free-sleep-data/lowdb/schedulesDB.json"
+  "/home/dac/dac_sock_path.txt:/persistent/free-sleep-data/dac_sock_path.txt"
+)
+
+# Loop through each file and move if it exists
+for entry in "${FILES_TO_MOVE[@]}"; do
+  IFS=":" read -r SOURCE_FILE DESTINATION <<< "$entry"
+
+  if [ -f "$SOURCE_FILE" ]; then
+    mv "$SOURCE_FILE" "$DESTINATION"
+    echo "Moved $SOURCE_FILE to $DESTINATION"
+  fi
+done
+
+
+# Change ownership recursively (-R flag)
+chown -R dac:dac /persistent/free-sleep-data/
+
+# Set directory permissions
+chmod 770 /persistent/free-sleep-data/
+chmod g+s /persistent/free-sleep-data/
+
 
 # -----------------------------------------------------------------------------------------------------
 
@@ -102,42 +137,7 @@ else
     echo "Passwordless permission for reboot granted to '$USERNAME'."
 fi
 
-# -----------------------------------------------------------------------------------------------------
-# Setup data folder
-
-# Create directories if they don't exist
-mkdir -p /persistent/free-sleep-data/logs/
-mkdir -p /persistent/free-sleep-data/lowdb/
-
-grep -oP '(?<=DAC_SOCKET=)[^ ]*dac.sock' /opt/eight/bin/frank.sh > /persistent/free-sleep-data/dac_sock_path.txt
-
-# DO NOT REMOVE, OLD VERSIONS WILL LOSE settings & schedules
-# Migrate old config/DB to new /persistent/free-sleep-data/
-FILES_TO_MOVE=(
-  "/home/dac/free-sleep-database/settingsDB.json:/persistent/free-sleep-data/lowdb/settingsDB.json"
-  "/home/dac/free-sleep-database/schedulesDB.json:/persistent/free-sleep-data/lowdb/schedulesDB.json"
-  "/home/dac/dac_sock_path.txt:/persistent/free-sleep-data/dac_sock_path.txt"
-)
-
-# Loop through each file and move if it exists
-for entry in "${FILES_TO_MOVE[@]}"; do
-  IFS=":" read -r SOURCE_FILE DESTINATION <<< "$entry"
-
-  if [ -f "$SOURCE_FILE" ]; then
-    mv "$SOURCE_FILE" "$DESTINATION"
-    echo "Moved $SOURCE_FILE to $DESTINATION"
-  fi
-done
-
-
-# Change ownership recursively (-R flag)
-chown -R dac:dac /persistent/free-sleep-data/
-
-# Set directory permissions
-chmod 770 /persistent/free-sleep-data/
-chmod g+s /persistent/free-sleep-data/
-
-# -----------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------
 
 echo -e "\033[0;32mInstallation complete! The Free Sleep server is running and will start automatically on boot.\033[0m"
 echo -e "\033[0;32mSee free-sleep logs with journalctl -u free-sleep --no-pager --output=cat\033[0m"
