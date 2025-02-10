@@ -174,16 +174,7 @@ nmcli connection reload
 ---
 
 
-### 12. THIS STEP IS FOR POD 4 USERS ONLY! POD 3 USERS SKIP THIS STEP
-Your firmware has a different `dac.sock` path location, all you need to do is run this command. This tell the free-sleep app where to establish a dac.sock connection
-```
-echo '/home/dac/app/sewer/dac.sock' > /home/dac/dac_sock_path.txt
-```
-
----
-
-
-### 13. Install the free-sleep app, this will set up a systemctl service that auto runs on boot
+### 12. Install the free-sleep app, this will set up a systemctl service that auto runs on boot
 ```
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/throwaway31265/free-sleep/main/scripts/install.sh)"
 ```
@@ -191,7 +182,7 @@ echo '/home/dac/app/sewer/dac.sock' > /home/dac/dac_sock_path.txt
 ---
 
 
-### 14. Get your pod's IP address
+### 13. Get your pod's IP address
 
 ```
 # Yours will be different, that's okay
@@ -202,9 +193,9 @@ nmcli -g ip4.address device show wlan0
 ---
 
 
-### 15. With a device connected to the SAME Wi-Fi network you set up in step 11, navigate to your pod's IP address (port 3000)
+### 14. With a device connected to the SAME Wi-Fi network you set up in step 11, navigate to your pod's IP address (port 3000)
 
-SET YOUR TIME ZONE, OR ELSE SCHEDULING WILL NOT WORK! This can be done on the settings page of the web app. See screenshot below
+SET YOUR TIME ZONE, OR ELSE SCHEDULING WILL NOT WORK! This can be done on the settings page of the web app. See screenshot below. The site should appear but it should be loading and dulled out. (Unless you have the pod plugged into the cover)
 
 http://192.168.1.50:3000/
 
@@ -213,12 +204,12 @@ http://192.168.1.50:3000/
 ---
 
 
-### 16. Validation
+### 15. Validation
 
 #### Verify the site is still up
 1. Unplug the power from your device and plug it back in 
 2. Wait up to 4 minutes or so, ensure you can still access the site from another device
-3. If the site is still up, you should be good
+3. If the site is still up, you should be good. NOTE - The website will not fully load until the Pod is connected to the mattress cover. Once it's plugged in to the cover the site should load and work correctly.
 
 #### Verify the controls work
 1. I would recommend setting up steps 16 and 17 below (block WAN traffic & setup SSH access for debugging & upgrading free-sleep)
