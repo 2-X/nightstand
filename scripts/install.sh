@@ -48,7 +48,7 @@ sudo -u dac bash -c "source /home/dac/.profile && cd /home/dac/free-sleep/server
 mkdir -p /persistent/free-sleep-data/logs/
 mkdir -p /persistent/free-sleep-data/lowdb/
 
-grep -oP '(?<=DAC_SOCKET=)[^ ]*dac.sock' /opt/eight/bin/frank.sh > /persistent/free-sleep-data/dac_sock_path.txt
+# grep -oP '(?<=DAC_SOCKET=)[^ ]*dac.sock' /opt/eight/bin/frank.sh > /persistent/free-sleep-data/dac_sock_path.txt
 
 # DO NOT REMOVE, OLD VERSIONS WILL LOSE settings & schedules
 # Migrate old config/DB to new /persistent/free-sleep-data/
