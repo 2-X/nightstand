@@ -15,15 +15,6 @@ import { useDeviceStatus } from '@api/deviceStatus';
 import { useSettings } from '@api/settings.ts';
 import { useTheme } from '@mui/material/styles';
 
-function getTemperatureGradient(temp: number | undefined): string {
-  if (temp === undefined) return '#262626';
-  if (temp <= 68) return '#1b2d4c';
-  if (temp <= 75) return '#020f25';
-  if (temp <= 80) return '#0c0926';
-  if (temp <= 83) return '#311a1a';
-  if (temp <= 95) return '#4d2121';
-  return '#501111';
-}
 
 export default function ControlTempPage() {
   const { data: deviceStatusOriginal, isError, refetch } = useDeviceStatus();
@@ -53,18 +44,6 @@ export default function ControlTempPage() {
         },
       } }
     >
-      { isOn && (
-        <div
-          style={ {
-            position: 'absolute',
-            inset: 0,
-            zIndex: -1,
-            background: `linear-gradient(${getTemperatureGradient(
-              sideStatus?.targetTemperatureF
-            )}, #0000 35%)`,
-          } }
-        />
-      ) }
       <SideControl title={ 'Temperature' } />
       <Slider
         isOn={ isOn }

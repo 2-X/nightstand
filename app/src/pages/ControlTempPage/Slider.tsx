@@ -18,17 +18,11 @@ type SliderProps = {
 
 function getTemperatureColor(temp: number | undefined) {
   if (temp === undefined) return '#262626';
-  if (temp <= 68) return '#2c67cd';
-  if (temp <= 75) return '#003cff';
-  if (temp <= 80) return '#2e34a6';
-  if (temp <= 83) return '#854040';
-  if (temp <= 95) return '#cf4c4c';
+  if (temp === undefined) return '#262626';
+  if (temp <= 70) return '#1c54b2';
+  if (temp <= 82) return '#5393ff';
+  if (temp <= 95) return '#db5858';
   return '#d32f2f';
-  // if (temp === undefined) return '#262626';
-  // if (temp <= 70) return '#1c54b2';
-  // if (temp <= 82) return '#5393ff';
-  // if (temp <= 95) return '#252020';
-  // return '#d32f2f';
 }
 
 export default function Slider({ isOn, currentTargetTemp, refetch, currentTemperatureF, displayCelsius }: SliderProps) {
