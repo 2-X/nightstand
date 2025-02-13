@@ -1,4 +1,4 @@
+export const DAYS_OF_WEEK = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 export function getDayOfWeekIndex(day) {
-    const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    return daysOfWeek.indexOf(day);
+    return DAYS_OF_WEEK.indexOf(day);
 }
