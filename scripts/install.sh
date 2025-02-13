@@ -81,7 +81,7 @@ chmod g+s /persistent/free-sleep-data/
 
 # Step 4: Install dependencies as user dac
 echo "Installing dependencies..."
-sudo -u dac bash -c "cd $SERVER_DIR && npm install"
+sudo -u dac bash -c "cd $SERVER_DIR && /home/dac/.volta/bin/npm install"
 
 # -----------------------------------------------------------------------------------------------------
 
