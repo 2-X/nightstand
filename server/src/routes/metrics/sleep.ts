@@ -33,7 +33,7 @@ router.get('/sleep', async (req: Request<object, object, object, SleepQuery>, re
 
     const sleepRecords = await prisma.sleep_records.findMany({
       where: query,
-      orderBy: { entered_bed_at: "asc" },
+      orderBy: { entered_bed_at: 'asc' },
     });
 
     const formattedRecords = await loadSleepRecords(sleepRecords);

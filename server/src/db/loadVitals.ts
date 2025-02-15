@@ -12,4 +12,4 @@ export const loadVitals = async (vitalRecords: PrismaVitalRecord[]): Promise<Vit
     ...vital,
     period_start: moment.tz(vital.period_start * 1000, userTimeZone).format(),
   })) as VitalRecord[];
-}
+};

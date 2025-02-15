@@ -44,5 +44,5 @@ export const executePythonScript = ({ script, cwd = '/home/dac/bio/src/presence_
   process.on('close', (code) => {
     logger.info(`Python script exited with code ${code}`);
   });
-}
+};
 

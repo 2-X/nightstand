@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import logger from './logger.js';
 
 
@@ -41,6 +41,7 @@ const FIRMWARE_MAP: Record<FirmwareVersion, FirmwareConfig> = {
 
 
 class Config {
+  // eslint-disable-next-line no-use-before-define
   private static instance: Config;
   public dbFolder: string;
   public lowDbFolder: string;
@@ -54,7 +55,7 @@ class Config {
     this.remoteDevMode = process.env.ENV === 'local';
     this.dacSockPath = this.detectSockPath();
     this.dbFolder = process.env.DATA_FOLDER;
-    this.lowDbFolder = `${this.dbFolder}lowdb/`
+    this.lowDbFolder = `${this.dbFolder}lowdb/`;
   }
 
 
@@ -62,7 +63,7 @@ class Config {
     const dacSockPath = checkIfDacSockPathConfigured();
 
     if (dacSockPath) {
-      logger.debug(`'Custom dac.sock path configured, using ${dacSockPath}`)
+      logger.debug(`'Custom dac.sock path configured, using ${dacSockPath}`);
       return dacSockPath;
     } else if (!this.remoteDevMode){
       logger.debug('No dac.sock path configured, defaulting to pod 3 path');

@@ -14,14 +14,14 @@ const defaultDailySchedule: DailySchedule = {
     onTemperature: 82,
   },
   alarm: {
-    time: "09:00",
+    time: '09:00',
     vibrationIntensity: 1,
     vibrationPattern: 'rise',
     duration: 1,
     enabled: false,
     alarmTemperature: 82,
   }
-}
+};
 
 const defaultSideSchedule: SideSchedule = {
   sunday: defaultDailySchedule,
@@ -31,7 +31,7 @@ const defaultSideSchedule: SideSchedule = {
   thursday: defaultDailySchedule,
   friday: defaultDailySchedule,
   saturday: defaultDailySchedule,
-}
+};
 
 const defaultData: Schedules = {
   left: _.cloneDeep(defaultSideSchedule),

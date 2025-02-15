@@ -5,7 +5,7 @@ import { TIME_ZONES } from './timeZones.js';
 import { TimeSchema } from './schedulesSchema.js';
 
 export const TEMPERATURES = ['celsius', 'fahrenheit'] as const;
-const Temperatures = z.enum(TEMPERATURES)
+const Temperatures = z.enum(TEMPERATURES);
 export type TemperatureFormat = z.infer<typeof Temperatures>;
 
 const SideSettingsSchema = z.object({

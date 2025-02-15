@@ -31,7 +31,7 @@ const parseRawDeviceData = (response: string): RawDeviceDataType => {
     logger.error(error);
     throw error;
   }
-}
+};
 
 // Scale goes from -100 < - > 100
 // Low  -> 55
@@ -65,7 +65,7 @@ const decodeSettings = (rawSettings: string): DeviceStatus['settings'] => {
   // @ts-ignore
   const renamedDecoded = _.mapKeys(decoded, (value, key) => SETTINGS_KEY_MAPPING[key] || key);
   return renamedDecoded as DeviceStatus['settings'];
-}
+};
 
 
 // The default naming convention was ugly... This remaps the keys to human-readable names

@@ -26,6 +26,7 @@ export const frankenCommands = {
 
 
 export const invertedFrankenCommands = _.invert(frankenCommands);
+// eslint-disable-next-line @typescript-eslint/no-type-alias
 export type FrankenCommand = keyof typeof frankenCommands;
 
 

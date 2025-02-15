@@ -15,7 +15,7 @@ const scheduleRebootJob = (onHour: number, onMinute: number, timeZone: TimeZone)
   dailyRule.minute = onMinute;
   dailyRule.tz = timeZone;
 
-  const time = `${String(onHour).padStart(2,'0')}:${String(onMinute).padStart(2,'0')}`
+  const time = `${String(onHour).padStart(2,'0')}:${String(onMinute).padStart(2,'0')}`;
   logger.debug(`Scheduling daily reboot job at ${time}`);
   schedule.scheduleJob(`daily-reboot-${time}`, dailyRule, async () => {
     logger.info(`Executing scheduled reboot job`);
@@ -31,7 +31,7 @@ const scheduleRebootJob = (onHour: number, onMinute: number, timeZone: TimeZone)
       logger.debug(`Stdout: ${stdout}`);
     });
   });
-}
+};
 
 const scheduleCalibrationJob = (onHour: number, onMinute: number, timeZone: TimeZone, side: Side) => {
   const dailyRule = new schedule.RecurrenceRule();
@@ -39,13 +39,13 @@ const scheduleCalibrationJob = (onHour: number, onMinute: number, timeZone: Time
   dailyRule.minute = onMinute;
   dailyRule.tz = timeZone;
 
-  const time = `${String(onHour).padStart(2,'0')}:${String(onMinute).padStart(2,'0')}`
+  const time = `${String(onHour).padStart(2,'0')}:${String(onMinute).padStart(2,'0')}`;
   logger.debug(`Scheduling daily calibration job at ${time}`);
   schedule.scheduleJob(`daily-calibration-${time}-${side}`, dailyRule, async () => {
     logger.info(`Executing scheduled calibration job`);
-    executeCalibrateSensors(side, moment().subtract(6, 'hours').toISOString(), moment().toISOString())
+    executeCalibrateSensors(side, moment().subtract(6, 'hours').toISOString(), moment().toISOString());
   });
-}
+};
 
 
 export const schedulePrimingRebootAndCalibration = (settingsData: Settings) => {

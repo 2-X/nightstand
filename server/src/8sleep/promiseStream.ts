@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/prefer-optional-chain */
 // @ts-nocheck
 // This was copied straight from the @eight/promise-streams package
 // I was concerned they might remove the packages from npm if they want to prevent people from researching free-sleep
@@ -6,7 +7,7 @@
 // @eight/promises && @eight/promise-streams
 
 import { toPromise } from './promises.js';
-import {Readable, Writable, Duplex} from 'stream';
+import { Readable, Writable, Duplex } from 'stream';
 
 class StreamReader {
   constructor(stream, errorTransform) {

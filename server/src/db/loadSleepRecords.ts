@@ -26,4 +26,4 @@ export const loadSleepRecords = async (sleepRecords: PrismaSleepRecord[]): Promi
       ])
       : [],
   })) as SleepRecord[];
-}
+};

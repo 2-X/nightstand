@@ -47,7 +47,7 @@ const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideSt
 
   if (isAlarmVibrating !== undefined) {
     logger.debug('Can only set isAlarmVibrating to false for now...');
-    if (!isAlarmVibrating) await executeFunction('ALARM_CLEAR', "empty");
+    if (!isAlarmVibrating) await executeFunction('ALARM_CLEAR', 'empty');
     await memoryDB.read();
     memoryDB.data[side].isAlarmVibrating = false;
     await memoryDB.write();
@@ -61,7 +61,7 @@ const updateSettings = async (settings: Partial<DeviceStatus['settings']>) => {
   const encodedBuffer = cbor.encode(renamedSettings);
   const hexString = encodedBuffer.toString('hex');
   await executeFunction('SET_SETTINGS', hexString);
-}
+};
 
 export const updateDeviceStatus = async (deviceStatus: DeepPartial<DeviceStatus>) => {
   logger.info(`Updating deviceStatus...`);

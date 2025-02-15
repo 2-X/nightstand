@@ -3,7 +3,7 @@ import schedule from 'node-schedule';
 import { Server } from 'http';
 import logger from './logger.js';
 import { getFranken, getFrankenServer } from './8sleep/frankenServer.js';
-import './jobs/jobScheduler.js'
+import './jobs/jobScheduler.js';
 
 
 // Setup code
