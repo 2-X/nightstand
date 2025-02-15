@@ -22,9 +22,7 @@ export default function PageContainer({ children, sx, containerProps }: React.Pr
         flexGrow: 1,
         alignItems: 'center',
         gap: 2,
-        // padding: 6,
         margin: 0,
-        width: '100vw',
         justifyContent: 'center',
         [theme.breakpoints.up('sm')]: {
           width: '90%',

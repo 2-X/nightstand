@@ -5,6 +5,8 @@ import { useTheme, Theme } from '@mui/material/styles';
 import Box from '@mui/material/Box';
 import SleepRecordCard from './SleepRecordCard.tsx';
 import { SleepRecord } from '../../../server/src/db/sleepRecordsSchema.ts';
+import HeartRateChart from './HeartRateChart.tsx';
+
 // import sleepRecords from './dummyData.ts';
 
 interface SleepBarChartProps {
@@ -20,13 +22,14 @@ interface AxisProps {
   yScale: d3.ScaleLinear<number, number>;
   height: number;
   theme: Theme;
+  selectedSleepRecord: SleepRecord;
 }
 
 // ----------------------------------------------------------------------
 // Convert UTC string -> local Moment
 // ----------------------------------------------------------------------
-function convertToLocalTime(utcDate: string): moment.Moment {
-  return moment.utc(utcDate).local();
+function convertToLocalTime(date: string): moment.Moment {
+  return moment(date).local();
 }
 
 // ----------------------------------------------------------------------
@@ -66,7 +69,7 @@ function formatShiftedHour(hour: number): string {
 // Format X-axis ticks => "MON", "TUE", etc
 // ----------------------------------------------------------------------
 function formatDayLabel(dateString: string): string {
-  const localTime = moment.utc(dateString).local();
+  const localTime = moment(dateString).local();
   if (localTime.hour() < 6) {
     return localTime.subtract(1, 'day').format('ddd').toUpperCase();
   } else {
@@ -130,7 +133,7 @@ function createScales({
 // ----------------------------------------------------------------------
 // Draw axes with grid lines
 // ----------------------------------------------------------------------
-function drawAxes({ chartG, xScale, yScale, height, theme }: AxisProps) {
+function drawAxes({ chartG, xScale, yScale, height, theme, selectedSleepRecord }: AxisProps) {
   // X-axis
   const xAxis = d3.axisBottom<string>(xScale).tickFormat(formatDayLabel);
   const xAxisGroup = chartG
@@ -139,9 +142,14 @@ function drawAxes({ chartG, xScale, yScale, height, theme }: AxisProps) {
     .attr('transform', `translate(0, ${height})`)
     .call(xAxis);
 
+  // .attr('fill', theme.palette.grey[500])
   xAxisGroup
     .selectAll('text')
-    .attr('fill', theme.palette.grey[500])
+    .attr('fill', (d) =>
+      selectedSleepRecord && d === selectedSleepRecord.entered_bed_at
+        ? theme.palette.grey[100] // Highlight selected bar's tick
+        : theme.palette.grey[500] // Default white for others
+    )
     // @ts-ignore
     .style('font-family', theme.typography.body1.fontFamily);
   xAxisGroup.selectAll('.tick line').remove();
@@ -229,15 +237,26 @@ function plotSleepRecords({
           .attr(
             'fill',
             isSelected
-              ? theme.palette.secondary.dark
-              : theme.palette.primary.dark
+              ? theme.palette.grey[100]
+              : theme.palette.grey[900]
           )
           .attr('rx', 2)
           .attr('class', 'bar')
           .attr('data-id', `${sleepRecord.entered_bed_at}-${i}`)
           .on('click', () => setSelectedSleepRecord(sleepRecord));
+        if (isSelected) {
+          gDay
+            .append('text')
+            .attr('x', rectX + rectWidth / 2)
+            .attr('y', yScale.range()[1] + 40) // Placing arrow just below the X-axis
+            .attr('text-anchor', 'middle')
+            .attr('fill', theme.palette.grey[100])
+            .attr('font-size', '16px')
+            .text('▲'); // Unicode up arrow
+        }
       });
     });
+
 }
 
 // ----------------------------------------------------------------------
@@ -295,14 +314,15 @@ export default function SleepBarChart({
       width: innerWidth,
       height: innerHeight
     });
-
+    if (selectedSleepRecord === undefined) return;
     // Draw axes
     drawAxes({
       chartG,
       xScale,
       yScale,
       height: innerHeight,
-      theme
+      theme,
+      selectedSleepRecord
     });
 
     // Plot the sleep intervals
@@ -319,8 +339,16 @@ export default function SleepBarChart({
   if (sleepRecords?.length === 0) return null;
   return (
     <Box>
-      <svg ref={ svgRef } />
-      <SleepRecordCard sleepRecord={ selectedSleepRecord } refetch={ refetch } />
+      <svg ref={ svgRef }/>
+      <SleepRecordCard sleepRecord={ selectedSleepRecord } refetch={ refetch }/>
+      { selectedSleepRecord &&
+        (
+          <HeartRateChart
+            startTime={ selectedSleepRecord.entered_bed_at }
+            endTime={ selectedSleepRecord.left_bed_at }
+          />
+        )
+      }
     </Box>
   );
 }

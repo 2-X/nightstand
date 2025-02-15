@@ -131,7 +131,7 @@ export default function Navbar() {
               aria-label={ title }
               sx={ {
                 '&.Mui-selected': {
-                  color: theme.palette.grey[100], // Different selected color
+                  color: theme.palette.grey[100],
                 },
               } }
             />
@@ -148,7 +148,6 @@ export default function Navbar() {
     background-position: 200% 50%;
   }
 }
-
         ` }
       </style>
     </>

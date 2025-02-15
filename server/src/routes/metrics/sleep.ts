@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import { Prisma, PrismaClient } from '@prisma/client';
 import moment from 'moment-timezone';
+import { sleepRecordSchema, SleepRecord } from '../../db/sleepRecordsSchema.js';
 import { loadSleepRecords } from '../../db/loadSleepRecords.js';
 const prisma = new PrismaClient();
 
@@ -40,6 +41,54 @@ router.get('/sleep', async (req: Request<object, object, object, SleepQuery>, re
   } catch (error) {
     console.error('Error in GET /sleep:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+router.put('/sleep/:id', async (req: Request<{ id: string }, object, Partial<SleepRecord>>, res: Response<SleepRecord | { error: string }>) => {
+
+
+  try {
+    const { id } = req.params;
+    const parsedId = parseInt(id, 10);
+    if (isNaN(parsedId)) {
+      return res.status(400).json({ error: 'Invalid ID' });
+    }
+
+    // Validate the request body against the schema
+    const parsedData = sleepRecordSchema.partial().safeParse(req.body);
+    if (!parsedData.success) {
+      return res.status(400).json({ error: 'Invalid request body', details: parsedData.error.format() });
+    }
+
+    // Convert entered_bed_at and exited_bed_at to epoch (Unix timestamp)
+    const data = { ...parsedData.data };
+    if (data.entered_bed_at) {
+      // @ts-ignore
+      data.entered_bed_at = Math.floor(new Date(data.entered_bed_at).getTime() / 1000);
+    }
+    if (data.left_bed_at) {
+      // @ts-ignore
+      data.left_bed_at = Math.floor(new Date(data.left_bed_at).getTime() / 1000);
+    }
+
+    // Recalculate sleep_period_seconds if both timestamps exist
+    if (data.entered_bed_at && data.left_bed_at) {
+      // @ts-ignore
+      data.sleep_period_seconds = data.left_bed_at - data.entered_bed_at;
+    }
+
+    // Update the record in the database
+    const updatedRecord = await prisma.sleep_records.update({
+      where: { id: parsedId },
+      // @ts-ignore
+      data,
+    });
+    const loadedNewRecord = await loadSleepRecords([updatedRecord]);
+    return res.json(loadedNewRecord[0]);
+  } catch (error) {
+    console.error('Error updating sleep record:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

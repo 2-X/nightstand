@@ -15,7 +15,6 @@ export default function Layout() {
         gap: 2,
         // padding: 0,
         margin: 0,
-        width: '100vw',
         justifyContent: 'center',
       } }
     >

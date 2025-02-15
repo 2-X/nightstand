@@ -3,6 +3,7 @@ export class SequentialQueue {
 
   private execInternal(f: () => Promise<void>) {
     const current = this.executing;
+    // eslint-disable-next-line no-async-promise-executor
     const newPromise = new Promise<void>(async (resolve) => {
       await current;
       await f();

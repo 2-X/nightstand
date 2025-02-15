@@ -4,16 +4,15 @@ import {
   useNavigate
 } from 'react-router-dom';
 import PageContainer from '../PageContainer.tsx';
-
-
 import Divider from '@mui/material/Divider';
-
-import ListItemText from '@mui/material/ListItemText';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import Typography from '@mui/material/Typography';
-import BedIcon from '@mui/icons-material/Bed';
-import { List, ListItem } from '@mui/material';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
+import BedIcon from '@mui/icons-material/Bed';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import FavoriteIcon from '@mui/icons-material/Favorite';
+import Typography from '@mui/material/Typography';
+import { List, ListItem } from '@mui/material';
+
 
 const SettingsList = () => {
   const navigate = useNavigate();
@@ -35,6 +34,14 @@ const SettingsList = () => {
         <ListItemText primary="Sleep"/>
         <ArrowForwardIosIcon fontSize="small" sx={ { color: 'gray' } }/>
       </ListItem>
+      <ListItem onClick={ () => navigate('/data/vitals') }>
+        <ListItemIcon>
+          <FavoriteIcon/>
+        </ListItemIcon>
+        <ListItemText primary="Vitals"/>
+        <ArrowForwardIosIcon fontSize="small" sx={ { color: 'gray' } }/>
+      </ListItem>
+
     </List>
   );
 };
@@ -43,7 +50,6 @@ const SettingsList = () => {
 // eslint-disable-next-line react/no-multi-comp
 export default function DataPage() {
   const location = useLocation();
-
   // Check if we are on a child route of dashboard (like stats)
   const hideContent = location.pathname.startsWith('/data/');
 

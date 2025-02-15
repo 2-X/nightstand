@@ -86,7 +86,7 @@ async function startServer() {
       .catch(error => {
         logger.error(error);
       });
-  };
+  }
 
   // Register signal handlers for graceful shutdown
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
