@@ -7,6 +7,7 @@ import { getDayOfWeekIndex } from './utils.js';
 import cbor from 'cbor';
 import moment from 'moment-timezone';
 import { executeFunction } from '../8sleep/deviceApi.js';
+import { getFranken } from '../8sleep/frankenServer.js';
 
 
 function isEndTimeSameDay(endTime: Time) {
@@ -50,7 +51,12 @@ export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek
     const cborPayload = cbor.encode(alarmPayload);
     const hexPayload = cborPayload.toString('hex');
     const command = side === 'left' ? 'ALARM_LEFT' : 'ALARM_RIGHT';
-
+    const franken = await getFranken();
+    const resp = await franken.getDeviceStatus();
+    if (!resp[side].isOn) {
+      logger.info(`Skipping scheduled alarm, ${side} side is turned off`);
+      return;
+    }
     logger.info(`Executing scheduled alarm job for ${side} side on ${day} at ${dailySchedule.alarm.time}`);
 
     await executeFunction(command, hexPayload);

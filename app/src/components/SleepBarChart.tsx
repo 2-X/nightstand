@@ -221,7 +221,23 @@ function plotSleepRecords({
       const isSelected = sleepRecord.id === selectedSleepRecord?.id;
 
       sleepRecord.present_intervals.forEach(([startStr, endStr], i) => {
-        // shift hours for each interval
+        if (startStr < sleepRecord.entered_bed_at) {
+          if (endStr > sleepRecord.entered_bed_at) {
+            startStr = sleepRecord.entered_bed_at;
+          } else {
+            return;
+          }
+        }
+
+        if (endStr > sleepRecord.left_bed_at) {
+          if (startStr < sleepRecord.left_bed_at) {
+            endStr = sleepRecord.left_bed_at;
+          } else {
+            return;
+          }
+        }
+
+        // Shift hours for each interval
         const s = shiftHour(dateToHourOfDay(startStr));
         const e = shiftHour(dateToHourOfDay(endStr));
 

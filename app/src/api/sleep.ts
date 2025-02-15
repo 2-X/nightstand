@@ -31,6 +31,6 @@ export const deleteSleepRecord = async (id: number): Promise<void> => {
 };
 
 
-export const updateSleepRecord = async (id: number, updates: Partial<SleepRecord>): Promise<SleepRecord> => {
+export const updateSleepRecord = async (id: number, updates: Partial<SleepRecord>) => {
   return axios.put<SleepRecord>(`/metrics/sleep/${id}`, updates);
 };

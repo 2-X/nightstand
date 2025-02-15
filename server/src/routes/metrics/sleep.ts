@@ -45,9 +45,12 @@ router.get('/sleep', async (req: Request<object, object, object, SleepQuery>, re
 });
 
 
-router.put('/sleep/:id', async (req: Request<{ id: string }, object, Partial<SleepRecord>>, res: Response<SleepRecord | { error: string }>) => {
-
-
+router.put<
+  { id: string },
+  any,
+  SleepRecord
+  // @ts-ignore
+>('/sleep/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const parsedId = parseInt(id, 10);
@@ -55,36 +58,55 @@ router.put('/sleep/:id', async (req: Request<{ id: string }, object, Partial<Sle
       return res.status(400).json({ error: 'Invalid ID' });
     }
 
-    // Validate the request body against the schema
+    // Fetch the existing record
+    const existingRecord = await prisma.sleep_records.findUnique({
+      where: { id: parsedId },
+    });
+    if (!existingRecord) {
+      return res.status(404).json({ error: 'Sleep record not found' });
+    }
+
+
+    // Validate the request body
     const parsedData = sleepRecordSchema.partial().safeParse(req.body);
     if (!parsedData.success) {
       return res.status(400).json({ error: 'Invalid request body', details: parsedData.error.format() });
     }
-
-    // Convert entered_bed_at and exited_bed_at to epoch (Unix timestamp)
-    const data = { ...parsedData.data };
-    if (data.entered_bed_at) {
+    // Convert entered_bed_at and exited_bed_at to epoch timestamps
+    const updatedRecord = { ...parsedData.data };
+    if (updatedRecord.entered_bed_at) {
       // @ts-ignore
-      data.entered_bed_at = Math.floor(new Date(data.entered_bed_at).getTime() / 1000);
+      updatedRecord.entered_bed_at = Math.floor(new Date(updatedRecord.entered_bed_at).getTime() / 1000);
     }
-    if (data.left_bed_at) {
+    if (updatedRecord.left_bed_at) {
       // @ts-ignore
-      data.left_bed_at = Math.floor(new Date(data.left_bed_at).getTime() / 1000);
+      updatedRecord.left_bed_at = Math.floor(new Date(updatedRecord.left_bed_at).getTime() / 1000);
     }
 
-    // Recalculate sleep_period_seconds if both timestamps exist
-    if (data.entered_bed_at && data.left_bed_at) {
+    // Need to recalculate the number of times someone left the bed during the new sleep interval
+    // @ts-ignore
+    if (updatedRecord.entered_bed_at && updatedRecord.left_bed_at) {
       // @ts-ignore
-      data.sleep_period_seconds = data.left_bed_at - data.entered_bed_at;
+      updatedRecord.sleep_period_seconds = updatedRecord.left_bed_at - updatedRecord.entered_bed_at;
+
+      // @ts-ignore
+      updatedRecord.times_exited_bed = existingRecord.not_present_intervals.filter(([start, end]) => {
+        const startTime = Math.floor(new Date(start).getTime() / 1000);
+        const endTime = Math.floor(new Date(end).getTime() / 1000);
+        // @ts-ignore
+        return startTime >= updatedRecord.entered_bed_at && endTime <= updatedRecord.left_bed_at;
+      }).length;
     }
 
     // Update the record in the database
-    const updatedRecord = await prisma.sleep_records.update({
+    const dbUpdatedRecord = await prisma.sleep_records.update({
       where: { id: parsedId },
       // @ts-ignore
-      data,
+      data: updatedRecord,
     });
-    const loadedNewRecord = await loadSleepRecords([updatedRecord]);
+
+    // Load and return the updated record
+    const loadedNewRecord = await loadSleepRecords([dbUpdatedRecord]);
     return res.json(loadedNewRecord[0]);
   } catch (error) {
     console.error('Error updating sleep record:', error);
