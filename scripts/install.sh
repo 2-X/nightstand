@@ -122,6 +122,7 @@ systemctl status free-sleep.service --no-pager
 echo "Updating device time"
 date -s "$(curl -s --head http://google.com | grep ^Date: | sed 's/Date: //g')"
 
+
 # -----------------------------------------------------------------------------------------------------
 # Setup ability to reboot pod without sudo permission for dac user
 USERNAME="dac"
@@ -144,3 +145,4 @@ echo -e "\033[0;32mSee free-sleep logs with journalctl -u free-sleep --no-pager 
 
 echo "This is your dac.sock path, if the output below doesn't end in dac.sock, reach out to us on Discord"
 cat /persistent/free-sleep-data/dac_sock_path.txt
+# -----------------------------------------------------------------------------------------------------
