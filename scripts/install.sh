@@ -8,28 +8,26 @@ SERVER_DIR="$REPO_DIR/server"
 SERVICE_FILE="/etc/systemd/system/free-sleep.service"
 
 # -----------------------------------------------------------------------------------------------------
-
-# Step 1: Download the repository
+# Download the repository
 echo "Downloading the repository..."
 curl -L -o "$ZIP_FILE" "$REPO_URL"
 
-# Step 2: Unzip the repository
+# Unzip the repository
 echo "Unzipping the repository..."
 unzip -o "$ZIP_FILE"
 
 echo "Removing the zip file..."
 rm "$ZIP_FILE"
 
-# Step 3: Move files to the installation directory
+# Move files to the installation directory
 echo "Setting up the installation directory..."
 mv free-sleep-main "$REPO_DIR"
 chown -R dac:dac "$REPO_DIR"
 
 # -----------------------------------------------------------------------------------------------------
-
 # Install volta
-sudo -u dac bash -c 'curl https://get.volta.sh | bash'
 
+sudo -u dac bash -c 'curl https://get.volta.sh | bash'
 
 if sudo -u dac bash -c 'command -v volta' > /dev/null 2>&1; then
     echo "Volta is already installed for user 'dac'."
@@ -42,7 +40,7 @@ fi
 # This will skip automatically if this node version is already installed
 sudo -u dac bash -c "source /home/dac/.profile && cd /home/dac/free-sleep/server && volta install node@22.13.0"
 # -----------------------------------------------------------------------------------------------------
-# Setup data folder
+# Setup data folder in /persistent/
 
 # Create directories if they don't exist
 mkdir -p /persistent/free-sleep-data/logs/
@@ -76,16 +74,18 @@ chown -R dac:dac /persistent/free-sleep-data/
 chmod 770 /persistent/free-sleep-data/
 chmod g+s /persistent/free-sleep-data/
 
-
 # -----------------------------------------------------------------------------------------------------
+# Install dependencies as user dac
 
-# Step 4: Install dependencies as user dac
 echo "Installing dependencies..."
 sudo -u dac bash -c "cd $SERVER_DIR && /home/dac/.volta/bin/npm install"
 
+echo "Running prisma migration"
+sudo -u dac bash -c "cd $SERVER_DIR && /home/dac/.volta/bin/npm run migrate deploy"
+
 # -----------------------------------------------------------------------------------------------------
 
-# Step 5: Create a systemd service file
+# Create a systemd service file
 echo "Creating systemd service file at $SERVICE_FILE..."
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
@@ -105,16 +105,16 @@ Environment=PATH=/home/dac/.volta/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sb
 WantedBy=multi-user.target
 EOF
 
-# Step 6: Reload systemd and enable the service
+# Reload systemd and enable the service
 echo "Reloading systemd daemon and enabling the service..."
 systemctl daemon-reload
 systemctl enable free-sleep.service
 
-# Step 7: Start the service
+# Start the service
 echo "Starting the free-sleep server..."
 systemctl start free-sleep.service
 
-# Step 8: Display service status
+# Display service status
 echo "Checking service status..."
 systemctl status free-sleep.service --no-pager
 
