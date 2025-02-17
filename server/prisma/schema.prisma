@@ -28,12 +28,12 @@ model sleep_records {
 model vitals {
   id             Int    @id @default(autoincrement())
   side           String
-  period_start   Int // 5-minute interval start (Unix timestamp)
+  timestamp      Int // 5-minute interval start (Unix timestamp)
   heart_rate     Float? // Averaged over 5 minutes
   hrv            Float? // Averaged over 5 minutes
   breathing_rate Float? // Averaged over 5 minutes
 
-  @@unique([side, period_start]) // Ensure no duplicate intervals
-  @@index([side, period_start])
+  @@unique([side, timestamp]) // Ensure no duplicate intervals
+  @@index([side, timestamp])
 }
 

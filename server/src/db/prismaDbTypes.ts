@@ -3,7 +3,7 @@ import { Side } from './schedulesSchema.js';
 export interface VitalRecord {
   id: number;
   side: Side;
-  period_start: string;
+  timestamp: string;
   heart_rate: number;
   hrv: number;
   breathing_rate: number;

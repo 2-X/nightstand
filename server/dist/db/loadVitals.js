@@ -5,6 +5,6 @@ export const loadVitals = async (vitalRecords) => {
     const userTimeZone = settingsDB.data.timeZone || 'UTC';
     return vitalRecords.map((vital) => ({
         ...vital,
-        period_start: moment.tz(vital.period_start * 1000, userTimeZone).format(),
+        timestamp: moment.tz(vital.timestamp * 1000, userTimeZone).format(),
     }));
 };

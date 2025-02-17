@@ -19,20 +19,20 @@ router.get('/vitals', async (req: Request<object, object, object, VitalsQuery>, 
   try {
     const { side, startTime, endTime } = req.query;
 
-    // const query: { side?: string; period_start?: any } = {};
-    const query: Prisma.vitalsWhereInput = { period_start: {} }; // Use Prisma-generated type
+    // const query: { side?: string; timestamp?: any } = {};
+    const query: Prisma.vitalsWhereInput = { timestamp: {} }; // Use Prisma-generated type
 
     if (side) query.side = side;
     // @ts-ignore
-    if (startTime) query.period_start = { ...query.period_start, gte: moment(startTime).unix() };
+    if (startTime) query.timestamp = { ...query.timestamp, gte: moment(startTime).unix() };
     // @ts-ignore
-    if (endTime) query.period_start = { ...query.period_start, lte: moment(endTime).unix() };
+    if (endTime) query.timestamp = { ...query.timestamp, lte: moment(endTime).unix() };
 
 
     // Use Prisma's generated type for the records
     const vitals: VitalRecord[] = await prisma.vitals.findMany({
       where: query,
-      orderBy: { period_start: 'asc' },
+      orderBy: { timestamp: 'asc' },
     });
 
     await settingsDB.read();

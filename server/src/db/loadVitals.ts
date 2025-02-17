@@ -10,6 +10,6 @@ export const loadVitals = async (vitalRecords: PrismaVitalRecord[]): Promise<Vit
 
   return vitalRecords.map((vital) => ({
     ...vital,
-    period_start: moment.tz(vital.period_start * 1000, userTimeZone).format(),
+    timestamp: moment.tz(vital.timestamp * 1000, userTimeZone).format(),
   })) as VitalRecord[];
 };

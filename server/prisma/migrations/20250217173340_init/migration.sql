@@ -14,7 +14,7 @@ CREATE TABLE "sleep_records" (
 CREATE TABLE "vitals" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "side" TEXT NOT NULL,
-    "period_start" INTEGER NOT NULL,
+    "timestamp" INTEGER NOT NULL,
     "heart_rate" REAL,
     "hrv" REAL,
     "breathing_rate" REAL
@@ -27,7 +27,7 @@ CREATE INDEX "sleep_records_side_entered_bed_at_idx" ON "sleep_records"("side", 
 CREATE UNIQUE INDEX "sleep_records_side_entered_bed_at_key" ON "sleep_records"("side", "entered_bed_at");
 
 -- CreateIndex
-CREATE INDEX "vitals_side_period_start_idx" ON "vitals"("side", "period_start");
+CREATE INDEX "vitals_side_timestamp_idx" ON "vitals"("side", "timestamp");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "vitals_side_period_start_key" ON "vitals"("side", "period_start");
+CREATE UNIQUE INDEX "vitals_side_timestamp_key" ON "vitals"("side", "timestamp");

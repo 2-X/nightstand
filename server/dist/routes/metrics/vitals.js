@@ -8,20 +8,20 @@ const router = express.Router();
 router.get('/vitals', async (req, res) => {
     try {
         const { side, startTime, endTime } = req.query;
-        // const query: { side?: string; period_start?: any } = {};
-        const query = { period_start: {} }; // Use Prisma-generated type
+        // const query: { side?: string; timestamp?: any } = {};
+        const query = { timestamp: {} }; // Use Prisma-generated type
         if (side)
             query.side = side;
         // @ts-ignore
         if (startTime)
-            query.period_start = { ...query.period_start, gte: moment(startTime).unix() };
+            query.timestamp = { ...query.timestamp, gte: moment(startTime).unix() };
         // @ts-ignore
         if (endTime)
-            query.period_start = { ...query.period_start, lte: moment(endTime).unix() };
+            query.timestamp = { ...query.timestamp, lte: moment(endTime).unix() };
         // Use Prisma's generated type for the records
         const vitals = await prisma.vitals.findMany({
             where: query,
-            orderBy: { period_start: 'asc' },
+            orderBy: { timestamp: 'asc' },
         });
         await settingsDB.read();
         const formattedVitals = await loadVitals(vitals);
