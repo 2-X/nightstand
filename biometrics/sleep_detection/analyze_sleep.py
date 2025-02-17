@@ -1,5 +1,6 @@
 # python3 analyze_sleep.py --side=right --start_time="2025-02-07 04:00:00" --end_time="2025-02-07 15:00:00"
-# cd /home/dac/free-sleep/biometrics/sleep_detection && python3 analyze_sleep.py --side=left --start_time="2025-02-13 03:00:00" --end_time="2025-02-13 15:00:00"
+# cd /home/dac/free-sleep/biometrics/sleep_detection && python3 analyze_sleep.py --side=right --start_time="2025-02-16 03:00:00" --end_time="2025-02-16 15:00:00"
+# cd /home/dac/free-sleep/biometrics/sleep_detection && /home/dac/venv/bin/python analyze_sleep.py --side=left --start_time="2025-02-16 03:00:00" --end_time="2025-02-16 15:00:00"
 # TODO: Support users manually starting/ending sleep time
 
 import sys

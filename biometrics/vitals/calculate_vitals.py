@@ -142,22 +142,22 @@ def calculate_vitals(start_time: datetime, end_time: datetime, side: Side, folde
     run_data.df_pred['end_time'] = pd.to_datetime(run_data.df_pred['end_time'])
 
     # Floor start_time to the nearest 5-minute interval
-    run_data.df_pred['period_start'] = run_data.df_pred['start_time'].dt.floor('3min')
+    run_data.df_pred['timestamp'] = run_data.df_pred['start_time'].dt.floor('3min')
 
     # Convert timestamps to Unix epoch (for Prisma)
-    run_data.df_pred['period_start'] = run_data.df_pred['period_start'].astype('int64') // 10 ** 9
+    run_data.df_pred['timestamp'] = run_data.df_pred['timestamp'].astype('int64') // 10 ** 9
 
     # DEBUGGING Convert epoch columns to formatted datetime strings
     # run_data.df_pred['ts_end'] = pd.to_datetime(run_data.df_pred['period_end'], unit='s').dt.strftime('%Y-%m-%d %H:%M:%S')
 
     # Group by 5-minute periods and compute averages
-    run_data.df_pred = run_data.df_pred.groupby(['period_start']).agg({
+    run_data.df_pred = run_data.df_pred.groupby(['timestamp']).agg({
         'heart_rate': 'mean',
         'hrv': 'mean',
         'breathing_rate': 'mean'
     }).reset_index()
     run_data.df_pred['side'] = side
-    run_data.df_pred['ts_start'] = pd.to_datetime(run_data.df_pred['period_start'], unit='s').dt.strftime('%Y-%m-%d %H:%M:%S')
+    run_data.df_pred['ts_start'] = pd.to_datetime(run_data.df_pred['timestamp'], unit='s').dt.strftime('%Y-%m-%d %H:%M:%S')
     run_data.df_pred['heart_rate'] = run_data.df_pred['heart_rate'].round(0).astype(int)
     run_data.df_pred['hrv'] = run_data.df_pred['hrv'].round(0).astype(int)
     run_data.df_pred['breathing_rate'] = run_data.df_pred['hrv'].round(0).astype(int)

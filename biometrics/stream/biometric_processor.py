@@ -124,12 +124,20 @@ class BiometricProcessor:
             calculate_breathing=True,
         )
         if self.is_valid(measurement):
+            hrv = measurement['sdnn']
+            if hrv < 30 or hrv > 120:
+                hrv = 0
+
+            breathing_rate = measurement['breathingrate'] * 60
+            if breathing_rate < 8 or breathing_rate > 25:
+                breathing_rate = 0
+
             return {
                 'side': self.side,
-                'period_start': epoch,
+                'timestamp': epoch,
                 'heart_rate': measurement['bpm'],
-                'hrv': measurement['sdnn'],
-                'breathing_rate': measurement['breathingrate'] * 60,
+                'hrv': hrv,
+                'breathing_rate': breathing_rate,
             }
         return None
 
@@ -168,12 +176,10 @@ class BiometricProcessor:
 
             self.combined_measurements.append({
                 'side': self.side,
-                'period_start': epoch,
+                'timestamp': epoch,
                 'heart_rate': heart_rate,
                 'hrv': (measurement_1['hrv'] + measurement_2['hrv']) / 2,
                 'breathing_rate': (measurement_1['breathing_rate'] + measurement_2['breathing_rate']) / 2 * 60,
-                # 'moving_average': self.hr_moving_avg,
-                # 'hr_std_2': self.hr_std_2,
             })
 
         elif measurement_1 is not None:
@@ -189,8 +195,6 @@ class BiometricProcessor:
             self.heart_rates.append(m1_heart_rate)
 
             measurement_1['heart_rate'] = m1_heart_rate
-            # measurement_1['moving_average'] = self.hr_moving_avg
-            # measurement_1['hr_std_2'] = self.hr_std_2
             self.combined_measurements.append(measurement_1)
 
         elif measurement_2 is not None:
@@ -210,8 +214,6 @@ class BiometricProcessor:
             self.heart_rates.append(heart_rate)
 
             measurement_2['heart_rate'] = heart_rate
-            # measurement_2['moving_average'] = self.hr_moving_avg
-            # measurement_2['hr_std_2'] = self.hr_std_2
             self.combined_measurements.append(measurement_2)
 
         self.next()

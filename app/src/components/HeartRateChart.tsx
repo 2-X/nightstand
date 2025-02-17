@@ -37,13 +37,13 @@ export default function HeartRateChart({ startTime, endTime }: HeartRateChartPro
   const cleanedVitalsRecords = downsampleData(vitalsRecords, downsampleTo)
     .filter(
       (record) =>
-        record.period_start &&
-        !isNaN(new Date(record.period_start).getTime()) &&
+        record.timestamp &&
+        !isNaN(new Date(record.timestamp).getTime()) &&
         !isNaN(record.heart_rate)
     )
     .map((record) => ({
       ...record,
-      period_start: new Date(record.period_start), // Convert to Date object
+      timestamp: new Date(record.timestamp), // Convert to Date object
       heart_rate: Number(record.heart_rate), // Ensure it's a number
     }));
 
@@ -60,7 +60,7 @@ export default function HeartRateChart({ startTime, endTime }: HeartRateChartPro
         xAxis={ [
           {
             id: 'Years',
-            dataKey: 'period_start',
+            dataKey: 'timestamp',
             scaleType: 'time',
             valueFormatter: (periodStart) =>
               moment(periodStart).tz('America/Chicago').format('HH:mm'),
