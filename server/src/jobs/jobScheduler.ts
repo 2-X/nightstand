@@ -18,7 +18,6 @@ async function setupJobs() {
   // Clear existing jobs
   logger.info('Canceling old jobs...');
   Object.keys(schedule.scheduledJobs).forEach((jobName) => {
-    logger.debug(`Canceled job: ${jobName}`);
     schedule.cancelJob(jobName);
   });
   await schedule.gracefulShutdown();

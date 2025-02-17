@@ -1,28 +1,20 @@
 import schedule from 'node-schedule';
-import logger from '../logger.js';
-import { getDayOfWeekIndex, DAYS_OF_WEEK } from './utils.js';
+import { getDayIndexForSchedule, logJob } from './utils.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 const scheduleAdjustment = (timeZone, side, day, time, temperature) => {
     const onRule = new schedule.RecurrenceRule();
+    const dayOfWeekIndex = getDayIndexForSchedule(day, time);
     const [onHour, onMinute] = time.split(':').map(Number);
-    let dayOfWeek = getDayOfWeekIndex(day);
-    if (onHour <= 12) {
-        dayOfWeek += 1;
-        const nextDay = DAYS_OF_WEEK[dayOfWeek];
-        logger.debug(`Scheduling temperature adjustment job for ${side} side on ${nextDay} morning at ${time} at ${temperature}°F`);
-    }
-    else {
-        logger.debug(`Scheduling temperature adjustment job for ${side} side on ${day} night at ${time} at ${temperature}°F`);
-    }
-    onRule.dayOfWeek = dayOfWeek;
+    logJob('Scheduling temperature adjustment job', side, day, dayOfWeekIndex, time);
+    onRule.dayOfWeek = dayOfWeekIndex;
     onRule.hour = onHour;
     onRule.minute = onMinute;
     onRule.tz = timeZone;
     schedule.scheduleJob(`${side}-${day}-${time}-${temperature}-temperature-adjustment`, onRule, async () => {
-        logger.info(`Executing scheduled temperature adjustment job for ${side} side on ${day} at ${time} at ${temperature}°F`);
+        logJob('Executing temperature adjustment job', side, day, dayOfWeekIndex, time);
         await updateDeviceStatus({
             [side]: {
-                targetTemperatureF: temperature
+                targetTemperatureF: temperature,
             }
         });
     });

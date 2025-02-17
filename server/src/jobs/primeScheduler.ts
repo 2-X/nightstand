@@ -40,9 +40,9 @@ const scheduleCalibrationJob = (onHour: number, onMinute: number, timeZone: Time
   dailyRule.tz = timeZone;
 
   const time = `${String(onHour).padStart(2,'0')}:${String(onMinute).padStart(2,'0')}`;
-  logger.debug(`Scheduling daily calibration job at ${time}`);
+  logger.debug(`Scheduling daily calibration job at ${time} for ${side}`);
   schedule.scheduleJob(`daily-calibration-${time}-${side}`, dailyRule, async () => {
-    logger.info(`Executing scheduled calibration job`);
+    logger.info(`Executing scheduled calibration job for ${side}`);
     executeCalibrateSensors(side, moment().subtract(6, 'hours').toISOString(), moment().toISOString());
   });
 };

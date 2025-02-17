@@ -1,19 +1,15 @@
 import schedule from 'node-schedule';
 import { Settings } from '../db/settingsSchema.js';
-import { DailySchedule, DayOfWeek, Side, Time } from '../db/schedulesSchema.js';
+import { DailySchedule, DayOfWeek, Side } from '../db/schedulesSchema.js';
 import memoryDB from '../db/memoryDB.js';
-import logger from '../logger.js';
-import { getDayOfWeekIndex, getNextDayOfWeekIndex } from './utils.js';
+import { getDayIndexForSchedule, logJob } from './utils.js';
 import cbor from 'cbor';
 import moment from 'moment-timezone';
 import { executeFunction } from '../8sleep/deviceApi.js';
 import { getFranken } from '../8sleep/frankenServer.js';
 
 
-function isEndTimeSameDay(endTime: Time) {
-  const endHour = Number(endTime.split(':')[0]);
-  return endHour > 11;
-}
+
 
 export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek, dailySchedule: DailySchedule) => {
   if (!dailySchedule.power.enabled) return;
@@ -22,19 +18,17 @@ export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek
   if (settingsData.timeZone === null) return;
 
   const alarmRule = new schedule.RecurrenceRule();
-  // Handle if someone has odd sleeping schedule for w/e reason (goes to bed at 13:00, wakes up at 21:00)
-  if (isEndTimeSameDay(dailySchedule.power.off)) {
-    alarmRule.dayOfWeek = getDayOfWeekIndex(day);
-  } else {
-    alarmRule.dayOfWeek = getNextDayOfWeekIndex(day);
-  }
+
+  const dayIndex = getDayIndexForSchedule(day, dailySchedule.power.off);
+  alarmRule.dayOfWeek = dayIndex;
 
   const { time } = dailySchedule.alarm;
   const [alarmHour, alarmMinute] = time.split(':').map(Number);
   alarmRule.hour = alarmHour;
   alarmRule.minute = alarmMinute;
   alarmRule.tz = settingsData.timeZone;
-  logger.debug(`Scheduling alarm job for ${side} side on ${day} at ${dailySchedule.alarm.time}`);
+
+  logJob('Scheduling alarm job', side, day, dayIndex, time);
 
   schedule.scheduleJob(`${side}-${day}-${time}-alarm`, alarmRule, async () => {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -54,10 +48,10 @@ export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek
     const franken = await getFranken();
     const resp = await franken.getDeviceStatus();
     if (!resp[side].isOn) {
-      logger.info(`Skipping scheduled alarm, ${side} side is turned off`);
+      logJob('Skipping scheduled alarm, pod is off', side, day, dayIndex, time);
       return;
     }
-    logger.info(`Executing scheduled alarm job for ${side} side on ${day} at ${dailySchedule.alarm.time}`);
+    logJob('Executing alarm job', side, day, dayIndex, time);
 
     await executeFunction(command, hexPayload);
     await memoryDB.read();
@@ -66,7 +60,7 @@ export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek
 
     setTimeout(
       async () => {
-        logger.debug(`Clearing alarm status for ${side} side on ${day} at ${dailySchedule.alarm.time}`);
+        logJob('Clearing alarm job', side, day, dayIndex, time);
         await memoryDB.read();
         memoryDB.data[side].isAlarmVibrating = false;
         await memoryDB.write();
