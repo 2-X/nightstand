@@ -10,3 +10,10 @@ export const vitalsRecordSchema = z.object({
 
 export type VitalsRecord = z.infer<typeof vitalsRecordSchema>;
 
+export type VitalsSummary = {
+  avgHeartRate: number;
+  minHeartRate: number;
+  maxHeartRate: number;
+  avgHRV: number;
+  avgBreathingRate: number;
+};

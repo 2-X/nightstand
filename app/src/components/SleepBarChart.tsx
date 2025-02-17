@@ -6,6 +6,7 @@ import Box from '@mui/material/Box';
 import SleepRecordCard from './SleepRecordCard.tsx';
 import { SleepRecord } from '../../../server/src/db/sleepRecordsSchema.ts';
 import HeartRateChart from './HeartRateChart.tsx';
+import VitalsSummaryCard from './VitalsSummaryCard.tsx';
 
 // import sleepRecords from './dummyData.ts';
 
@@ -357,12 +358,19 @@ export default function SleepBarChart({
     <Box>
       <svg ref={ svgRef }/>
       <SleepRecordCard sleepRecord={ selectedSleepRecord } refetch={ refetch }/>
-      { selectedSleepRecord &&
+      {
+        selectedSleepRecord &&
         (
-          <HeartRateChart
-            startTime={ selectedSleepRecord.entered_bed_at }
-            endTime={ selectedSleepRecord.left_bed_at }
-          />
+          <>
+            <VitalsSummaryCard
+              startTime={ selectedSleepRecord.entered_bed_at }
+              endTime={ selectedSleepRecord.left_bed_at }
+            />
+            <HeartRateChart
+              startTime={ selectedSleepRecord.entered_bed_at }
+              endTime={ selectedSleepRecord.left_bed_at }
+            />
+          </>
         )
       }
     </Box>
