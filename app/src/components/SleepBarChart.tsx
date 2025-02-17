@@ -357,11 +357,11 @@ export default function SleepBarChart({
   return (
     <Box>
       <svg ref={ svgRef }/>
-      <SleepRecordCard sleepRecord={ selectedSleepRecord } refetch={ refetch }/>
       {
         selectedSleepRecord &&
         (
           <>
+            <SleepRecordCard sleepRecord={ selectedSleepRecord } refetch={ refetch }/>
             <VitalsSummaryCard
               startTime={ selectedSleepRecord.entered_bed_at }
               endTime={ selectedSleepRecord.left_bed_at }

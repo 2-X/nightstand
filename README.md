@@ -38,6 +38,7 @@ Check the back of your pod where you plug in the water tubes,
 - Requires your device to be on the same Wi-Fi as the pod
 - No authentication is implemented
 - Does not have sleep statistics available (HRV, hear rate, REM time, snore time, etc.), this is a WIP
+- Pod 4 taps do not work
 
 --- 
 
@@ -73,14 +74,13 @@ This project is intended to be entirely ran on an 8 sleep pod
 ![Scheduled alarms](docs/alarm_schedule.png)
 ![Settings](docs/settings.png)
 
-## Future planned work
-- Making the UI "prettier"
-- Identifying sources for advanced metrics (HRV, heart rate, snoring)
-
 
 ## Contributing
 
-- I'm happy to approve pull requests as long as it makes sense, clearly documented, and in TypeScript
+- Reach out to me on Discord @free_sleep to coordinate work so we don't step on each other's toes
+- Make sure you run `npm run lint` in `server/` & `app/`
+- Your changes must not have any conflicts with the main branch, I don't have the bandwidth to fix your git conflicts
+- Changes must be in TS
 
 ---
 

@@ -1,18 +1,30 @@
 import moment from 'moment-timezone';
-import { Box, Typography } from '@mui/material';
-import { useResizeDetector } from 'react-resize-detector';
-
-import PageContainer from '../../PageContainer.tsx';
-import SleepBarChart from '../../../components/SleepBarChart.tsx';
-import { useSleepRecords } from '@api/sleep.ts';
-import { useAppStore } from '@state/appStore.tsx';
-import { useState } from 'react';
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
-import { useTheme } from '@mui/material/styles';
+import { Alert } from '@mui/material';
+import { Box, Typography } from '@mui/material';
+import { useResizeDetector } from 'react-resize-detector';
+import { useState } from 'react';
+
 import BedIcon from '@mui/icons-material/Bed';
 import Header from '../Header';
+import PageContainer from '../../PageContainer.tsx';
+import SleepBarChart from '../../../components/SleepBarChart.tsx';
+import { useAppStore } from '@state/appStore.tsx';
+import { useSleepRecords } from '@api/sleep.ts';
+import { useTheme } from '@mui/material/styles';
 
+
+const NoData = () => {
+  return (
+    <Alert severity="info">
+      No data available for the selected time range
+    </Alert>
+  );
+};
+
+
+// eslint-disable-next-line react/no-multi-comp
 export default function SleepPage() {
   const { width = 300, ref } = useResizeDetector();
   const { side } = useAppStore();
@@ -41,11 +53,12 @@ export default function SleepPage() {
     const newEndTime = endTime.clone().add(1, 'week');
     setEndTime(newEndTime);
   };
+
   const theme = useTheme();
   const isNextDisabled = endTime && moment(endTime).isSameOrAfter(moment(), 'week');
 
   return (
-    <PageContainer containerProps={ { ref } } sx={ { mb: 15, gap: 1 } }>
+    <PageContainer containerProps={ { ref } } sx={ { mb: 15, gap: 1, mt: 0 } }>
       <Header title="Sleep" icon={ <BedIcon/> }/>
       <Box
         sx={ {
@@ -70,7 +83,10 @@ export default function SleepPage() {
           ) }
         </Box>
       </Box>
-      <SleepBarChart width={ width } sleepRecords={ sleepRecords } refetch={ refetch }/>
+      {
+        sleepRecords?.length === 0 && <NoData />
+      }
+      <SleepBarChart width={ width } height={ 300 } sleepRecords={ sleepRecords } refetch={ refetch }/>
     </PageContainer>
   );
 }
