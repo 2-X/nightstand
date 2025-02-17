@@ -7,6 +7,7 @@ export class MessageStream {
         this.separator = separator;
     }
     async readMessage() {
+        // eslint-disable-next-line no-constant-condition
         while (true) {
             const index = this.buffer.indexOf(this.separator);
             if (index >= 0) {

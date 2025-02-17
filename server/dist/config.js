@@ -28,6 +28,7 @@ const FIRMWARE_MAP = {
     },
 };
 class Config {
+    // eslint-disable-next-line no-use-before-define
     static instance;
     dbFolder;
     lowDbFolder;

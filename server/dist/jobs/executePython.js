@@ -20,8 +20,10 @@ export const logOutput = (data) => {
     });
 };
 export const executePythonScript = ({ script, cwd = '/home/dac/bio/src/presence_detection/', args = [] }) => {
-    logger.info(`Executing ${script} ${args}`);
-    const process = spawn('/usr/bin/python3', [
+    const pythonExecutable = '/home/dac/venv/bin/python';
+    const command = `${pythonExecutable} ${script} ${args.join(' ')}`;
+    logger.info(`Executing: ${command}`);
+    const process = spawn(pythonExecutable, [
         script,
         ...args,
     ], {

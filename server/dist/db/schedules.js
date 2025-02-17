@@ -11,7 +11,7 @@ const defaultDailySchedule = {
         onTemperature: 82,
     },
     alarm: {
-        time: "09:00",
+        time: '09:00',
         vibrationIntensity: 1,
         vibrationPattern: 'rise',
         duration: 1,

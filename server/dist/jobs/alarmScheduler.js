@@ -1,10 +1,11 @@
 import schedule from 'node-schedule';
 import memoryDB from '../db/memoryDB.js';
 import logger from '../logger.js';
-import { getDayOfWeekIndex } from './utils.js';
+import { getDayOfWeekIndex, getNextDayOfWeekIndex } from './utils.js';
 import cbor from 'cbor';
 import moment from 'moment-timezone';
 import { executeFunction } from '../8sleep/deviceApi.js';
+import { getFranken } from '../8sleep/frankenServer.js';
 function isEndTimeSameDay(endTime) {
     const endHour = Number(endTime.split(':')[0]);
     return endHour > 11;
@@ -24,7 +25,7 @@ export const scheduleAlarm = (settingsData, side, day, dailySchedule) => {
         alarmRule.dayOfWeek = getDayOfWeekIndex(day);
     }
     else {
-        alarmRule.dayOfWeek = getDayOfWeekIndex(day) + 1;
+        alarmRule.dayOfWeek = getNextDayOfWeekIndex(day);
     }
     const { time } = dailySchedule.alarm;
     const [alarmHour, alarmMinute] = time.split(':').map(Number);
@@ -45,6 +46,12 @@ export const scheduleAlarm = (settingsData, side, day, dailySchedule) => {
         const cborPayload = cbor.encode(alarmPayload);
         const hexPayload = cborPayload.toString('hex');
         const command = side === 'left' ? 'ALARM_LEFT' : 'ALARM_RIGHT';
+        const franken = await getFranken();
+        const resp = await franken.getDeviceStatus();
+        if (!resp[side].isOn) {
+            logger.info(`Skipping scheduled alarm, ${side} side is turned off`);
+            return;
+        }
         logger.info(`Executing scheduled alarm job for ${side} side on ${day} at ${dailySchedule.alarm.time}`);
         await executeFunction(command, hexPayload);
         await memoryDB.read();

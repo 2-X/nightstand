@@ -3,7 +3,7 @@ import { Settings } from '../db/settingsSchema.js';
 import { DailySchedule, DayOfWeek, Side, Time } from '../db/schedulesSchema.js';
 import logger from '../logger.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
-import { getDayOfWeekIndex } from './utils.js';
+import { getDayOfWeekIndex, getNextDayOfWeekIndex } from './utils.js';
 import { executeAnalyzeSleep } from './analyzeSleep.js';
 import { TimeZone } from '../db/timeZones.js';
 import moment from 'moment-timezone';
@@ -69,7 +69,8 @@ export const schedulePowerOffAndSleepAnalysis = (settingsData: Settings, side: S
   if (isEndTimeSameDay(power.off)) {
     dayOfWeek = getDayOfWeekIndex(day);
   } else {
-    dayOfWeek = getDayOfWeekIndex(day) + 1;
+    dayOfWeek = getNextDayOfWeekIndex(day);
+
   }
 
   offRule.dayOfWeek = dayOfWeek;

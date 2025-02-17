@@ -3,7 +3,7 @@ import { Settings } from '../db/settingsSchema.js';
 import { DailySchedule, DayOfWeek, Side, Time } from '../db/schedulesSchema.js';
 import memoryDB from '../db/memoryDB.js';
 import logger from '../logger.js';
-import { getDayOfWeekIndex } from './utils.js';
+import { getDayOfWeekIndex, getNextDayOfWeekIndex } from './utils.js';
 import cbor from 'cbor';
 import moment from 'moment-timezone';
 import { executeFunction } from '../8sleep/deviceApi.js';
@@ -26,7 +26,7 @@ export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek
   if (isEndTimeSameDay(dailySchedule.power.off)) {
     alarmRule.dayOfWeek = getDayOfWeekIndex(day);
   } else {
-    alarmRule.dayOfWeek = getDayOfWeekIndex(day) + 1;
+    alarmRule.dayOfWeek = getNextDayOfWeekIndex(day);
   }
 
   const { time } = dailySchedule.alarm;

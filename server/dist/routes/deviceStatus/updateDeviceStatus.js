@@ -43,7 +43,7 @@ const updateSide = async (side, sideStatus) => {
     if (isAlarmVibrating !== undefined) {
         logger.debug('Can only set isAlarmVibrating to false for now...');
         if (!isAlarmVibrating)
-            await executeFunction('ALARM_CLEAR', "empty");
+            await executeFunction('ALARM_CLEAR', 'empty');
         await memoryDB.read();
         memoryDB.data[side].isAlarmVibrating = false;
         await memoryDB.write();
