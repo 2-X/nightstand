@@ -27,14 +27,13 @@ logger = get_logger()
 
 
 class StreamProcessor:
-    def __init__(self, piezo_record, buffer_size=10, baseline_buffer=60):
+    def __init__(self, piezo_record, buffer_size=3):
         if 'left2' in piezo_record:
             self.sensor_count = 2
         else:
             self.sensor_count = 1
         self.buffer_size = buffer_size
         self.piezo_buffer: List[PiezoDualData] = []
-        self.baseline_buffer = baseline_buffer
 
         self.left_side_present = False
         self.right_side_present = False
