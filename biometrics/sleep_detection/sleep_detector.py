@@ -1,3 +1,15 @@
+"""
+This module detects sleep periods by analyzing presence intervals derived from piezoelectric
+and capacitance sensor data.
+
+Key functionalities:
+- Loads and preprocesses raw sensor data.
+- Detects presence using piezoelectric and capacitance sensors.
+- Identifies sleep intervals by merging presence periods with small gaps.
+- Filters valid sleep periods based on predefined thresholds.
+- Saves detected sleep records to a database.
+"""
+
 import pandas as pd
 import gc
 from typing import List, Tuple
@@ -9,12 +21,12 @@ from sleep_detection.cap_data import load_cap_df, load_baseline, detect_presence
 from get_logger import get_logger
 from load_raw_files import load_raw_files
 from piezo_data import load_piezo_df, detect_presence_piezo
-# from presence_detection.plot_presence import plot_occupancy_one_side
 
 logger = get_logger()
 
 
-def _get_presence_intervals(df: pd.DataFrame, side: Side, presence_duration_threshold_seconds=60) -> Tuple[List[Tuple[datetime, datetime]], List[Tuple[datetime, datetime]]]:
+def _get_presence_intervals(df: pd.DataFrame, side: Side, presence_duration_threshold_seconds=60) -> Tuple[
+    List[Tuple[datetime, datetime]], List[Tuple[datetime, datetime]]]:
     """
     Get time intervals when someone was present and not present on the bed,
     requiring presence intervals to be at least 1 minute long.
@@ -146,7 +158,6 @@ def _identify_sleep_intervals(present_intervals: List[Tuple[datetime, datetime]]
     return sleep_intervals
 
 
-
 def _filter_intervals(
         intervals: List[Tuple[datetime, datetime]],
         start: datetime,
@@ -163,7 +174,7 @@ def _filter_intervals(
     return filtered_intervals
 
 
-def build_sleep_records(merged_df: pd.DataFrame, side: Side, max_gap_in_minutes: int = 15) ->List[SleepRecord]:
+def build_sleep_records(merged_df: pd.DataFrame, side: Side, max_gap_in_minutes: int = 15) -> List[SleepRecord]:
     logger.debug('Building sleep records...')
 
     present_intervals, not_present_intervals = _get_presence_intervals(merged_df, side)
@@ -189,7 +200,6 @@ def build_sleep_records(merged_df: pd.DataFrame, side: Side, max_gap_in_minutes:
     return sleep_records
 
 
-
 def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_path: str) -> List[SleepRecord]:
     logger.debug(f"Processing side:  {side}")
     logger.debug(f"Start time (UTC): {start_time.isoformat()}")
@@ -212,7 +222,6 @@ def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_pa
         range_rolling_seconds=10,
         clean=True
     )
-
 
     merged_df = piezo_df.merge(cap_df, on='ts', how='inner')
     merged_df.drop_duplicates(inplace=True)
@@ -245,4 +254,3 @@ def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_pa
     del merged_df
     gc.collect()
     return sleep_records
-

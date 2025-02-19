@@ -12,6 +12,7 @@ Custom exceptions and warnings for HeartPy
 
 __all__ = ['BadSignalWarning']
 
+
 class BadSignalWarning(UserWarning):
     '''
     warning class to raise when no heart rate is detectable
@@ -21,6 +22,7 @@ class BadSignalWarning(UserWarning):
     of insufficient quality and/or does not contain enough information
     to properly process.
     '''
+
 
 class IncorrectFileType(UserWarning):
     '''

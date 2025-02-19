@@ -5,7 +5,6 @@ import os
 import pandas as pd
 import numpy as np
 
-
 sys.path.append(os.getcwd())
 from data_types import *
 from get_logger import get_logger
@@ -34,8 +33,8 @@ def load_piezo_df(data: Data, side: Side, lower_percentile=2, upper_percentile=9
     return df
 
 
-
-def detect_presence_piezo(df: pd.DataFrame, side: Side, rolling_seconds=10, threshold_percent=0.75, range_rolling_seconds=10, range_threshold=10_000, clean=True):
+def detect_presence_piezo(df: pd.DataFrame, side: Side, rolling_seconds=10, threshold_percent=0.75, range_rolling_seconds=10, range_threshold=10_000,
+                          clean=True):
     """Detects presence on a bed using piezo sensor data.
 
      The function determines when a person is present based on the sensor's range values.
@@ -77,7 +76,6 @@ def detect_presence_piezo(df: pd.DataFrame, side: Side, rolling_seconds=10, thre
             >= threshold_count
     ).astype(int)
 
-
     if clean:
         df.drop(
             columns=[
@@ -89,8 +87,6 @@ def detect_presence_piezo(df: pd.DataFrame, side: Side, rolling_seconds=10, thre
             inplace=True
         )
     gc.collect()
-
-
 
 
 def identify_baseline_period(merged_df: pd.DataFrame, side: str, threshold_range: int = 10_000, empty_minutes: int = 5):

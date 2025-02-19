@@ -11,7 +11,6 @@
 main module for HeartPy.
 '''
 
-
 import numpy as np
 from heart.datautils import rolling_mean, outliers_iqr_method, outliers_modified_z
 from heart.preprocessing import enhance_peaks
@@ -20,19 +19,15 @@ from heart.filtering import hampel_correcter
 from heart.peakdetection import check_peaks, fit_peaks
 from heart.analysis import calc_rr
 import sys
-# sys.path.append("/Users/ds/main/8sleep_biometrics/src/biometrics/heart/src/biometrics/heart/")
-# from peakdetection_cython import fit_peaks, calc_rr
-
-
 from heart.analysis import clean_rr_intervals, calc_ts_measures, calc_breathing, calc_poincare
 
 
 def process(
         hrdata: np.ndarray,
         sample_rate: int,
-        windowsize: float=0.75,
-        bpmmin: int=40,
-        bpmmax: int=180,
+        windowsize: float = 0.75,
+        bpmmin: int = 40,
+        bpmmax: int = 180,
         reject_segmentwise=False,
         breathing_method='welch',
         clean_rr_method='quotient-filter',
@@ -82,7 +77,7 @@ def process(
     # if clean_rr:
     working_data = clean_rr_intervals(
         working_data,
-        method = clean_rr_method
+        method=clean_rr_method
     )
 
     working_data, measures = calc_ts_measures(
@@ -96,8 +91,8 @@ def process(
     measures = calc_poincare(
         working_data['RR_list'],
         working_data['RR_masklist'],
-        measures = measures,
-        working_data = working_data
+        measures=measures,
+        working_data=working_data
     )
 
     if calculate_breathing:
@@ -110,6 +105,5 @@ def process(
             )
         except:
             measures['breathingrate'] = np.nan
-
 
     return working_data, measures

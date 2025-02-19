@@ -1,16 +1,60 @@
 # Biometrics
 
+## Stream Processor - Calculates vitals (`stream/`)
+
+- `stream.py`: Monitors the latest `.RAW` file and continuously processes biometric data.
+- `stream_processor.py`: Buffers piezoelectric sensor data for presence detection and biometric calculations.
+- `biometric_processor.py`: Processes real-time piezo data to extract heart rate, HRV, and breathing rate.
+
+## Sleep Detection (`sleep_detection/`)
+
+- `calibrate_sensor_thresholds.py`: Establishes a baseline for capacitance sensors.
+- `analyze_sleep.py`: Processes raw data and detects sleep intervals.
+- `cap_data.py`: Loads and processes capacitance sensor data to detect presence.
+- `sleep_detector.py`: Merges piezo and capacitance presence data to determine sleep sessions.
+
+## Vital Signs Calculation (`vitals/`)
+
+- `calculate_vitals.py`: Loads piezo data, estimates heart rate, HRV, and breathing rate.
+- `calculations.py`: Implements signal processing, filtering, and biometric estimation.
+- `run_data.py`: Manages runtime parameters for sliding window calculations.
+
+## Database Management (`db.py`)
+
+- Handles SQLite database operations for storing sleep records and vitals.
+- Uses `sqlite3` with a persistent connection and WAL mode for performance.
+- Provides functions for inserting vitals and sleep records while avoiding duplicates.
+
+## Raw Data Handling (`load_raw_files.py`)
+
+- Loads `.RAW` files from the pod, decodes CBOR-encoded data, and extracts piezo and capacitance sensor readings.
+- Filters data based on timestamps and sensor types.
+- Implements memory optimization techniques such as garbage collection.
+
+## Data Types (`data_types.py`)
+
+- Defines structured data models (`TypedDict`) for various biometric readings.
+- Includes schemas for heart rate, HRV, breathing rate, and sensor readings.
+
+## Piezo Data Processing (`piezo_data.py`)
+
+- Loads and processes piezo sensor data for biometric calculations.
+- Detects presence using a rolling window method based on sensor range thresholds.
+- Identifies baseline periods for calibrating the system.
 
 ## Data Sources
+
 - There's 2 main sensors used to measure biometrics, they're both available in /persistent/*.RAW files
-- This data is only available if the Pod cannot access the internet. You can block internet access to the pod by setting up firewall rules
+- This data is only available if the Pod cannot access the internet. You can block internet access to the pod by setting
+  up firewall rules
 - The raw files are encoded in cbor & can be loaded with `load_raw_files.py`
 
-
 ### 1. Capacitance sensor data
-- This measures pressure in 1 second intervals. There's 3 sensors for each side 
+
+- This measures pressure in 1 second intervals. There's 3 sensors for each side
 
 - Sample:
+
 ```json
 {
   "type": "capSense",
@@ -32,8 +76,10 @@
 ```
 
 ### 2. Piezo sensor data
+
 - This measures pressure 500x a second
 - Pod 3 has 2 piezo sensors, Pod 4 has 1 piezo sensor
+
 ```json
 {
   "adc": 1,
@@ -56,7 +102,7 @@
   ],
   "right2": [
     722955,
-    723792,
+    723792
     //  ...500 more
   ],
   "seq": 1610681,
@@ -64,25 +110,6 @@
   "type": "piezo-dual"
 }
 ```
-
-
-## Calculating metrics
-
-### Presence detection
-#### Step 1: Establish a baseline for capacitance sensors
-- Run this for a time interval no one was in the bed
-- `python3 sleep_detection/calibrate_sensor_thresholds.py --side=left --start_time="2025-02-08 18:00:00" --end_time="2025-02-08 18:50:00"`
-- Calculates the thresholds for the capacitance sensors and saves the thresholds to `/persistent/free-sleep-data/SIDE_cap_baseline.json`
-
-#### Step 2: Detect presence
-- Run this for any time frame to detect when someone was in a bed
-- `python3 sleep_detection/sleep_detector.py --side=left --start_time="2025-02-08 06:00:00" --end_time="2025-02-08 14:50:00"`
-- Saves results to `sleep_records` @ SQLite `/persistent/free-sleep-data/free-sleep.db`
-
-
-### Heart rate, HRV, breathing rate
-- Run this during a period someone was in the bed
-- `python3 vitals/calculate_vitals.py`
 
 
 

@@ -20,6 +20,7 @@ __all__ = ['filter_signal',
            'hampel_correcter',
            'smooth_signal']
 
+
 def butter_lowpass(cutoff, sample_rate, order=2):
     '''standard lowpass filter.
 
@@ -145,7 +146,7 @@ def filter_signal(
         sample_rate,
         order=2,
         filtertype='lowpass',
-        return_top = False
+        return_top=False
 ):
     # print('#filter_signal -----------------------------------------------------------------------------------------------------')
     # print(inspect.stack()[1])
@@ -158,15 +159,15 @@ def filter_signal(
 cutoff needs to be array or tuple specifying lower and upper bound: [lower, upper].'
         b, a = butter_bandpass(cutoff[0], cutoff[1], sample_rate, order=order)
     elif filtertype.lower() == 'notch':
-        b, a = iirnotch(cutoff, Q = 0.005, fs = sample_rate)
+        b, a = iirnotch(cutoff, Q=0.005, fs=sample_rate)
     else:
         raise ValueError('filtertype: %s is unknown, available are: \
-lowpass, highpass, bandpass, and notch' %filtertype)
+lowpass, highpass, bandpass, and notch' % filtertype)
 
     filtered_data = filtfilt(b, a, data)
 
     if return_top:
-        return np.clip(filtered_data, a_min = 0, a_max = None)
+        return np.clip(filtered_data, a_min=0, a_max=None)
     else:
         return filtered_data
 
@@ -207,9 +208,9 @@ def remove_baseline_wander(data, sample_rate, cutoff=0.05):
     # print('#remove_baseline_wander -----------------------------------------------------------------------------------------------------')
     # print(inspect.stack()[1])
     return filter_signal(
-        data = data,
-        cutoff = cutoff,
-        sample_rate = sample_rate,
+        data=data,
+        cutoff=cutoff,
+        sample_rate=sample_rate,
         filtertype='notch'
     )
 
@@ -240,12 +241,12 @@ def hampel_filter(data, filtsize=6):
 
     '''
 
-    #generate second list to prevent overwriting first
-    #cast as array to be sure, in case list is passed
+    # generate second list to prevent overwriting first
+    # cast as array to be sure, in case list is passed
     output = np.copy(np.asarray(data))
     onesided_filt = filtsize // 2
     for i in range(onesided_filt, len(data) - onesided_filt - 1):
-        dataslice = output[i - onesided_filt : i + onesided_filt]
+        dataslice = output[i - onesided_filt: i + onesided_filt]
         mad = MAD(dataslice)
         median = np.median(dataslice)
         if output[i] > median + (3 * mad):
@@ -282,7 +283,7 @@ def hampel_correcter(data, sample_rate):
     return data - hampel_filter(data, filtsize=int(sample_rate))
 
 
-def quotient_filter(RR_list, RR_list_mask = [], iterations=2):
+def quotient_filter(RR_list, RR_list_mask=[], iterations=2):
     '''applies a quotient filter
 
     Function that applies a quotient filter as described in
@@ -332,17 +333,17 @@ def quotient_filter(RR_list, RR_list_mask = [], iterations=2):
         RR_list_mask = np.zeros((len(RR_list)))
     else:
         assert len(RR_list) == len(RR_list_mask), \
-        'error: RR_list and RR_list_mask should be same length if RR_list_mask is specified'
+            'error: RR_list and RR_list_mask should be same length if RR_list_mask is specified'
 
     for iteration in range(iterations):
         for i in range(len(RR_list) - 1):
             if RR_list_mask[i] + RR_list_mask[i + 1] != 0:
-                pass #skip if one of both intervals is already rejected
+                pass  # skip if one of both intervals is already rejected
             elif 0.8 <= RR_list[i] / RR_list[i + 1] <= 1.2:
-                pass #if R-R pair seems ok, do noting
-            else: #update mask
+                pass  # if R-R pair seems ok, do noting
+            else:  # update mask
                 RR_list_mask[i] = 1
-                #RR_list_mask[i + 1] = 1
+                # RR_list_mask[i + 1] = 1
 
     return np.asarray(RR_list_mask)
 
@@ -398,7 +399,7 @@ def smooth_signal(data, sample_rate, window_length=None, polyorder=3):
 
     if window_length % 2 == 0 or window_length == 0: window_length += 1
 
-    smoothed = savgol_filter(data, window_length = window_length,
-                             polyorder = polyorder)
+    smoothed = savgol_filter(data, window_length=window_length,
+                             polyorder=polyorder)
 
     return smoothed

@@ -16,8 +16,6 @@ import numpy as np
 from scipy.io import loadmat
 
 
-
-
 def get_data(filename, delim=',', column_name='None', encoding=None,
              ignore_extension=False):
     '''load data from file
@@ -107,17 +105,17 @@ def get_data(filename, delim=',', column_name='None', encoding=None,
             except Exception as error:
                 raise LookupError('\nError loading column "%s" from file "%s". \
 Is column name specified correctly?\n The following error was provided: %s'
-                                 %(column_name, filename, error))
+                                  % (column_name, filename, error))
         elif column_name == 'None':
             hrdata = np.genfromtxt(filename, delimiter=delim, dtype=np.float64)
-        else: # pragma: no cover
+        else:  # pragma: no cover
             raise LookupError('\nError: column name "%s" not found in header of "%s".\n'
-                              %(column_name, filename))
+                              % (column_name, filename))
     elif file_ext == 'mat':
         data = loadmat(filename)
         if column_name != "None":
             hrdata = np.array(data[column_name][:, 0], dtype=np.float64)
-        else: # pragma: no cover
+        else:  # pragma: no cover
             raise LookupError('\nError: column name required for Matlab .mat files\n\n')
     else:
         if ignore_extension:
@@ -128,12 +126,12 @@ Is column name specified correctly?\n The following error was provided: %s'
                 except Exception as error:
                     raise LookupError('\nError loading column "%s" from file "%s". \
 Is column name specified correctly?\n'
-                                      %(column_name, filename))
-            elif column_name == 'None': # pragma: no cover
+                                      % (column_name, filename))
+            elif column_name == 'None':  # pragma: no cover
                 hrdata = np.genfromtxt(filename, delimiter=delim, dtype=np.float64)
-            else: # pragma: no cover
+            else:  # pragma: no cover
                 raise LookupError('\nError: column name "%s" not found in header of "%s".\n'
-                                  %(column_name, filename))
+                                  % (column_name, filename))
         else:
             raise IncorrectFileType('unknown file format')
             return None
@@ -170,7 +168,7 @@ def get_samplerate_mstimer(timerdata):
     of course if another time unit is used, converting it to ms-based
     should be trivial.
     '''
-    sample_rate = ((len(timerdata) / (timerdata[-1]-timerdata[0]))*1000)
+    sample_rate = ((len(timerdata) / (timerdata[-1] - timerdata[0])) * 1000)
     return sample_rate
 
 
@@ -208,7 +206,7 @@ def get_samplerate_datetime(datetimedata, timeformat='%H:%M:%S.%f'):
     >>> round(get_samplerate_datetime(timer, timeformat = '%Y-%m-%d %H:%M:%S.%f'), 3)
     100.42
     '''
-    datetimedata = np.asarray(datetimedata, dtype='str') #cast as str in case of np.bytes type
+    datetimedata = np.asarray(datetimedata, dtype='str')  # cast as str in case of np.bytes type
     elapsed = ((datetime.strptime(datetimedata[-1], timeformat) -
                 datetime.strptime(datetimedata[0], timeformat)).total_seconds())
     sample_rate = (len(datetimedata) / elapsed)
@@ -266,18 +264,18 @@ def rolling_mean(data, windowsize, sample_rate):
 
     # calculate rolling mean
     data_arr = np.array(data)
-    rol_mean = np.mean(_sliding_window(data_arr, int(windowsize*sample_rate)), axis=1)
+    rol_mean = np.mean(_sliding_window(data_arr, int(windowsize * sample_rate)), axis=1)
 
     # need to fill 1/2 windowsize gap at the start and end
-    n_missvals = int(abs(len(data_arr) - len(rol_mean))/2)
-    missvals_a = np.array([rol_mean[0]]*n_missvals)
-    missvals_b = np.array([rol_mean[-1]]*n_missvals)
+    n_missvals = int(abs(len(data_arr) - len(rol_mean)) / 2)
+    missvals_a = np.array([rol_mean[0]] * n_missvals)
+    missvals_b = np.array([rol_mean[-1]] * n_missvals)
 
     rol_mean = np.concatenate((missvals_a, rol_mean, missvals_b))
 
-    #only to catch length errors that sometimes unexplicably occur.
+    # only to catch length errors that sometimes unexplicably occur.
     ##Generally not executed, excluded from testing and coverage
-    if len(rol_mean) != len(data): # pragma: no cover
+    if len(rol_mean) != len(data):  # pragma: no cover
         lendiff = len(rol_mean) - len(data)
         if lendiff < 0:
             rol_mean = np.append(rol_mean, 0)
@@ -317,7 +315,7 @@ def outliers_iqr_method(hrvalues):
     upper = q3 + (1.5 * iqr)
     output = []
     replaced_indices = []
-    for i in range(0,len(hrvalues)):
+    for i in range(0, len(hrvalues)):
         if hrvalues[i] < lower or hrvalues[i] > upper:
             output.append(med)
             replaced_indices.append(i)
@@ -441,13 +439,13 @@ def load_exampledata(example=0):
     elif example == 1:
         path = path = 'data/data2.csv'
         filepath = resource_filename(__name__, path)
-        data = get_data(filepath, column_name = 'hr')
-        timer = get_data(filepath, column_name = 'timer')
+        data = get_data(filepath, column_name='hr')
+        timer = get_data(filepath, column_name='timer')
     elif example == 2:
         path = path = 'data/data3.csv'
         filepath = resource_filename(__name__, path)
-        data = get_data(filepath, column_name = 'hr')
-        timer = get_data(filepath, column_name = 'datetime')
+        data = get_data(filepath, column_name='hr')
+        timer = get_data(filepath, column_name='datetime')
     else:
         raise ValueError('Incorrect data file specified.\
 available datafiles are data.csv (0), data2.csv(1), data3.csv(2).')

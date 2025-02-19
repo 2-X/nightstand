@@ -21,7 +21,6 @@ from scipy.signal import welch, periodogram
 from heart.datautils import MAD, outliers_iqr_method, outliers_modified_z
 from heart.filtering import quotient_filter, filter_signal
 
-
 __all__ = ['calc_rr',
            'update_rr',
            'calc_rr_segment',
@@ -55,9 +54,9 @@ def calc_rr(peaklist, sample_rate, working_data={}):
         working_data dictionary object containing all of heartpy's temp objects
 
     '''
-    peaklist = np.array(peaklist) #cast numpy array to be sure or correct array type
+    peaklist = np.array(peaklist)  # cast numpy array to be sure or correct array type
 
-    #delete first peak if within first 150ms (signal might start mid-beat after peak)
+    # delete first peak if within first 150ms (signal might start mid-beat after peak)
     if len(peaklist) > 0:
         if peaklist[0] <= ((sample_rate / 1000.0) * 150):
             peaklist = np.delete(peaklist, 0)
@@ -65,7 +64,7 @@ def calc_rr(peaklist, sample_rate, working_data={}):
             working_data['ybeat'] = np.delete(working_data['ybeat'], 0)
 
     rr_list = (np.diff(peaklist) / sample_rate) * 1000.0
-    rr_indices = [(peaklist[i], peaklist[i+1]) for i in range(len(peaklist) - 1)]
+    rr_indices = [(peaklist[i], peaklist[i + 1]) for i in range(len(peaklist) - 1)]
     rr_diff = np.abs(np.diff(rr_list))
     rr_sqdiff = np.power(rr_diff, 2)
     working_data['RR_list'] = rr_list
@@ -129,8 +128,8 @@ def update_rr(working_data={}):
     '''
     rr_source = working_data['RR_list']
     b_peaklist = working_data['binary_peaklist']
-    rr_list = [rr_source[i] for i in range(len(rr_source)) if b_peaklist[i] + b_peaklist[i+1] == 2]
-    rr_mask = [0 if (b_peaklist[i] + b_peaklist[i+1] == 2) else 1 for i in range(len(rr_source))]
+    rr_list = [rr_source[i] for i in range(len(rr_source)) if b_peaklist[i] + b_peaklist[i + 1] == 2]
+    rr_mask = [0 if (b_peaklist[i] + b_peaklist[i + 1] == 2) else 1 for i in range(len(rr_source))]
     rr_masked = np.ma.array(rr_source, mask=rr_mask)
     rr_diff = np.abs(np.diff(rr_masked))
     rr_diff = rr_diff[~rr_diff.mask]
@@ -184,8 +183,8 @@ def calc_rr_segment(rr_source, b_peaklist):
     >>> print(rrsd)
     [202500.  19044.  19600.]
     '''
-    rr_list = [rr_source[i] for i in range(len(rr_source)) if b_peaklist[i] + b_peaklist[i+1] == 2]
-    rr_mask = [0 if (b_peaklist[i] + b_peaklist[i+1] == 2) else 1 for i in range(len(rr_source))]
+    rr_list = [rr_source[i] for i in range(len(rr_source)) if b_peaklist[i] + b_peaklist[i + 1] == 2]
+    rr_mask = [0 if (b_peaklist[i] + b_peaklist[i + 1] == 2) else 1 for i in range(len(rr_source))]
     rr_masked = np.ma.array(rr_source, mask=rr_mask)
     rr_diff = np.abs(np.diff(rr_masked))
     rr_diff = rr_diff[~rr_diff.mask]
@@ -220,11 +219,11 @@ def clean_rr_intervals(working_data, method='quotient-filter'):
         will be created if not passed to function
     '''
 
-    #generate RR_list_cor indices relative to RR_list
+    # generate RR_list_cor indices relative to RR_list
     RR_cor_indices = [i for i in range(len(working_data['RR_masklist']))
-                       if working_data['RR_masklist'][i] == 0]
+                      if working_data['RR_masklist'][i] == 0]
 
-    #clean rr-list
+    # clean rr-list
     if method.lower() == 'iqr':
         rr_cleaned, replaced_indices = outliers_iqr_method(working_data['RR_list_cor'])
         rr_mask = working_data['RR_masklist']
@@ -239,7 +238,7 @@ def clean_rr_intervals(working_data, method='quotient-filter'):
 
     elif method.lower() == 'quotient-filter':
         rr_mask = quotient_filter(working_data['RR_list'], working_data['RR_masklist'])
-        rr_cleaned = [x for x,y in zip(working_data['RR_list'], rr_mask) if y == 0]
+        rr_cleaned = [x for x, y in zip(working_data['RR_list'], rr_mask) if y == 0]
 
 
     else:
@@ -465,7 +464,7 @@ def calc_fd_measures(method='welch', welch_wsize=240, square_spectrum=False, mea
         measures['hf'] = np.nan
         measures['lf/hf'] = np.nan
         return working_data, measures
-    elif np.sum(rr_list) <= 300000:   # pragma: no cover
+    elif np.sum(rr_list) <= 300000:  # pragma: no cover
         # warn if signal is short
         msg = ''.join(('Short signal.\n',
                        '\n---------Warning:---------\n',
@@ -487,7 +486,7 @@ def calc_fd_measures(method='welch', welch_wsize=240, square_spectrum=False, mea
     rr_x = np.cumsum(rr_list)
 
     resamp_factor = 4
-    datalen = int((len(rr_x) - 1)*resamp_factor)
+    datalen = int((len(rr_x) - 1) * resamp_factor)
     rr_x_new = np.linspace(int(rr_x[0]), int(rr_x[-1]), datalen)
 
     if len(rr_x) > degree_smoothing_spline:
@@ -577,9 +576,7 @@ def calc_fd_measures(method='welch', welch_wsize=240, square_spectrum=False, mea
 
 def calc_breathing(rrlist, method='welch', filter_breathing=True,
                    bw_cutoff=[0.1, 0.4], measures={}, working_data={}):
-
-
-    #resample RR-list to 1000Hz
+    # resample RR-list to 1000Hz
     x = np.linspace(0, len(rrlist), len(rrlist))
     x_new = np.linspace(0, len(rrlist), np.sum(rrlist, dtype=np.int32))
     interp = UnivariateSpline(x, rrlist, k=3)
@@ -587,14 +584,14 @@ def calc_breathing(rrlist, method='welch', filter_breathing=True,
 
     if filter_breathing:
         breathing = filter_signal(breathing, cutoff=bw_cutoff,
-                                               sample_rate = 1000.0, filtertype='bandpass')
+                                  sample_rate=1000.0, filtertype='bandpass')
 
     if method.lower() == 'fft':
         datalen = len(breathing)
-        frq = np.fft.fftfreq(datalen, d=((1/1000.0)))
-        frq = frq[range(int(datalen/2))]
-        Y = np.fft.fft(breathing)/datalen
-        Y = Y[range(int(datalen/2))]
+        frq = np.fft.fftfreq(datalen, d=((1 / 1000.0)))
+        frq = frq[range(int(datalen / 2))]
+        Y = np.fft.fft(breathing) / datalen
+        Y = Y[range(int(datalen / 2))]
         psd = np.power(np.abs(Y), 2)
     elif method.lower() == 'welch':
         if len(breathing) < 30000:
@@ -608,7 +605,7 @@ def calc_breathing(rrlist, method='welch', filter_breathing=True,
     else:
         raise ValueError('Breathing rate extraction method not understood! Must be \'welch\' or \'fft\'!')
 
-    #find max
+    # find max
     measures['breathingrate'] = frq[np.argmax(psd)]
     working_data['breathing_signal'] = breathing
     working_data['breathing_psd'] = psd
@@ -656,30 +653,30 @@ def calc_poincare(rr_list, rr_mask=[], measures={}, working_data={}):
         poincare values are appended to measures['poincare']
     '''
 
-    #generate vectors of adjacent peak-peak intervals
+    # generate vectors of adjacent peak-peak intervals
     x_plus = []
     x_minus = []
 
     for i in range(len(working_data['RR_masklist']) - 1):
         if working_data['RR_masklist'][i] + working_data['RR_masklist'][i + 1] == 0:
-            #only add adjacent RR-intervals that are not rejected
+            # only add adjacent RR-intervals that are not rejected
             x_plus.append(working_data['RR_list'][i])
             x_minus.append(working_data['RR_list'][i + 1])
         else:
             pass
 
-    #cast to arrays so we can do numerical work easily
+    # cast to arrays so we can do numerical work easily
     x_plus = np.asarray(x_plus)
     x_minus = np.asarray(x_minus)
 
-    #compute parameters and append to dict
+    # compute parameters and append to dict
     x_one = (x_plus - x_minus) / np.sqrt(2)
     x_two = (x_plus + x_minus) / np.sqrt(2)
-    sd1 = np.sqrt(np.var(x_one)) #compute stdev perpendicular to identity line
-    sd2 = np.sqrt(np.var(x_two)) #compute stdev parallel to identity line
-    s = np.pi * sd1 * sd2 #compute area of ellipse
+    sd1 = np.sqrt(np.var(x_one))  # compute stdev perpendicular to identity line
+    sd2 = np.sqrt(np.var(x_two))  # compute stdev parallel to identity line
+    s = np.pi * sd1 * sd2  # compute area of ellipse
 
-    #write computed measures to dicts
+    # write computed measures to dicts
     measures['sd1'] = sd1
     measures['sd2'] = sd2
     measures['s'] = s

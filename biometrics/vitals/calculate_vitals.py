@@ -5,7 +5,7 @@
 import sys
 
 FOLDER_PATH = '/persistent/'
-sys.path.append('/home/dac/python_packages/')
+
 sys.path.append('/home/dac/free-sleep/biometrics/')
 
 import sqlite3
@@ -31,9 +31,6 @@ from run_data import RunData, RuntimeParams
 from db import DB_FILE_PATH
 
 logger = get_logger()
-
-
-FOLDER_PATH = '/Users/ds/main/8sleep_biometrics/data/people/david/raw/loaded/2025-01-27/'
 
 
 def _parse_args() -> Namespace:
@@ -74,7 +71,6 @@ def _parse_args() -> Namespace:
 def _load_piezo_df(start_time: datetime, end_time: datetime, side: Side, folder_path: str) -> pd.DataFrame:
     data = load_raw_files(folder_path, start_time, end_time, side, sensor_count=2, raw_data_types=['piezo-dual'])
 
-
     piezo_df = pd.DataFrame(data['piezo_dual'])
 
     # Ensure ts column is in datetime format before setting index
@@ -97,7 +93,7 @@ def calculate_vitals(start_time: datetime, end_time: datetime, side: Side, folde
     # side = "right"
     # start_time = datetime.strptime("2025-01-27 06:15:00", "%Y-%m-%d %H:%M:%S")
     # end_time = datetime.strptime("2025-01-27 14:53:00", "%Y-%m-%d %H:%M:%S")
-    # folder_path = FOLDER_PATH
+    # folder_path = '/Users/ds/main/8sleep_biometrics/data/people/david/raw/loaded/2025-01-27/'
 
     piezo_df = _load_piezo_df(start_time, end_time, side, folder_path)
     print(piezo_df.head())
@@ -177,4 +173,3 @@ if __name__ == "__main__":
     logger.debug(f"Free Memory: {get_available_memory_mb()} MB")
 
     calculate_vitals(args.start_time, args.end_time, args.side, '/persistent/')
-

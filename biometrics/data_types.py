@@ -6,6 +6,7 @@ from numpy import ndarray
 Side = Literal['left', 'right']
 RawDataTypes = Literal['bedTemp', 'capSense', 'frzTemp', 'log', 'piezo-dual']
 
+
 # ---------------------------------------------------------------------------------------------------
 # See all the different logs in ./decoded_raw_data_samples/logs.json
 
@@ -15,7 +16,6 @@ class LogData(TypedDict):
     level: str
     msg: str
     seq: int
-
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -32,6 +32,7 @@ class PiezoDualData(TypedDict):
     right1: ndarray
     right2: ndarray
     seq: int
+
 
 # {
 #     "adc": 1,
@@ -70,6 +71,7 @@ class CapSenseData(TypedDict):
     left: CapSenseChannel
     right: CapSenseChannel
     seq: int
+
 
 # {
 #   "type": "capSense",
@@ -119,6 +121,7 @@ class BedTempData(TypedDict):
     right: BedTempChannel
     seq: int
 
+
 # {
 #     "amb": 2168,
 #     "hs": 3168,
@@ -130,7 +133,6 @@ class BedTempData(TypedDict):
 # }
 
 # ---------------------------------------------------------------------------------------------------
-
 
 
 class RawRow(TypedDict):
@@ -172,9 +174,9 @@ class CapBaseline(TypedDict):
     right_in: Baseline
 
 
-
 from typing import TypedDict, Union
 import numpy as np
+
 
 class Measurement(TypedDict):
     bpm: Union[np.float64, float]
@@ -190,4 +192,3 @@ class Measurement(TypedDict):
     s: Union[np.float64, float]
     sd1_sd2: Union[np.float64, float]  # Renamed "sd1/sd2" to a valid key
     breathingrate: Union[np.float64, float]
-

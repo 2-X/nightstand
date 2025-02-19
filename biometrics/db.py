@@ -1,19 +1,11 @@
-import math
-import os.path
-
-import sys
-
-import numpy as np
-
-sys.path.append('/home/dac/python_packages/')
-import pandas as pd
-
-import platform
 from datetime import datetime
-import sqlite3
-import json
 from typing import List
 import atexit
+import json
+import math
+import numpy as np
+import pandas as pd
+import sqlite3
 
 from data_types import *
 from get_logger import *
@@ -24,7 +16,7 @@ DB_FILE_PATH = f'{logger.folder_path}free-sleep.db'
 
 # Create a persistent connection
 conn = sqlite3.connect(DB_FILE_PATH, isolation_level=None, check_same_thread=False)
-conn.execute("PRAGMA journal_mode=WAL;")   # Enable WAL mode
+conn.execute("PRAGMA journal_mode=WAL;")  # Enable WAL mode
 conn.execute("PRAGMA busy_timeout=5000;")  # Wait up to 5 seconds if locked
 cursor = conn.cursor()
 atexit.register(lambda: conn.close())
@@ -86,7 +78,6 @@ def insert_vitals(data: dict):
         conn.commit()
     except sqlite3.Error as e:
         print(f"SQLite error: {e}")
-
 
 
 def insert_sleep_records(sleep_records: List[SleepRecord]):
@@ -151,4 +142,3 @@ def insert_sleep_records(sleep_records: List[SleepRecord]):
     cur.close()
     conn.close()
     logger.debug(f"Inserted {len(sleep_records)} record(s) into 'sleep_records' (ignoring duplicates).")
-

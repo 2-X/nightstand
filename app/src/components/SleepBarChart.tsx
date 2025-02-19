@@ -95,7 +95,7 @@ function createScales({
     .scaleBand<string>()
     .domain(data.map((d) => d.entered_bed_at))
     .range([0, width])
-    .padding(0.3);
+    .padding(0.5);
 
   // 1) Collect all shifted hours from data
   const allShiftedHours: number[] = [];

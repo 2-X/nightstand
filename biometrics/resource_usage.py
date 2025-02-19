@@ -3,9 +3,9 @@ import os
 
 def get_memory_usage_unix():
     pid = os.getpid()  # Current process ID
-    page_size = os.sysconf('SC_PAGE_SIZE')    # Page size in bytes
+    page_size = os.sysconf('SC_PAGE_SIZE')  # Page size in bytes
     rss = int(open(f'/proc/{pid}/statm').read().split()[1])  # Resident Set Size in pages
-    memory_usage_mb = (rss * page_size) / (1024 ** 2)        # Convert to MB
+    memory_usage_mb = (rss * page_size) / (1024 ** 2)  # Convert to MB
     return memory_usage_mb
 
 

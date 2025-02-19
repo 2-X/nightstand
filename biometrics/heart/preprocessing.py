@@ -13,11 +13,10 @@ import warnings
 import numpy as np
 from scipy.interpolate import UnivariateSpline, interp1d
 
-np.seterr(divide='ignore') #disable div by zero warnings
+np.seterr(divide='ignore')  # disable div by zero warnings
 np.seterr(invalid='ignore')
 
 from heart.filtering import filter_signal
-
 
 __all__ = ['scale_data',
            'scale_sections',
@@ -109,12 +108,12 @@ def scale_sections(data, sample_rate, windowsize=2.5, lower=0, upper=1024):
     array([20., 30., 20., 30., 20., 30., 20., 30., 20., 30.])
     '''
 
-    #deprecation suppresses since 2.7, disable filter
+    # deprecation suppresses since 2.7, disable filter
     warnings.simplefilter('always', DeprecationWarning)
     warnings.warn('scale_sections function is deprecated and will be removed in a future release',
-                    category=DeprecationWarning,
-                    stacklevel=2)
-    warnings.simplefilter('default', DeprecationWarning)  #enable default filter
+                  category=DeprecationWarning,
+                  stacklevel=2)
+    warnings.simplefilter('default', DeprecationWarning)  # enable default filter
 
     total_length = len(data) / sample_rate
     window_dimension = int(windowsize * sample_rate)
@@ -180,15 +179,15 @@ def mark_clipping(data, threshold=1020):
     clipping_segments = []
 
     for i in range(0, len(clipping_edges)):
-        if i == 0: #if first clipping segment
+        if i == 0:  # if first clipping segment
             clipping_segments.append((clip_binary[0][0],
                                       clip_binary[0][clipping_edges[0]]))
         elif i == len(clipping_edges) - 1:
-            #append last entry
-            clipping_segments.append((clip_binary[0][clipping_edges[i]+1],
+            # append last entry
+            clipping_segments.append((clip_binary[0][clipping_edges[i] + 1],
                                       clip_binary[0][-1]))
         else:
-            clipping_segments.append((clip_binary[0][clipping_edges[i-1] + 1],
+            clipping_segments.append((clip_binary[0][clipping_edges[i - 1] + 1],
                                       clip_binary[0][clipping_edges[i]]))
 
     return clipping_segments
@@ -249,16 +248,16 @@ def interpolate_clipping(data, sample_rate, threshold=1020):
 
     for segment in clipping_segments:
         if segment[0] < num_datapoints:
-            #if clipping is present at start of signal, skip.
-            #We cannot interpolate accurately when there is insufficient data prior to clipping segment.
+            # if clipping is present at start of signal, skip.
+            # We cannot interpolate accurately when there is insufficient data prior to clipping segment.
             pass
         else:
-            antecedent = data[segment[0] - num_datapoints : segment[0]]
-            consequent = data[segment[1] : segment[1] + num_datapoints]
+            antecedent = data[segment[0] - num_datapoints: segment[0]]
+            consequent = data[segment[1]: segment[1] + num_datapoints]
             segment_data = np.concatenate((antecedent, consequent))
 
             interpdata_x = np.concatenate(([x for x in range(segment[0] - num_datapoints, segment[0])],
-                                            [x for x in range(segment[1], segment[1] + num_datapoints)]))
+                                           [x for x in range(segment[1], segment[1] + num_datapoints)]))
             x_new = np.linspace(segment[0] - num_datapoints,
                                 segment[1] + num_datapoints,
                                 ((segment[1] - segment[0]) + (2 * num_datapoints)))
@@ -267,10 +266,10 @@ def interpolate_clipping(data, sample_rate, threshold=1020):
                 interp_func = UnivariateSpline(interpdata_x, segment_data, k=3)
                 interp_data = interp_func(x_new)
 
-                data[segment[0] - num_datapoints :
+                data[segment[0] - num_datapoints:
                      segment[1] + num_datapoints] = interp_data
             except:
-                #pass over failed interpolation: leave original data alone
+                # pass over failed interpolation: leave original data alone
                 pass
 
     return data
@@ -329,12 +328,12 @@ def flip_signal(data, enhancepeaks=False, keep_range=True):
     data_min = np.min(data)
     data_max = np.max(data)
 
-    #invert signal
+    # invert signal
     data = (data_mean - data) + data_mean
 
     if keep_range:
-        #scale data so original range is maintained
-        data = scale_data(data, lower = data_min, upper = data_max)
+        # scale data so original range is maintained
+        data = scale_data(data, lower=data_min, upper=data_max)
     if enhancepeaks:
         data = enhance_peaks(data)
     return data
@@ -428,10 +427,10 @@ def enhance_ecg_peaks(hrdata, sample_rate, iterations=4, aggregation='mean',
     In the last example we also disabled the notch filter.
     '''
 
-    #assign output
+    # assign output
     output = np.copy(hrdata)
 
-    #generate synthetic QRS complexes
+    # generate synthetic QRS complexes
     templates = generate_ecg_templates(sample_rate)
 
     for i in range(int(iterations)):
@@ -441,7 +440,7 @@ def enhance_ecg_peaks(hrdata, sample_rate, iterations=4, aggregation='mean',
         elif aggregation == 'median':
             output = np.nanmedian(convolved, axis=0)
 
-    #offset signal shift (shifts 1 datapoint for every iteration after the first)
+    # offset signal shift (shifts 1 datapoint for every iteration after the first)
     output = output[int(iterations) - 1:-int(iterations)]
 
     if notch_filter:
@@ -454,7 +453,7 @@ def generate_ecg_templates(sample_rate, widths=[50, 60, 70, 80, 100],
                            presets=[[0, 2, 2.5, 3, 3.5, 5],
                                     [0, 1, 1.5, 2, 2.5, 3],
                                     [0, 3, 3.5, 4, 4.5, 6]],
-                           amplitude = [0, -0.1, 1, -0.5, 0, 0]):
+                           amplitude=[0, -0.1, 1, -0.5, 0, 0]):
     '''helper function for enhance_ecg_peaks
 
     Helper function that generates synthetic QRS complexes of varying sizes
@@ -465,12 +464,12 @@ def generate_ecg_templates(sample_rate, widths=[50, 60, 70, 80, 100],
 
     for i in presets:
         for j in widths:
-            #duration < 120ms
+            # duration < 120ms
             duration = (j / 1000) * sample_rate
             step = duration / len(i)
             new_t = [int(step * x) for x in i]
             new_x = np.linspace(new_t[0], new_t[-1], new_t[-1])
-            #interpolate peak to fit in correct sampling rate
+            # interpolate peak to fit in correct sampling rate
             interp_func = interp1d(new_t, amplitude, kind='linear')
             templates.append(interp_func(new_x))
 
@@ -487,7 +486,7 @@ def denoise_convolutions(data, sample_rate, templates):
     convolutions = []
 
     for i in range(len(templates)):
-            convolved = np.convolve(data, templates[i], mode='same')
-            convolutions.append(convolved)
+        convolved = np.convolve(data, templates[i], mode='same')
+        convolutions.append(convolved)
 
     return np.asarray(convolutions)

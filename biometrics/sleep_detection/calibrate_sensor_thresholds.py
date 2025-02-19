@@ -1,23 +1,32 @@
-# python3 calibrate_sensor_thresholds.py --side=left --start_time="2025-02-08 18:00:00" --end_time="2025-02-08 18:50:00"
-# python3 calibrate_sensor_thresholds.py --side=right --start_time="2025-02-08 18:00:00" --end_time="2025-02-08 18:50:00"
+"""
+This script calibrates sensor thresholds by analyzing historical raw data to establish a baseline
+for sleep detection using piezoelectric and capacitance sensors.
+
+Key functionalities:
+- Loads raw `.RAW` sensor data for a specified time range and bed side.
+- Processes piezoelectric sensor data to detect presence using signal thresholds.
+- Analyzes capacitance sensor data to create a baseline for occupancy detection.
+- Identifies a baseline period and saves the capacitance sensor baseline for future reference.
+- Optimized for memory efficiency using garbage collection (`gc`).
+
+Usage:
+Run the script with required parameters:
+    cd /home/dac/free-sleep/biometrics/sleep_detection && /home/dac/venv/bin/python calibrate_sensor_thresholds.py --side=left --start_time="YYYY-MM-DD HH:MM:SS" --end_time="YYYY-MM-DD HH:MM:SS"
+"""
 import sys
 import platform
 import os
-
-sys.path.append(os.getcwd())
-if platform.system().lower() == 'linux':
-    sys.path.append('/home/dac/python_packages/')
-    sys.path.append('/home/dac/free-sleep/biometrics/')
-
 import gc
 from argparse import Namespace, ArgumentParser
 import traceback
 
+sys.path.append(os.getcwd())
 FOLDER_PATH = '/Users/ds/main/8sleep_biometrics/data/people/david/raw/loaded/2025-01-10/'
 if platform.system().lower() == 'linux':
     FOLDER_PATH = '/persistent/'
-    sys.path.append('/home/dac/python_packages/')
     sys.path.append('/home/dac/free-sleep/biometrics/')
+
+
 from data_types import *
 from load_raw_files import load_raw_files
 from piezo_data import load_piezo_df, detect_presence_piezo, identify_baseline_period
@@ -27,8 +36,8 @@ from get_logger import get_logger
 
 logger = get_logger()
 
-
 from utils import validate_datetime_utc
+
 
 def _parse_args() -> Namespace:
     # Argument parser setup
@@ -59,8 +68,7 @@ def _parse_args() -> Namespace:
 
     # Validate that start_time is before end_time
     if args.start_time >= args.end_time:
-        logger.error("Error: --start_time must be earlier than --end_time.")
-        sys.exit(1)
+        raise ValueError("--start_time must be earlier than --end_time")
 
     return args
 
@@ -104,7 +112,6 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
     cap_baseline = create_cap_baseline_from_cap_df(merged_df, baseline_start_time, baseline_end_time, side, min_std=5)
     save_baseline(side, cap_baseline)
 
-
     # Cleanup
     merged_df.drop(merged_df.index, inplace=True)
     del merged_df
@@ -135,6 +142,3 @@ if __name__ == "__main__":
         gc.collect()
         logger.error(e)
         traceback.print_exc()
-
-
-

@@ -2,6 +2,8 @@ import argparse
 from datetime import datetime, timezone
 
 d = datetime.fromisoformat('2025-02-04T04:00:00Z'.replace('Z', '+00:00'))
+
+
 def validate_datetime_utc(date_str):
     """
     Validate and parse datetime input as UTC.

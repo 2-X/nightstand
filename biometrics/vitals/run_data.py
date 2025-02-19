@@ -29,15 +29,12 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from typing import Union, Tuple, TypedDict, List
-# from tqdm import tqdm
 
 import platform
 import sys
 
 if platform.system().lower() == 'linux':
-    sys.path.append('/home/dac/python_packages/')
     sys.path.append('/home/dac/free-sleep/biometrics/')
-
 
 from data_types import *
 
@@ -79,6 +76,7 @@ class RuntimeParams(TypedDict):
     hr_percentile: Tuple[int, int]
     signal_percentile: Tuple[float, float]
     window_size: float
+
 
 class Accuracy(TypedDict):
     window: int
@@ -298,7 +296,5 @@ class RunData:
         if not self.df_pred_side_2.empty:
             self.df_pred_side_2.dropna(subset=['heart_rate'], inplace=True)
             self.df_pred_side_2.sort_values(by='start_time', inplace=True)
-
-
 
 # endregion

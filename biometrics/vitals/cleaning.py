@@ -39,4 +39,3 @@ def interpolate_outliers_in_wave(data, lower_percentile: float = 2, upper_percen
     data[mask] = np.interp(np.where(mask)[0], valid_idx, data[valid_idx])
 
     return data
-

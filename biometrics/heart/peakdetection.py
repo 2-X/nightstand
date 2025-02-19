@@ -17,7 +17,6 @@ from scipy.signal import resample
 from heart.analysis import calc_rr, update_rr
 from heart.exceptions import BadSignalWarning
 
-
 __all__ = ['make_windows',
            'append_dict',
            'detect_peaks',
@@ -143,10 +142,9 @@ def append_dict(dict_obj, measure_key, measure_value):
 
 
 def detect_peaks(hrdata, rol_mean, ma_perc, sample_rate, update_dict=True, working_data={}):
-
     rmean = np.array(rol_mean)
 
-    #rol_mean = rmean + ((rmean / 100) * ma_perc)
+    # rol_mean = rmean + ((rmean / 100) * ma_perc)
     mn = np.mean(rmean / 100) * ma_perc
     rol_mean = rmean + mn
 
@@ -157,13 +155,13 @@ def detect_peaks(hrdata, rol_mean, ma_perc, sample_rate, update_dict=True, worki
             np.array([0]),
             (np.where(np.diff(peaksx) > 1)[0]),
             np.array([len(peaksx)])
-         )
+        )
     )
     peaklist = []
 
-    for i in range(0, len(peakedges)-1):
+    for i in range(0, len(peakedges) - 1):
         try:
-            y_values = peaksy[peakedges[i]:peakedges[i+1]].tolist()
+            y_values = peaksy[peakedges[i]:peakedges[i + 1]].tolist()
             peaklist.append(peaksx[peakedges[i] + y_values.index(max(y_values))])
         except:
             pass
@@ -233,7 +231,7 @@ def fit_peaks(hrdata, rol_mean, sample_rate, bpmmin=40, bpmmax=180, working_data
             update_dict=True,
             working_data=working_data
         )
-        bpm = ((len(working_data['peaklist'])/(len(hrdata)/sample_rate))*60)
+        bpm = ((len(working_data['peaklist']) / (len(hrdata) / sample_rate)) * 60)
         rrsd.append([working_data['rrsd'], bpm, ma_perc])
 
     for _rrsd, _bpm, _ma_perc in rrsd:
@@ -358,7 +356,7 @@ def check_binary_quality(peaklist, binary_peaklist, maxrejects=3, working_data={
     working_data['rejected_segments'] = []
     for i in range(int(len(binary_peaklist) / 10)):
         if np.bincount(binary_peaklist[idx:idx + 10])[0] > maxrejects:
-            binary_peaklist[idx:idx + 10] = [0 for i in range(len(binary_peaklist[idx:idx+10]))]
+            binary_peaklist[idx:idx + 10] = [0 for i in range(len(binary_peaklist[idx:idx + 10]))]
             if idx + 10 < len(peaklist):
                 working_data['rejected_segments'].append((peaklist[idx], peaklist[idx + 10]))
             else:

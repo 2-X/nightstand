@@ -23,7 +23,6 @@ import platform
 import warnings
 
 if platform.system().lower() == 'linux':
-    sys.path.append('/home/dac/python_packages/')
     sys.path.append('/home/dac/free-sleep/biometrics/')
 
 sys.path.append(os.getcwd())
@@ -38,6 +37,8 @@ logger = get_logger()
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.simplefilter(action='ignore', category=RuntimeWarning)
 warnings.simplefilter(action='ignore', category=UserWarning)
+
+
 # ---------------------------------------------------------------------------------------------------
 # region CLEAN DF
 
@@ -234,7 +235,6 @@ def estimate_heart_rate_intervals(run_data: RunData, debug=False):
             measurement_2['heart_rate'] = heart_rate
             run_data.combined_measurements.append(measurement_2)
             run_data.measurements_side_2.append(measurement_2)
-
 
         run_data.next()
 

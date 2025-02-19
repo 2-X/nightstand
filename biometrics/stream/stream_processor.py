@@ -1,9 +1,28 @@
+"""
+This module defines the `StreamProcessor` class, which processes continuous piezoelectric
+sensor data to track user presence and extract biometric metrics such as heart rate,
+heart rate variability (HRV), and breathing rate.
+
+Key functionalities:
+- Buffers incoming piezoelectric sensor data to process trends over time.
+- Detects user presence based on signal strength for both left and right sides.
+- Uses `BiometricProcessor` to analyze heart rate, HRV, and breathing rate.
+- Supports single and dual-sensor configurations.
+- Maintains a rolling buffer of sensor readings to smooth out noise.
+- Extracts timestamped biometric data and logs presence detections.
+
+Usage:
+Instantiate `StreamProcessor` with an initial piezo record and call `process_piezo_record(piezo_record)`
+with new sensor data to continuously track and analyze biometric trends.
+"""
+
 from typing import Union, Tuple, TypedDict, List, Optional
 
 import math
 from get_logger import get_logger
 from biometric_processor import BiometricProcessor
 from data_types import *
+
 logger = get_logger()
 
 
@@ -27,8 +46,6 @@ class StreamProcessor:
     def check_presence(self, left1_signal: np.ndarray, right1_signal: np.ndarray):
         self.left_processor.detect_presence(left1_signal)
         self.right_processor.detect_presence(right1_signal)
-
-
 
     def process_piezo_record(self, piezo_record: PiezoDualData):
         self.piezo_buffer.append(piezo_record)
@@ -61,7 +78,3 @@ class StreamProcessor:
                 else:
                     right2_signal = None
                 self.right_processor.calculate_vitals(epoch, right1_signal, right2_signal)
-
-
-
-

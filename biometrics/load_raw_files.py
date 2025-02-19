@@ -7,7 +7,6 @@ import gc
 import sys
 import os
 
-
 # Add the current directory to sys.path
 sys.path.append(os.getcwd())
 from data_types import *
@@ -115,7 +114,6 @@ def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Si
     return data
 
 
-
 def _rename_keys(data: dict):
     key_mapping = {
         'log': 'logs',
@@ -152,7 +150,3 @@ def load_raw_files(folder_path: str, start_time: datetime, end_time: datetime, s
     _rename_keys(data)
     gc.collect()
     return data
-
-
-
-

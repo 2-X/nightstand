@@ -1,3 +1,24 @@
+"""
+This module defines the `BiometricProcessor` class, which processes biometric signals
+from piezoelectric sensors to extract heart rate, heart rate variability (HRV), and
+breathing rate. It applies signal cleaning, filtering, and outlier detection to ensure
+accurate physiological measurements.
+
+Key functionalities:
+- Detects user presence based on piezo signal range.
+- Applies preprocessing steps such as outlier interpolation, scaling, and filtering.
+- Extracts heart rate, HRV, and breathing rate using a sliding window approach.
+- Maintains a rolling buffer of heart rates to compute a moving average and dynamic bounds.
+- Validates heart rate values against defined thresholds to reduce false positives.
+- Periodically inserts smoothed biometric data into an SQL database.
+- Supports multiple sensors and handles missing or noisy signals.
+- Implements garbage collection for memory efficiency.
+
+Usage:
+Instantiate `BiometricProcessor` and call `calculate_vitals(epoch, signal1, signal2)`
+with sensor data to process and extract biometric metrics.
+"""
+
 import gc
 from typing import Union, Tuple, TypedDict, List, Optional
 import traceback
@@ -12,20 +33,18 @@ from heart.filtering import filter_signal, remove_baseline_wander
 from heart.heartpy import process
 from db import insert_vitals
 from data_types import *
+
 logger = get_logger()
 
 
-
-
-
-
 class BiometricProcessor:
-    heart_rates: List[float]        # Store average heart rates
-    last_heart_rates: List[float]   # Store last <moving_avg_size> heart rates
-    lower_bound: Optional[np.floating]    # Lower bound of HR (None if not set)
-    upper_bound: Optional[np.floating]    # Upper bound of HR (None if not set)
+    heart_rates: List[float]  # Store average heart rates
+    last_heart_rates: List[float]  # Store last <moving_avg_size> heart rates
+    lower_bound: Optional[np.floating]  # Lower bound of HR (None if not set)
+    upper_bound: Optional[np.floating]  # Upper bound of HR (None if not set)
     hr_moving_avg: Optional[np.floating]  # Current moving average heart rate
-    hr_std_2: Optional[float]       # Standard deviation of heart rate
+    hr_std_2: Optional[float]  # Standard deviation of heart rate
+
     def __init__(
             self,
             side: str = 'left',
@@ -77,7 +96,6 @@ class BiometricProcessor:
         self.iteration_count = 0
         self.init_tracking()
 
-
     def detect_presence(self, signal: np.ndarray):
         signal_range = np.ptp(signal)
         if signal_range > 200_000:
@@ -91,7 +109,6 @@ class BiometricProcessor:
                 logger.debug(f'User not detected for {self.no_presence_tolerance} seconds on {self.side} side, resetting...')
                 self.present = False
                 self.reset()
-
 
     def _calculate_vitals(self, signal: np.ndarray, epoch: int):
         # Remove outliers from signal
@@ -140,7 +157,6 @@ class BiometricProcessor:
                 'breathing_rate': breathing_rate,
             }
         return None
-
 
     def calculate_vitals(self, epoch: int, signal1: np.ndarray, signal2: Union[None, np.ndarray] = None):
         measurement_1 = None
@@ -218,7 +234,6 @@ class BiometricProcessor:
 
         self.next()
 
-
     def is_valid(self, measurement) -> bool:
         if np.isnan(measurement['bpm']):
             return False
@@ -231,7 +246,6 @@ class BiometricProcessor:
             else:
                 return False
         return True
-
 
     def next(self):
         self.iteration_count += 1
@@ -247,7 +261,6 @@ class BiometricProcessor:
             else:
                 smoothed_measurement = {**self.combined_measurements[-1], 'heart_rate': np.mean(self.heart_rates[-20:])}
                 self.smoothed_measurements.append(smoothed_measurement)
-
 
         if len(self.heart_rates) >= self.moving_avg_size:
             if len(self.heart_rates) > self.moving_avg_size:

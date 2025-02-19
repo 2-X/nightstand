@@ -1,20 +1,33 @@
+"""
+This module processes capacitance sensor data to detect presence and establish baselines
+for sleep detection.
+
+Key functionalities:
+- Loads capacitance sensor data into a Pandas DataFrame.
+- Creates and saves baseline values for capacitance sensors to improve sleep detection accuracy.
+- Detects presence based on capacitance changes using rolling window analysis.
+- Supports baseline calibration for each bed side (`left` and `right`).
+- Uses efficient vectorized operations for fast presence detection.
+
+Usage:
+- Use `load_cap_df(data, side)` to load raw capacitance sensor data.
+- Use `create_cap_baseline_from_cap_df(merged_df, start_time, end_time, side)` to establish a baseline.
+- Use `detect_presence_cap(merged_df, cap_baseline, side)` to determine presence intervals.
+"""
+
 import os
-import gc
 import json
 import math
 import pandas as pd
-from datetime import datetime, timedelta
-import platform
+from datetime import datetime
 
 from data_types import *
 from get_logger import get_logger
 
 logger = get_logger()
 
-
 LEFT_CAP_BASE_LINE_FILE_PATH = f'{logger.folder_path}left_cap_baseline.json'
 RIGHT_CAP_BASELINE_FILE_PATH = f'{logger.folder_path}right_cap_baseline.json'
-
 
 
 def create_cap_baseline_from_cap_df(merged_df: pd.DataFrame, start_time: datetime, end_time: datetime, side: Side, min_std: int = 5) -> CapBaseline:
@@ -110,7 +123,3 @@ def detect_presence_cap(
         merged_df.drop(columns=[f'{side}_combined', f'{side}_out', f'{side}_cen', f'{side}_in'], inplace=True)
 
     return merged_df
-
-
-
-
