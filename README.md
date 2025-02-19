@@ -43,7 +43,6 @@ Heart rates were validated over 33 sleep periods from 3 males & 3 females agains
   - RMSE - 2.88 average, 1.45 min, 7.63 max 
   - Correlation - 80.8% average, 27% min, 95% max
   - MAE - 1.83 average, 1 min, 5.77
-- Only enable this if you're comfortable debugging & have programming experience
 - How to enable:
   - `sh /home/dac/free-sleep/scripts/enable_biometrics.sh`
 - How to disable:
