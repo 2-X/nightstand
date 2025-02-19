@@ -63,9 +63,9 @@ class BiometricProcessor:
             runtime_params: RuntimeParams = {
                 'window': 3,
                 'slide_by': 1,
-                'moving_avg_size': 100,
+                'moving_avg_size': 120,
                 'hr_std_range': (1, 10),
-                'hr_percentile': (20, 75),
+                'hr_percentile': (15, 80),
                 'signal_percentile': (0.2, 99.8),
                 'window_size': 0.65,
             }
@@ -252,7 +252,7 @@ class BiometricProcessor:
         if self.iteration_count % self.insertion_frequency == 0 and len(self.combined_measurements) > 0:
             if self.insert_to_sql:
                 # Convert last heart rate to average
-                self.combined_measurements[-1]['heart_rate'] = np.mean(self.heart_rates[-20:])
+                self.combined_measurements[-1]['heart_rate'] = np.mean(self.heart_rates[-25:])
                 insert_vitals(self.combined_measurements[-1])
 
                 del self.combined_measurements
