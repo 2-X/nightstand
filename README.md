@@ -34,6 +34,37 @@ Check the back of your pod where you plug in the water tubes,
 - Settings customization: Configure timezones, away mode, brightness of LED on pod
 - Website works on desktop and mobile
 
+### Biometrics (BETA)
+- Do not enable this unless you're comfortable programming & debugging
+- **The only biometrics data that has been validated is heart rate**, HRV & breathing rates have not been validated & may be inaccurate.
+Heart rates were validated over 33 sleep periods from 3 males & 3 females against mostly Apple Watches. 
+**Heart rate calculations tend to be slightly less accurate for females**
+- Summary statistics for all 33 periods:
+  - RMSE - 2.88 average, 1.45 min, 7.63 max 
+  - Correlation - 80.8% average, 27% min, 95% max
+  - MAE - 1.83 average, 1 min, 5.77
+- Only enable this if you're comfortable debugging & have programming experience
+- How to enable:
+  - `sh /home/dac/free-sleep/scripts/enable_biometrics.sh`
+- How to disable:
+  - `sh /home/dac/free-sleep/scripts/disable_biometrics.sh`
+
+#### Biometrics Overview
+
+All biometric and sleep data is inserted into SQLite @ `/persistent/free-sleep-data/free-sleep.db`.
+
+1. Vitals (Heart rate, breath rate, HRV) `biometrics/stream/stream.py` - This runs 24/7 and calculates vitals when it detects presence.
+Vitals are inserted once every 60 seconds & you can access the raw data @ <POD_IP>/api/metrics/vitals
+**Data will not show in the UI if you don't have scheduled on/off times and daily primes enabled**
+
+2. Sleep periods `biometrics/sleep_detection/analyze_sleep.py` - This is scheduled under `server/src/jobs/jobScheduler.ts`
+DEPENDS ON:
+- Scheduled on/off times
+  - The sleep period is only calculated whenever the pod is scheduled to turn off on a side for that day
+- Daily priming enabled (this should be during a period no one is ever present on the pod)
+  - This establishes a base level threshold in order to detect when a user is present
+
+
 ## Limitations
 - Requires your device to be on the same Wi-Fi as the pod
 - No authentication is implemented
