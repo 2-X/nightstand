@@ -12,14 +12,15 @@ main module for HeartPy.
 '''
 
 import numpy as np
-from heart.datautils import rolling_mean, outliers_iqr_method, outliers_modified_z
-from heart.preprocessing import enhance_peaks
-from heart.filtering import hampel_correcter
+from typing import Tuple
+import json
+from data_types import HeartPyMeasurement, WorkingData
+from heart.datautils import rolling_mean
 
 from heart.peakdetection import check_peaks, fit_peaks
 from heart.analysis import calc_rr
-import sys
-from heart.analysis import clean_rr_intervals, calc_ts_measures, calc_breathing, calc_poincare
+from heart.analysis import clean_rr_intervals, calc_ts_measures, calc_breathing
+
 
 
 def process(
@@ -28,14 +29,13 @@ def process(
         windowsize: float = 0.75,
         bpmmin: int = 40,
         bpmmax: int = 180,
-        reject_segmentwise=False,
         breathing_method='welch',
         clean_rr_method='quotient-filter',
         calculate_breathing=True,
-):
+) -> Tuple[dict, HeartPyMeasurement]:
     measures = {}
 
-    working_data = {}
+    working_data: WorkingData = {}
 
     # check that the data has positive baseline for the moving average algorithm to work
     bl_val = np.percentile(hrdata, 0.1)
@@ -66,15 +66,7 @@ def process(
         working_data=working_data
     )
 
-    working_data = check_peaks(
-        working_data['RR_list'],
-        working_data['peaklist'],
-        working_data['ybeat'],
-        reject_segmentwise,
-        working_data=working_data
-    )
-
-    # if clean_rr:
+    working_data = check_peaks(working_data)
     working_data = clean_rr_intervals(
         working_data,
         method=clean_rr_method
@@ -84,13 +76,6 @@ def process(
         working_data['RR_list_cor'],
         working_data['RR_diff'],
         working_data['RR_sqdiff'],
-        measures=measures,
-        working_data=working_data
-    )
-
-    measures = calc_poincare(
-        working_data['RR_list'],
-        working_data['RR_masklist'],
         measures=measures,
         working_data=working_data
     )
@@ -105,5 +90,6 @@ def process(
             )
         except:
             measures['breathingrate'] = np.nan
+    # print(working_data)
 
     return working_data, measures

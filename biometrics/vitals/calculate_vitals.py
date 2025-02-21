@@ -156,7 +156,7 @@ def calculate_vitals(start_time: datetime, end_time: datetime, side: Side, folde
     run_data.df_pred['ts_start'] = pd.to_datetime(run_data.df_pred['timestamp'], unit='s').dt.strftime('%Y-%m-%d %H:%M:%S')
     run_data.df_pred['heart_rate'] = run_data.df_pred['heart_rate'].round(0).astype(int)
     run_data.df_pred['hrv'] = run_data.df_pred['hrv'].round(0).astype(int)
-    run_data.df_pred['breathing_rate'] = run_data.df_pred['hrv'].round(0).astype(int)
+    run_data.df_pred['breathing_rate'] = run_data.df_pred['breathing_rate'].round(0).astype(int)
     run_data.df_pred.head()
     # Save to SQLite (for Prisma to use)
     conn = sqlite3.connect(DB_FILE_PATH)

@@ -13,6 +13,8 @@ Key Functions:
 """
 import gc
 import numpy as np
+
+from heart.exceptions import BadSignalWarning
 from vitals.run_data import RunData
 import traceback
 import pandas as pd
@@ -29,7 +31,7 @@ sys.path.append(os.getcwd())
 from data_types import *
 from vitals.cleaning import interpolate_outliers_in_wave
 from heart.filtering import filter_signal, remove_baseline_wander
-from heart.preprocessing import scale_data, enhance_ecg_peaks
+from heart.preprocessing import scale_data
 from heart.heartpy import process
 from get_logger import get_logger
 
@@ -112,7 +114,6 @@ def _calculate(run_data: RunData, side: str):
         breathing_method='fft',
         bpmmin=40,
         bpmmax=90,
-        reject_segmentwise=False,  # KEEP FALSE - Less accurate
         windowsize=run_data.window_size,
         clean_rr_method='quotient-filter',
         calculate_breathing=True,
@@ -161,15 +162,21 @@ def estimate_heart_rate_intervals(run_data: RunData, debug=False):
         measurement_2 = None
         try:
             measurement_1 = _calculate(run_data, run_data.side_1)
-        except Exception as e:
+        except BadSignalWarning:
             run_data.sensor_1_error_count += 1
-            if debug:
+        except Exception as e:
+            if run_data.log:
                 traceback.print_exc()
+            run_data.sensor_1_error_count += 1
 
         if run_data.senor_count == 2:
             try:
                 measurement_2 = _calculate(run_data, run_data.side_2)
+            except BadSignalWarning:
+                run_data.sensor_2_error_count += 1
             except Exception as e:
+                if run_data.log:
+                    traceback.print_exc()
                 run_data.sensor_2_error_count += 1
 
         if measurement_1 is not None and measurement_2 is not None:

@@ -12,7 +12,7 @@ Key functionalities:
 Usage:
 Run the script with required parameters:
     /home/dac/venv/bin/python calibrate_sensor_thresholds.py --side=left --start_time="YYYY-MM-DD HH:MM:SS" --end_time="YYYY-MM-DD HH:MM:SS"
-    cd /home/dac/free-sleep/biometrics/sleep_detection && /home/dac/venv/bin/python analyze_sleep.py --side=left --start_time="2025-02-16 03:00:00" --end_time="2025-02-16 15:00:00"
+    cd /home/dac/free-sleep/biometrics/sleep_detection && /home/dac/venv/bin/python analyze_sleep.py --side=right --start_time="2025-02-20 03:00:00" --end_time="2025-02-16 16:00:00"
 """
 
 import sys

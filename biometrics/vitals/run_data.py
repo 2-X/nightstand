@@ -29,70 +29,16 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from typing import Union, Tuple, TypedDict, List
-
+from tqdm import *
 import platform
 import sys
+from tqdm import tqdm
 
 if platform.system().lower() == 'linux':
     sys.path.append('/home/dac/free-sleep/biometrics/')
 
 from data_types import *
-
-
-# ---------------------------------------------------------------------------------------------------
-# region Type definitions
-
-class Measurement(TypedDict):
-    start_time: str
-    end_time: str
-    heart_rate: float
-    hrv: float
-    breathing_rate: float
-    source: str
-
-
-class Measurements(TypedDict):
-    combined: List[Measurement]
-
-
-class ChartLabels(TypedDict, total=False):
-    name: str
-    start_time: str
-    end_time: str
-    label: str
-    elapsed: float
-
-
-class PostRuntimeParams(TypedDict):
-    r_window_avg: int
-    r_min_periods: int
-
-
-class RuntimeParams(TypedDict):
-    window: int
-    slide_by: int
-    moving_avg_size: int
-    hr_std_range: Tuple[int, int]
-    hr_percentile: Tuple[int, int]
-    signal_percentile: Tuple[float, float]
-    window_size: float
-
-
-class Accuracy(TypedDict):
-    window: int
-    slide_by: int
-    moving_avg_size: int
-    hr_std_range: Tuple[int, int]
-    percentile: Tuple[int, int]
-
-
-class ChartInfo(TypedDict, total=False):
-    labels: ChartLabels
-    runtime_params: RuntimeParams
-    accuracy: Accuracy
-
-
-# endregion
+from vitals.run_data_types import *
 
 # ---------------------------------------------------------------------------------------------------
 # region RunData
@@ -188,8 +134,8 @@ class RunData:
             raise Exception(f'end_time is before start_time: {start_time} -> {end_time}')
         self.total_intervals = math.ceil(total_seconds / self.slide_by)
         self.progress_bar_update_interval = 100
-        # if self.log:
-        #     self.bar = tqdm(total=math.ceil(self.total_intervals / self.progress_bar_update_interval))
+        if self.log:
+            self.bar = tqdm(total=math.ceil(self.total_intervals / self.progress_bar_update_interval))
         self.timer_start = None
         self.timer_end = None
         self.elapsed_time = None

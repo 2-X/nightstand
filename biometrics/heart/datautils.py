@@ -238,49 +238,29 @@ def _sliding_window(data, windowsize):
     return np.lib.stride_tricks.as_strided(data, shape=shape, strides=strides)
 
 
-def rolling_mean(data, windowsize, sample_rate):
-    '''calculates rolling mean
+def rolling_mean(hrdata: np.ndarray, windowsize: float, sample_rate: int) -> np.ndarray:
+    win_size = int(windowsize * sample_rate)
 
-    Function to calculate the rolling mean (also: moving average) over the passed data.
+    # Calculate rolling mean using a sliding window approach
+    rol_mean = np.mean(_sliding_window(hrdata, win_size), axis=1)
 
-    Parameters
-    ----------
-    data : 1-dimensional numpy array or list
-        sequence containing data over which rolling mean is to be computed
+    # Compute padding size
+    n_missvals = (len(hrdata) - len(rol_mean)) // 2
 
-    windowsize : int or float
-        the window size to use, in seconds
-        calculated as windowsize * sample_rate
+    # Use np.full for efficient array creation
+    missvals_a = np.full(n_missvals, rol_mean[0], dtype=hrdata.dtype)
+    missvals_b = np.full(n_missvals, rol_mean[-1], dtype=hrdata.dtype)
 
-    sample_rate : int or float
-        the sample rate of the data set
+    # Concatenate efficiently
+    rol_mean = np.hstack((missvals_a, rol_mean, missvals_b))
 
-    Returns
-    -------
-    out : 1-d numpy array
-        sequence containing computed rolling mean
+    # Length correction if necessary
+    len_diff = len(rol_mean) - len(hrdata)
+    if len_diff < 0:
+        rol_mean = np.append(rol_mean, np.zeros(-len_diff, dtype=hrdata.dtype))
+    elif len_diff > 0:
+        rol_mean = rol_mean[:len(hrdata)]
 
-    '''
-
-    # calculate rolling mean
-    data_arr = np.array(data)
-    rol_mean = np.mean(_sliding_window(data_arr, int(windowsize * sample_rate)), axis=1)
-
-    # need to fill 1/2 windowsize gap at the start and end
-    n_missvals = int(abs(len(data_arr) - len(rol_mean)) / 2)
-    missvals_a = np.array([rol_mean[0]] * n_missvals)
-    missvals_b = np.array([rol_mean[-1]] * n_missvals)
-
-    rol_mean = np.concatenate((missvals_a, rol_mean, missvals_b))
-
-    # only to catch length errors that sometimes unexplicably occur.
-    ##Generally not executed, excluded from testing and coverage
-    if len(rol_mean) != len(data):  # pragma: no cover
-        lendiff = len(rol_mean) - len(data)
-        if lendiff < 0:
-            rol_mean = np.append(rol_mean, 0)
-        else:
-            rol_mean = rol_mean[:-1]
     return rol_mean
 
 

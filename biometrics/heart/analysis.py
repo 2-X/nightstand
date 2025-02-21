@@ -13,13 +13,14 @@ heart rate variability (HRV) measures.
 '''
 
 import warnings
-
+from typing import List
 import numpy as np
 from scipy.interpolate import UnivariateSpline
 from scipy.signal import welch, periodogram
 
 from heart.datautils import MAD, outliers_iqr_method, outliers_modified_z
 from heart.filtering import quotient_filter, filter_signal
+from data_types import *
 
 __all__ = ['calc_rr',
            'update_rr',
@@ -30,7 +31,7 @@ __all__ = ['calc_rr',
            'calc_breathing']
 
 
-def calc_rr(peaklist, sample_rate, working_data={}):
+def calc_rr(peaklist: List[np.int64], sample_rate: int, working_data={}) -> WorkingData:
     '''calculates peak-peak intervals
 
     Function that calculates the peak-peak data required for
@@ -54,7 +55,7 @@ def calc_rr(peaklist, sample_rate, working_data={}):
         working_data dictionary object containing all of heartpy's temp objects
 
     '''
-    peaklist = np.array(peaklist)  # cast numpy array to be sure or correct array type
+    # peaklist = np.array(peaklist)  # cast numpy array to be sure or correct array type
 
     # delete first peak if within first 150ms (signal might start mid-beat after peak)
     if len(peaklist) > 0:
@@ -74,7 +75,7 @@ def calc_rr(peaklist, sample_rate, working_data={}):
     return working_data
 
 
-def update_rr(working_data={}):
+def update_rr(working_data) -> WorkingData:
     '''updates differences between adjacent peak-peak distances
 
     Function that updates RR differences and RR squared differences
@@ -273,61 +274,12 @@ Nothing to do!')
     return working_data
 
 
+
+
 def calc_ts_measures(rr_list, rr_diff, rr_sqdiff, measures={}, working_data={}):
     '''calculates standard time-series measurements.
 
     Function that calculates the time-series measurements for HeartPy.
-
-    Parameters
-    ----------
-    rr_list : 1d list or array
-        list or array containing peak-peak intervals
-
-    rr_diff : 1d list or array
-        list or array containing differences between adjacent peak-peak intervals
-
-    rr_sqdiff : 1d list or array
-        squared rr_diff
-
-    measures : dict
-        dictionary object used by heartpy to store computed measures. Will be created
-        if not passed to function.
-
-    working_data : dict
-        dictionary object that contains all heartpy's working data (temp) objects.
-        will be created if not passed to function
-
-    Returns
-    -------
-    working_data : dict
-        dictionary object that contains all heartpy's working data (temp) objects.
-
-    measures : dict
-        dictionary object used by heartpy to store computed measures.
-
-    Examples
-    --------
-    Normally this function is called during the process pipeline of HeartPy. It can
-    of course also be used separately.
-
-    Assuming we have the following peak-peak distances:
-
-    >>> import numpy as np
-    >>> rr_list = [1020.0, 990.0, 960.0, 1000.0, 1050.0, 1090.0, 990.0, 900.0, 900.0, 950.0, 1080.0]
-
-    we can then compute the other two required lists by hand for now:
-
-    >>> rr_diff = np.diff(rr_list)
-    >>> rr_sqdiff = np.power(rr_diff, 2)
-    >>> wd, m = calc_ts_measures(rr_list, rr_diff, rr_sqdiff)
-
-    All output measures are then accessible from the measures object through
-    their respective keys:
-
-    >>> print('%.3f' %m['bpm'])
-    60.384
-    >>> print('%.3f' %m['rmssd'])
-    67.082
     '''
 
     measures['bpm'] = 60000 / np.mean(rr_list)
@@ -574,8 +526,14 @@ def calc_fd_measures(method='welch', welch_wsize=240, square_spectrum=False, mea
     return working_data, measures
 
 
-def calc_breathing(rrlist, method='welch', filter_breathing=True,
-                   bw_cutoff=[0.1, 0.4], measures={}, working_data={}):
+def calc_breathing(
+        rrlist,
+        method='welch',
+        filter_breathing=True,
+        bw_cutoff=[0.1, 0.4],
+        measures={},
+        working_data={}
+):
     # resample RR-list to 1000Hz
     x = np.linspace(0, len(rrlist), len(rrlist))
     x_new = np.linspace(0, len(rrlist), np.sum(rrlist, dtype=np.int32))
@@ -583,8 +541,12 @@ def calc_breathing(rrlist, method='welch', filter_breathing=True,
     breathing = interp(x_new)
 
     if filter_breathing:
-        breathing = filter_signal(breathing, cutoff=bw_cutoff,
-                                  sample_rate=1000.0, filtertype='bandpass')
+        breathing = filter_signal(
+            breathing,
+            cutoff=bw_cutoff,
+            sample_rate=1000.0,
+            filtertype='bandpass'
+        )
 
     if method.lower() == 'fft':
         datalen = len(breathing)
@@ -614,78 +576,3 @@ def calc_breathing(rrlist, method='welch', filter_breathing=True,
     return measures, working_data
 
 
-def calc_poincare(rr_list, rr_mask=[], measures={}, working_data={}):
-    '''computes poincare parameters
-
-    Function that takes peak-peak intervals and computes poincare parameters:
-    [0] standard deviation perpendicular to identity line (SD1)
-    [1] standard deviation along identity line (SD2)
-    [2] area of ellipse described by SD1 and SD2
-    [3] SD1/SD2 ratio
-
-    Based on:
-    "Shaffer, F., Ginsberg, J.P. (2017), An Overview of Heart Rate
-    Variability Metrics and Norms"
-
-    Parameters
-    ----------
-    rr_list : 1d array or list
-        list or array containing peak-peak intervals
-
-    rr_mask : 1d array or list
-        list or array containing mask for rejected peak-peak intervals
-
-    measures : dict
-        dictionary object used by heartpy to store computed measures. Will be created
-        if not passed to function.
-
-    working_data : dict
-        dictionary object that contains all heartpy's working data (temp) objects.
-        will be created if not passed to function
-
-    Returns
-    -------
-    working_data : dict
-        dictionary object that contains all heartpy's working data (temp) objects.
-
-    measures : dict
-        dictionary object used by heartpy to store computed measures.
-        poincare values are appended to measures['poincare']
-    '''
-
-    # generate vectors of adjacent peak-peak intervals
-    x_plus = []
-    x_minus = []
-
-    for i in range(len(working_data['RR_masklist']) - 1):
-        if working_data['RR_masklist'][i] + working_data['RR_masklist'][i + 1] == 0:
-            # only add adjacent RR-intervals that are not rejected
-            x_plus.append(working_data['RR_list'][i])
-            x_minus.append(working_data['RR_list'][i + 1])
-        else:
-            pass
-
-    # cast to arrays so we can do numerical work easily
-    x_plus = np.asarray(x_plus)
-    x_minus = np.asarray(x_minus)
-
-    # compute parameters and append to dict
-    x_one = (x_plus - x_minus) / np.sqrt(2)
-    x_two = (x_plus + x_minus) / np.sqrt(2)
-    sd1 = np.sqrt(np.var(x_one))  # compute stdev perpendicular to identity line
-    sd2 = np.sqrt(np.var(x_two))  # compute stdev parallel to identity line
-    s = np.pi * sd1 * sd2  # compute area of ellipse
-
-    # write computed measures to dicts
-    measures['sd1'] = sd1
-    measures['sd2'] = sd2
-    measures['s'] = s
-    measures['sd1/sd2'] = sd1 / sd2
-
-    working_data['poincare'] = {}
-    working_data['poincare']['x_plus'] = x_plus
-    working_data['poincare']['x_minus'] = x_minus
-    working_data['poincare']['x_one'] = x_one
-    working_data['poincare']['x_two'] = x_two
-
-    return measures

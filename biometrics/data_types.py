@@ -1,6 +1,7 @@
 from typing import TypedDict, Literal, List, Tuple
 from datetime import datetime
-from numpy import ndarray
+from numpy import ndarray, float64, ma, int64
+from typing import TypedDict, Union
 
 # endregion
 Side = Literal['left', 'right']
@@ -174,21 +175,57 @@ class CapBaseline(TypedDict):
     right_in: Baseline
 
 
-from typing import TypedDict, Union
-import numpy as np
+
+
+
+class HeartPyMeasurement(TypedDict):
+    bpm: Union[float64, float]
+    ibi: Union[float64, float]
+    sdnn: Union[float64, float]
+    sdsd: Union[float64, float, str]  # 'masked' is a string
+    rmssd: Union[float64, float]
+    pnn20: Union[float64, float]
+    pnn50: Union[float64, float]
+    hr_mad: Union[float64, float]
+    sd1: Union[float64, float]
+    sd2: Union[float64, float]
+    s: Union[float64, float]
+    sd1_sd2: Union[float64, float]  # Renamed "sd1/sd2" to a valid key
+    breathingrate: Union[float64, float]
+
 
 
 class Measurement(TypedDict):
-    bpm: Union[np.float64, float]
-    ibi: Union[np.float64, float]
-    sdnn: Union[np.float64, float]
-    sdsd: Union[np.float64, float, str]  # 'masked' is a string
-    rmssd: Union[np.float64, float]
-    pnn20: Union[np.float64, float]
-    pnn50: Union[np.float64, float]
-    hr_mad: Union[np.float64, float]
-    sd1: Union[np.float64, float]
-    sd2: Union[np.float64, float]
-    s: Union[np.float64, float]
-    sd1_sd2: Union[np.float64, float]  # Renamed "sd1/sd2" to a valid key
-    breathingrate: Union[np.float64, float]
+    side: Side
+    timestamp: int
+    heart_rate: Union[float64, float]
+    hrv: Union[float64, float]
+    breathing_rate: Union[float64, float]
+
+class PoincareData(TypedDict):
+    x_plus: ndarray
+    x_minus: ndarray
+    x_one: ndarray
+    x_two: ndarray
+
+class WorkingData(TypedDict):
+    hr: ndarray
+    sample_rate: int
+    peaklist: List[int64]
+    ybeat: List[float64]
+    rolling_mean: ndarray
+    RR_list: ndarray
+    RR_indices: List[Tuple[int64, int64]]
+    RR_diff: ma.MaskedArray
+    RR_sqdiff: ma.MaskedArray
+    rrsd: float64
+    best: int
+    removed_beats: ndarray
+    removed_beats_y: ndarray
+    binary_peaklist: ndarray
+    RR_masklist: List[int]
+    RR_list_cor: ndarray
+    RR_masked: ma.MaskedArray
+    nn20: ma.MaskedArray
+    nn50: ma.MaskedArray
+    poincare: PoincareData
