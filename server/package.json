@@ -33,8 +33,6 @@
     "lowdb": "^6.1.1",
     "moment-timezone": "^0.5.46",
     "node-schedule": "^2.1.1",
-    "sqlite": "^5.1.1",
-    "sqlite3": "^5.1.7",
     "winston": "^3.17.0",
     "zod": "^3.24.1"
   },

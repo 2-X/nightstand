@@ -36,6 +36,8 @@ The server is composed of the following key components:
 - **`/api/settings`:** Manages device settings (e.g., timezone, away mode, priming schedules).
 - **`/api/schedules`:** Handles scheduling for device operations.
 - **`/api/execute`:** Sends commands directly to the device.
+- **`/api/metrics/vitals`:** Biometrics (heart rate, HRV, breathing rate)
+- **`/api/metrics/sleep`:** Sleep intervals 
 
 ### 3. **Jobs Scheduler (`src/jobs/`):**
 - Schedules periodic tasks like temperature adjustments, power on/off, and device priming using the `node-schedule` library.
@@ -272,6 +274,71 @@ The server exposes RESTful endpoints for interaction:
   "message": "Command 'SET_TEMP' executed successfully."
 }
 ```
+
+
+### `/api/metrics/sleep`
+
+#### **GET**
+
+- Fetches sleep records based on optional query parameters.
+- **Query Parameters:**
+    - `side` (optional): Filter by the side of the bed (e.g., "left" or "right").
+    - `startTime` (optional): Filter by the start time of sleep records, in ISO 8601 format.
+    - `endTime` (optional): Filter by the end time of sleep records, in ISO 8601 format.
+- Sample Response:
+  ```json
+  [
+    {
+      "id": 1,
+      "side": "left",
+      "entered_bed_at": "2025-02-15T22:00:00Z",
+      "left_bed_at": "2025-02-16T06:00:00Z",
+      "sleep_period_seconds": 28800,
+      "times_exited_bed": 2
+    },
+    {
+      "id": 2,
+      "side": "right",
+      "entered_bed_at": "2025-02-15T23:00:00Z",
+      "left_bed_at": "2025-02-16T07:00:00Z",
+      "sleep_period_seconds": 28800,
+      "times_exited_bed": 1
+    }
+  ]
+  ```
+
+
+### `/api/metrics/vitals`
+
+#### **GET /vitals**
+
+- **Description:** Fetches vital records based on optional query parameters.
+- **Query Parameters:**
+    - `side` (optional): Filter by the side of the bed (e.g., "left" or "right").
+    - `startTime` (optional): Filter by the start time of vital records, in ISO 8601 format.
+    - `endTime` (optional): Filter by the end time of vital records, in ISO 8601 format.
+- **Sample Response:**
+  ```json
+  [
+    {
+      "id": 1,
+      "side": "left",
+      "timestamp": "2025-02-15T22:00:00Z",
+      "heart_rate": 72,
+      "breathing_rate": 16,
+      "hrv": 42
+    },
+    {
+      "id": 2,
+      "side": "right",
+      "timestamp": "2025-02-15T23:00:00Z",
+      "heart_rate": 74,
+      "breathing_rate": 15,
+      "hrv": 45
+    }
+  ]
+  ```
+
 
 ## Partial Updates for POST Requests
 

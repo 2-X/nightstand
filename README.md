@@ -30,7 +30,7 @@ Check the back of your pod where you plug in the water tubes,
   - Set power on/off times 
   - Schedule temperature adjustments
   - Schedule daily time to prime the pod
-  - Alarms
+  - Alarms - If you turn off the Pod prior to the alarm running, then the alarm will not run
 - Settings customization: Configure timezones, away mode, brightness of LED on pod
 - Website works on desktop and mobile
 
@@ -42,7 +42,7 @@ Heart rates were validated over 33 sleep periods from 3 males & 3 females agains
 - Summary statistics for all 33 periods:
   - RMSE - 2.88 average, 1.45 min, 7.63 max 
   - Correlation - 80.8% average, 27% min, 95% max
-  - MAE - 1.83 average, 1 min, 5.77
+  - MAE - 1.83 average, 1 min, 5.77 max
 - How to enable:
   - `sh /home/dac/free-sleep/scripts/enable_biometrics.sh`
 - How to disable:
