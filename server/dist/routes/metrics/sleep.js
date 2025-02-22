@@ -14,11 +14,15 @@ router.get('/sleep', async (req, res) => {
         };
         if (side)
             query.side = side;
-        if (startTime) { // @ts-ignore
-            query.left_bed_at.gte = moment(startTime).unix();
+        if (startTime) {
+            query.left_bed_at = {
+                gte: moment(startTime).unix(),
+            };
         }
-        if (endTime) { // @ts-ignore
-            query.entered_bed_at.lte = moment(endTime).unix();
+        if (endTime) {
+            query.entered_bed_at = {
+                lte: moment(endTime).unix(),
+            };
         }
         const sleepRecords = await prisma.sleep_records.findMany({
             where: query,

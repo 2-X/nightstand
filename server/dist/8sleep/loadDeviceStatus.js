@@ -52,6 +52,7 @@ export const SETTINGS_KEY_MAPPING = {
     lb: 'ledBrightness',
 };
 export const INVERTED_SETTINGS_KEY_MAPPING = _.invert(SETTINGS_KEY_MAPPING);
+// Raw settings string is a CBOR encoded string
 const decodeSettings = (rawSettings) => {
     // Convert hex string to a buffer
     const cborBuffer = Buffer.from(rawSettings.replace(/"/g, ''), 'hex');

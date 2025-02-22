@@ -29,7 +29,7 @@ interface FirmwareConfig {
 
 const FIRMWARE_MAP: Record<FirmwareVersion, FirmwareConfig> = {
   remoteDevMode: {
-    dacLocation: 'lowdb/dac.sock',
+    dacLocation: `${process.env.DATA_FOLDER}/dac.sock`,
   },
   pod3FirmwareReset: {
     dacLocation: '/deviceinfo/dac.sock',

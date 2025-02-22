@@ -1,5 +1,3 @@
-// WARNING! - Any changes here MUST be the same between app/src/api & server/src/db/
-
 import { z } from 'zod';
 import { TIME_ZONES } from './timeZones.js';
 import { TimeSchema } from './schedulesSchema.js';

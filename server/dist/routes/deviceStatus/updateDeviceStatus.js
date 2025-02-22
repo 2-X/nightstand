@@ -50,7 +50,6 @@ const updateSide = async (side, sideStatus) => {
     }
 };
 const updateSettings = async (settings) => {
-    // @ts-ignore
     const renamedSettings = _.mapKeys(settings, (value, key) => INVERTED_SETTINGS_KEY_MAPPING[key] || key);
     const encodedBuffer = cbor.encode(renamedSettings);
     const hexString = encodedBuffer.toString('hex');

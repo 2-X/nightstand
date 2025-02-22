@@ -19,14 +19,13 @@ router.get('/vitals', async (req: Request<object, object, object, VitalsQuery>, 
   try {
     const { side, startTime, endTime } = req.query;
 
-    // const query: { side?: string; timestamp?: any } = {};
-    const query: Prisma.vitalsWhereInput = { timestamp: {} }; // Use Prisma-generated type
+    const query: Prisma.vitalsWhereInput = {};
 
     if (side) query.side = side;
-    // @ts-ignore
-    if (startTime) query.timestamp = { ...query.timestamp, gte: moment(startTime).unix() };
-    // @ts-ignore
-    if (endTime) query.timestamp = { ...query.timestamp, lte: moment(endTime).unix() };
+
+    query.timestamp = {};
+    if (startTime) query.timestamp.gte = moment(startTime).unix();
+    if (endTime) query.timestamp.lte = moment(endTime).unix();
 
 
     // Use Prisma's generated type for the records
@@ -51,15 +50,13 @@ router.get('/vitals/summary', async (req: Request<object, object, object, Vitals
   try {
     const { side, startTime, endTime } = req.query;
 
-    const query: Prisma.vitalsWhereInput = { timestamp: {} };
+    const query: Prisma.vitalsWhereInput = {};
 
     if (side) query.side = side;
-    if (startTime) { // @ts-ignore
-      query.timestamp = { ...query.timestamp, gte: moment(startTime).unix() };
-    }
-    if (endTime) { // @ts-ignore
-      query.timestamp = { ...query.timestamp, lte: moment(endTime).unix() };
-    }
+
+    query.timestamp = {};
+    if (startTime) query.timestamp.gte = moment(startTime).unix();
+    if (endTime) query.timestamp.lte = moment(endTime).unix();
 
     // Query: Min & Max Heart Rate
     const heartRateSummary = await prisma.vitals.aggregate({

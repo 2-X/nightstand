@@ -1,3 +1,4 @@
+// LowDB, stores the schedules in /persistent/free-sleep-data/lowdb/settingsDB.json
 import _ from 'lodash';
 import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';

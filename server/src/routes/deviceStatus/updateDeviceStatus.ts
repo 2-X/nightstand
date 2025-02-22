@@ -56,7 +56,6 @@ const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideSt
 
 
 const updateSettings = async (settings: Partial<DeviceStatus['settings']>) => {
-  // @ts-ignore
   const renamedSettings = _.mapKeys(settings, (value, key) => INVERTED_SETTINGS_KEY_MAPPING[key] || key);
   const encodedBuffer = cbor.encode(renamedSettings);
   const hexString = encodedBuffer.toString('hex');
