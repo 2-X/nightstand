@@ -1,17 +1,20 @@
 #!/bin/bash
 
+PYTHON_VERSION_DOT=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}{sys.version_info.minor}")')
 
-PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-PYTHON_VERSION_2=$(python3 -c 'import sys; print(f"{sys.version_info.major}{sys.version_info.minor}")')
-echo "Python version: $PYTHON_VERSION_2"
-
-if [ "$PYTHON_VERSION_2" = "39" ]; then
-    cp -r /home/dac/free-sleep/scripts/python/$PYTHON_VERSION/venv /usr/lib64/python$PYTHON_VERSION/
-    echo "Copied venv successfully."
+if [ "$PYTHON_VERSION" = "39" ]; then
+    # Pod 3 with SD card has python version 3.9 & is missing venv
+    cp -r /home/dac/free-sleep/scripts/python/$PYTHON_VERSION_DOT/venv /usr/lib64/python$PYTHON_VERSION_DOT/
+    cp /home/dac/free-sleep/scripts/python/plistlib.py /usr/lib/python$PYTHON_VERSION_DOT/
+    cp /home/dac/free-sleep/scripts/python/pyexpat.cpython-$PYTHON_VERSION-aarch64-linux-gnu.so /usr/lib/python$PYTHON_VERSION_DOT/
+    echo "Copied files for Pod 3 with SD card successfully."
+else
+    cp /home/dac/free-sleep/scripts/python/plistlib.py /usr/lib64/python$PYTHON_VERSION_DOT/
+    cp /home/dac/free-sleep/scripts/python/pyexpat.cpython-$PYTHON_VERSION-aarch64-linux-gnu.so /usr/lib64/python$PYTHON_VERSION_DOT/
+    echo "Copied files successfully"
 fi
 
-cp /home/dac/free-sleep/scripts/python/plistlib.py /usr/lib64/python$PYTHON_VERSION/
-cp /home/dac/free-sleep/scripts/python/pyexpat.cpython-$PYTHON_VERSION_2-aarch64-linux-gnu.so /usr/lib64/python$PYTHON_VERSION/
 python3 -m venv /home/dac/venv
 source /home/dac/venv/bin/activate
 /home/dac/venv/bin/python -m pip install numpy scipy pandas cbor2 watchdog
