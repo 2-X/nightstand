@@ -43,9 +43,9 @@ type ScheduleStore = {
   setAccordionExpanded: (accordion: AccordionExpanded) => void;
   accordionExpanded: AccordionExpanded;
 
-
   validations: Validations;
   setValidations: (newValidations: DeepPartial<Validations>) => void;
+  isValid: () => boolean;
 
   selectedSchedule: DailySchedule | undefined;
   updateSelectedSchedule: (dailySchedule: DeepPartial<DailySchedule>) => void;
@@ -101,7 +101,10 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
     const { validations } = get();
     set({ validations: _.merge(validations, newValidations) });
   },
-
+  isValid: () => {
+    const { validations } = get();
+    return _.every(validations);
+  },
   changesPresent: false,
   checkForChanges: () => {
     const { selectedDay, selectedSchedule, originalSchedules, selectedDays } = get();
