@@ -10,7 +10,8 @@ import { LOWERCASE_DAYS } from './days';
 
 
 type Validations = {
-  endTimeIsValid: boolean;
+  powerOffTimeIsValid: boolean;
+  alarmTimeIsValid: boolean;
   // TODO: Validate temperature adjustments
   // temperatureAdjustmentsValid: boolean,
 };
@@ -26,7 +27,8 @@ export const DEFAULT_DAYS_SELECTED: DaysSelected = {
 };
 
 const DEFAULT_VALIDATIONS: Validations = {
-  endTimeIsValid: true,
+  powerOffTimeIsValid: true,
+  alarmTimeIsValid: true,
   // temperatureAdjustmentsValid: true,
 };
 
@@ -92,7 +94,8 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
   },
 
   validations: {
-    endTimeIsValid: true,
+    powerOffTimeIsValid: true,
+    alarmTimeIsValid: true,
   },
   setValidations: (newValidations) => {
     const { validations } = get();

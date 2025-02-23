@@ -18,7 +18,12 @@ fi
 
 REPO_URL="https://github.com/python/cpython/archive/refs/tags/v${MAJOR_MINOR_INCREMENTAL_VERSION}.zip"
 TARGET_DIR="/home/dac/python-modules"
-PYTHON_LIB_DIR="/usr/lib64/python${MAJOR_MINOR}"  # Use full version here too
+
+if [ "$PYTHON_VERSION" = "39" ]; then
+  PYTHON_LIB_DIR="/usr/lib/python${MAJOR_MINOR}"
+else
+  PYTHON_LIB_DIR="/usr/lib64/python${MAJOR_MINOR}"
+fi
 
 # --- 1. Download and Unzip ---
 

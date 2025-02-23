@@ -5,7 +5,7 @@ import { useAppStore } from '@state/appStore';
 import { Time } from '@api/schedulesSchema.ts';
 
 
-export default function EndTime() {
+export default function PowerOffTime() {
   const {
     validations,
     setValidations,
@@ -24,7 +24,7 @@ export default function EndTime() {
     // Adjust for the next day if the end time is earlier than the start time
     const endMomentNextDay = moment(endMomentSameDay).add(1, 'day');
     const isValid = endMomentSameDay.isAfter(startMoment) || endMomentNextDay.diff(startMoment, 'hours') <= 12;
-    setValidations({ endTimeIsValid: isValid });
+    setValidations({ powerOffTimeIsValid: isValid });
     updateSelectedSchedule(
       {
         power: {
@@ -38,14 +38,14 @@ export default function EndTime() {
 
   return (
     <TextField
-      label="End Time"
+      label="Power off"
       type="time"
       value={ selectedSchedule?.power?.off || '09:00' }
       onChange={ (e) => handleChange(e.target.value) }
 
-      error={ !validations.endTimeIsValid }
+      error={ !validations.powerOffTimeIsValid }
       helperText={
-        !validations.endTimeIsValid
+        !validations.powerOffTimeIsValid
           ? `Time must be no later than 12 hours the same day or next day`
           : ''
       }

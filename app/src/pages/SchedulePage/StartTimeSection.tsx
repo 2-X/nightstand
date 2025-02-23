@@ -12,7 +12,7 @@ export default function StartTimeSection({ displayCelsius }: { displayCelsius: b
     <Box sx={ { display: 'flex', alignItems: 'center', gap: 6, p: 0, width: '100%' } } id="start-time-section">
       { /* Start time */ }
       <TextField
-        label="Start Time"
+        label="Power on"
         type="time"
         value={ selectedSchedule?.power.on || '21:00' }
         disabled={ disabled }
@@ -30,7 +30,7 @@ export default function StartTimeSection({ displayCelsius }: { displayCelsius: b
       <Box sx={ { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, flex: 1, pr: 1 } }>
         { /* Temperature label */ }
         <Typography sx={ { mb: -1, textAlign: 'center' } }>
-          { `Start at ${formatTemperature(selectedSchedule?.power?.onTemperature || 82, displayCelsius)}` }
+          { `Power on temperature ${formatTemperature(selectedSchedule?.power?.onTemperature || 82, displayCelsius)}` }
         </Typography>
         <Slider
           value={ selectedSchedule?.power?.onTemperature || 82 }

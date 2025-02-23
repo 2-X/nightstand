@@ -8,7 +8,7 @@ import AlarmAccordion from './AlarmAccordion.tsx';
 import ApplyToOtherDaysAccordion from './ApplyToOtherDaysAccordion.tsx';
 import DayTabs from './DayTabs.tsx';
 import EnabledSwitch from './EnabledSwitch.tsx';
-import EndTime from './EndTime.tsx';
+import PowerOffTime from './PowerOffTime.tsx';
 import PageContainer from '../PageContainer.tsx';
 import SaveButton from './SaveButton.tsx';
 import SideControl from '../../components/SideControl.tsx';
@@ -108,7 +108,7 @@ export default function SchedulePage() {
       <SideControl title={ 'Schedules' }/>
       <DayTabs/>
       <StartTimeSection displayCelsius={ displayCelsius }/>
-      <EndTime/>
+      <PowerOffTime/>
       <Box sx={ { mt: 2, display: 'flex', justifyContent: 'space-between', width: '100%', mb: 2 } }>
         <EnabledSwitch/>
         <SaveButton onSave={ handleSave }/>
