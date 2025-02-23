@@ -1,35 +1,42 @@
 import { LineChart } from '@mui/x-charts/LineChart';
 import { Card, Typography } from '@mui/material';
 import moment from 'moment-timezone';
-import { useVitalsRecords } from '@api/vitals.ts';
-import { useAppStore } from '@state/appStore.tsx';
 import { useTheme } from '@mui/material/styles';
 import { VitalsRecord } from '@api/vitals.ts';
 import { useResizeDetector } from 'react-resize-detector';
 
 
-type HeartRateChartProps = {
-  startTime: string;
-  endTime: string;
+
+type VitalsLineChartProps = {
+  vitalsRecords?: VitalsRecord[];
+  metric: 'heart_rate' | 'hrv' | 'breathing_rate';
+  label: string;
 };
 
 const downsampleData = (data: VitalsRecord[], factor: number) => {
   return data.filter((_, index) => index % factor === 0);
 };
 
-export default function HeartRateChart({ startTime, endTime }: HeartRateChartProps) {
+export default function VitalsLineChart({ vitalsRecords, metric }: VitalsLineChartProps) {
   const { width = 300, ref } = useResizeDetector();
-
-  const { side } = useAppStore();
   const theme = useTheme();
-
-  const { data: vitalsRecords } = useVitalsRecords({
-    side,
-    startTime: startTime,
-    endTime: endTime
-  });
-
   if (!vitalsRecords) return;
+  const vitalsMap = {
+    heart_rate: {
+      label: 'Heart rate',
+      color: theme.palette.error.main,
+    },
+    breathing_rate: {
+      label: 'Breathing rate',
+      color: theme.palette.primary.main,
+    },
+    hrv: {
+      label: 'HRV',
+      color: theme.palette.error.main,
+    }
+  };
+  const { label, color } = vitalsMap[metric];
+
   const pxPerPoint = 3;
   const allowedPoints = width / pxPerPoint;
   const downsampleTo = Math.ceil(vitalsRecords.length / allowedPoints);
@@ -39,23 +46,23 @@ export default function HeartRateChart({ startTime, endTime }: HeartRateChartPro
       (record) =>
         record.timestamp &&
         !isNaN(new Date(record.timestamp).getTime()) &&
-        !isNaN(record.heart_rate)
+        !isNaN(record[metric])
     )
     .map((record) => ({
       ...record,
-      timestamp: new Date(record.timestamp), // Convert to Date object
-      heart_rate: Number(record.heart_rate), // Ensure it's a number
+      timestamp: new Date(record.timestamp),
+      [metric]: Number(record[metric]),
     }));
 
   return (
     <Card sx={ { pt: 1, mt: 2, pl: 2 } }>
       <Typography variant="h6" gutterBottom>
-        Heart Rate
+        { label }
       </Typography>
       <LineChart
         ref={ ref }
         height={ 300 }
-        colors={ [theme.palette.error.main] }
+        colors={ [color] }
         dataset={ cleanedVitalsRecords }
         xAxis={ [
           {
@@ -63,16 +70,16 @@ export default function HeartRateChart({ startTime, endTime }: HeartRateChartPro
             dataKey: 'timestamp',
             scaleType: 'time',
             valueFormatter: (periodStart) =>
-              moment(periodStart).tz('America/Chicago').format('HH:mm'),
+              moment(periodStart).format('HH:mm'),
           },
         ] }
         legend={ { hidden: true } }
         series={ [
           {
-            id: 'Heart Rate',
-            label: 'Heart Rate',
-            dataKey: 'heart_rate',
-            valueFormatter: (heartRate) => (heartRate !== null && !isNaN(heartRate) ? heartRate.toFixed(0) : 'Invalid'),
+            id: label,
+            label: label,
+            dataKey: metric,
+            valueFormatter: (metric) => (metric !== null && !isNaN(metric) ? metric.toFixed(0) : 'Invalid'),
             showMark: false,
           },
         ] }

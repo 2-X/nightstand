@@ -1,15 +1,7 @@
 {
   "files": [],
   "compilerOptions": {
-    "baseUrl": "./",
-    "paths": {
-      "@api/*": [
-        "src/api/*"
-      ],
-      "@state/*": [
-        "src/state/*"
-      ]
-    }
+    "baseUrl": "./"
   },
   "references": [
     {

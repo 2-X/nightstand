@@ -13,6 +13,9 @@
       ],
       "@state/*": [
         "src/state/*"
+      ],
+      "@components/*": [
+        "src/components/*"
       ]
     },
     "moduleResolution": "bundler",

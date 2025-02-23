@@ -1,20 +1,17 @@
-import { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect } from 'react';
 import * as d3 from 'd3';
 import moment from 'moment-timezone';
 import { useTheme, Theme } from '@mui/material/styles';
 import Box from '@mui/material/Box';
-import SleepRecordCard from './SleepRecordCard.tsx';
 import { SleepRecord } from '../../../server/src/db/sleepRecordsSchema.ts';
-import HeartRateChart from './HeartRateChart.tsx';
-import VitalsSummaryCard from './VitalsSummaryCard.tsx';
 
-// import sleepRecords from './dummyData.ts';
 
 interface SleepBarChartProps {
   width?: number;
   height?: number;
   sleepRecords?: SleepRecord[];
-  refetch?: () => void;
+  selectedSleepRecord?: SleepRecord;
+  setSelectedSleepRecord: React.Dispatch<React.SetStateAction<SleepRecord | undefined>>;
 }
 
 interface AxisProps {
@@ -203,8 +200,8 @@ function plotSleepRecords({
   xScale: d3.ScaleBand<string>;
   yScale: d3.ScaleLinear<number, number>;
   theme: Theme;
-  selectedSleepRecord: SleepRecord | undefined;
-  setSelectedSleepRecord: (r: SleepRecord) => void;
+  selectedSleepRecord: SleepBarChartProps['selectedSleepRecord'];
+  setSelectedSleepRecord: SleepBarChartProps['setSelectedSleepRecord'];
 }) {
   // Clear existing
   chartG.selectAll('.day-group').remove();
@@ -283,23 +280,12 @@ export default function SleepBarChart({
   width = 400,
   height = 400,
   sleepRecords,
-  refetch,
+  selectedSleepRecord,
+  setSelectedSleepRecord,
 }: SleepBarChartProps) {
-  // if (!sleepRecords) return null;
-  // const sleepRecords = sleepRecords;
   const svgRef = useRef<SVGSVGElement | null>(null);
   const theme = useTheme();
 
-  const [selectedSleepRecord, setSelectedSleepRecord] = useState<
-    SleepRecord | undefined
-  >(undefined);
-
-  useEffect(() => {
-    // Default to last record selected
-    if (sleepRecords?.length) {
-      setSelectedSleepRecord(sleepRecords[sleepRecords.length - 1]);
-    }
-  }, [sleepRecords]);
 
   useEffect(() => {
     if (!sleepRecords?.length) return;
@@ -352,27 +338,11 @@ export default function SleepBarChart({
       selectedSleepRecord,
       setSelectedSleepRecord
     });
-  }, [sleepRecords, width, height, theme, selectedSleepRecord]);
+  }, [sleepRecords, width, height, theme, selectedSleepRecord, setSelectedSleepRecord]);
   if (sleepRecords?.length === 0) return null;
   return (
-    <Box>
+    <Box sx={ { 'width': width } }>
       <svg ref={ svgRef }/>
-      {
-        selectedSleepRecord &&
-        (
-          <>
-            <SleepRecordCard sleepRecord={ selectedSleepRecord } refetch={ refetch }/>
-            <VitalsSummaryCard
-              startTime={ selectedSleepRecord.entered_bed_at }
-              endTime={ selectedSleepRecord.left_bed_at }
-            />
-            <HeartRateChart
-              startTime={ selectedSleepRecord.entered_bed_at }
-              endTime={ selectedSleepRecord.left_bed_at }
-            />
-          </>
-        )
-      }
     </Box>
   );
 }
