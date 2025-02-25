@@ -85,6 +85,8 @@ class StreamProcessor:
 
             # Process right side
             if self.right_processor.present_for > self.right_processor.heart_rate_window_seconds:
+                if log:
+                    logger.debug(f'Presence detected for right side @ {time.isoformat()}')
                 right2_signal = None
                 if self.sensor_count == 2:
                     right2_signal = self.buffer.get_heart_rate_signal('right', 2)
