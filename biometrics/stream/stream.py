@@ -123,7 +123,7 @@ def process_biometrics():
     checks presence, calculates heart rate if present.
     """
     piezo_record = piezo_record_queue.get()
-    stream_processor = StreamProcessor(piezo_record)
+    stream_processor = StreamProcessor(piezo_record, debug=False)
     while True:
         piezo_record = piezo_record_queue.get()
         # Block until new data is available

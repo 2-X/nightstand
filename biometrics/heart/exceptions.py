@@ -23,9 +23,3 @@ class BadSignalWarning(UserWarning):
     to properly process.
     '''
 
-
-class IncorrectFileType(UserWarning):
-    '''
-    warning class to raise when incorrect file type or incorrectly
-    formatted file is provided to data loader
-    '''

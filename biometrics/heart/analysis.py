@@ -11,52 +11,22 @@
 Functions that handle computation of heart rate (HR) and
 heart rate variability (HRV) measures.
 '''
-
-import warnings
-from typing import List
 import numpy as np
 from scipy.interpolate import UnivariateSpline
 from scipy.signal import welch, periodogram
 
-from heart.datautils import MAD, outliers_iqr_method, outliers_modified_z
+from heart.datautils import MAD
 from heart.filtering import quotient_filter, filter_signal
 from data_types import *
 
 __all__ = ['calc_rr',
            'update_rr',
-           'calc_rr_segment',
            'clean_rr_intervals',
            'calc_ts_measures',
-           'calc_fd_measures',
            'calc_breathing']
 
 
 def calc_rr(peaklist: List[np.int64], sample_rate: int, working_data={}) -> WorkingData:
-    '''calculates peak-peak intervals
-
-    Function that calculates the peak-peak data required for
-    further analysis. Stores results in the working_data{} dict.
-
-    Parameters
-    ----------
-    peaklist : 1d list or array
-        list or array containing detected peak positions
-
-    sample_rate : int or float
-        the sample rate with which the heart rate signal is collected
-
-    working_data : dict
-        dictionary object that contains all heartpy's working data (temp) objects.
-        will be created if not passed to function
-
-    Returns
-    -------
-    working_data : dict
-        working_data dictionary object containing all of heartpy's temp objects
-
-    '''
-    # peaklist = np.array(peaklist)  # cast numpy array to be sure or correct array type
-
     # delete first peak if within first 150ms (signal might start mid-beat after peak)
     if len(peaklist) > 0:
         if peaklist[0] <= ((sample_rate / 1000.0) * 150):
@@ -75,58 +45,7 @@ def calc_rr(peaklist: List[np.int64], sample_rate: int, working_data={}) -> Work
     return working_data
 
 
-def update_rr(working_data) -> WorkingData:
-    '''updates differences between adjacent peak-peak distances
-
-    Function that updates RR differences and RR squared differences
-    based on corrected RR list
-
-    Parameters
-    ----------
-    working_data : dict
-        dictionary object that contains all heartpy's working data (temp) objects
-        will be created if not passed to function
-
-    Returns
-    -------
-    out : dict
-        working_data dictionary object containing all of heartpy's temp objects
-
-    Examples
-    --------
-    Let's assume we detected peaks at these positions in the signal:
-
-    >>> peaklist = [200, 280, 405, 410, 501, 615]
-
-    And we subsequently ran further analysis:
-
-    >>> wd = calc_rr(peaklist, sample_rate = 100.0)
-
-    The peak at position 410 is likely an incorrect detection and
-    will be marked as such by other heartpy functions. This is indicated
-    by an array 'binary_peaklist' in working_data. Binary peaklist is of
-    the same length as peaklist, and is formatted as a mask:
-
-    For now let's set it manually, normally this is done by the check_peaks()
-    function from HeartPy's peakdetection module.
-
-    >>> wd['binary_peaklist'] = [1, 1, 1, 0, 1, 1]
-
-    Rejected peaks are marked with a zero and accepted with a 1.
-
-    By now running update_rr(), heartpy will update all associated measures
-    and will only compute peak-peak intervals between two accepted peaks.
-
-    >>> wd = update_rr(wd)
-
-    This will have generated a corrected RR_list object in the dictionary:
-
-    >>> wd['RR_list_cor']
-    [800.0, 1250.0, 1140.0]
-
-    As well as updated the lists RR_diff (differences between adjacent peak-peak intervals) and
-    RR_sqdiff (squared differences between adjacent peak-peak intervals).
-    '''
+def update_rr(working_data: WorkingData):
     rr_source = working_data['RR_list']
     b_peaklist = working_data['binary_peaklist']
     rr_list = [rr_source[i] for i in range(len(rr_source)) if b_peaklist[i] + b_peaklist[i + 1] == 2]
@@ -141,110 +60,12 @@ def update_rr(working_data) -> WorkingData:
     working_data['RR_diff'] = rr_diff
     working_data['RR_sqdiff'] = rr_sqdiff
 
-    return working_data
 
 
-def calc_rr_segment(rr_source, b_peaklist):
-    '''calculates peak-peak differences for segmentwise processing
 
-    Function that calculates rr-measures when analysing segmentwise
-    in the 'fast' mode.
-
-    Parameters
-    ----------
-    rr_source : 1d list or array
-        list or array containing peak-peak intervals.
-
-    b_peaklist : 1d list or array
-        list or array containing mask for peaklist.
-
-    Returns
-    -------
-    rr_list : array
-        array containing peak-peak intervals.
-
-    rr_diff : array
-        array containing differences between adjacent peak-peak intervals
-
-    rr_sqdiff : array
-        array containing squared differences between adjacent peak-peak intervals
-
-    Examples
-    --------
-    The function works in the same way as update_rr, except it returns
-    three separate objects. It's used by process_segmentwise.
-    Revert to doc on update_rr for more information.
-
-    >>> rr, rrd, rrsd = calc_rr_segment(rr_source = [ 800., 1250.,   50.,  910., 1140., 1002., 1142.],
-    ... b_peaklist = [1, 1, 1, 0, 1, 1, 1, 1])
-    >>> print(rr)
-    [800.0, 1250.0, 1140.0, 1002.0, 1142.0]
-    >>> print(rrd)
-    [450.0 138.0 140.0]
-    >>> print(rrsd)
-    [202500.  19044.  19600.]
-    '''
-    rr_list = [rr_source[i] for i in range(len(rr_source)) if b_peaklist[i] + b_peaklist[i + 1] == 2]
-    rr_mask = [0 if (b_peaklist[i] + b_peaklist[i + 1] == 2) else 1 for i in range(len(rr_source))]
-    rr_masked = np.ma.array(rr_source, mask=rr_mask)
-    rr_diff = np.abs(np.diff(rr_masked))
-    rr_diff = rr_diff[~rr_diff.mask]
-    rr_sqdiff = np.power(rr_diff, 2)
-
-    return rr_list, rr_diff, rr_sqdiff
-
-
-def clean_rr_intervals(working_data, method='quotient-filter'):
-    '''detects and rejects outliers in peak-peak intervals
-
-    Function that detects and rejects outliers in the peak-peak intervals. It updates
-    the RR_list_cor in the working data dict
-
-    Parameters
-    ----------
-    working_data : dict
-        dictionary object that contains all heartpy's working data (temp) objects.
-        Needs to contain RR_list_cor, meaning one analysis cycle has already completed.
-
-    method : str
-        which method to use for outlier rejection, included are:
-        - 'quotient-filter', based on the work in "Piskorki, J., Guzik, P. (2005), Filtering Poincare plots",
-        - 'iqr', which uses the inter-quartile range,
-        - 'z-score', which uses the modified z-score method.
-        default : quotient-filter
-
-    Returns
-    -------
-    working_data : dict
-        dictionary object that contains all heartpy's working data (temp) objects.
-        will be created if not passed to function
-    '''
-
-    # generate RR_list_cor indices relative to RR_list
-    RR_cor_indices = [i for i in range(len(working_data['RR_masklist']))
-                      if working_data['RR_masklist'][i] == 0]
-
-    # clean rr-list
-    if method.lower() == 'iqr':
-        rr_cleaned, replaced_indices = outliers_iqr_method(working_data['RR_list_cor'])
-        rr_mask = working_data['RR_masklist']
-        for i in replaced_indices:
-            rr_mask[RR_cor_indices[i]] = 1
-
-    elif method.lower() == 'z-score':
-        rr_cleaned, replaced_indices = outliers_modified_z(working_data['RR_list_cor'])
-        rr_mask = working_data['RR_masklist']
-        for i in replaced_indices:
-            rr_mask[RR_cor_indices[i]] = 1
-
-    elif method.lower() == 'quotient-filter':
-        rr_mask = quotient_filter(working_data['RR_list'], working_data['RR_masklist'])
-        rr_cleaned = [x for x, y in zip(working_data['RR_list'], rr_mask) if y == 0]
-
-
-    else:
-        raise ValueError('Incorrect method specified, use either "iqr", "z-score" or "quotient-filtering". \
-Nothing to do!')
+def clean_rr_intervals(working_data):
+    rr_mask = quotient_filter(working_data['RR_list'], working_data['RR_masklist'])
+    rr_cleaned = [x for x, y in zip(working_data['RR_list'], rr_mask) if y == 0]
 
     rr_masked = np.ma.array(working_data['RR_list'], mask=rr_mask)
     rr_diff = np.abs(np.diff(rr_masked))
@@ -274,18 +95,10 @@ Nothing to do!')
     return working_data
 
 
-
-
-def calc_ts_measures(rr_list, rr_diff, rr_sqdiff, measures={}, working_data={}):
-    '''calculates standard time-series measurements.
-
-    Function that calculates the time-series measurements for HeartPy.
-    '''
-
+def calc_ts_measures(rr_list, rr_diff, rr_sqdiff, measures: HeartPyMeasurement, working_data: WorkingData):
     measures['bpm'] = 60000 / np.mean(rr_list)
     measures['ibi'] = np.mean(rr_list)
 
-    ##TODO:
     measures['sdnn'] = np.std(rr_list)
     measures['sdsd'] = np.std(rr_diff)
     measures['rmssd'] = np.sqrt(np.mean(rr_sqdiff))
@@ -303,236 +116,14 @@ def calc_ts_measures(rr_list, rr_diff, rr_sqdiff, measures={}, working_data={}):
         measures['pnn50'] = np.nan
     measures['hr_mad'] = MAD(rr_list)
 
-    return working_data, measures
-
-
-def calc_fd_measures(method='welch', welch_wsize=240, square_spectrum=False, measures={}, working_data={}, degree_smoothing_spline=3):
-    """calculates the frequency-domain measurements.
-
-    Function that calculates the frequency-domain measurements for HeartPy.
-
-    Parameters
-    ----------
-    method : str
-        method used to compute the spectrogram of the heart rate.
-        available methods: fft, periodogram, and welch
-        default : welch
-
-    welch_wsize : float
-        Size of window (in sec) when welch method used to compute the spectrogram.
-        This choice is based on a trade-off btw temporal res and freq res of the resulting spectrum
-        60 sec may seem reasonable, but this would greatly limit frequency resolution!
-          1/60 s = 0.017 Hz, so you would only have 2 points in the VLF band
-        Therefore, the default is 4 min (9 points in the VLF band)
-        default : 240
-
-    square_spectrum : bool
-        whether to square the power spectrum returned.
-        default : False
-
-    measures : dict
-        dictionary object used by heartpy to store computed measures. Will be created
-        if not passed to function.
-
-    working_data : dict
-        dictionary object that contains all heartpy's working data (temp) objects.
-        will be created if not passed to function
-
-    degree_smoothing_spline : int, optional
-        Degree of the smoothing spline for UnivariateSpline function in fitpack2.  Must be 1 <= `k` <= 5.
-        Default is `k` = 3, a cubic spline.
-
-    Returns
-    -------
-    working_data : dict
-        dictionary object that contains all heartpy's working data (temp) objects.
-
-    measures : dict
-        dictionary object used by heartpy to store computed measures.
-
-    Examples
-    --------
-    Normally this function is called during the process pipeline of HeartPy. It can
-    of course also be used separately.
-
-    Let's load an example and get a list of peak-peak intervals
-
-    >>> import heartpy as hp
-    >>> data, timer = hp.load_exampledata(2)
-    >>> sample_rate = hp.get_samplerate_datetime(timer, timeformat='%Y-%m-%d %H:%M:%S.%f')
-    >>> wd, m = hp.process(data, sample_rate)
-
-    wd now contains a list of peak-peak intervals that has been cleaned of
-    outliers ('RR_list_cor'). Calling the function then is easy
-
-    >>> wd, m = calc_fd_measures(method = 'periodogram', measures = m, working_data = wd)
-    >>> print('%.3f' %m['lf/hf'])
-    5.198
-
-    Available methods are 'fft', 'welch' and 'periodogram'. To set another method, do:
-
-    >>> wd, m = calc_fd_measures(method = 'fft', measures = m, working_data = wd)
-    >>> print('%.3f' %m['lf/hf'])
-    5.198
-
-    If there are no valid peak-peak intervals specified, returned measures are NaN:
-    >>> wd['RR_list_cor'] = []
-    >>> wd, m = calc_fd_measures(working_data = wd)
-    >>> np.isnan(m['lf/hf'])
-    True
-
-    If there are rr-intervals but not enough to reliably compute frequency measures, a
-    warning is raised:
-
-    --------------
-    RuntimeWarning: Short signal.
-    ---------Warning:---------
-    too few peak-peak intervals for (reliable) frequency domain measure computation,
-    frequency output measures are still computed but treat them with caution!
-
-    HF is usually computed over a minimum of 1 minute of good signal.
-    LF is usually computed over a minimum of 2 minutes of good signal.
-    VLF is usually computed over a minimum of 5 minutes of good signal.
-    The LF/HF ratio is usually computed over minimum 24 hours, although an
-    absolute minimum of 5 min has also been suggested.
-
-    For more info see: \nShaffer, F., Ginsberg, J.P. (2017).
-    An Overview of Heart Rate Variability Metrics and Norms.
-
-    Task Force of Pacing and Electrophysiology (1996), Heart Rate Variability
-    in: European Heart Journal, vol.17, issue 3, pp354-381
-
-
-    This warning will not repeat'
-    --------------
-    """
-    rr_list = working_data['RR_list_cor']
-
-    if len(rr_list) <= 1:
-        working_data['frq'] = np.nan
-        working_data['psd'] = np.nan
-        measures['vlf'] = np.nan
-        measures['lf'] = np.nan
-        measures['hf'] = np.nan
-        measures['lf/hf'] = np.nan
-        return working_data, measures
-    elif np.sum(rr_list) <= 300000:  # pragma: no cover
-        # warn if signal is short
-        msg = ''.join(('Short signal.\n',
-                       '\n---------Warning:---------\n',
-                       'too few peak-peak intervals for (reliable) frequency domain measure computation, ',
-                       'frequency output measures are still computed but treat them with caution!\n\n',
-                       'HF is usually computed over a minimum of 1 minute of good signal. ',
-                       'LF is usually computed over a minimum of 2 minutes of good signal.',
-                       'VLF is usually computed over a minimum of 5 minutes of good signal.',
-                       'The LF/HF ratio is usually computed over minimum 24 hours, although an ',
-                       'absolute minimum of 5 min has also been suggested.\n\n',
-                       'For more info see: \nShaffer, F., Ginsberg, J.P. (2017), ',
-                       'An Overview of Heart Rate Variability Metrics and Norms.\n\n',
-                       'Task Force of Pacing and Electrophysiology (1996), Heart Rate Variability, ',
-                       'in: European Heart Journal, vol.17, issue 3, pp354-381'
-                       '\n\nThis warning will not repeat'))
-        warnings.warn(msg, UserWarning)
-
-    # Aggregate RR-list and interpolate to a uniform sampling rate at 4x resolution
-    rr_x = np.cumsum(rr_list)
-
-    resamp_factor = 4
-    datalen = int((len(rr_x) - 1) * resamp_factor)
-    rr_x_new = np.linspace(int(rr_x[0]), int(rr_x[-1]), datalen)
-
-    if len(rr_x) > degree_smoothing_spline:
-        interpolation_func = UnivariateSpline(rr_x, rr_list, k=degree_smoothing_spline)
-        rr_interp = interpolation_func(rr_x_new)
-
-        # RR-list in units of ms, with the sampling rate at 1 sample per beat
-        dt = np.mean(rr_list) / 1000  # in sec
-        fs = 1 / dt  # about 1.1 Hz; 50 BPM would be 0.83 Hz, just enough to get the
-        # max of the HF band at 0.4 Hz according to Nyquist
-        fs_new = fs * resamp_factor
-
-        # compute PSD (one-sided, units of ms^2/Hz)
-        if method == 'fft':
-            frq = np.fft.fftfreq(datalen, d=(1 / fs_new))
-            frq = frq[range(int(datalen / 2))]
-            Y = np.fft.fft(rr_interp) / datalen
-            Y = Y[range(int(datalen / 2))]
-            psd = np.power(Y, 2)
-
-        elif method == 'periodogram':
-            frq, psd = periodogram(rr_interp, fs=fs_new)
-
-        elif method == 'welch':
-            # nperseg should be based on trade-off btw temporal res and freq res
-            # default is 4 min to get about 9 points in the VLF band
-            nperseg = welch_wsize * fs_new
-            if nperseg >= len(rr_x_new):  # if nperseg is larger than the available data segment
-                nperseg = len(rr_x_new)  # set it to length of data segment to prevent scipy warnings
-                # as user is already informed through the signal length warning
-            frq, psd = welch(rr_interp, fs=fs_new, nperseg=nperseg)
-        else:
-            raise ValueError("specified method incorrect, use 'fft', 'periodogram' or 'welch'")
-
-        working_data['frq'] = frq
-        if square_spectrum:
-            working_data['psd'] = np.power(psd, 2)
-        else:
-            working_data['psd'] = psd
-
-        # compute absolute power band measures (units of ms^2)
-        df = frq[1] - frq[0]
-        measures['vlf'] = np.trapz(abs(psd[(frq >= 0.0033) & (frq < 0.04)]), dx=df)
-        measures['lf'] = np.trapz(abs(psd[(frq >= 0.04) & (frq < 0.15)]), dx=df)
-        measures['hf'] = np.trapz(abs(psd[(frq >= 0.15) & (frq < 0.4)]), dx=df)
-        measures['lf/hf'] = measures['lf'] / measures['hf']
-
-        measures['p_total'] = measures['vlf'] + measures['lf'] + measures['hf']
-
-        # compute relative and normalized power measures
-        perc_factor = 100 / measures['p_total']
-        measures['vlf_perc'] = measures['vlf'] * perc_factor
-        measures['lf_perc'] = measures['lf'] * perc_factor
-        measures['hf_perc'] = measures['hf'] * perc_factor
-
-        nu_factor = 100 / (measures['lf'] + measures['hf'])
-        measures['lf_nu'] = measures['lf'] * nu_factor
-        measures['hf_nu'] = measures['hf'] * nu_factor
-
-        working_data['interp_rr_function'] = interpolation_func
-        working_data['interp_rr_linspace'] = rr_x_new
-
-    else:
-        working_data['frq'] = np.nan
-        working_data['psd'] = np.nan
-        measures['vlf'] = np.nan
-        measures['lf'] = np.nan
-        measures['hf'] = np.nan
-        measures['lf/hf'] = np.nan
-
-        measures['p_total'] = np.nan
-
-        # compute relative and normalized power measures
-        measures['vlf_perc'] = np.nan
-        measures['lf_perc'] = np.nan
-        measures['hf_perc'] = np.nan
-
-        measures['lf_nu'] = np.nan
-        measures['hf_nu'] = np.nan
-
-        working_data['interp_rr_function'] = np.nan
-        working_data['interp_rr_linspace'] = rr_x_new
-        # TODO: Warning about degree of the interpolation function.
-
-    return working_data, measures
-
 
 def calc_breathing(
         rrlist,
+        measures: HeartPyMeasurement,
+        working_data: WorkingData,
         method='welch',
         filter_breathing=True,
         bw_cutoff=[0.1, 0.4],
-        measures={},
-        working_data={}
 ):
     # resample RR-list to 1000Hz
     x = np.linspace(0, len(rrlist), len(rrlist))

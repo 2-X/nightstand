@@ -124,8 +124,7 @@ def _calculate(run_data: RunData, side: str):
             'end_time': run_data.end_interval.strftime('%Y-%m-%d %H:%M:%S'),
             'heart_rate': measurement['bpm'],
             'hrv': measurement['sdnn'],
-            'breathing_rate': measurement['breathingrate'] * 60,
-            # 'breathing_rate': 0,
+            'breathing_rate': measurement.get('breathingrate', 0) * 60,
         }
     return None
 

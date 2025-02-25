@@ -175,9 +175,6 @@ class CapBaseline(TypedDict):
     right_in: Baseline
 
 
-
-
-
 class HeartPyMeasurement(TypedDict):
     bpm: Union[float64, float]
     ibi: Union[float64, float]
@@ -194,7 +191,6 @@ class HeartPyMeasurement(TypedDict):
     breathingrate: Union[float64, float]
 
 
-
 class Measurement(TypedDict):
     side: Side
     timestamp: int
@@ -202,16 +198,18 @@ class Measurement(TypedDict):
     hrv: Union[float64, float]
     breathing_rate: Union[float64, float]
 
+
 class PoincareData(TypedDict):
     x_plus: ndarray
     x_minus: ndarray
     x_one: ndarray
     x_two: ndarray
 
+
 class WorkingData(TypedDict):
     hr: ndarray
     sample_rate: int
-    peaklist: List[int64]
+    peaklist: ndarray
     ybeat: List[float64]
     rolling_mean: ndarray
     RR_list: ndarray
@@ -219,7 +217,7 @@ class WorkingData(TypedDict):
     RR_diff: ma.MaskedArray
     RR_sqdiff: ma.MaskedArray
     rrsd: float64
-    best: int
+    best_ma_perc: int
     removed_beats: ndarray
     removed_beats_y: ndarray
     binary_peaklist: ndarray

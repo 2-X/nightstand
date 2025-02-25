@@ -13,13 +13,12 @@ main module for HeartPy.
 
 import numpy as np
 from typing import Tuple
-import json
 from data_types import HeartPyMeasurement, WorkingData
 from heart.datautils import rolling_mean
 
 from heart.peakdetection import check_peaks, fit_peaks
-from heart.analysis import calc_rr
-from heart.analysis import clean_rr_intervals, calc_ts_measures, calc_breathing
+from heart.analysis import clean_rr_intervals, calc_ts_measures, calc_breathing, calc_rr
+import traceback
 
 
 
@@ -30,11 +29,9 @@ def process(
         bpmmin: int = 40,
         bpmmax: int = 180,
         breathing_method='welch',
-        clean_rr_method='quotient-filter',
         calculate_breathing=True,
 ) -> Tuple[dict, HeartPyMeasurement]:
-    measures = {}
-
+    measures: HeartPyMeasurement = {}
     working_data: WorkingData = {}
 
     # check that the data has positive baseline for the moving average algorithm to work
@@ -51,45 +48,47 @@ def process(
         sample_rate
     )
 
-    working_data = fit_peaks(
+    fit_peaks(
         hrdata,
         rol_mean,
         sample_rate,
+        working_data,
         bpmmin=bpmmin,
         bpmmax=bpmmax,
-        working_data=working_data
     )
+    try:
+        if type(working_data["peaklist"]) == list:
+            working_data["peaklist"] = np.array(working_data["peaklist"])
 
-    working_data = calc_rr(
-        working_data['peaklist'],
-        sample_rate,
-        working_data=working_data
-    )
+        working_data = calc_rr(
+            working_data["peaklist"],
+            sample_rate,
+            working_data=working_data
+        )
+    except Exception as e:
+        error_message = traceback.format_exc()
+        print(e)
+        print(error_message)
 
-    working_data = check_peaks(working_data)
-    working_data = clean_rr_intervals(
-        working_data,
-        method=clean_rr_method
-    )
+    check_peaks(working_data)
+    working_data = clean_rr_intervals(working_data)
 
-    working_data, measures = calc_ts_measures(
+    calc_ts_measures(
         working_data['RR_list_cor'],
         working_data['RR_diff'],
         working_data['RR_sqdiff'],
-        measures=measures,
-        working_data=working_data
+        measures,
+        working_data
     )
 
     if calculate_breathing:
         try:
             measures, working_data = calc_breathing(
                 working_data['RR_list_cor'],
+                measures,
+                working_data,
                 method=breathing_method,
-                measures=measures,
-                working_data=working_data
             )
         except:
             measures['breathingrate'] = np.nan
-    # print(working_data)
-
     return working_data, measures

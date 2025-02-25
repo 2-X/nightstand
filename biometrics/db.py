@@ -70,14 +70,14 @@ def insert_vitals(data: dict):
         data['breathing_rate'] = math.floor(data['breathing_rate'])
 
     data['heart_rate'] = math.floor(data['heart_rate'])
-    print('Inserting row...')
-    print(json.dumps(data, indent=4))
-
+    logger.debug('Inserting vitals record...')
     try:
         cursor.execute(sql, data)
         conn.commit()
     except sqlite3.Error as e:
-        print(f"SQLite error: {e}")
+        error_message = traceback.format_exc()
+        logger.error(e)
+        logger.error(error_message)
 
 
 def insert_sleep_records(sleep_records: List[SleepRecord]):

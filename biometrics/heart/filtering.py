@@ -148,18 +148,16 @@ def filter_signal(
         filtertype='lowpass',
         return_top=False
 ):
-    # print('#filter_signal -----------------------------------------------------------------------------------------------------')
-    # print(inspect.stack()[1])
-    if filtertype.lower() == 'lowpass':
-        b, a = butter_lowpass(cutoff, sample_rate, order=order)
-    elif filtertype.lower() == 'highpass':
-        b, a = butter_highpass(cutoff, sample_rate, order=order)
-    elif filtertype.lower() == 'bandpass':
+    if filtertype.lower() == 'bandpass':
         assert type(cutoff) == tuple or list or np.array, 'if bandpass filter is specified, \
 cutoff needs to be array or tuple specifying lower and upper bound: [lower, upper].'
         b, a = butter_bandpass(cutoff[0], cutoff[1], sample_rate, order=order)
     elif filtertype.lower() == 'notch':
         b, a = iirnotch(cutoff, Q=0.005, fs=sample_rate)
+    elif filtertype.lower() == 'lowpass':
+        b, a = butter_lowpass(cutoff, sample_rate, order=order)
+    elif filtertype.lower() == 'highpass':
+        b, a = butter_highpass(cutoff, sample_rate, order=order)
     else:
         raise ValueError('filtertype: %s is unknown, available are: \
 lowpass, highpass, bandpass, and notch' % filtertype)
@@ -173,40 +171,6 @@ lowpass, highpass, bandpass, and notch' % filtertype)
 
 
 def remove_baseline_wander(data, sample_rate, cutoff=0.05):
-    '''removes baseline wander
-
-    Function that uses a Notch filter to remove baseline
-    wander from (especially) ECG signals
-
-    Parameters
-    ----------
-    data : 1-dimensional numpy array or list
-        Sequence containing the to be filtered data
-
-    sample_rate : int or float
-        the sample rate with which the passed data sequence was sampled
-
-    cutoff : int, float
-        the cutoff frequency of the Notch filter. We recommend 0.05Hz.
-        default : 0.05
-
-    Returns
-    -------
-    out : 1d array
-        1d array containing the filtered data
-
-    Examples
-    --------
-    >>> import heartpy as hp
-    >>> data, _ = hp.load_exampledata(0)
-
-    baseline wander is removed by calling the function and specifying
-    the data and sample rate.
-
-    >>> filtered = remove_baseline_wander(data, 100.0)
-    '''
-    # print('#remove_baseline_wander -----------------------------------------------------------------------------------------------------')
-    # print(inspect.stack()[1])
     return filter_signal(
         data=data,
         cutoff=cutoff,

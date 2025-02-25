@@ -19,6 +19,8 @@ class BaseLogger(logging.Logger):
 
     def _handle_exception(self, exc_type, exc_value, exc_traceback):
         self.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+        stack_trace = traceback.format_exc()
+        self.error(stack_trace)
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
             return
@@ -36,8 +38,7 @@ def _handle_exception(exc_type, exc_value, exc_traceback):
     if issubclass(exc_type, KeyboardInterrupt):
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
         return
-    logger.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
-    traceback.print_exception(exc_type, exc_value, exc_traceback)
+    logger.error("Uncaught exception", exc_info=True)
 
 
 def _get_log_level():
@@ -50,8 +51,8 @@ class FixedWidthFormatter(logging.Formatter):
         timestamp = self.formatTime(record, datefmt='%Y-%m-%d %H:%M:%S')
 
         # Fixed-width formatting for LEVEL (8 chars) and FILE:LINE (30 chars)
-        level = f"{record.levelname:<8}"  # Left-align to 8 chars
-        file_info = f"{record.filename}:{record.lineno}"  # e.g., script.py:45
+        level = f"{record.levelname:<8}"
+        file_info = f"{record.filename}:{record.lineno}"
         file_info_padded = f"{file_info:<40}"  # Left-align to 40 chars
 
         # Add Process ID (PID), fixed-width of 6 characters
@@ -72,10 +73,13 @@ def _get_file_handler(data_folder_path: str):
         os.makedirs(folder_path)
 
     handler = TimedRotatingFileHandler(
-        filename=f"{folder_path}/biometrics.log",  # Log file path
-        when="midnight",  # Rotate at midnight
-        interval=1,  # Rotate every day
-        backupCount=2  # Keep 7 days of logs
+        filename=f"{folder_path}/free-sleep-stream.log",  # Log file path
+        when="midnight",
+        interval=1,
+        backupCount=2,
+        encoding="utf-8",
+        delay=True,  # Prevents creating file until first log is written
+        utc=True,  # Ensures logs are rotated using UTC timestamps
     )
     handler.setFormatter(FORMATTER)
     return handler
@@ -102,7 +106,7 @@ def _build_logger(logger: BaseLogger):
 
     logger.setLevel(logging.DEBUG)
     logger.addHandler(_get_console_handler())
-    # logger.addHandler(_get_file_handler(logger.folder_path))
+    logger.addHandler(_get_file_handler(logger.folder_path))
     sys.excepthook = _handle_exception
 
 
