@@ -1,4 +1,5 @@
 import winston from 'winston';
+import 'winston-daily-rotate-file';
 import moment from 'moment-timezone';
 const logger = winston.createLogger({
     level: 'debug',
@@ -20,7 +21,14 @@ const logger = winston.createLogger({
                 return `${timestamp} | ${level.padStart(15)} | ${message}`;
             })),
         }),
-        // new winston.transports.File({ filename: 'combined.log' }),
+        new winston.transports.DailyRotateFile({
+            level: 'debug',
+            filename: '/persistent/free-sleep-data/logs/free-sleep-%DATE%.log',
+            datePattern: 'YYYY-MM-DD',
+            zippedArchive: false,
+            maxSize: '5m',
+            maxFiles: '3d'
+        }),
     ],
 });
 export default logger;

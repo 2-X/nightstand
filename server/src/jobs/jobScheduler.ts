@@ -50,7 +50,6 @@ function isSystemDateValid() {
   return currentYear > 2010;
 }
 
-const MAX_RETRIES = 12;
 let RETRY_COUNT = 0;
 let SYSTEM_DATE_SET = false;
 
@@ -59,12 +58,10 @@ function waitForValidDateAndSetupJobs() {
     logger.info('System date is valid. Setting up jobs...');
     SYSTEM_DATE_SET = true;
     setupJobs();
-  } else if (RETRY_COUNT < MAX_RETRIES) {
-    RETRY_COUNT++;
-    logger.debug(`System date is invalid (year 2010). Retrying in 10 seconds... (Attempt ${RETRY_COUNT}/${MAX_RETRIES})`);
-    setTimeout(waitForValidDateAndSetupJobs, 10_000);
   } else {
-    logger.error('System date is still invalid after 6 attempts. Stopping retries, jobs will not be scheduled');
+    RETRY_COUNT++;
+    logger.debug(`System date is invalid (year 2010). Retrying in 10 seconds... (Attempt #${RETRY_COUNT}})`);
+    setTimeout(waitForValidDateAndSetupJobs, 10_000);
   }
 }
 

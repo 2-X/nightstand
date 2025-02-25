@@ -44,12 +44,15 @@ router.put('/sleep/:id', async (req, res) => {
             return res.status(400).json({ error: 'Invalid ID' });
         }
         // Fetch the existing record
-        const existingRecord = await prisma.sleep_records.findUnique({
+        let existingRecord = await prisma.sleep_records.findUnique({
             where: { id: parsedId },
         });
         if (!existingRecord) {
             return res.status(404).json({ error: 'Sleep record not found' });
         }
+        const loadedRecords = await loadSleepRecords([existingRecord]);
+        // @ts-ignore
+        existingRecord = loadedRecords[0];
         // Validate the request body
         const parsedData = sleepRecordSchema.partial().safeParse(req.body);
         if (!parsedData.success) {
