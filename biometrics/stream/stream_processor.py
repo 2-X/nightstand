@@ -56,7 +56,7 @@ class StreamProcessor:
             right1_signal = self.buffer.get_heart_rate_signal('right', 1)
 
             log = self.iteration_count % 60 == 0
-            epoch = self.piezo_buffer[-1]['ts']
+            epoch = piezo_record['ts']
             time = datetime.fromtimestamp(epoch)
 
             calculate_breath_rate = (
