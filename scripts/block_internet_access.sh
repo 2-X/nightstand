@@ -53,5 +53,5 @@ ip6tables -A INPUT -j DROP
 ip6tables -A OUTPUT -j DROP
 ip6tables-save > /etc/iptables/ip6tables.rules
 
-echo "Configuration completed successfully."
+echo "Blocked WAN internet access successfully!"
 
