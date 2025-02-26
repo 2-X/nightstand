@@ -17,6 +17,7 @@ import DataPage from './pages/DataPage/DataPage.tsx';
 import VitalsPage from './pages/DataPage/VitalsPage/VitalsPage.tsx';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
+import LogsPage from './pages/DataPage/LogsPage/LogsPage.tsx';
 
 const darkTheme = createTheme({
   palette: {
@@ -72,6 +73,7 @@ const App = () => {
 
                   <Route path="data" element={ <DataPage /> }>
                     <Route path="sleep" element={ <SleepPage/> }/>
+                    <Route path="logs" element={ <LogsPage/> }/>
                     <Route path="vitals" element={ <VitalsPage/> }/>
                   </Route>
 

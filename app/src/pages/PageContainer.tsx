@@ -29,7 +29,7 @@ export default function PageContainer({ children, sx, containerProps }: React.Pr
           padding: 0,
           paddingTop: 6,
           paddingBottom: 6,
-          maxWidth: '700px'
+          maxWidth: '700px',
         },
         [theme.breakpoints.down('sm')]: {
           width: '100%',
