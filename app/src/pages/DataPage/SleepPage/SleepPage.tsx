@@ -126,6 +126,7 @@ export default function SleepPage() {
 
               <VitalsLineChart vitalsRecords={ vitalsRecords } metric='heart_rate' label='Heart Rate' />
               <VitalsLineChart vitalsRecords={ vitalsRecords } metric='breathing_rate' label='Breath Rate' />
+              <VitalsLineChart vitalsRecords={ vitalsRecords } metric='hrv' label='HRV' />
             </>
           )
         }

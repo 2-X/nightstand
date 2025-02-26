@@ -1,5 +1,6 @@
 import logger from '../logger.js';
 import { spawn } from 'child_process';
+import fs from 'fs';
 
 export const logOutput = (data: Buffer) => {
   const output = data.toString().trim();
@@ -26,6 +27,10 @@ type ExecutePythonScriptArgs = {
 };
 export const executePythonScript = ({ script, cwd = '/home/dac/bio/src/presence_detection/', args=[] }: ExecutePythonScriptArgs) => {
   const pythonExecutable = '/home/dac/venv/bin/python';
+  if (!fs.existsSync(pythonExecutable)) {
+    logger.debug(`Not executing python script, ${pythonExecutable} does not exist!`);
+    return;
+  }
   const command = `${pythonExecutable} ${script} ${args.join(' ')}`;
   logger.info(`Executing: ${command}`);
 
