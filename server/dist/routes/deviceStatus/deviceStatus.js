@@ -20,7 +20,13 @@ router.post('/deviceStatus', async (req, res) => {
         });
         return;
     }
-    await updateDeviceStatus(body);
-    res.status(200).json({ test: 1 });
+    try {
+        await updateDeviceStatus(body);
+        res.status(204).end();
+    }
+    catch (error) {
+        logger.error(error);
+        res.status(500).json({ error });
+    }
 });
 export default router;

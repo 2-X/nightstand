@@ -7,6 +7,7 @@ import TemperatureButtons from './TemperatureButtons.tsx';
 import { useControlTempStore } from './controlTempStore.tsx';
 import { useTheme } from '@mui/material/styles';
 import { useResizeDetector } from 'react-resize-detector';
+import { useSettings } from '@api/settings.ts';
 
 type SliderProps = {
   isOn: boolean;
@@ -28,10 +29,12 @@ function getTemperatureColor(temp: number | undefined) {
 export default function Slider({ isOn, currentTargetTemp, refetch, currentTemperatureF, displayCelsius }: SliderProps) {
   const { deviceStatus, setDeviceStatus } = useControlTempStore();
   const { isUpdating, setIsUpdating, side } = useAppStore();
+  const { data: settings } = useSettings();
+  const isInAwayMode = settings?.[side].awayMode;
+  const disabled = isUpdating || isInAwayMode || !isOn;
   const { width, ref } = useResizeDetector();
   const theme = useTheme();
   const sliderColor = getTemperatureColor(deviceStatus?.[side]?.targetTemperatureF);
-
   const handleControlFinished = async () => {
     if (!deviceStatus) return;
 
@@ -50,7 +53,6 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
       });
   };
 
-  const disabled = !isOn || isUpdating;
   const arcBackgroundColor = theme.palette.grey[700];
 
   const sideStatus = deviceStatus?.[side];

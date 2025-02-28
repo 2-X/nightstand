@@ -1,8 +1,9 @@
 import express, { Request, Response } from 'express';
 import { getFranken } from '../../8sleep/frankenServer.js';
-import { DeviceStatusSchema } from './deviceStatusSchema.js';
+import { DeviceStatus, DeviceStatusSchema } from './deviceStatusSchema.js';
 import logger from '../../logger.js';
 import { updateDeviceStatus } from './updateDeviceStatus.js';
+import { DeepPartial } from 'ts-essentials';
 
 const router = express.Router();
 
@@ -25,8 +26,13 @@ router.post('/deviceStatus', async (req: Request, res: Response) => {
     return;
   }
 
-  await updateDeviceStatus(body);
-  res.status(200).json({ test: 1 });
+  try {
+    await updateDeviceStatus(body as DeepPartial<DeviceStatus>);
+    res.status(204).end();
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({ error });
+  }
 });
 
 

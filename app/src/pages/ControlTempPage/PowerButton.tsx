@@ -3,6 +3,7 @@ import { postDeviceStatus } from '@api/deviceStatus.ts';
 import { DeviceStatus, SideStatus, } from '@api/deviceStatusSchema.ts';
 import { DeepPartial } from 'ts-essentials';
 import { useAppStore } from '@state/appStore.tsx';
+import { useSettings } from '@api/settings.ts';
 
 
 type PowerButtonProps = {
@@ -12,6 +13,10 @@ type PowerButtonProps = {
 
 export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
   const { isUpdating, setIsUpdating, side } = useAppStore();
+  const { data: settings } = useSettings();
+  const isInAwayMode = settings?.[side].awayMode;
+  const disabled = isUpdating || isInAwayMode;
+
   const handleOnClick = () => {
     const sideStatus: Partial<SideStatus> = { isOn: !isOn };
     const deviceStatus: DeepPartial<DeviceStatus> = {};
@@ -32,9 +37,10 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
         setIsUpdating(false);
       });
   };
+  if (isInAwayMode) return null;
 
   return (
-    <Button variant="outlined" disabled={ isUpdating } onClick={ handleOnClick }>
+    <Button variant="outlined" disabled={ disabled } onClick={ handleOnClick }>
       { isOn ? 'Turn off' : 'Turn on' }
     </Button>
   );

@@ -42,6 +42,8 @@ export default function TemperatureLabel({
   const { side } = useAppStore();
   const { data: schedules } = useSchedules();
   const { data: settings } = useSettings();
+  const isInAwayMode = settings?.[side].awayMode;
+
   const currentDay = settings?.timeZone && moment.tz(settings?.timeZone).format('dddd').toLowerCase();
   // @ts-ignore
   const power = currentDay ? schedules?.[side]?.[currentDay]?.power : undefined;
@@ -121,7 +123,7 @@ export default function TemperatureLabel({
               Off
             </Typography>
             {
-              power?.enabled && (
+              power?.enabled && !isInAwayMode && (
                 <Typography
                   style={ { top: '105%' } }
                   // variant="h3"

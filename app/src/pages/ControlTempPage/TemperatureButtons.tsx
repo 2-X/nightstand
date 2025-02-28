@@ -5,6 +5,7 @@ import { Add, Remove } from '@mui/icons-material';
 import { useControlTempStore } from './controlTempStore.tsx';
 import { useAppStore } from '@state/appStore.tsx';
 import { postDeviceStatus } from '@api/deviceStatus.ts';
+import { useSettings } from '@api/settings.ts';
 
 
 type TemperatureButtonsProps = {
@@ -14,7 +15,9 @@ type TemperatureButtonsProps = {
 export default function TemperatureButtons({ refetch }: TemperatureButtonsProps) {
   const { side, setIsUpdating, isUpdating } = useAppStore();
   const { deviceStatus, setDeviceStatus, originalDeviceStatus } = useControlTempStore();
-
+  const { data: settings } = useSettings();
+  const isInAwayMode = settings?.[side].awayMode;
+  const disabled = isUpdating || isInAwayMode;
   const theme = useTheme();
   const borderColor = theme.palette.grey[800];
   const iconColor = theme.palette.grey[500];
@@ -37,7 +40,11 @@ export default function TemperatureButtons({ refetch }: TemperatureButtonsProps)
 
     const timer = setTimeout(async () => {
       setIsUpdating(true);
-      await postDeviceStatus(deviceStatus)
+      await postDeviceStatus({
+        [side]: {
+          targetTemperatureF: deviceStatus[side].targetTemperatureF
+        }
+      })
         .then(() => {
           // Wait 1 second before refreshing the device status
           return new Promise((resolve) => setTimeout(resolve, 1_000));
@@ -54,7 +61,6 @@ export default function TemperatureButtons({ refetch }: TemperatureButtonsProps)
     return () => clearTimeout(timer); // Cleanup the timeout
   }, [deviceStatus?.[side].targetTemperatureF, originalDeviceStatus?.[side].targetTemperatureF]);
 
-
   const handleClick = (change: number) => {
     if (deviceStatus === undefined) return;
     setDeviceStatus({
@@ -63,6 +69,8 @@ export default function TemperatureButtons({ refetch }: TemperatureButtonsProps)
       }
     });
   };
+
+  if (isInAwayMode) return null;
 
   return (
     <Box
@@ -83,7 +91,7 @@ export default function TemperatureButtons({ refetch }: TemperatureButtonsProps)
         color="primary"
         sx={ buttonStyle }
         onClick={ () => handleClick(-1) }
-        disabled={ isUpdating }
+        disabled={ disabled }
       >
         <Remove sx={ { color: iconColor } }/>
       </Button>
@@ -91,7 +99,7 @@ export default function TemperatureButtons({ refetch }: TemperatureButtonsProps)
         variant="outlined"
         sx={ buttonStyle }
         onClick={ () => handleClick(1) }
-        disabled={ isUpdating }
+        disabled={ disabled }
       >
         <Add sx={ { color: iconColor } }/>
       </Button>

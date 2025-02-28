@@ -27,8 +27,8 @@ export default function AwayNotification({ settings }: AwayNotificationProps) {
   }
   if (settings?.[side]?.awayMode) {
     return (
-      <Alert severity="info">
-        This side is in away mode
+      <Alert severity="info" sx={ { transform: 'translateY(-100px)' } }>
+        This side is in away mode, temperature control unavailable
       </Alert>
     );
   }

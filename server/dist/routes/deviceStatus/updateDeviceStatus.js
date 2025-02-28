@@ -12,6 +12,16 @@ const calculateLevelFromF = (temperatureF) => {
 const updateSide = async (side, sideStatus) => {
     await settingsDB.read();
     const settings = settingsDB.data;
+    if (side === 'left') {
+        if (settings.left.awayMode) {
+            throw new Error('Left side is in away mode, not updating side');
+        }
+    }
+    else {
+        if (settings.right.awayMode) {
+            throw new Error('Right side is in away mode, not updating side');
+        }
+    }
     const controlBothSides = settings.left.awayMode || settings.right.awayMode;
     const updateLeft = side === 'left' || controlBothSides;
     const updateRight = side === 'right' || controlBothSides;
@@ -57,13 +67,19 @@ const updateSettings = async (settings) => {
 };
 export const updateDeviceStatus = async (deviceStatus) => {
     logger.info(`Updating deviceStatus...`);
-    if (deviceStatus.isPriming)
-        await executeFunction('PRIME');
-    if (deviceStatus?.left)
-        await updateSide('left', deviceStatus.left);
-    if (deviceStatus?.right)
-        await updateSide('right', deviceStatus.right);
-    if (deviceStatus?.settings)
-        await updateSettings(deviceStatus.settings);
-    logger.info('Finished updating device status');
+    try {
+        if (deviceStatus.isPriming)
+            await executeFunction('PRIME');
+        if (deviceStatus?.left)
+            await updateSide('left', deviceStatus.left);
+        if (deviceStatus?.right)
+            await updateSide('right', deviceStatus.right);
+        if (deviceStatus?.settings)
+            await updateSettings(deviceStatus.settings);
+        logger.info('Finished updating device status');
+    }
+    catch (error) {
+        logger.error('Error updating device status:', error);
+        throw error;
+    }
 };
