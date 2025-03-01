@@ -96,25 +96,26 @@ def clean_rr_intervals(working_data):
 
 
 def calc_ts_measures(rr_list, rr_diff, rr_sqdiff, measures: HeartPyMeasurement, working_data: WorkingData):
+    # Heart rate
     measures['bpm'] = 60000 / np.mean(rr_list)
-    measures['ibi'] = np.mean(rr_list)
-
+    # sdnn is HRV
     measures['sdnn'] = np.std(rr_list)
-    measures['sdsd'] = np.std(rr_diff)
-    measures['rmssd'] = np.sqrt(np.mean(rr_sqdiff))
-    nn20 = rr_diff[np.where(rr_diff > 20.0)]
-    nn50 = rr_diff[np.where(rr_diff > 50.0)]
-    working_data['nn20'] = nn20
-    working_data['nn50'] = nn50
-    try:
-        measures['pnn20'] = float(len(nn20)) / float(len(rr_diff))
-    except:
-        measures['pnn20'] = np.nan
-    try:
-        measures['pnn50'] = float(len(nn50)) / float(len(rr_diff))
-    except:
-        measures['pnn50'] = np.nan
-    measures['hr_mad'] = MAD(rr_list)
+    # measures['ibi'] = np.mean(rr_list)
+    # measures['sdsd'] = np.std(rr_diff)
+    # measures['rmssd'] = np.sqrt(np.mean(rr_sqdiff))
+    # nn20 = rr_diff[np.where(rr_diff > 20.0)]
+    # nn50 = rr_diff[np.where(rr_diff > 50.0)]
+    # working_data['nn20'] = nn20
+    # working_data['nn50'] = nn50
+    # try:
+    #     measures['pnn20'] = float(len(nn20)) / float(len(rr_diff))
+    # except:
+    #     measures['pnn20'] = np.nan
+    # try:
+    #     measures['pnn50'] = float(len(nn50)) / float(len(rr_diff))
+    # except:
+    #     measures['pnn50'] = np.nan
+    # measures['hr_mad'] = MAD(rr_list)
 
 
 def calc_breathing(

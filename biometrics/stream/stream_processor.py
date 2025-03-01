@@ -67,7 +67,7 @@ class StreamProcessor:
             left1_signal = self.buffer.get_heart_rate_signal('left', 1)
             right1_signal = self.buffer.get_heart_rate_signal('right', 1)
 
-            log = self.iteration_count % 60 == 0
+            log = self.iteration_count % 300 == 0
             epoch = piezo_record['ts']
             time = datetime.fromtimestamp(epoch)
             if log:
