@@ -1,149 +1,172 @@
 #!/bin/bash
+# Exit immediately on error, on undefined variables, and on error in pipelines
+set -euo pipefail
 
+# --------------------------------------------------------------------------------
 # Variables
 REPO_URL="https://github.com/throwaway31265/free-sleep/archive/refs/heads/main.zip"
 ZIP_FILE="free-sleep.zip"
 REPO_DIR="/home/dac/free-sleep"
 SERVER_DIR="$REPO_DIR/server"
-SERVICE_FILE="/etc/systemd/system/free-sleep.service"
+USERNAME="dac"
 
-# -----------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------
 # Download the repository
 echo "Downloading the repository..."
 curl -L -o "$ZIP_FILE" "$REPO_URL"
 
-# Unzip the repository
 echo "Unzipping the repository..."
-unzip -o "$ZIP_FILE"
-
+unzip -o -q "$ZIP_FILE"
 echo "Removing the zip file..."
-rm "$ZIP_FILE"
+rm -f "$ZIP_FILE"
 
-# Move files to the installation directory
+# Clean up existing directory and move new code into place
 echo "Setting up the installation directory..."
 rm -rf "$REPO_DIR"
 mv free-sleep-main "$REPO_DIR"
-chown -R dac:dac "$REPO_DIR"
 
-# -----------------------------------------------------------------------------------------------------
-# Install volta
+# Optional: remove the leftover free-sleep-main directory if the `unzip` created extra files
+# (In this script we're already moving it, so there's no leftover)
+# rm -rf free-sleep-main
 
-sudo -u dac bash -c 'curl https://get.volta.sh | bash'
+chown -R "$USERNAME":"$USERNAME" "$REPO_DIR"
 
-if sudo -u dac bash -c 'command -v volta' > /dev/null 2>&1; then
-    echo "Volta is already installed for user 'dac'."
+# --------------------------------------------------------------------------------
+# Install or update Volta
+# - We check once. If it’s not installed, install it.
+echo "Checking if Volta is installed for user '$USERNAME'..."
+if sudo -u "$USERNAME" bash -c 'command -v volta' > /dev/null 2>&1; then
+  echo "Volta is already installed for user '$USERNAME'."
 else
-    echo "Volta is not installed. Installing for user 'dac'..."
-    sudo -u dac bash -c 'curl https://get.volta.sh | bash'
-    echo -e '\nexport VOLTA_HOME="/home/dac/.volta"\nexport PATH="$VOLTA_HOME/bin:$PATH"\n' >> /home/root/.profile
+  echo "Volta is not installed. Installing for user '$USERNAME'..."
+  sudo -u "$USERNAME" bash -c 'curl https://get.volta.sh | bash'
+  # Ensure Volta environment variables are in the DAC user’s profile:
+  if ! grep -q 'export VOLTA_HOME=' "/home/$USERNAME/.profile"; then
+    echo -e '\nexport VOLTA_HOME="/home/dac/.volta"\nexport PATH="$VOLTA_HOME/bin:$PATH"\n' \
+      >> "/home/$USERNAME/.profile"
+  fi
 fi
 
-# This will skip automatically if this node version is already installed
-sudo -u dac bash -c "source /home/dac/.profile && cd /home/dac/free-sleep/server && volta install node@22.13.0"
-# -----------------------------------------------------------------------------------------------------
-# Setup data folder in /persistent/
+# --------------------------------------------------------------------------------
+# Install (or update) Node via Volta
+echo "Installing/ensuring Node 22.13.0 via Volta..."
+sudo -u "$USERNAME" bash -c "source /home/$USERNAME/.profile && volta install node@22.13.0"
 
-# Create directories if they don't exist
+# --------------------------------------------------------------------------------
+# Setup /persistent/free-sleep-data (migrate old configs, logs, etc.)
 mkdir -p /persistent/free-sleep-data/logs/
 mkdir -p /persistent/free-sleep-data/lowdb/
 
+# Extract the DAC_SOCKET path from frank.sh (if present) and put it in DAC_SOCK_PATH file
 grep -oP '(?<=DAC_SOCKET=)[^ ]*dac.sock' /opt/eight/bin/frank.sh > /persistent/free-sleep-data/dac_sock_path.txt
 
 # DO NOT REMOVE, OLD VERSIONS WILL LOSE settings & schedules
-# Migrate old config/DB to new /persistent/free-sleep-data/
 FILES_TO_MOVE=(
   "/home/dac/free-sleep-database/settingsDB.json:/persistent/free-sleep-data/lowdb/settingsDB.json"
   "/home/dac/free-sleep-database/schedulesDB.json:/persistent/free-sleep-data/lowdb/schedulesDB.json"
   "/home/dac/dac_sock_path.txt:/persistent/free-sleep-data/dac_sock_path.txt"
 )
 
-# Loop through each file and move if it exists
 for entry in "${FILES_TO_MOVE[@]}"; do
   IFS=":" read -r SOURCE_FILE DESTINATION <<< "$entry"
-
   if [ -f "$SOURCE_FILE" ]; then
     mv "$SOURCE_FILE" "$DESTINATION"
     echo "Moved $SOURCE_FILE to $DESTINATION"
   fi
 done
 
-
-# Change ownership recursively (-R flag)
-chown -R dac:dac /persistent/free-sleep-data/
-
-# Set directory permissions
+# Change ownership and permissions
+chown -R "$USERNAME":"$USERNAME" /persistent/free-sleep-data/
 chmod 770 /persistent/free-sleep-data/
 chmod g+s /persistent/free-sleep-data/
 
-# -----------------------------------------------------------------------------------------------------
-# Install dependencies as user dac
+# --------------------------------------------------------------------------------
+# Install server dependencies
+echo "Installing dependencies in $SERVER_DIR ..."
+sudo -u "$USERNAME" bash -c "cd '$SERVER_DIR' && /home/$USERNAME/.volta/bin/npm install"
 
-echo "Installing dependencies..."
-sudo -u dac bash -c "cd $SERVER_DIR && /home/dac/.volta/bin/npm install"
+echo "Running Prisma migrations..."
+sudo -u "$USERNAME" bash -c "cd '$SERVER_DIR' && /home/$USERNAME/.volta/bin/npm run migrate deploy"
 
-echo "Running prisma migration"
-sudo -u dac bash -c "cd $SERVER_DIR && /home/dac/.volta/bin/npm run migrate deploy"
+# --------------------------------------------------------------------------------
+# Create systemd service
 
-# -----------------------------------------------------------------------------------------------------
+SERVICE_FILE="/etc/systemd/system/free-sleep.service"
 
-# Create a systemd service file
 echo "Creating systemd service file at $SERVICE_FILE..."
+
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=Free Sleep Server
 After=network.target
 
 [Service]
-ExecStart=/home/dac/.volta/bin/npm run start
+ExecStart=/home/$USERNAME/.volta/bin/npm run start
 WorkingDirectory=$SERVER_DIR
 Restart=always
-User=dac
+User=$USERNAME
 Environment=NODE_ENV=production
-Environment=VOLTA_HOME=/home/dac/.volta
-Environment=PATH=/home/dac/.volta/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
+Environment=VOLTA_HOME=/home/$USERNAME/.volta
+Environment=PATH=/home/$USERNAME/.volta/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# Reload systemd and enable the service
 echo "Reloading systemd daemon and enabling the service..."
 systemctl daemon-reload
 systemctl enable free-sleep.service
 
-# Start the service
-echo "Starting the free-sleep server..."
+echo "Starting free-sleep.service..."
 systemctl start free-sleep.service
 
-# Display service status
 echo "Checking service status..."
-systemctl status free-sleep.service --no-pager
+systemctl status free-sleep.service --no-pager || true
 
-# Sometimes the device time gets reset to 2010, this resets the device time
-echo "Updating device time"
-date -s "$(curl -s --head http://google.com | grep ^Date: | sed 's/Date: //g')"
+# --------------------------------------------------------------------------------
+# Graceful device time update (optional)
 
+echo "Attempting to update device time from Google..."
+# If the curl fails or is blocked, skip with a warning but don't fail the entire script
+if date_string="$(curl -s --head http://google.com | grep '^Date: ' | sed 's/Date: //g')" && [ -n "$date_string" ]; then
+  date -s "$date_string" || echo "WARNING: Unable to update system time"
+else
+  echo -e "\033[0;33mWARNING: Unable to retrieve date from Google... Skipping time update.\033[0m"
+fi
 
-# -----------------------------------------------------------------------------------------------------
-# Setup ability to reboot pod without sudo permission for dac user
-USERNAME="dac"
+# --------------------------------------------------------------------------------
+# Setup passwordless reboot for 'dac'
+
 SUDOERS_FILE="/etc/sudoers.d/$USERNAME"
 SUDOERS_RULE="$USERNAME ALL=(ALL) NOPASSWD: /sbin/reboot"
 
-# 2. Check if the sudoers rule already exists
 if sudo grep -Fxq "$SUDOERS_RULE" "$SUDOERS_FILE" 2>/dev/null; then
-    echo "Rule for '$USERNAME' reboot permissions already exists."
+  echo "Rule for '$USERNAME' reboot permissions already exists."
 else
-    echo "$SUDOERS_RULE" | sudo tee "$SUDOERS_FILE" > /dev/null
-    sudo chmod 440 "$SUDOERS_FILE"
-    echo "Passwordless permission for reboot granted to '$USERNAME'."
+  echo "$SUDOERS_RULE" | sudo tee "$SUDOERS_FILE" > /dev/null
+  sudo chmod 440 "$SUDOERS_FILE"
+  echo "Passwordless permission for reboot granted to '$USERNAME'."
 fi
 
-# ---------------------------------------------------------------------------------------
+echo ""
+
+# --------------------------------------------------------------------------------
+# Restart free-sleep-stream if it exists
+
+if systemctl list-units --full --all | grep -q "free-sleep-stream"; then
+  echo "Restarting free-sleep-stream service..."
+  systemctl restart free-sleep-stream
+else
+  echo "free-sleep-stream service does not exist. Skipping restart."
+fi
+
+echo ""
+
+# --------------------------------------------------------------------------------
+# Finish
+echo "This is your dac.sock path (if it doesn't end in dac.sock, contact support):"
+cat /persistent/free-sleep-data/dac_sock_path.txt 2>/dev/null || echo "No dac.sock path found."
 
 echo -e "\033[0;32mInstallation complete! The Free Sleep server is running and will start automatically on boot.\033[0m"
-echo -e "\033[0;32mSee free-sleep logs with journalctl -u free-sleep --no-pager --output=cat\033[0m"
+echo -e "\033[0;32mSee logs with: journalctl -u free-sleep --no-pager --output=cat\033[0m"
 
-echo "This is your dac.sock path, if the output below doesn't end in dac.sock, reach out to us on Discord"
-cat /persistent/free-sleep-data/dac_sock_path.txt
-# -----------------------------------------------------------------------------------------------------
