@@ -6,6 +6,7 @@ import config from '../config.js';
 const defaultData = {
     timeZone: null,
     temperatureFormat: 'fahrenheit',
+    rebootDaily: true,
     left: {
         name: 'Left',
         awayMode: false,
@@ -17,7 +18,7 @@ const defaultData = {
     primePodDaily: {
         enabled: false,
         time: '14:00',
-    }
+    },
 };
 const file = new JSONFile(`${config.lowDbFolder}settingsDB.json`);
 const settingsDB = new Low(file, defaultData);

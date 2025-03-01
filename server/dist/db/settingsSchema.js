@@ -16,4 +16,5 @@ export const SettingsSchema = z.object({
         time: TimeSchema,
     }),
     temperatureFormat: Temperatures,
+    rebootDaily: z.boolean(),
 }).strict();

@@ -7,6 +7,7 @@ import { TimeZone } from '../db/timeZones.js';
 import { executeCalibrateSensors } from './calibrateSensors.js';
 import { Side } from '../db/schedulesSchema.js';
 import moment from 'moment-timezone';
+import settingsDB from '../db/settings.js';
 
 
 const scheduleRebootJob = (onHour: number, onMinute: number, timeZone: TimeZone) => {
@@ -18,6 +19,11 @@ const scheduleRebootJob = (onHour: number, onMinute: number, timeZone: TimeZone)
   const time = `${String(onHour).padStart(2,'0')}:${String(onMinute).padStart(2,'0')}`;
   logger.debug(`Scheduling daily reboot job at ${time}`);
   schedule.scheduleJob(`daily-reboot-${time}`, dailyRule, async () => {
+    await settingsDB.read();
+
+    if (!settingsDB.data.rebootDaily) {
+      logger.info('Daily reboot job is disabled, skipping...');
+    }
     logger.info(`Executing scheduled reboot job`);
     exec('sudo /sbin/reboot', (error, stdout, stderr) => {
       if (error) {

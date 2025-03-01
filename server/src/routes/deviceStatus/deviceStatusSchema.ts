@@ -15,7 +15,6 @@ const SideStatusSchema = z.object({
 export const DeviceStatusSchema = z.object({
   left: SideStatusSchema,
   right: SideStatusSchema,
-  sensorLabel: z.string(),
   waterLevel: z.string(),
   isPriming: z.boolean(),
   settings: z.object({

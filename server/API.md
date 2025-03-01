@@ -34,7 +34,6 @@ The server exposes RESTful endpoints for interaction:
     "gainRight": 1, 
     "ledBrightness": 1
   },
-  "sensorLabel": "\"00000-0000-000-00000\""
 }
 ```
 
@@ -65,6 +64,8 @@ The server exposes RESTful endpoints for interaction:
 ```json
 {
   "timeZone": "America/New_York",
+  "temperatureFormat": "fahrenheit",
+  "rebootDaily": true,
   "left": {
     "awayMode": false
   },
@@ -83,12 +84,18 @@ The server exposes RESTful endpoints for interaction:
 - Sample Request Body:
 ```json
 {
-  "timeZone": "America/Los_Angeles",
+  "timeZone": "America/New_York",
+  "temperatureFormat": "fahrenheit",
+  "rebootDaily": true,
   "left": {
+    "awayMode": false
+  },
+  "right": {
     "awayMode": true
   },
   "primePodDaily": {
-    "enabled": false
+    "enabled": true,
+    "time": "14:00"
   }
 }
 ```
@@ -96,6 +103,7 @@ The server exposes RESTful endpoints for interaction:
 ```json
 {
   "timeZone": "America/Los_Angeles",
+  "rebootDaily": true,
   "left": {
     "awayMode": true
   },

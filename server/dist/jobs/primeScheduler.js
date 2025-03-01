@@ -4,6 +4,7 @@ import logger from '../logger.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import { executeCalibrateSensors } from './calibrateSensors.js';
 import moment from 'moment-timezone';
+import settingsDB from '../db/settings.js';
 const scheduleRebootJob = (onHour, onMinute, timeZone) => {
     const dailyRule = new schedule.RecurrenceRule();
     dailyRule.hour = onHour;
@@ -12,6 +13,10 @@ const scheduleRebootJob = (onHour, onMinute, timeZone) => {
     const time = `${String(onHour).padStart(2, '0')}:${String(onMinute).padStart(2, '0')}`;
     logger.debug(`Scheduling daily reboot job at ${time}`);
     schedule.scheduleJob(`daily-reboot-${time}`, dailyRule, async () => {
+        await settingsDB.read();
+        if (!settingsDB.data.rebootDaily) {
+            logger.info('Daily reboot job is disabled, skipping...');
+        }
         logger.info(`Executing scheduled reboot job`);
         exec('sudo /sbin/reboot', (error, stdout, stderr) => {
             if (error) {

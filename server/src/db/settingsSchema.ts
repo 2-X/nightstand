@@ -20,6 +20,7 @@ export const SettingsSchema = z.object({
     time: TimeSchema,
   }),
   temperatureFormat: Temperatures,
+  rebootDaily: z.boolean(),
 }).strict();
 
 export type SideSettings = z.infer<typeof SideSettingsSchema>;

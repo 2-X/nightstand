@@ -8,6 +8,7 @@ import { Settings } from '@api/settingsSchema.ts';
 import { postSettings, useSettings } from '@api/settings.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import DailyPriming from './DailyPriming.tsx';
+import DailyReboot from './DailyReboot.tsx';
 import LicenseModal from './LicenseModal.tsx';
 import PrimeControl from './PrimeControl.tsx';
 import LedBrightnessSlider from './LedBrightnessSlider.tsx';
@@ -41,7 +42,7 @@ export default function SettingsPage() {
     <PageContainer sx={ { mb: 15, mt: 2 } }>
       <TimeZoneSelector settings={ settings } updateSettings={ updateSettings }/>
       <TemperatureFormatSelector settings={ settings } updateSettings={ updateSettings } />
-
+      <DailyReboot settings={ settings } updateSettings={ updateSettings } />
       <Divider />
       <DailyPriming settings={ settings } updateSettings={ updateSettings }/>
       <PrimeControl/>

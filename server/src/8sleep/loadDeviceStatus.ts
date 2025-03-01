@@ -91,7 +91,6 @@ export async function loadDeviceStatus(response: string): Promise<DeviceStatus> 
       isOn: rightSideSecondsRemaining > 0,
       isAlarmVibrating: memoryDB.data.right.isAlarmVibrating,
     },
-    sensorLabel: rawDeviceData.sensorLabel,
     waterLevel: rawDeviceData.waterLevel,
     isPriming: rawDeviceData.priming === 'true',
     settings: decodeSettings(rawDeviceData.settings),
