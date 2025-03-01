@@ -92,7 +92,12 @@ def insert_sleep_records(sleep_records: List[SleepRecord]):
       - present_intervals (list of [start, end] datetime pairs)
       - not_present_intervals (list of [start, end] datetime pairs)
     """
-    logger.debug(f'Inserting sleep records into {DB_FILE_PATH}...')
+    if len(sleep_records) == 0:
+        logger.warning(f'No sleep records to insert, exiting...')
+        return
+    else:
+        logger.info(f'Inserting {len(sleep_records)} sleep record(s) into {DB_FILE_PATH}...')
+        logger.info(json.dumps(sleep_records, indent=4, default=custom_serializer))
 
     conn = sqlite3.connect(DB_FILE_PATH)
     cur = conn.cursor()
@@ -141,4 +146,4 @@ def insert_sleep_records(sleep_records: List[SleepRecord]):
     conn.commit()
     cur.close()
     conn.close()
-    logger.debug(f"Inserted {len(sleep_records)} record(s) into 'sleep_records' (ignoring duplicates).")
+    logger.info(f"Inserted {len(sleep_records)} record(s) into 'sleep_records' (ignoring duplicates).")

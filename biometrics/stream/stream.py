@@ -33,11 +33,12 @@ from watchdog.events import FileSystemEventHandler
 import queue
 import threading
 
+from get_logger import get_logger
+logger = get_logger('free-sleep-stream')
+
 from stream_processor import StreamProcessor
 from load_raw_files import load_piezo_row
-from get_logger import get_logger
 
-logger = get_logger()
 
 # Global queue for processing decoded biometric data
 piezo_record_queue = queue.Queue()
@@ -118,23 +119,27 @@ class LatestRawFileHandler(FileSystemEventHandler):
 
 
 def process_biometrics():
-    """
-    Consumes from data_queue, maintains a rolling buffer,
-    checks presence, calculates heart rate if present.
-    """
     piezo_record = piezo_record_queue.get()
     stream_processor = StreamProcessor(piezo_record, debug=False)
     while True:
-        piezo_record = piezo_record_queue.get()
-        # Block until new data is available
-        if piezo_record is None:
-            break
+        try:
+            piezo_record = piezo_record_queue.get(timeout=5)
 
-        stream_processor.process_piezo_record(piezo_record)
-        piezo_record_queue.task_done()
+            if piezo_record is None:
+                # Stop if None is received
+                break
+
+            stream_processor.process_piezo_record(piezo_record)
+            piezo_record_queue.task_done()
+        except queue.Empty:
+            # Just continue if the queue is empty, do not exit the loop
+            logger.info("No new data, retrying...")
+        except Exception as e:
+            logger.error(e)
 
 
 def watch_directory(directory="/persistent"):
+    logger.info('Steam processor starting...')
     """Monitors the directory for new RAW files and processes only the latest one."""
     handler = LatestRawFileHandler(directory)
     observer = Observer()
@@ -145,17 +150,20 @@ def watch_directory(directory="/persistent"):
     processing_thread = threading.Thread(target=process_biometrics, daemon=True)
     processing_thread.start()
 
+    logger.debug('Steam processor set up successfully, running...')
     try:
         while True:
-            time.sleep(1)
+            time.sleep(0.1)
             handler.track_latest_file()  # Check if a newer file exists
             handler.follow_latest_file()  # Read new CBOR entries line-by-line
     except KeyboardInterrupt:
         observer.stop()
         piezo_record_queue.put(None)  # Send stop signal to processing thread
         processing_thread.join()
+    except Exception as e:
+        logger.error(e)
+        raise e
     observer.join()
-
 
 # Start watching and processing the latest .RAW file
 watch_directory("/persistent")

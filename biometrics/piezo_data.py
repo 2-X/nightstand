@@ -16,7 +16,7 @@ def _calculate_avg(arr: np.ndarray):
     return np.mean(arr)
 
 
-def load_piezo_df(data: Data, side: Side, lower_percentile=2, upper_percentile=98) -> pd.DataFrame:
+def load_piezo_df(data: Data, side: Side, lower_percentile=2, upper_percentile=98, expected_row_count=None) -> pd.DataFrame:
     logger.debug('Loading piezo df...')
     df = pd.DataFrame(data['piezo_dual'])
     df.sort_values(by='ts', inplace=True)
@@ -30,6 +30,13 @@ def load_piezo_df(data: Data, side: Side, lower_percentile=2, upper_percentile=9
     df = df[(df[f'{side}1_avg'] >= lower_bound) & (df[f'{side}1_avg'] <= upper_bound)]
 
     df.drop(columns=[f'{side}1', 'type', 'freq', 'adc', 'gain'], inplace=True)
+    logger.debug(f'Piezo rows loaded: {df.shape[0]:,}')
+    if expected_row_count is not None:
+        row_count = df.shape[0]
+        if row_count / expected_row_count < 0.80:
+            logger.warning(f'Potentially missing piezo rows! Expected: {expected_row_count:,} Loaded: {row_count:,} ({row_count / expected_row_count * 100:0.0f}%)')
+
+    logger.debug(f'Loaded piezo df time range: {df.index[0]} -> {df.index[-1]}')
     return df
 
 

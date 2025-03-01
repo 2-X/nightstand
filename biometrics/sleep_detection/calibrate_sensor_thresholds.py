@@ -19,6 +19,9 @@ import os
 import gc
 from argparse import Namespace, ArgumentParser
 import traceback
+from typing import Union
+from datetime import datetime, timezone, timedelta
+
 
 sys.path.append(os.getcwd())
 FOLDER_PATH = '/Users/ds/main/8sleep_biometrics/data/people/david/raw/loaded/2025-01-10/'
@@ -26,20 +29,22 @@ if platform.system().lower() == 'linux':
     FOLDER_PATH = '/persistent/'
     sys.path.append('/home/dac/free-sleep/biometrics/')
 
+# This must run before the other local import in order to set up the logger
+from get_logger import get_logger
+
+logger = get_logger('calibrate-sensor')
 
 from data_types import *
 from load_raw_files import load_raw_files
 from piezo_data import load_piezo_df, detect_presence_piezo, identify_baseline_period
 from cap_data import load_cap_df, create_cap_baseline_from_cap_df, save_baseline
 from resource_usage import get_memory_usage_unix, get_available_memory_mb
-from get_logger import get_logger
 
-logger = get_logger()
 
 from utils import validate_datetime_utc
 
 
-def _parse_args() -> Namespace:
+def _parse_args() -> Union[Namespace, None]:
     # Argument parser setup
     parser = ArgumentParser(description="Process presence intervals with UTC datetime.")
 
@@ -47,25 +52,26 @@ def _parse_args() -> Namespace:
     parser.add_argument(
         "--side",
         choices=["left", "right"],
-        required=True,
+        required=False,
         help="Side of the bed to process (left or right)."
     )
     parser.add_argument(
         "--start_time",
         type=validate_datetime_utc,
-        required=True,
+        required=False,
         help="Start time in UTC format 'YYYY-MM-DD HH:MM:SS'."
     )
     parser.add_argument(
         "--end_time",
         type=validate_datetime_utc,
-        required=True,
+        required=False,
         help="End time in UTC format 'YYYY-MM-DD HH:MM:SS'."
     )
 
     # Parse arguments
     args = parser.parse_args()
-
+    if args.start_time is None or args.end_time is None or args.side is None:
+        return None
     # Validate that start_time is before end_time
     if args.start_time >= args.end_time:
         raise ValueError("--start_time must be earlier than --end_time")
@@ -74,6 +80,9 @@ def _parse_args() -> Namespace:
 
 
 def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: datetime, folder_path: str):
+    expected_row_count = int((end_time - start_time).total_seconds())
+    logger.debug(f"Calibrating sensors for {side} side | {start_time.isoformat()} -> {end_time.isoformat()} | Expected row count: {expected_row_count:,}")
+
     data = load_raw_files(
         folder_path,
         start_time,
@@ -83,7 +92,7 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
         raw_data_types=['capSense', 'piezo-dual']
     )
 
-    piezo_df = load_piezo_df(data, side)
+    piezo_df = load_piezo_df(data, side, expected_row_count=expected_row_count)
     detect_presence_piezo(
         piezo_df,
         side,
@@ -94,7 +103,7 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
         clean=False
     )
 
-    cap_df = load_cap_df(data, side)
+    cap_df = load_cap_df(data, side, expected_row_count=expected_row_count)
     # Cleanup data
     del data
     gc.collect()
@@ -118,27 +127,56 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
     gc.collect()
 
 
+def calibrate_both_sides():
+    end_time = datetime.now(timezone.utc)
+    start_time = end_time - timedelta(hours=14)
+    logger.info(
+        f'No args passed to calibrate_sensor_thresholds.py, calibrating for the last 14 hours... {start_time.isoformat()} -> {end_time.isoformat()}')
+
+    calibrate_sensor_thresholds(
+        'left',
+        start_time,
+        end_time,
+        FOLDER_PATH,
+    )
+    calibrate_sensor_thresholds(
+        'right',
+        start_time,
+        end_time,
+        FOLDER_PATH,
+    )
+
+
 if __name__ == "__main__":
-    if logger.env == 'prod':
-        logger.debug(f"Memory Usage: {get_memory_usage_unix():.2f} MB")
-        logger.debug(f"Free Memory: {get_available_memory_mb()} MB")
-        if get_available_memory_mb() < 300:
-            error = MemoryError('Available memory is too little, exiting...')
-            logger.error(error)
-            raise error
-
-    args = _parse_args()
-
-    # Display parsed datetime objects
-    logger.debug(f"Processing side: {args.side}")
-    logger.debug(f"Start time (UTC): {args.start_time} ({type(args.start_time)})")
-    logger.debug(f"End time (UTC): {args.end_time} ({type(args.end_time)})")
-
-    duration = args.end_time - args.start_time
-    logger.debug(f"Total duration: {duration}")
     try:
-        calibrate_sensor_thresholds(args.side, args.start_time, args.end_time, FOLDER_PATH)
+        logger.debug(f"START Free Memory: {get_available_memory_mb()} MB")
+        logger.debug(f"START Memory Usage: {get_memory_usage_unix():.2f} MB")
+        if get_available_memory_mb() < 400:
+            raise MemoryError('Available memory is too little, exiting...')
+
+        if logger.env == 'prod':
+            args = _parse_args()
+        else:
+            # DEBUGGING
+            date = '2025-01-20'
+            FOLDER_PATH = f'/Users/ds/main/8sleep_biometrics/data/people/david/raw/loaded/{date}/'
+            args = Namespace(
+                side="right",
+                start_time=datetime.strptime(f'{date} 07:00:00', '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc),
+                end_time=datetime.strptime(f'{date} 15:00:00', '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc),
+            )
+
+        if args is None:
+            calibrate_both_sides()
+        else:
+            calibrate_sensor_thresholds(
+                args.side,
+                args.start_time,
+                args.end_time,
+                FOLDER_PATH,
+            )
+    except KeyboardInterrupt:
+        logger.info('Keyboard interrupt signal received, exiting...')
     except Exception as e:
-        gc.collect()
         logger.error(e)
-        traceback.print_exc()
+        logger.error('Error calibrating sensors, exiting...')

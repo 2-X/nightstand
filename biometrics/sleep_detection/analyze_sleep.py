@@ -12,14 +12,11 @@ Key functionalities:
 Usage:
 Run the script with required parameters:
     /home/dac/venv/bin/python calibrate_sensor_thresholds.py --side=left --start_time="YYYY-MM-DD HH:MM:SS" --end_time="YYYY-MM-DD HH:MM:SS"
-    cd /home/dac/free-sleep/biometrics/sleep_detection && /home/dac/venv/bin/python analyze_sleep.py --side=right --start_time="2025-02-20 03:00:00" --end_time="2025-02-16 16:00:00"
+    cd /home/dac/free-sleep/biometrics/sleep_detection && /home/dac/venv/bin/python analyze_sleep.py --side=left --start_time="2025-03-01 03:00:00" --end_time="2025-03-01 15:00:00"
 """
 
 import sys
 import platform
-
-if platform.system().lower() == 'linux':
-    sys.path.append('/home/dac/free-sleep/biometrics/')
 
 import json
 import gc
@@ -27,19 +24,22 @@ import os
 import traceback
 from argparse import ArgumentParser, Namespace
 import numpy as np
+from datetime import datetime, timezone
 
 sys.path.append(os.getcwd())
+
+if platform.system().lower() == 'linux':
+    FOLDER_PATH = '/persistent/'
+    sys.path.append('/home/dac/free-sleep/biometrics/')
+
+from get_logger import get_logger
+# This must run before the other local import in order to set up the logger
+logger = get_logger('sleep-analyzer')
 
 from sleep_detector import detect_sleep
 from resource_usage import get_memory_usage_unix, get_available_memory_mb
 from utils import validate_datetime_utc
-from get_logger import get_logger
 
-logger = get_logger()
-
-FOLDER_PATH = '/Users/ds/main/8sleep_biometrics/data/people/david/raw/loaded/2025-01-10/'
-if platform.system().lower() == 'linux':
-    FOLDER_PATH = '/persistent/'
 
 
 def _parse_args() -> Namespace:
@@ -72,46 +72,41 @@ def _parse_args() -> Namespace:
     # Validate that start_time is before end_time
     if args.start_time >= args.end_time:
         raise ValueError("--start_time must be earlier than --end_time")
-
     return args
 
 
-def main():
-    # DEBUGGING
-    # args = Namespace(
-    #     side="right",
-    #     start_time=datetime.strptime("2025-01-10 08:00:00", "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc),
-    #     end_time=datetime.strptime("2025-01-10 14:00:00", "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc),
-    # )
-    # side = args.side
-    args = _parse_args()
-    # Display parsed datetime objects
-
-    # Example usage
-    duration = args.end_time - args.start_time
-    logger.debug(f"Total duration: {duration}")
+if __name__ == "__main__":
     try:
+        logger.debug(f"START Free Memory: {get_available_memory_mb()} MB")
+        logger.debug(f"START Memory Usage: {get_memory_usage_unix():.2f} MB")
+        if get_available_memory_mb() < 400:
+            raise MemoryError('Available memory is too little, exiting...')
+
+        if logger.env == 'prod':
+            args = _parse_args()
+        else:
+            # DEBUGGING
+            date = '2025-01-20'
+            FOLDER_PATH = f'/Users/ds/main/8sleep_biometrics/data/people/david/raw/loaded/{date}/'
+            args = Namespace(
+                side="right",
+                start_time=datetime.strptime(f'{date} 07:00:00', '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc),
+                end_time=datetime.strptime(f'{date} 15:00:00', '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc),
+            )
+
+
         detect_sleep(
             args.side,
             args.start_time,
             args.end_time,
             FOLDER_PATH
         )
-        logger.debug(f"END Memory Usage: {get_memory_usage_unix():.2f} MB")
-        logger.debug(f"Free Memory: {get_available_memory_mb()} MB")
 
+        logger.debug(f"END Memory Usage: {get_memory_usage_unix():.2f} MB")
+        logger.debug(f"END Free Memory: {get_available_memory_mb()} MB")
+    except KeyboardInterrupt:
+        logger.info('Keyboard interrupt signal received, exiting...')
     except Exception as e:
         logger.error(e)
-        traceback.print_exc()
-        gc.collect()
+        logger.error('Error analyzing sleep, exiting...')
 
-
-if __name__ == "__main__":
-    logger.debug(f"Memory Usage: {get_memory_usage_unix():.2f} MB")
-    logger.debug(f"Free Memory: {get_available_memory_mb()} MB")
-    if get_available_memory_mb() < 400:
-        error = MemoryError('Available memory is too little, exiting...')
-        logger.error(error)
-        raise error
-
-    main()

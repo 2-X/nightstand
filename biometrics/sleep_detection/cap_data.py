@@ -20,7 +20,6 @@ import json
 import math
 import pandas as pd
 from datetime import datetime
-
 from data_types import *
 from get_logger import get_logger
 
@@ -28,11 +27,14 @@ logger = get_logger()
 
 LEFT_CAP_BASE_LINE_FILE_PATH = f'{logger.folder_path}left_cap_baseline.json'
 RIGHT_CAP_BASELINE_FILE_PATH = f'{logger.folder_path}right_cap_baseline.json'
+pd.set_option('display.width', 300)
+pd.set_option('display.max_columns', 50)
 
 
 def create_cap_baseline_from_cap_df(merged_df: pd.DataFrame, start_time: datetime, end_time: datetime, side: Side, min_std: int = 5) -> CapBaseline:
     logger.debug(f'Creating baseline for capacitance sensors...')
     filtered_df = merged_df[start_time:end_time]
+    logger.debug(f'filtered_df: \n{filtered_df.describe()}')
     cap_baseline = {}
     for sensor in [f'{side}_out', f'{side}_cen', f'{side}_in']:
         cap_baseline[sensor] = {
@@ -40,16 +42,16 @@ def create_cap_baseline_from_cap_df(merged_df: pd.DataFrame, start_time: datetim
             "std": max(filtered_df[sensor].std(), min_std)
         }
 
-    logger.debug(f'baseline_stats: \n{json.dumps(cap_baseline, indent=4)}')
+    logger.debug(f'cap_baseline: \n{json.dumps(cap_baseline, indent=4)}')
     return cap_baseline
 
 
 def save_baseline(side: Side, cap_baseline: dict):
-    logger.debug(f'Saving {side} cap_baseline...')
     if side == 'right':
         file_path = RIGHT_CAP_BASELINE_FILE_PATH
     else:
         file_path = LEFT_CAP_BASE_LINE_FILE_PATH
+    logger.debug(f'Saving {side} side cap_baseline to {file_path}')
 
     with open(file_path, "w") as json_file:
         json.dump(cap_baseline, json_file, indent=4)
@@ -73,7 +75,7 @@ Run `python3 calibrate_sensor_thresholds.py --side=right --start_time="2025-02-0
 ''')
 
 
-def load_cap_df(data: Data, side: Side) -> pd.DataFrame:
+def load_cap_df(data: Data, side: Side, expected_row_count=None) -> pd.DataFrame:
     logger.debug('Loading cap df...')
     df = pd.DataFrame(data['cap_senses'], columns=['ts', side])
 
@@ -87,6 +89,13 @@ def load_cap_df(data: Data, side: Side) -> pd.DataFrame:
     df.sort_values('ts', inplace=True)
     df['ts'] = pd.to_datetime(df['ts'])
     df.set_index('ts', inplace=True)
+    logger.debug(f'Capacitance rows loaded: {df.shape[0]:,}')
+    if expected_row_count is not None:
+        row_count = df.shape[0]
+        if row_count / expected_row_count < 0.80:
+            logger.warning(f'Potentially missing cap rows! Expected: {expected_row_count:,} Loaded: {row_count:,} ({row_count / expected_row_count * 100:0.0f}%)')
+
+    logger.debug(f'Loaded cap df time range: {df.index[0]} -> {df.index[-1]}')
     return df
 
 
@@ -119,7 +128,9 @@ def detect_presence_cap(
             >= threshold_count
     ).astype(int)
 
+    logger.debug(f'Cap baseline for {side} side:')
+    logger.debug(json.dumps(cap_baseline, indent=4))
+    logger.debug(f'Presence df: \n{merged_df.describe()}')
     if clean:
         merged_df.drop(columns=[f'{side}_combined', f'{side}_out', f'{side}_cen', f'{side}_in'], inplace=True)
-
     return merged_df

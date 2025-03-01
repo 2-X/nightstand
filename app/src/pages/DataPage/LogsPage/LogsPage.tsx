@@ -4,6 +4,9 @@ import { Paper, Typography, Box, MenuItem, Select, FormControl, InputLabel } fro
 import PageContainer from '../../PageContainer.tsx';
 import { useTheme } from '@mui/material/styles';
 import axios from 'axios';
+import Header from '../Header.tsx';
+import TextSnippetIcon from '@mui/icons-material/TextSnippet';
+
 
 export default function LogsPage() {
   const [logs, setLogs] = useState<string[]>([]);
@@ -81,6 +84,8 @@ export default function LogsPage() {
         },
       } }
     >
+      <Header title="Logs" icon={ <TextSnippetIcon /> }/>
+
       <Paper
         elevation={ 3 }
         sx={ {

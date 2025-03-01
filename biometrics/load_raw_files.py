@@ -84,7 +84,7 @@ def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Si
                 if not checked_timespan:
                     timestamp_start = datetime.fromtimestamp(
                         decoded_data['ts'],
-                        # timezone.utc
+                        timezone.utc
                     )
                     timestamp_end = timestamp_start + timedelta(minutes=15)
                     if start_time <= timestamp_start <= end_time:

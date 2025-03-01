@@ -191,7 +191,7 @@ class BiometricProcessor:
             logger.error(error_message)
             return None
 
-    def calculate_vitals(self, epoch: int, signal1: np.ndarray, signal2: Union[None, np.ndarray] = None):
+    def calculate_heart_rate(self, epoch: int, signal1: np.ndarray, signal2: Union[None, np.ndarray] = None):
         self.epoch = epoch
         measurement_2 = None
         measurement_1 = self._calculate_vitals(signal1, epoch)

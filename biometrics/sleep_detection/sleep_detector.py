@@ -180,7 +180,7 @@ def build_sleep_records(merged_df: pd.DataFrame, side: Side, max_gap_in_minutes:
     present_intervals, not_present_intervals = _get_presence_intervals(merged_df, side)
     sleep_intervals = _identify_sleep_intervals(present_intervals, max_gap_in_minutes=max_gap_in_minutes)
 
-    sleep_records = []
+    sleep_records: List[SleepRecord] = []
     for sleep_interval in sleep_intervals:
         entered_bed_at = sleep_interval['entered_bed_at']
         left_bed_at = sleep_interval['left_bed_at']
@@ -192,7 +192,6 @@ def build_sleep_records(merged_df: pd.DataFrame, side: Side, max_gap_in_minutes:
         sleep_records.append({
             "side": side,
             **sleep_interval,
-            # 'total_seconds_in_bed': _total_duration_seconds(filtered_present_intervals),
             'present_intervals': filtered_present_intervals,
             'not_present_intervals': filtered_not_present_intervals,
         })
@@ -201,14 +200,13 @@ def build_sleep_records(merged_df: pd.DataFrame, side: Side, max_gap_in_minutes:
 
 
 def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_path: str) -> List[SleepRecord]:
-    logger.debug(f"Processing side:  {side}")
-    logger.debug(f"Start time (UTC): {start_time.isoformat()}")
-    logger.debug(f"End time (UTC):   {end_time.isoformat()}")
+    expected_row_count = int((end_time - start_time).total_seconds())
+    logger.info(f"Detecting sleep interval for {side} side | {start_time.isoformat()} -> {end_time.isoformat()} | Expected row count: {expected_row_count:,}")
 
     data = load_raw_files(folder_path, start_time, end_time, side, sensor_count=1, raw_data_types=['capSense', 'piezo-dual'])
 
-    piezo_df = load_piezo_df(data, side)
-    cap_df = load_cap_df(data, side)
+    piezo_df = load_piezo_df(data, side, expected_row_count=expected_row_count)
+    cap_df = load_cap_df(data, side, expected_row_count=expected_row_count)
     # Cleanup data
     del data
     gc.collect()
@@ -247,7 +245,10 @@ def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_pa
 
     merged_df[f'final_{side}_occupied'] = merged_df[f'piezo_{side}1_presence'] + merged_df[f'cap_{side}_occupied']
     sleep_records = build_sleep_records(merged_df, side, max_gap_in_minutes=15)
-    insert_sleep_records(sleep_records)
+    if len(sleep_records) == 0:
+        logger.warning(f'No sleep periods found for {side} side! {start_time} -> {end_time} ')
+    else:
+        insert_sleep_records(sleep_records)
     # plot_occupancy_one_side(merged_df, side)
     # Cleanup
     merged_df.drop(merged_df.index, inplace=True)

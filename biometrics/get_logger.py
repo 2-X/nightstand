@@ -1,11 +1,14 @@
-from typing import Literal
+from typing import Literal, get_args, Optional, Tuple, List
 import platform
 import traceback
 import logging
-from logging.handlers import TimedRotatingFileHandler
+from logging.handlers import RotatingFileHandler
 import sys
 from datetime import datetime
 import os
+
+LoggerName = Literal['sleep-analyzer', 'calibrate-sensor', 'free-sleep-stream']
+LOGGER_NAMES: List[LoggerName] = list(get_args(LoggerName))
 
 
 class BaseLogger(logging.Logger):
@@ -17,28 +20,22 @@ class BaseLogger(logging.Logger):
     def __init__(self, name):
         super().__init__(name)
 
-    def _handle_exception(self, exc_type, exc_value, exc_traceback):
-        self.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
-        stack_trace = traceback.format_exc()
-        self.error(stack_trace)
-        if issubclass(exc_type, KeyboardInterrupt):
-            sys.__excepthook__(exc_type, exc_value, exc_traceback)
-            return
-
     def runtime(self):
         return str(datetime.now() - datetime.strptime(self.start_time, '%Y-%m-%d %H:%M:%S'))
 
 
-def _get_logger_instance():
-    return logging.getLogger('presence_detection')
+def _get_logger_instance(name: str = None) -> Tuple[BaseLogger, LoggerName]:
+    if name is None:
+        loggers = list(logging.root.manager.loggerDict.keys())
+        for name in LOGGER_NAMES:
+            if name in loggers:
+                logger: BaseLogger= logging.getLogger(name)
+                return logger, name
+        raise Exception('Default logger not found!')
 
+    logger: BaseLogger= logging.getLogger(name)
+    return logger, name
 
-def _handle_exception(exc_type, exc_value, exc_traceback):
-    logger = _get_logger_instance()
-    if issubclass(exc_type, KeyboardInterrupt):
-        sys.__excepthook__(exc_type, exc_value, exc_traceback)
-        return
-    logger.error("Uncaught exception", exc_info=True)
 
 
 def _get_log_level():
@@ -55,31 +52,26 @@ class FixedWidthFormatter(logging.Formatter):
         file_info = f"{record.filename}:{record.lineno}"
         file_info_padded = f"{file_info:<40}"  # Left-align to 40 chars
 
-        # Add Process ID (PID), fixed-width of 6 characters
-        pid = f"{record.process:<6}"  # Left-align to 6 chars
-
         # Combine formatted parts
-        formatted_message = f"{timestamp} UTC | PID: {pid} | {level} | {file_info_padded} | {record.getMessage()}"
+        formatted_message = f"{timestamp} UTC | {level} | {file_info_padded} | {record.getMessage()}"
         return formatted_message
 
 
 FORMATTER = FixedWidthFormatter()
 
 
-def _get_file_handler(data_folder_path: str):
+def _get_file_handler(data_folder_path: str, name: str):
     folder_path = f'{data_folder_path}logs/'
 
     if not os.path.isdir(folder_path):
         os.makedirs(folder_path)
 
-    handler = TimedRotatingFileHandler(
-        filename=f"{folder_path}/free-sleep-stream.log",  # Log file path
-        when="midnight",
-        interval=1,
-        backupCount=2,
+    handler = RotatingFileHandler(
+        filename=f"{folder_path}/{name}.log",
+        mode='a',
+        maxBytes=10 * 1024 * 1024,  # 10MB max file size
+        backupCount=0,  # No rotation, just truncate when max size is reached
         encoding="utf-8",
-        delay=True,  # Prevents creating file until first log is written
-        utc=True,  # Ensures logs are rotated using UTC timestamps
     )
     handler.setFormatter(FORMATTER)
     return handler
@@ -93,7 +85,7 @@ def _get_console_handler():
     return handler
 
 
-def _build_logger(logger: BaseLogger):
+def _build_logger(logger: BaseLogger, name: LoggerName):
     logger.date = datetime.now().strftime('%Y-%m-%d')
     logger.start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -106,17 +98,16 @@ def _build_logger(logger: BaseLogger):
 
     logger.setLevel(logging.DEBUG)
     logger.addHandler(_get_console_handler())
-    logger.addHandler(_get_file_handler(logger.folder_path))
-    sys.excepthook = _handle_exception
+    logger.addHandler(_get_file_handler(logger.folder_path, name))
 
 
-def get_logger():
+def get_logger(name: Optional[LoggerName] = None) -> BaseLogger:
     """
     Returns:
         BaseLogger: Custom logger with fixed-width formatting
     """
     logging.setLoggerClass(BaseLogger)
-    logger = _get_logger_instance()
+    logger, name = _get_logger_instance(name)
     if not logger.handlers:
-        _build_logger(logger)
+        _build_logger(logger, name)
     return logger
