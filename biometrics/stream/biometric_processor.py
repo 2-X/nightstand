@@ -219,7 +219,7 @@ class BiometricProcessor:
                 'side': self.side,
                 'timestamp': epoch,
                 'heart_rate': heart_rate,
-                'hrv': (measurement_1['hrv'] + measurement_2['hrv']) / 2,
+                'hrv': self.hrv,
                 'breathing_rate': self.breathing_rate,
             })
 
