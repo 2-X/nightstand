@@ -23,7 +23,7 @@ import pandas as pd
 sys.path.append(os.getcwd())
 from data_types import *
 from get_logger import get_logger
-from utils import validate_datetime_utc
+from biometrics_helpers import validate_datetime_utc
 from resource_usage import get_memory_usage_unix, get_available_memory_mb
 from load_raw_files import load_raw_files
 from calculations import estimate_heart_rate_intervals, clean_df_pred

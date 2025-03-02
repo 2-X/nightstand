@@ -39,9 +39,7 @@ from load_raw_files import load_raw_files
 from piezo_data import load_piezo_df, detect_presence_piezo, identify_baseline_period
 from cap_data import load_cap_df, create_cap_baseline_from_cap_df, save_baseline
 from resource_usage import get_memory_usage_unix, get_available_memory_mb
-
-
-from utils import validate_datetime_utc
+from biometrics_helpers import validate_datetime_utc
 
 
 def _parse_args() -> Union[Namespace, None]:

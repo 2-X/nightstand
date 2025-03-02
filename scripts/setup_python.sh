@@ -39,7 +39,7 @@ fi
 
 
 echo "Unzipping..."
-unzip -o cpython_lib.zip -d "$TARGET_DIR"
+unzip -o -q cpython_lib.zip -d "$TARGET_DIR"
 
 # Check if unzip was successful
 if [ $? -ne 0 ]; then

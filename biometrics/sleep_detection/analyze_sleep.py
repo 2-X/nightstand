@@ -12,7 +12,7 @@ Key functionalities:
 Usage:
 Run the script with required parameters:
     /home/dac/venv/bin/python calibrate_sensor_thresholds.py --side=left --start_time="YYYY-MM-DD HH:MM:SS" --end_time="YYYY-MM-DD HH:MM:SS"
-    cd /home/dac/free-sleep/biometrics/sleep_detection && /home/dac/venv/bin/python analyze_sleep.py --side=left --start_time="2025-03-01 03:00:00" --end_time="2025-03-01 15:00:00"
+    cd /home/dac/free-sleep/biometrics/sleep_detection && /home/dac/venv/bin/python -B analyze_sleep.py --side=left --start_time="2025-03-02 03:00:00" --end_time="2025-03-02 15:00:00"
 """
 
 import sys
@@ -38,7 +38,7 @@ logger = get_logger('sleep-analyzer')
 
 from sleep_detector import detect_sleep
 from resource_usage import get_memory_usage_unix, get_available_memory_mb
-from utils import validate_datetime_utc
+from biometrics_helpers import validate_datetime_utc
 
 
 
