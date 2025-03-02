@@ -1,5 +1,5 @@
 import logger from '../logger.js';
-import { spawn } from 'child_process';
+import { exec } from 'child_process';
 import fs from 'fs';
 export const logOutput = (data) => {
     const output = data.toString().trim();
@@ -20,23 +20,24 @@ export const logOutput = (data) => {
         }
     });
 };
-export const executePythonScript = ({ script, cwd = '/home/dac/bio/src/presence_detection/', args = [] }) => {
+export const executePythonScript = ({ script, args = [] }) => {
     const pythonExecutable = '/home/dac/venv/bin/python';
     if (!fs.existsSync(pythonExecutable)) {
         logger.debug(`Not executing python script, ${pythonExecutable} does not exist!`);
         return;
     }
-    const command = `${pythonExecutable} ${script} ${args.join(' ')}`;
+    const command = `${pythonExecutable} -B ${script} ${args.join(' ')}`;
     logger.info(`Executing: ${command}`);
-    const process = spawn(pythonExecutable, [
-        script,
-        ...args,
-    ], {
-        cwd,
-    });
-    process.stdout.on('data', logOutput);
-    process.stderr.on('data', logOutput);
-    process.on('close', (code) => {
-        logger.info(`Python script exited with code ${code}`);
+    exec(command, { env: { ...process.env } }, (error, stdout, stderr) => {
+        if (error) {
+            logger.error(`Execution error: ${error.message}`);
+            return;
+        }
+        if (stderr) {
+            logger.error(`Python stderr: ${stderr}`);
+        }
+        if (stdout) {
+            logger.info(`Python stdout: ${stdout}`);
+        }
     });
 };

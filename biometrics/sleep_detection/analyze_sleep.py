@@ -108,5 +108,7 @@ if __name__ == "__main__":
         logger.info('Keyboard interrupt signal received, exiting...')
     except Exception as e:
         logger.error(e)
+        stack = traceback.format_exc()
+        logger.error(stack)
         logger.error('Error analyzing sleep, exiting...')
 
