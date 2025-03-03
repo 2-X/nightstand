@@ -12,8 +12,13 @@ import config from '../config.js';
 import { scheduleAlarm } from './alarmScheduler.js';
 
 
+const isJobSetupRunning = false;
+
 async function setupJobs() {
-  logger.info('Scheduling jobs...');
+  if (isJobSetupRunning) {
+    logger.debug('Job setup already running, skipping duplicate execution.');
+    return;
+  }
 
   // Clear existing jobs
   logger.info('Canceling old jobs...');
@@ -30,6 +35,7 @@ async function setupJobs() {
   const schedulesData = schedulesDB.data;
   const settingsData = settingsDB.data;
 
+  logger.info('Scheduling jobs...');
   Object.entries(schedulesData).forEach(([side, sideSchedule]) => {
     Object.entries(sideSchedule).forEach(([day, schedule]) => {
       schedulePowerOn(settingsData, side as Side, day as DayOfWeek, schedule.power);

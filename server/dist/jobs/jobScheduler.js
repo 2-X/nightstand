@@ -9,8 +9,12 @@ import { scheduleTemperatures } from './temperatureScheduler.js';
 import { schedulePrimingRebootAndCalibration } from './primeScheduler.js';
 import config from '../config.js';
 import { scheduleAlarm } from './alarmScheduler.js';
+const isJobSetupRunning = false;
 async function setupJobs() {
-    logger.info('Scheduling jobs...');
+    if (isJobSetupRunning) {
+        logger.debug('Job setup already running, skipping duplicate execution.');
+        return;
+    }
     // Clear existing jobs
     logger.info('Canceling old jobs...');
     Object.keys(schedule.scheduledJobs).forEach((jobName) => {
@@ -22,6 +26,7 @@ async function setupJobs() {
     moment.tz.setDefault(settingsDB.data.timeZone || 'UTC');
     const schedulesData = schedulesDB.data;
     const settingsData = settingsDB.data;
+    logger.info('Scheduling jobs...');
     Object.entries(schedulesData).forEach(([side, sideSchedule]) => {
         Object.entries(sideSchedule).forEach(([day, schedule]) => {
             schedulePowerOn(settingsData, side, day, schedule.power);
