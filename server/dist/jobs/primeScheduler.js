@@ -16,6 +16,7 @@ const scheduleRebootJob = (onHour, onMinute, timeZone) => {
         await settingsDB.read();
         if (!settingsDB.data.rebootDaily) {
             logger.info('Daily reboot job is disabled, skipping...');
+            return;
         }
         logger.info(`Executing scheduled reboot job`);
         exec('sudo /sbin/reboot', (error, stdout, stderr) => {
