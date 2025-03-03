@@ -11,7 +11,7 @@ function getNextDayOfWeekIndex(day) {
 }
 function isEndTimeNextDay(endTime) {
     const endHour = Number(endTime.split(':')[0]);
-    return endHour < 11;
+    return endHour <= 12;
 }
 export function getDayIndexForSchedule(scheduleDay, time) {
     if (isEndTimeNextDay(time)) {
