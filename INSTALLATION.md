@@ -28,6 +28,7 @@
 1. Follow the steps to teardown your device and get access to the circuit board
    1. [Pod 3](docs/pod_3_teardown) 
    1. [Pod 4](docs/pod_4_teardown)
+       1. [Pod 4 written instructions](docs/pod_4_teardown/instructions.md)
 
 ---
 
