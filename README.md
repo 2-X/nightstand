@@ -108,7 +108,9 @@ This project is intended to be entirely ran on an 8 sleep pod
 ![Scheduled temperature adjustments](docs/scheduled_temperatures.png)
 ![Scheduled alarms](docs/alarm_schedule.png)
 ![Settings](docs/settings.png)
-
+![Biometrics - 1](docs/biometrics_1.png)
+![Biometrics - 2](docs/biometrics_2.png)
+![Biometrics - 3](docs/biometrics_3.png)
 
 ## Contributing
 
