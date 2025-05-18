@@ -7,12 +7,15 @@ https://discord.gg/JpArXnBgEj
 - Updates
 - Support
 
-## [HOW TO INSTALL](./INSTALLATION.md)
+## 👉 [HOW TO INSTALL](./INSTALLATION.md) 🛠️ 👈
 
 ---  
 
-## Is it reversible?
+## Is it reversible? 
 Yes, I tested reversing it on my pod 3 by  [resetting the firmware](docs/pod_3_teardown/6_firmware_reset.jpeg). After the reset, setup your pod as a new pod again.
+
+## Will I brick my pod?
+Pod 3 **without** the SD card & Pod 4 are impossible to brick - _as long as you follow the directions_ 
 
 
 ## Tested and confirmed compatible devices
@@ -34,8 +37,7 @@ Check the back of your pod where you plug in the water tubes,
 - Settings customization: Configure timezones, away mode, brightness of LED on pod
 - Website works on desktop and mobile
 
-### Biometrics (BETA)
-- Do not enable this unless you're comfortable programming & debugging
+### Biometrics 📈
 - **The only biometrics data that has been validated is heart rate**, HRV & breathing rates have not been validated & may be inaccurate.
 Heart rates were validated over 33 sleep periods from 3 males & 3 females against mostly Apple Watches. 
 **Heart rate calculations tend to be slightly less accurate for females**
