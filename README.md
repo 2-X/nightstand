@@ -20,8 +20,11 @@ Pod 3 **without** the SD card & Pod 4 are impossible to brick - _as long as you 
 
 ## Tested and confirmed compatible devices
 Check the back of your pod where you plug in the water tubes, 
-- Pod 3 - FCC ID: 2AYXT61100001
-  - *It should work on other pod 3 models with the OS on a microSD card, the steps would actually be easier since you wouldn't need the tools required below. If someone wants to give it a shot, follow the steps here to get ssh & root access https://blopker.com/writing/04-zerosleep-1/
+- Pod 3 - **(With SD card) ** - _most people who have tried this gave gotten it working_
+  - Follow the steps [here](https://blopker.com/writing/04-zerosleep-1/) to get root
+  - Follow the [installation instructions](./INSTALLATION.md), starting from step 10 (skip step 11)
+  - It's important you run step 10 ASAP, or else your pod will auto update firmware and kick you out
+- Pod 3 - **(No SD card)** - FCC ID: 2AYXT61100001 
 - Pod 4
 
 
