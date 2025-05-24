@@ -3,10 +3,13 @@
 ## Compatability
 - Pod 1 - ❌ **NOT COMPATIBLE**
 - Pod 2 - ❌ **NOT COMPATIBLE**
-- Pod 3 - **(With SD card)** - ✅  _most people who have tried this gave gotten it working_
-  - Follow the steps [here](https://blopker.com/writing/04-zerosleep-1/) to get root
-  - Start from step 10 **(SKIP step 11)**
-  - It's important you run step 10 ASAP after you ssh in, or else your pod will auto update firmware and kick you out
+- Pod 3 - **(With SD card)** - ✅  _most people who have tried this have gotten it working_
+  - Option 1:
+    - Follow the steps [here](https://blopker.com/writing/04-zerosleep-1/) to get root
+    - Start from step 10 **(SKIP step 11)**
+    - It's important you run step 10 ASAP after you ssh in, or else your pod will auto update firmware and kick you out
+  - Option 2:
+    - Try [this script](https://github.com/Pixel-Meister/freesleep_script/blob/main/modify_eight_sleep.sh) to modify 8 sleeps SD card (I have not personally tested this) 
 - Pod 3 - **(No SD card)** - ✅ FCC ID: 2AYXT61100001 (The FCC ID is located in the back of the pod where you plug in the water tubes)
 - Pod 4 ✅
 - Pod 5 - ❓ **UNTESTED & UNKNOWN**
