@@ -1,6 +1,4 @@
-# Free Sleep: 8 Sleep Manager
-
-
+# Free Sleep - Jailbreak 8 Sleep Pod & Control Locally
 ## Follow us on Discord!
 https://discord.gg/JpArXnBgEj
 - Feature requests
@@ -18,14 +16,13 @@ Yes, I tested reversing it on my pod 3 by  [resetting the firmware](docs/pod_3_t
 Pod 3 **without** the SD card & Pod 4 are impossible to brick - _as long as you follow the directions_ 
 
 
-## Tested and confirmed compatible devices
-Check the back of your pod where you plug in the water tubes, 
-- Pod 3 - **(With SD card)** - _most people who have tried this gave gotten it working_
-  - Follow the steps [here](https://blopker.com/writing/04-zerosleep-1/) to get root
-  - Follow the [installation instructions](./INSTALLATION.md), starting from step 10 (skip step 11)
-  - It's important you run step 10 ASAP, or else your pod will auto update firmware and kick you out
-- Pod 3 - **(No SD card)** - FCC ID: 2AYXT61100001 
-- Pod 4
+## Compatability
+- Pod 1 - ❌ **NOT COMPATIBLE**
+- Pod 2 - ❌ **NOT COMPATIBLE**
+- Pod 3 - **(With SD card)** - ✅ 
+- Pod 3 - **(No SD card)** - ✅ FCC ID: 2AYXT61100001 (The FCC ID is located in the back of the pod where you plug in the water tubes)
+- Pod 4 ✅
+- Pod 5 - ❓ **UNTESTED & UNKNOWN**
 
 
 ## Features
