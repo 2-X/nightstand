@@ -6,8 +6,8 @@
 - Pod 3 - **(With SD card)** - ✅  _most people who have tried this have gotten it working_
   - Option 1:
     - Follow the steps [here](https://blopker.com/writing/04-zerosleep-1/) to get root
-    - Start from step 10 **(SKIP step 11)**
-    - It's important you run step 10 ASAP after you ssh in, or else your pod will auto update firmware and kick you out
+    - Start from step 11 **(SKIP step 12)**
+    - It's important you run step 11 ASAP after you ssh in, or else your pod will auto update firmware and kick you out
   - Option 2:
     - Try [this script](https://github.com/Pixel-Meister/freesleep_script/blob/main/modify_eight_sleep.sh) to modify 8 sleeps SD card (I have not personally tested this) 
 - Pod 3 - **(No SD card)** - ✅ FCC ID: 2AYXT61100001 (The FCC ID is located in the back of the pod where you plug in the water tubes)
@@ -30,7 +30,7 @@
     1. [Pod 4](docs/pod_4_teardown/3_reset_firmware.png)
 3. Set up the pod as a new pod in the app
 
-## Setup
+### 1. Reset firmware
 
 1. Reset the firmware for your device
     1. [Pod 3](docs/pod_3_teardown/6_firmware_reset.jpeg)
@@ -42,7 +42,7 @@
 
 ---
 
-### 1. Connect to device
+### 2. Connect to device
 
 1. Your pod should be unplugged at this point. It doesn't need a connection to the mattress cover OR power at this point
 1. Using dupont wires, connect your tag-connect cable to your FTDI FT232RL following the images in [docs/jtag/](docs/jtag/)
@@ -53,7 +53,7 @@
 
 ---
 
-### 2. Get the minicom session ready on your computer
+### 3. Get the minicom session ready on your computer
 - The baud rate is 921600
 - Run `ls /dev/tty*`, you should see your FT232RL listed under something like `tty.usbserial-B0010NHK`
 ```
@@ -66,7 +66,7 @@ minicom -b 921600 -o -D /dev/tty.usbserial-B0010NHK
 
 ---
 
-### 3. Plug the power into the pod  
+### 4. Plug the power into the pod  
 
 Get ready to interrupt the boot when you see `Hit any key to stop autoboot`. (I just hit CTRL + C)
 
@@ -79,7 +79,7 @@ If you did it correctly, you'll see this
 ---
 
 
-### 4.Modify the boot environment, this allows us to get root access
+### 5.Modify the boot environment, this allows us to get root access
 
 ```
 # VERIFY your current_slot = a, if not, go back and firmware reset your pod
@@ -95,7 +95,7 @@ run bootcmd
 ---
 
 
-### 5. Mount the file system
+### 6. Mount the file system
 
 ```
 # Mount /proc for process and system information
@@ -117,7 +117,7 @@ mount -o remount,rw /
 ---
 
 
-### 6. Update password for root & rewt
+### 7. Update password for root & rewt
 
 ```
 passwd root
@@ -126,7 +126,7 @@ passwd rewt
 ---
 
 
-### 7. Sync the file changes
+### 8. Sync the file changes
 
 ```
 sync
@@ -135,7 +135,7 @@ sync
 ---
 
 
-### 8. Reboot (DO NOT INTERRUPT BOOT THIS TIME)
+### 9. Reboot (DO NOT INTERRUPT BOOT THIS TIME)
 
 ```
 reboot -f
@@ -143,7 +143,7 @@ reboot -f
 
 ---
 
-### 9. Login as root with the password we set
+### 10. Login as root with the password we set
 On the pod 4, this screen will be slightly different, that's OK
 
 ![Login](docs/installation/3_login.png)
@@ -151,7 +151,7 @@ On the pod 4, this screen will be slightly different, that's OK
 ---
 
 
-### 10. Disable software updates
+### 11. Disable software updates
 
 You may see some failures saying these services were not loaded or do not exist, that's ok
 ```
@@ -164,7 +164,7 @@ systemctl mask swupdate-progress swupdate defibrillator eight-kernel telegraf ve
 
 ---
 
-### 11. Setup internet access
+### 12. Setup internet access
 
 ```
 # Replace WIFI_NAME and PASSWORD with your actual WiFi credentials
@@ -185,7 +185,7 @@ nmcli connection reload
 ---
 
 
-### 12. Install the free-sleep app, this will set up a systemctl service that auto runs on boot
+### 13. Install the free-sleep app, this will set up a systemctl service that auto runs on boot
 ```
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/throwaway31265/free-sleep/main/scripts/install.sh)"
 ```
@@ -193,7 +193,7 @@ nmcli connection reload
 ---
 
 
-### 13. Get your pod's IP address
+### 14. Get your pod's IP address
 
 ```
 # Yours will be different, that's okay
@@ -204,7 +204,7 @@ nmcli -g ip4.address device show wlan0
 ---
 
 
-### 14. With a device connected to the SAME Wi-Fi network you set up in step 11, navigate to your pod's IP address (port 3000)
+### 15. With a device connected to the SAME Wi-Fi network you set up in step 12, navigate to your pod's IP address (port 3000)
 
 SET YOUR TIME ZONE, OR ELSE SCHEDULING WILL NOT WORK! This can be done on the settings page of the web app. See screenshot below. The site should appear but it should be loading and dulled out. (Unless you have the pod plugged into the cover)
 
@@ -215,7 +215,7 @@ http://192.168.1.50:3000/
 ---
 
 
-### 15. Validation
+### 16. Validation
 
 #### Verify the site is still up
 1. Unplug the power from your device and plug it back in 
@@ -223,9 +223,9 @@ http://192.168.1.50:3000/
 3. If the site is still up, you should be good. NOTE - The website will not fully load until the Pod is connected to the mattress cover. Once it's plugged in to the cover the site should load and work correctly.
 
 #### Verify the controls work
-1. I would recommend setting up steps 16 and 17 below (block WAN traffic & setup SSH access for debugging & upgrading free-sleep)
+1. I would recommend setting up steps 17 and 18 below (block WAN traffic & setup SSH access for debugging & upgrading free-sleep)
 2. Disconnect the tag-connect cable and power from your pod
-3. Connect your pod to the cover as you normally would 4
+3. Connect your pod to the cover as you normally would 
 4. Using the free-sleep site, set a temperature. (I would suggest the highest temp on one side and the lowest temp on the other side)
 5. Physically verify the temps change (lay on the cover, use a thermometer, whatever)
 6. If the temps change, you're all set! 
@@ -255,7 +255,7 @@ I will eventually add a shell script to execute to upgrade free-sleep. Feel free
 
 ## These last steps are optional
 
-### 16. Add firewall rules to block access to the internet (optional, but recommended)
+### 17. Add firewall rules to block access to the internet (optional, but recommended)
 ```
 sh /home/dac/free-sleep/scripts/block_internet_access.sh
 
@@ -266,7 +266,7 @@ sh /home/dac/free-sleep/scripts/unblock_internet_access.sh
 ---
 
 
-### 17. Add an ssh config
+### 18. Add an ssh config
 This will ask for a public key, ssh access is on port 8822 (ex: `ssh root@<POD_IP> -p 8822') 
 ```
 sh /home/dac/free-sleep/scripts/setup_ssh.sh
