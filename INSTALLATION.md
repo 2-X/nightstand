@@ -12,7 +12,7 @@
     - Try [this script](https://github.com/Pixel-Meister/freesleep_script/blob/main/modify_eight_sleep.sh) to modify 8 sleeps SD card (I have not personally tested this) 
 - Pod 3 - **(No SD card)** - ✅ FCC ID: 2AYXT61100001 (The FCC ID is located in the back of the pod where you plug in the water tubes)
 - Pod 4 ✅
-- Pod 5 - ❓ **UNTESTED & UNKNOWN**
+- Pod 5 ✅
 
 
 ## Tools required
