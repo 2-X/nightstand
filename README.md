@@ -22,7 +22,7 @@ Pod 3 **without** the SD card & Pod 4 are impossible to brick - _as long as you 
 - Pod 3 - **(With SD card)** - ✅ 
 - Pod 3 - **(No SD card)** - ✅ FCC ID: 2AYXT61100001 (The FCC ID is located in the back of the pod where you plug in the water tubes)
 - Pod 4 ✅
-- Pod 5 - ❓ **UNTESTED & UNKNOWN**
+- Pod 5 ✅
 
 
 ## Features
