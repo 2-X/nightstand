@@ -69,8 +69,7 @@ DEPENDS ON:
 ## Limitations
 - Requires your device to be on the same Wi-Fi as the pod
 - No authentication is implemented
-- Does not have sleep statistics available (HRV, hear rate, REM time, snore time, etc.), this is a WIP
-- Pod 4 taps do not work
+- Pod 4 & 5 taps do not work
 
 --- 
 
