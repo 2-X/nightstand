@@ -40,6 +40,7 @@ from piezo_data import load_piezo_df, detect_presence_piezo, identify_baseline_p
 from cap_data import load_cap_df, create_cap_baseline_from_cap_df, save_baseline
 from resource_usage import get_memory_usage_unix, get_available_memory_mb
 from biometrics_helpers import validate_datetime_utc
+from service_health import update_health, is_biometrics_enabled
 
 
 def _parse_args() -> Union[Namespace, None]:
@@ -145,8 +146,16 @@ def calibrate_both_sides():
     )
 
 
+def update_health_both_sides(status: str, message: str):
+    update_health('calibrateLeft', status, message)
+    update_health('calibrateRight', status, message)
+
+
 if __name__ == "__main__":
     try:
+        if not is_biometrics_enabled():
+            logger.info('Not analyzing sleep, biometrics is disabled')
+
         logger.debug(f"START Free Memory: {get_available_memory_mb()} MB")
         logger.debug(f"START Memory Usage: {get_memory_usage_unix():.2f} MB")
         if get_available_memory_mb() < 400:
@@ -165,18 +174,33 @@ if __name__ == "__main__":
             )
 
         if args is None:
+            update_health_both_sides('started', '')
             calibrate_both_sides()
+            update_health_both_sides('healthy', '')
         else:
+            job_key = f"calibrate{args.side.capitalize()}"
+            update_health(job_key, 'started', '')
             calibrate_sensor_thresholds(
                 args.side,
                 args.start_time,
                 args.end_time,
                 FOLDER_PATH,
             )
+            update_health(job_key, 'healthy', '')
+
     except KeyboardInterrupt:
         logger.info('Keyboard interrupt signal received, exiting...')
-    except Exception as e:
-        logger.error(e)
+        if 'job_key' in locals():
+            update_health(job_key, 'failed', 'Interrupted')
+        else:
+            update_health_both_sides('failed', 'Interrupted')
+    except Exception as error:
+        logger.error(error)
         stack = traceback.format_exc()
         logger.error(stack)
         logger.error('Error calibrating sensors, exiting...')
+        if 'job_key' in locals():
+            update_health(job_key, 'failed', repr(error))
+        else:
+            update_health_both_sides('failed', repr(error))
+

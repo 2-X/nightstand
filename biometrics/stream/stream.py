@@ -38,7 +38,7 @@ logger = get_logger('free-sleep-stream')
 
 from stream_processor import StreamProcessor
 from load_raw_files import load_piezo_row
-
+from service_health import update_health
 
 # Global queue for processing decoded biometric data
 piezo_record_queue = queue.Queue()
@@ -121,7 +121,12 @@ class LatestRawFileHandler(FileSystemEventHandler):
 def process_biometrics():
     piezo_record = piezo_record_queue.get()
     stream_processor = StreamProcessor(piezo_record, debug=False)
+    ix = 0
     while True:
+        ix += 1
+        if ix == 60:
+            update_health('stream', 'healthy')
+            ix = 0
         try:
             piezo_record = piezo_record_queue.get(timeout=5)
 
@@ -134,12 +139,14 @@ def process_biometrics():
         except queue.Empty:
             # Just continue if the queue is empty, do not exit the loop
             logger.info("No new data, retrying...")
-        except Exception as e:
-            logger.error(e)
+        except Exception as error:
+            logger.error(error)
+            update_health('stream', 'failed', repr(error))
 
 
 def watch_directory(directory="/persistent"):
     logger.info('Steam processor starting...')
+    update_health('stream', 'started', '')
     """Monitors the directory for new RAW files and processes only the latest one."""
     handler = LatestRawFileHandler(directory)
     observer = Observer()
@@ -153,16 +160,18 @@ def watch_directory(directory="/persistent"):
     logger.debug('Steam processor set up successfully, running...')
     try:
         while True:
-            time.sleep(0.1)
+            time.sleep(1)
             handler.track_latest_file()  # Check if a newer file exists
             handler.follow_latest_file()  # Read new CBOR entries line-by-line
     except KeyboardInterrupt:
         observer.stop()
         piezo_record_queue.put(None)  # Send stop signal to processing thread
         processing_thread.join()
-    except Exception as e:
-        logger.error(e)
-        raise e
+    except Exception as error:
+        logger.error(error)
+        update_health('stream', 'failed', repr(error))
+        raise error
+
     observer.join()
 
 # Start watching and processing the latest .RAW file
