@@ -34,20 +34,20 @@ export default function FeaturesSection() {
         label="Biometrics"
       />
       <Typography color='text.secondary'>Biometrics to run on the pod</Typography>
-      <br />
-      <FormControlLabel
-        control={
-          <Switch
-            disabled={ isUpdating }
-            checked={ services.sentryLogging.enabled }
-            onChange={ (event) => updateServices({ sentryLogging: { enabled: event.target.checked } }) }
-          />
-        }
-        label="Enable Sentry error reporting"
-      />
-      <Typography color='text.secondary'>
-        Help improve stability by sending anonymous error reports to the free-sleep maintainers.
-      </Typography>
+      { /*<br />*/ }
+      { /*<FormControlLabel*/ }
+      { /*  control={*/ }
+      { /*    <Switch*/ }
+      { /*      disabled={ isUpdating }*/ }
+      { /*      checked={ services.sentryLogging.enabled }*/ }
+      { /*      onChange={ (event) => updateServices({ sentryLogging: { enabled: event.target.checked } }) }*/ }
+      { /*    />*/ }
+      { /*  }*/ }
+      { /*  label="Enable Sentry error reporting"*/ }
+      { /*/>*/ }
+      { /*<Typography color='text.secondary'>*/ }
+      { /*  Help improve stability by sending anonymous error reports to the free-sleep maintainers.*/ }
+      { /*</Typography>*/ }
     </Section>
   );
 }
