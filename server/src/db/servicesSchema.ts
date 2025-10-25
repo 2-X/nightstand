@@ -8,6 +8,8 @@ export const ServicesSchema = z.object({
   biometrics: z.object({
     enabled: z.boolean(),
     jobs: z.object({
+      analyzeSleepLeft: StatusInfoSchema,
+      analyzeSleepRight: StatusInfoSchema,
       installation: StatusInfoSchema,
       stream: StatusInfoSchema,
       calibrateLeft: StatusInfoSchema,

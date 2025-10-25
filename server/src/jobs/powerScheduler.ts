@@ -65,7 +65,7 @@ const scheduleAnalyzeSleep = (dayOfWeekIndex: number, offHour: number, offMinute
     }
     logJob('Executing daily sleep analyzer job', side, day, dayOfWeekIndex, time);
     // Subtract a fixed start time
-    executeAnalyzeSleep(side, moment().subtract(12, 'hours').toISOString(), moment().add(3, 'hours').toISOString());
+    executeAnalyzeSleep(side, moment().subtract(12, 'hours').toISOString(), moment().add(1, 'hours').toISOString());
   });
 };
 

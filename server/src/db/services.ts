@@ -24,7 +24,21 @@ const defaultData: Services = {
         name: 'Biometrics stream',
         message: '',
         status: 'not_started',
-        description: 'Consumes the RAW files as a stream and calculates biometrics',
+        description: 'Consumes the sensor data as a stream and calculates biometrics',
+        timestamp: '',
+      },
+      analyzeSleepLeft: {
+        name: 'Analyze sleep - left',
+        message: '',
+        status: 'not_started',
+        description: 'Analyzes sleep period',
+        timestamp: '',
+      },
+      analyzeSleepRight: {
+        name: 'Analyze sleep - right',
+        message: '',
+        status: 'not_started',
+        description: 'Analyzes sleep period',
         timestamp: '',
       },
       calibrateLeft: {
