@@ -6,6 +6,7 @@ const router = express.Router();
 
 import servicesDB from '../../db/services.js';
 import { ServicesSchema } from '../../db/servicesSchema.js';
+import { enableBiometrics } from '../../jobs/enableBiometrics.js';
 
 router.get('/services', async (req: Request, res: Response) => {
   await servicesDB.read();
@@ -27,6 +28,10 @@ router.post('/services', async (req: Request, res: Response) => {
   await servicesDB.read();
   _.merge(servicesDB.data, body);
   await servicesDB.write();
+
+  if (body?.biometrics?.enabled) {
+    enableBiometrics();
+  }
   res.status(200).json(servicesDB.data);
 });
 
