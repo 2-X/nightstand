@@ -53,6 +53,15 @@ export default function SettingsPage() {
         <DailyPriming settings={ settings } updateSettings={ updateSettings }/>
         <br/>
         <PrimeControl/>
+
+        <Box display="flex" gap={ 1 } sx={ { mt: 2 } }>
+          <InfoIcon sx={ { color: 'text.secondary' } }/>
+
+          <Typography color='text.secondary'>
+            Regular priming helps prevent air bubbles, ensures even cooling and heating.
+            Schedule priming during a time that you're not on the bed.
+          </Typography>
+        </Box>
       </Section>
       <FeaturesSection/>
       <Section title="Side settings">
@@ -61,7 +70,7 @@ export default function SettingsPage() {
         <SideSettings side="right" settings={ settings } updateSettings={ updateSettings }/>
         <Box display="flex" gap={ 1 } sx={ { mt: 1 } }>
 
-          <InfoIcon/>
+          <InfoIcon sx={ { color: 'text.secondary' } }/>
           <Typography color="text.secondary">
             Away mode:
             Disables schedules and temperature control for one side.

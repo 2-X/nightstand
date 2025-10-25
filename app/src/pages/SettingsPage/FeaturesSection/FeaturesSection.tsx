@@ -21,7 +21,6 @@ export default function FeaturesSection() {
   };
 
   if (isLoading || !services) return <CircularProgress />;
-
   return (
     <Section title='Features'>
       <FormControlLabel

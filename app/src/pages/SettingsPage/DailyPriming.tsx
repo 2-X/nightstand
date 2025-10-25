@@ -1,4 +1,4 @@
-import { Box, FormControlLabel, TextField, Typography } from '@mui/material';
+import { Box, FormControlLabel, TextField } from '@mui/material';
 
 import { Settings } from '@api/settingsSchema.ts';
 import { DeepPartial } from 'ts-essentials';
@@ -37,10 +37,6 @@ export default function DailyPriming({ settings, updateSettings }: PrimePodSched
           disabled={ isUpdating || settings?.primePodDaily?.enabled === false }
         />
       </Box>
-
-      <Typography color='text.secondary'>
-        Regular priming helps prevent air bubbles, ensures even cooling and heating.
-      </Typography>
     </>
 
   );

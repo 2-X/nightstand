@@ -35,6 +35,7 @@ export type ServerStatus = {
   rebootSchedule: StatusInfo;
   systemDate: StatusInfo;
   temperatureSchedule: StatusInfo;
+  biometricsInstallation?: StatusInfo;
   biometricsStream?: StatusInfo;
   biometricsCalibrationLeft?: StatusInfo;
   biometricsCalibrationRight?: StatusInfo;

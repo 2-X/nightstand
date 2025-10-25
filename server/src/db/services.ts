@@ -12,8 +12,14 @@ const defaultData: Services = {
   },
   biometrics: {
     enabled: false,
-    installScriptComplete: false,
     jobs: {
+      installation: {
+        name: 'Biometrics installation',
+        message: '',
+        status: 'not_started',
+        description: 'Whether or not biometrics was installed successfully',
+        timestamp: '',
+      },
       stream: {
         name: 'Biometrics stream',
         message: '',

@@ -25,6 +25,7 @@ export default function DailyReboot({ settings, updateSettings }: DailyRebootPro
       />
       <Typography color='text.secondary'>
         Automatically reboot the Pod once per day to keep it running smoothly.
+        Reboot time is scheduled 1 hour before the daily prime time.
       </Typography>
     </>
 

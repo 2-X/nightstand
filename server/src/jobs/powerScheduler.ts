@@ -8,6 +8,7 @@ import { TimeZone } from '../db/timeZones.js';
 import moment from 'moment-timezone';
 import serverStatus from '../serverStatus.js';
 import logger from '../logger.js';
+import servicesDB from '../db/services.js';
 
 
 export const schedulePowerOn = (settingsData: Settings, side: Side, day: DayOfWeek, power: DailySchedule['power']) => {
@@ -57,6 +58,11 @@ const scheduleAnalyzeSleep = (dayOfWeekIndex: number, offHour: number, offMinute
   const time = `${String(offHour).padStart(2, '0')}:${String(adjustedOffMinute).padStart(2, '0')}`;
   logJob('Scheduling daily sleep analyzer job', side, day, dayOfWeekIndex, time);
   schedule.scheduleJob(`daily-analyze-sleep-${time}-${side}`, dailyRule, async () => {
+    await servicesDB.read();
+    if (!servicesDB.data.biometrics.enabled) {
+      logger.debug('Not executing sleep analyzer job, biometrics is disabled');
+      return;
+    }
     logJob('Executing daily sleep analyzer job', side, day, dayOfWeekIndex, time);
     // Subtract a fixed start time
     executeAnalyzeSleep(side, moment().subtract(12, 'hours').toISOString(), moment().add(3, 'hours').toISOString());

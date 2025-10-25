@@ -9,6 +9,7 @@ import { Side } from '../db/schedulesSchema.js';
 import moment from 'moment-timezone';
 import settingsDB from '../db/settings.js';
 import serverStatus from '../serverStatus.js';
+import servicesDB from '../db/services.js';
 
 
 const scheduleRebootJob = (onHour: number, onMinute: number, timeZone: TimeZone) => {
@@ -59,6 +60,11 @@ const scheduleCalibrationJob = (onHour: number, onMinute: number, timeZone: Time
   const time = `${String(onHour).padStart(2,'0')}:${String(onMinute).padStart(2,'0')}`;
   logger.debug(`Scheduling daily calibration job at ${time} for ${side}`);
   schedule.scheduleJob(`daily-calibration-${time}-${side}`, dailyRule, async () => {
+    await servicesDB.read();
+    if (!servicesDB.data.biometrics.enabled) {
+      logger.debug('Not executing calibration job, biometrics is disabled');
+      return;
+    }
     logger.info(`Executing scheduled calibration job for ${side}`);
     executeCalibrateSensors(side, moment().subtract(6, 'hours').toISOString(), moment().toISOString());
   });
@@ -76,7 +82,7 @@ export const schedulePrimingRebootAndCalibration = (settingsData: Settings) => {
   dailyRule.minute = onMinute;
   dailyRule.tz = timeZone;
 
-  scheduleRebootJob(onHour - 2, onMinute, timeZone);
+  scheduleRebootJob(onHour - 1, onMinute, timeZone);
   scheduleCalibrationJob(onHour, 0, timeZone, 'left');
   scheduleCalibrationJob(onHour, 30, timeZone, 'right');
 

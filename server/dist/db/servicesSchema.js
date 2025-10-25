@@ -4,8 +4,8 @@ import { StatusInfoSchema } from '../routes/serverStatus/serverStatusSchema.js';
 export const ServicesSchema = z.object({
     biometrics: z.object({
         enabled: z.boolean(),
-        installScriptComplete: z.boolean(),
         jobs: z.object({
+            installation: StatusInfoSchema,
             stream: StatusInfoSchema,
             calibrateLeft: StatusInfoSchema,
             calibrateRight: StatusInfoSchema,
