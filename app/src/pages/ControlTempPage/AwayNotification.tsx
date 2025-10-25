@@ -1,6 +1,7 @@
 import Alert from '@mui/material/Alert';
 import { Settings } from '@api/settingsSchema.ts';
 import { useAppStore } from '@state/appStore.tsx';
+import { Box } from '@mui/material';
 
 type AwayNotificationProps = {
   settings?: Settings;
@@ -20,14 +21,16 @@ export default function AwayNotification({ settings }: AwayNotificationProps) {
   }
   if (settings?.[otherSide]?.awayMode) {
     return (
-      <Alert severity="info">
-        Other side is in away mode, temperature settings will apply to both sides
-      </Alert>
+      <Box>
+        <Alert severity="info">
+          Other side is in away mode, temperature settings will apply to both sides
+        </Alert>
+      </Box>
     );
   }
   if (settings?.[side]?.awayMode) {
     return (
-      <Alert severity="info" sx={ { transform: 'translateY(-100px)' } }>
+      <Alert severity="info">
         This side is in away mode, temperature control unavailable
       </Alert>
     );

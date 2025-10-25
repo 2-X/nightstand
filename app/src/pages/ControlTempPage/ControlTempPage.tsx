@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
+import { Box, CircularProgress } from '@mui/material';
 
 import AlarmDismissal from './AlarmDismissal.tsx';
 import AwayNotification from './AwayNotification.tsx';
@@ -14,6 +14,7 @@ import { useControlTempStore } from './controlTempStore.tsx';
 import { useDeviceStatus } from '@api/deviceStatus';
 import { useSettings } from '@api/settings.ts';
 import { useTheme } from '@mui/material/styles';
+import PrimingNotification from './PrimingNotification.tsx';
 
 
 export default function ControlTempPage() {
@@ -44,7 +45,7 @@ export default function ControlTempPage() {
         },
       } }
     >
-      <SideControl title={ 'Temperature' } />
+      <SideControl title={ 'Temperature' }/>
       <Slider
         isOn={ isOn }
         currentTargetTemp={ sideStatus?.targetTemperatureF || 55 }
@@ -61,13 +62,19 @@ export default function ControlTempPage() {
           Try again
         </Button>
       ) : (
-        <PowerButton isOn={ sideStatus?.isOn || false } refetch={ refetch } />
+        <PowerButton isOn={ sideStatus?.isOn || false } refetch={ refetch }/>
       ) }
-
-      <AwayNotification settings={ settings } />
-      <WaterNotification deviceStatus={ deviceStatus } />
-      <AlarmDismissal deviceStatus={ deviceStatus } refetch={ refetch } />
-      { isUpdating && <CircularProgress /> }
+      <Box sx={ { display: 'flex', flexDirection: 'column', gap: 1 } }>
+        {
+          deviceStatus?.isPriming && (
+            <PrimingNotification/>
+          )
+        }
+        <AwayNotification settings={ settings }/>
+        <WaterNotification deviceStatus={ deviceStatus }/>
+      </Box>
+      <AlarmDismissal deviceStatus={ deviceStatus } refetch={ refetch }/>
+      { isUpdating && <CircularProgress/> }
     </PageContainer>
   );
 }
