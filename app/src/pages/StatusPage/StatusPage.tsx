@@ -75,6 +75,7 @@ function StatusCard({
 }: {
   statusInfo: StatusInfo;
 }) {
+  const timestamp = statusInfo.timestamp && moment(statusInfo.timestamp).format('YYYY-MM-DD HH:mm:ss z');
   return (
     <Grid item xs={ 12 } sm={ 6 } md={ 4 }>
 
@@ -98,6 +99,21 @@ function StatusCard({
           }
         />
         <CardContent>
+          {
+            timestamp && (
+              <Typography
+                variant="body2"
+                sx={ {
+                  color: (t) => t.palette.text.secondary,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  minHeight: 24,
+                } }
+              >
+                { timestamp }
+              </Typography>
+            )
+          }
           <Typography
             variant="body2"
             sx={ {
@@ -135,7 +151,7 @@ export default function StatusPage() {
   const { data, isLoading, dataUpdatedAt } = useServerStatus();
   if (isLoading || !data) return null;
   const updatedAt = moment(dataUpdatedAt);
-  const formatted = updatedAt.format('YYYY-MM-DD HH:mm:ss z'); // e.g. "2025-10-22 14:05:12 PDT"
+  const formatted = updatedAt.format('YYYY-MM-DD HH:mm:ss z');
 
   return (
     <PageContainer
