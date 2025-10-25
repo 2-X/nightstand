@@ -106,6 +106,7 @@ async function startServer() {
     logger.debug(`Server running on http://localhost:${port}`);
   });
   serverStatus.status.express.status = 'healthy';
+  serverStatus.status.logger.status = 'healthy';
 
   // Initialize Franken once before listening
   if (!config.remoteDevMode) {
