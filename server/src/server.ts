@@ -88,10 +88,10 @@ async function gracefulShutdown(signal: string) {
 // Initialize Franken on server startup
 async function initFranken() {
   logger.info('Initializing Franken on startup...');
-  serverStatus.franken.status = 'started';
+  serverStatus.status.franken.status = 'started';
   // Force creation of the Franken and FrankenServer so it’s ready before we listen
   await getFranken();
-  serverStatus.franken.status = 'healthy';
+  serverStatus.status.franken.status = 'healthy';
   logger.info('Franken has been initialized successfully.');
 }
 
@@ -105,15 +105,15 @@ async function startServer() {
   server = app.listen(port, () => {
     logger.debug(`Server running on http://localhost:${port}`);
   });
-  serverStatus.express.status = 'healthy';
+  serverStatus.status.express.status = 'healthy';
 
   // Initialize Franken once before listening
   if (!config.remoteDevMode) {
     initFranken()
       .catch(error => {
-        serverStatus.franken.status = 'failed';
+        serverStatus.status.franken.status = 'failed';
         const message = error instanceof Error ? error.message : String(error);
-        serverStatus.franken.message = message;
+        serverStatus.status.franken.message = message;
 
         logger.error(error);
       });

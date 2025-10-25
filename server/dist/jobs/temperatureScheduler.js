@@ -20,13 +20,13 @@ const scheduleAdjustment = (timeZone, side, day, time, temperature) => {
                     targetTemperatureF: temperature,
                 }
             });
-            serverStatus.temperatureSchedule.status = 'healthy';
-            serverStatus.temperatureSchedule.message = '';
+            serverStatus.status.temperatureSchedule.status = 'healthy';
+            serverStatus.status.temperatureSchedule.message = '';
         }
         catch (error) {
-            serverStatus.temperatureSchedule.status = 'failed';
+            serverStatus.status.temperatureSchedule.status = 'failed';
             const message = error instanceof Error ? error.message : String(error);
-            serverStatus.temperatureSchedule.message = message;
+            serverStatus.status.temperatureSchedule.message = message;
             logger.error(error);
         }
     });

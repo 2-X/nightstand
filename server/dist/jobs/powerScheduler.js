@@ -30,13 +30,13 @@ export const schedulePowerOn = (settingsData, side, day, power) => {
                     targetTemperatureF: power.onTemperature
                 }
             });
-            serverStatus.powerSchedule.status = 'healthy';
-            serverStatus.powerSchedule.message = '';
+            serverStatus.status.powerSchedule.status = 'healthy';
+            serverStatus.status.powerSchedule.message = '';
         }
         catch (error) {
-            serverStatus.powerSchedule.status = 'failed';
+            serverStatus.status.powerSchedule.status = 'failed';
             const message = error instanceof Error ? error.message : String(error);
-            serverStatus.powerSchedule.message = message;
+            serverStatus.status.powerSchedule.message = message;
             logger.error(error);
         }
     });
@@ -81,13 +81,13 @@ export const schedulePowerOffAndSleepAnalysis = (settingsData, side, day, power)
                     isOn: false,
                 }
             });
-            serverStatus.powerSchedule.status = 'healthy';
-            serverStatus.powerSchedule.message = '';
+            serverStatus.status.powerSchedule.status = 'healthy';
+            serverStatus.status.powerSchedule.message = '';
         }
         catch (error) {
-            serverStatus.powerSchedule.status = 'failed';
+            serverStatus.status.powerSchedule.status = 'failed';
             const message = error instanceof Error ? error.message : String(error);
-            serverStatus.powerSchedule.message = message;
+            serverStatus.status.powerSchedule.message = message;
             logger.error(error);
         }
     });

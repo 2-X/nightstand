@@ -32,6 +32,11 @@ echo "$NEW_TIME_SYNC_CONFIG" > "/etc/systemd/timesyncd.conf"
 # Restart timesyncd to apply changes
 systemctl restart systemd-timesyncd
 
+
+# Allow localhost (loopback) traffic so local apps can talk to each other
+iptables -A INPUT  -i lo -j ACCEPT
+iptables -A OUTPUT -o lo -j ACCEPT
+
 # Block everything else
 iptables -A INPUT -j DROP
 iptables -A OUTPUT -j DROP

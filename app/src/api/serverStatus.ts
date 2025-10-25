@@ -13,5 +13,3 @@ export const useServerStatus = () => {
     refetchInterval: 5_000,
   });
 };
-
-

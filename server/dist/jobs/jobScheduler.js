@@ -13,11 +13,11 @@ import { scheduleAlarm } from './alarmScheduler.js';
 import { isSystemDateValid } from './isSystemDateValid.js';
 async function setupJobs() {
     try {
-        if (serverStatus.jobs.status !== 'not_started') {
+        if (serverStatus.status.jobs.status !== 'not_started') {
             logger.debug('Job setup already running, skipping duplicate execution.');
             return;
         }
-        serverStatus.jobs.status = 'started';
+        serverStatus.status.jobs.status = 'started';
         // Clear existing jobs
         logger.info('Canceling old jobs...');
         Object.keys(schedule.scheduledJobs).forEach((jobName) => {
@@ -40,47 +40,47 @@ async function setupJobs() {
         });
         schedulePrimingRebootAndCalibration(settingsData);
         logger.info('Done scheduling jobs!');
-        serverStatus.alarmSchedule.status = 'healthy';
-        serverStatus.jobs.status = 'healthy';
-        serverStatus.primeSchedule.status = 'healthy';
-        serverStatus.powerSchedule.status = 'healthy';
-        serverStatus.rebootSchedule.status = 'healthy';
-        serverStatus.temperatureSchedule.status = 'healthy';
+        serverStatus.status.alarmSchedule.status = 'healthy';
+        serverStatus.status.jobs.status = 'healthy';
+        serverStatus.status.primeSchedule.status = 'healthy';
+        serverStatus.status.powerSchedule.status = 'healthy';
+        serverStatus.status.rebootSchedule.status = 'healthy';
+        serverStatus.status.temperatureSchedule.status = 'healthy';
     }
     catch (error) {
-        serverStatus.jobs.status = 'failed';
+        serverStatus.status.jobs.status = 'failed';
         const message = error instanceof Error ? error.message : String(error);
         logger.error(error);
-        serverStatus.jobs.message = message;
+        serverStatus.status.jobs.message = message;
     }
 }
 let RETRY_COUNT = 0;
 function waitForValidDateAndSetupJobs() {
-    serverStatus.systemDate.status = 'started';
+    serverStatus.status.systemDate.status = 'started';
     if (isSystemDateValid()) {
-        serverStatus.systemDate.status = 'healthy';
-        serverStatus.systemDate.message = '';
+        serverStatus.status.systemDate.status = 'healthy';
+        serverStatus.status.systemDate.message = '';
         logger.info('System date is valid. Setting up jobs...');
         void setupJobs();
     }
     else if (RETRY_COUNT < 20) {
-        serverStatus.systemDate.status = 'retrying';
+        serverStatus.status.systemDate.status = 'retrying';
         const message = `System date is invalid (year 2010). Retrying in 10 seconds... (Attempt #${RETRY_COUNT}})`;
-        serverStatus.systemDate.message = message;
+        serverStatus.status.systemDate.message = message;
         RETRY_COUNT++;
         logger.debug(message);
         setTimeout(waitForValidDateAndSetupJobs, 5_000);
     }
     else {
         const message = `System date is invalid! No jobs can be scheduled! ${new Date().toISOString()} `;
-        serverStatus.systemDate.message = message;
+        serverStatus.status.systemDate.message = message;
         logger.warn(message);
     }
 }
 // Monitor the JSON file and refresh jobs on change
 chokidar.watch(config.lowDbFolder).on('change', () => {
     logger.info('Detected DB change, reloading...');
-    if (serverStatus.systemDate.status === 'healthy') {
+    if (serverStatus.status.systemDate.status === 'healthy') {
         void setupJobs();
     }
     else {

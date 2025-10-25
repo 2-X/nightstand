@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import winston from 'winston';
 import moment from 'moment';
-import serverStatus from './serverStatus.js';
+// import serverStatus from './serverStatus.js';
 const logDir = '/persistent/free-sleep-data/logs';
 const logFile = path.join(logDir, 'free-sleep.log');
 // Try to create directory, or fall back to console only
@@ -17,7 +17,7 @@ try {
         maxFiles: 1,
         tailable: true,
     });
-    serverStatus.logger.status = 'healthy';
+    // serverStatus.status.logger.status = 'healthy';
 }
 catch (error) {
     const errorMessage = error instanceof Error
@@ -27,8 +27,8 @@ catch (error) {
             : 'Unknown error';
     const message = `Logger cannot write to ${logDir}, file logging disabled: ${errorMessage}`;
     console.warn(message);
-    serverStatus.logger.status = 'failed';
-    serverStatus.logger.message = message;
+    // serverStatus.status.logger.status = 'failed';
+    // serverStatus.status.logger.message = message;
 }
 const transports = [
     new winston.transports.Console({

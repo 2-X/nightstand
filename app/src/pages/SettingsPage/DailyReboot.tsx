@@ -1,5 +1,4 @@
-import { Box, FormControlLabel } from '@mui/material';
-import Switch from '@mui/material/Switch';
+import { FormControlLabel, Switch, Typography } from '@mui/material';
 import { DeepPartial } from 'ts-essentials';
 
 import { Settings } from '@api/settingsSchema.ts';
@@ -13,7 +12,7 @@ type DailyRebootProps = {
 export default function DailyReboot({ settings, updateSettings }: DailyRebootProps) {
   const { isUpdating } = useAppStore();
   return (
-    <Box sx={ { mt: 2, display: 'flex', mb: 2, alignItems: 'center', gap: 2 } }>
+    <>
       <FormControlLabel
         control={
           <Switch
@@ -24,6 +23,10 @@ export default function DailyReboot({ settings, updateSettings }: DailyRebootPro
         }
         label="Reboot once a day"
       />
-    </Box>
+      <Typography color='text.secondary'>
+        Automatically reboot the Pod once per day to keep it running smoothly.
+      </Typography>
+    </>
+
   );
 }

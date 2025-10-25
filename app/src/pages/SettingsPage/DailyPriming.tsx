@@ -1,5 +1,4 @@
-import { Box, FormControlLabel } from '@mui/material';
-import { TextField } from '@mui/material';
+import { Box, FormControlLabel, TextField, Typography } from '@mui/material';
 
 import { Settings } from '@api/settingsSchema.ts';
 import { DeepPartial } from 'ts-essentials';
@@ -16,25 +15,33 @@ export default function DailyPriming({ settings, updateSettings }: PrimePodSched
   const { isUpdating } = useAppStore();
 
   return (
-    <Box sx={ { mt: 2, display: 'flex', mb: 2, alignItems: 'center', gap: 2 } }>
-      <FormControlLabel
-        control={
-          <Switch
-            disabled={ isUpdating }
-            checked={ settings?.primePodDaily?.enabled || false }
-            onChange={ (event) => updateSettings({ primePodDaily: { enabled: event.target.checked } }) }
-          />
-        }
-        label="Prime daily?"
-      />
-      <TextField
-        label="Prime time"
-        type="time"
-        value={ settings?.primePodDaily?.time || '12:00' }
-        onChange={ (e) => updateSettings({ primePodDaily: { time: e.target.value } }) }
-        disabled={ isUpdating || settings?.primePodDaily?.enabled === false }
-        sx={ { mt: 2 } }
-      />
-    </Box>
+    <>
+      <Box sx={ { display: 'flex', alignItems: 'center', gap: 2, mb: 1 } }>
+        <FormControlLabel
+          control={
+            <Switch
+              disabled={ isUpdating }
+              checked={ settings?.primePodDaily?.enabled || false }
+              onChange={ (event) => updateSettings({ primePodDaily: { enabled: event.target.checked } }) }
+            />
+          }
+          label="Prime daily?"
+        />
+        <TextField
+          label="Prime time"
+          type="time"
+          size='medium'
+          variant='standard'
+          value={ settings?.primePodDaily?.time || '12:00' }
+          onChange={ (e) => updateSettings({ primePodDaily: { time: e.target.value } }) }
+          disabled={ isUpdating || settings?.primePodDaily?.enabled === false }
+        />
+      </Box>
+
+      <Typography color='text.secondary'>
+        Regular priming helps prevent air bubbles, ensures even cooling and heating.
+      </Typography>
+    </>
+
   );
 }

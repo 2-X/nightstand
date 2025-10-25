@@ -1,91 +1,86 @@
 import { PrismaClient } from '@prisma/client';
-import { StatusInfo, ServerStatus as ServerStatusType } from './routes/serverStatus/serverStatusSchema.js';
+import { ServerStatus as ServerStatusType } from './routes/serverStatus/serverStatusSchema.js';
 import { isSystemDateValid } from './jobs/isSystemDateValid.js';
+import servicesDB from './db/services.js';
 
 
 const prisma = new PrismaClient();
+await servicesDB.read();
 
 class ServerStatus {
   // eslint-disable-next-line no-use-before-define
   private static instance: ServerStatus;
-  public alarmSchedule: StatusInfo;
-  public database: StatusInfo;
-  public express: StatusInfo;
-  public franken: StatusInfo;
-  public jobs: StatusInfo;
-  public logger: StatusInfo;
-  public powerSchedule: StatusInfo;
-  public primeSchedule: StatusInfo;
-  public rebootSchedule: StatusInfo;
-  public systemDate: StatusInfo;
-  public temperatureSchedule: StatusInfo;
+
+  public status: ServerStatusType;
 
   private constructor() {
-    this.alarmSchedule = {
-      name: 'Alarm schedule',
-      status: 'not_started',
-      description: '',
-      message: '',
-    };
-    this.database = {
-      name: 'Database',
-      status: 'not_started',
-      description: 'Connection to SQLite DB',
-      message: '',
-    };
-    this.express = {
-      name: 'Express',
-      status: 'not_started',
-      description: 'The back-end server',
-      message: ''
-    };
-    this.franken = {
-      name: 'Franken sock',
-      status: 'not_started',
-      description: 'Socket service for controlling the hardware',
-      message: '',
-    };
-    this.jobs = {
-      name: 'Job scheduler',
-      status: 'not_started',
-      description: 'Scheduling service for temperature changes, alarms, and maintenance',
-      message: '',
-    };
-    this.logger = {
-      name: 'Logger',
-      status: 'not_started',
-      description: 'Logging service',
-      message: '',
-    };
-    this.powerSchedule = {
-      name: 'Power schedule',
-      status: 'not_started',
-      description: 'Power on/off schedule',
-      message: '',
-    };
-    this.primeSchedule = {
-      name: 'Prime schedule',
-      status: 'not_started',
-      description: 'Daily prime job',
-      message: '',
-    };
-    this.rebootSchedule = {
-      name: 'Reboot schedule',
-      status: 'not_started',
-      description: 'Daily system reboots',
-      message: '',
-    };
-    this.systemDate = {
-      name: 'System date',
-      status: 'not_started',
-      description: 'Whether or not the system date is correct. Scheduling jobs depend on this.',
-      message: ''
-    };
-    this.temperatureSchedule = {
-      name: 'Temperature schedule',
-      status: 'not_started',
-      description: 'Temperature adjustment schedule',
-      message: '',
+    this.status = {
+      alarmSchedule: {
+        name: 'Alarm schedule',
+        status: 'not_started',
+        description: '',
+        message: '',
+      },
+      database: {
+        name: 'Database',
+        status: 'not_started',
+        description: 'Connection to SQLite DB',
+        message: '',
+      },
+      express: {
+        name: 'Express',
+        status: 'not_started',
+        description: 'The back-end server',
+        message: '',
+      },
+      franken: {
+        name: 'Franken sock',
+        status: 'not_started',
+        description: 'Socket service for controlling the hardware',
+        message: '',
+      },
+      jobs: {
+        name: 'Job scheduler',
+        status: 'not_started',
+        description: 'Scheduling service for temperature changes, alarms, and maintenance',
+        message: '',
+      },
+      logger: {
+        name: 'Logger',
+        status: 'not_started',
+        description: 'Logging service',
+        message: '',
+      },
+      powerSchedule: {
+        name: 'Power schedule',
+        status: 'not_started',
+        description: 'Power on/off schedule',
+        message: '',
+      },
+      primeSchedule: {
+        name: 'Prime schedule',
+        status: 'not_started',
+        description: 'Daily prime job',
+        message: '',
+      },
+      rebootSchedule: {
+        name: 'Reboot schedule',
+        status: 'not_started',
+        description: 'Daily system reboots',
+        message: '',
+      },
+      systemDate: {
+        name: 'System date',
+        status: 'not_started',
+        description: 'Whether or not the system date is correct. Scheduling jobs depend on this.',
+        message: '',
+      },
+      temperatureSchedule: {
+        name: 'Temperature schedule',
+        status: 'not_started',
+        description: 'Temperature adjustment schedule',
+        message: '',
+      },
     };
   }
 
@@ -99,42 +94,45 @@ class ServerStatus {
   async updateDB() {
     try {
       await prisma.$queryRaw`SELECT 1`;
-      this.database.status = 'healthy';
-      this.database.message = '';
+      this.status.database.status = 'healthy';
+      this.status.database.message = '';
     } catch (error) {
-      this.database.status = 'failed';
+      this.status.database.status = 'failed';
       const message = error instanceof Error ? error.message : String(error);
-      this.database.message = message;
+      this.status.database.message = message;
     }
   }
 
   updateSystemDate() {
     const isValid = isSystemDateValid();
     if (isValid) {
-      this.systemDate.status = 'healthy';
-      this.systemDate.message = '';
+      this.status.systemDate.status = 'healthy';
+      this.status.systemDate.message = '';
     } else {
-      this.systemDate.status = 'failed';
-      this.systemDate.message = `Invalid system date: ${new Date().toISOString()}`;
+      this.status.systemDate.status = 'failed';
+      this.status.systemDate.message = `Invalid system date: ${new Date().toISOString()}`;
+    }
+  }
+
+  async updateServices() {
+    await servicesDB.read();
+    if (servicesDB.data.biometrics.enabled) {
+      this.status.biometricsCalibrationLeft = servicesDB.data.biometrics.jobs.calibrateLeft;
+      this.status.biometricsCalibrationRight = servicesDB.data.biometrics.jobs.calibrateRight;
+      this.status.biometricsStream = servicesDB.data.biometrics.jobs.stream;
+    } else {
+      // Delete keys from server status
+      delete this.status.biometricsCalibrationLeft;
+      delete this.status.biometricsCalibrationRight;
+      delete this.status.biometricsStream;
     }
   }
 
   async toJSON(): Promise<ServerStatusType> {
     await this.updateDB();
+    await this.updateServices();
     this.updateSystemDate();
-    return {
-      alarmSchedule: this.alarmSchedule,
-      database: this.database,
-      express: this.express,
-      franken: this.franken,
-      jobs: this.jobs,
-      logger: this.logger,
-      powerSchedule: this.powerSchedule,
-      primeSchedule: this.primeSchedule,
-      rebootSchedule: this.rebootSchedule,
-      systemDate: this.systemDate,
-      temperatureSchedule: this.temperatureSchedule,
-    };
+    return this.status;
   }
 }
 

@@ -32,13 +32,13 @@ const scheduleRebootJob = (onHour, onMinute, timeZone) => {
                 }
                 logger.debug(`Stdout: ${stdout}`);
             });
-            serverStatus.alarmSchedule.status = 'healthy';
-            serverStatus.alarmSchedule.message = '';
+            serverStatus.status.alarmSchedule.status = 'healthy';
+            serverStatus.status.alarmSchedule.message = '';
         }
         catch (error) {
-            serverStatus.alarmSchedule.status = 'failed';
+            serverStatus.status.alarmSchedule.status = 'failed';
             const message = error instanceof Error ? error.message : String(error);
-            serverStatus.alarmSchedule.message = message;
+            serverStatus.status.alarmSchedule.message = message;
             logger.error(error);
         }
     });
@@ -75,13 +75,13 @@ export const schedulePrimingRebootAndCalibration = (settingsData) => {
         try {
             logger.info(`Executing scheduled prime job`);
             await updateDeviceStatus({ isPriming: true });
-            serverStatus.primeSchedule.status = 'healthy';
-            serverStatus.primeSchedule.message = '';
+            serverStatus.status.primeSchedule.status = 'healthy';
+            serverStatus.status.primeSchedule.message = '';
         }
         catch (error) {
-            serverStatus.primeSchedule.status = 'failed';
+            serverStatus.status.primeSchedule.status = 'failed';
             const message = error instanceof Error ? error.message : String(error);
-            serverStatus.primeSchedule.message = message;
+            serverStatus.status.primeSchedule.message = message;
             logger.error(error);
         }
     });

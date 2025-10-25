@@ -39,8 +39,8 @@ export default function LedBrightnessSlider() {
   };
   return (
 
-    <Box sx={ { display: 'flex', flexDirection: 'column', gap: 1 } }>
-      <Typography sx={ { mb: -1, textAlign: 'center' } }>
+    <Box sx={ { display: 'flex', flexDirection: 'column', gap: 1, width: '90%' } }>
+      <Typography sx={ { } }>
         LED Brightness
       </Typography>
       <Slider
@@ -59,7 +59,7 @@ export default function LedBrightnessSlider() {
           { value: 100, label: '100%' },
         ] }
         disabled={ isUpdating }
-        sx={ { width: '100%' } }
+        sx={ { width: '100%', ml: 2 } }
       />
     </Box>
   );

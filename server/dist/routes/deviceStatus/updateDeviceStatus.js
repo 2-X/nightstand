@@ -66,7 +66,7 @@ const updateSettings = async (settings) => {
     await executeFunction('SET_SETTINGS', hexString);
 };
 export const updateDeviceStatus = async (deviceStatus) => {
-    logger.info(`Updating deviceStatus...`);
+    logger.info(`Updating device status..`);
     try {
         if (deviceStatus.isPriming)
             await executeFunction('PRIME');

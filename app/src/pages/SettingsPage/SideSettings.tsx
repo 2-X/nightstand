@@ -33,7 +33,7 @@ export default function SideSettings({ side, settings, updateSettings }: AwayMod
 
   return (
     <Box sx={ { display: 'flex', flexDirection: 'column', alignItems: 'center' } }>
-      <Typography variant="h5">{ title } Side</Typography>
+      <Typography variant="h6">{ title } Side</Typography>
       <TextField
         label="Side Name"
         placeholder="Enter side name"

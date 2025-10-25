@@ -71,12 +71,12 @@ export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek
         },
         dailySchedule.alarm.duration * 1_000
       );
-      serverStatus.alarmSchedule.status = 'healthy';
-      serverStatus.alarmSchedule.message = '';
+      serverStatus.status.alarmSchedule.status = 'healthy';
+      serverStatus.status.alarmSchedule.message = '';
     } catch (error: unknown) {
-      serverStatus.alarmSchedule.status = 'failed';
+      serverStatus.status.alarmSchedule.status = 'failed';
       const message = error instanceof Error ? error.message : String(error);
-      serverStatus.alarmSchedule.message = message;
+      serverStatus.status.alarmSchedule.message = message;
       logger.error(error);
     }
   });

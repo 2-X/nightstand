@@ -91,10 +91,10 @@ sudo -u "$USERNAME" bash -c "cd '$SERVER_DIR' && /home/$USERNAME/.volta/bin/npm 
 
 # Stop the free-sleep-stream service if it was running
 # This is needed to close out the lock files for the SQLite file
-stream_enabled="false"
+biometrics_enabled="false"
 if systemctl is-active --quiet free-sleep-stream && systemctl list-unit-files | grep -q "^free-sleep-stream.service"; then
-  stream_enabled="true"
-  echo "Stopping free-sleep-stream service..."
+  biometrics_enabled="true"
+  echo "Stopping biometrics service..."
   systemctl stop free-sleep-stream
   sleep 5
 fi
@@ -127,7 +127,7 @@ fi
 
 
 # Restart free-sleep-stream if it was running before
-if [ "$stream_enabled" = "true" ]; then
+if [ "$biometrics_enabled" = "true" ]; then
   echo "Restarting free-sleep-stream service..."
   systemctl restart free-sleep-stream
 fi

@@ -1,18 +1,27 @@
 // WARNING! - Any changes here MUST be the same between app/src/api & server/src/db/
-export type Status =
-  'failed' |
-  'healthy' |
-  'not_started' |
-  'restarting' |
-  'retrying' |
-  'started';
+import { z } from 'zod';
 
-export type StatusInfo = {
-  name: string;
-  status: Status;
-  description: string;
-  message: string;
-}
+
+const StatusSchema = z.enum([
+  'failed',
+  'healthy',
+  'not_started',
+  'restarting',
+  'retrying',
+  'started',
+]);
+
+export type Status = z.infer<typeof StatusSchema>;
+
+export const StatusInfoSchema = z.object({
+  name: z.string(),
+  status: StatusSchema,
+  description: z.string(),
+  message: z.string(),
+  timestamp: z.string().optional(),
+});
+
+export type StatusInfo = z.infer<typeof StatusInfoSchema>;
 
 export type ServerStatus = {
   alarmSchedule: StatusInfo;
@@ -26,4 +35,7 @@ export type ServerStatus = {
   rebootSchedule: StatusInfo;
   systemDate: StatusInfo;
   temperatureSchedule: StatusInfo;
+  biometricsStream?: StatusInfo;
+  biometricsCalibrationLeft?: StatusInfo;
+  biometricsCalibrationRight?: StatusInfo;
 };

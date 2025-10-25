@@ -72,7 +72,7 @@ const updateSettings = async (settings: Partial<DeviceStatus['settings']>) => {
 };
 
 export const updateDeviceStatus = async (deviceStatus: DeepPartial<DeviceStatus>) => {
-  logger.info(`Updating deviceStatus...`);
+  logger.info(`Updating device status..`);
 
   try {
     if (deviceStatus.isPriming) await executeFunction('PRIME');

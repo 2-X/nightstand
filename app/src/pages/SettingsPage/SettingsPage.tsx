@@ -1,4 +1,6 @@
 import { DeepPartial } from 'ts-essentials';
+import { Typography, Box } from '@mui/material';
+import InfoIcon from '@mui/icons-material/Info';
 
 import SideSettings from './SideSettings.tsx';
 import PageContainer from '../PageContainer.tsx';
@@ -15,6 +17,8 @@ import LedBrightnessSlider from './LedBrightnessSlider.tsx';
 import Donate from './Donate.tsx';
 import DiscordLink from './DiscordLink.tsx';
 import Divider from './Divider.tsx';
+import FeaturesSection from './FeaturesSection/FeaturesSection.tsx';
+import Section from './Section.tsx';
 
 
 export default function SettingsPage() {
@@ -22,15 +26,9 @@ export default function SettingsPage() {
   const { setIsUpdating } = useAppStore();
 
   const updateSettings = (settings: DeepPartial<Settings>) => {
-    // console.log(`SettingsPage.tsx:21 | settings: `, settings);
-    // return
     setIsUpdating(true);
 
     postSettings(settings)
-      .then(() => {
-        // Wait 1 second before refreshing the device status
-        return new Promise((resolve) => setTimeout(resolve, 1_000));
-      })
       .then(() => refetch())
       .catch(error => {
         console.error(error);
@@ -40,25 +38,41 @@ export default function SettingsPage() {
 
   return (
     <PageContainer sx={ { mb: 15, mt: 2 } }>
-      <TimeZoneSelector settings={ settings } updateSettings={ updateSettings }/>
-      <TemperatureFormatSelector settings={ settings } updateSettings={ updateSettings } />
-      <DailyReboot settings={ settings } updateSettings={ updateSettings } />
-      <Divider />
-      <DailyPriming settings={ settings } updateSettings={ updateSettings }/>
-      <PrimeControl/>
+      <Section title="Device settings">
+        <TimeZoneSelector settings={ settings } updateSettings={ updateSettings }/>
+        <br/>
+        <TemperatureFormatSelector settings={ settings } updateSettings={ updateSettings }/>
+        <br/>
+        <DailyReboot settings={ settings } updateSettings={ updateSettings }/>
+        <br/>
+        <LedBrightnessSlider/>
 
-      <Divider />
-      <SideSettings side="left" settings={ settings } updateSettings={ updateSettings }/>
-      <br />
-      <SideSettings side="right" settings={ settings } updateSettings={ updateSettings }/>
-      <Divider />
-      <LedBrightnessSlider/>
+      </Section>
+      <Section title="Priming">
 
-      <Divider />
-      <DiscordLink />
-      <Divider />
-      <Donate />
-      <Divider />
+        <DailyPriming settings={ settings } updateSettings={ updateSettings }/>
+        <br/>
+        <PrimeControl/>
+      </Section>
+      <FeaturesSection/>
+      <Section title="Side settings">
+        <SideSettings side="left" settings={ settings } updateSettings={ updateSettings }/>
+        <br/>
+        <SideSettings side="right" settings={ settings } updateSettings={ updateSettings }/>
+        <Box display="flex" gap={ 1 } sx={ { mt: 1 } }>
+
+          <InfoIcon/>
+          <Typography color="text.secondary">
+            Away mode:
+            Disables schedules and temperature control for one side.
+            That side will mirror any temperature or schedule changes from the active side.
+            If both sides are in away mode, no schedules will apply.
+          </Typography>
+        </Box>
+      </Section>
+      <DiscordLink/>
+      <Donate/>
+      <Divider/>
       <LicenseModal/>
     </PageContainer>
   );
