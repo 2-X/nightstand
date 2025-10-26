@@ -11,7 +11,7 @@ import StatusCard from './StatusCard.tsx';
 import { ServerStatusKey, StatusInfo } from '@api/serverStatusSchema.ts';
 
 export default function StatusPage() {
-  const { data, isLoading, dataUpdatedAt } = useServerStatus();
+  const { data, isLoading, dataUpdatedAt } = useServerStatus(5_000);
   if (isLoading || !data) return null;
   const updatedAt = moment(dataUpdatedAt);
   const formatted = updatedAt.format('YYYY-MM-DD HH:mm:ss z');

@@ -42,28 +42,23 @@ const JOB_MAP: Record<Job, () => void> = {
 
 
 router.post('/jobs', async (req: Request, res: Response) => {
-  try {
-    const { body } = req;
-    const validationResult = JobKeyListSchema.safeParse(body);
-    if (!validationResult.success) {
-      logger.error('Invalid jobs:', validationResult.error);
-      res.status(400).json({
-        error: 'Invalid request data',
-        details: validationResult?.error?.errors,
-      });
-      return;
-    }
-
-    body.forEach((job: Job) => {
-      logger.debug(`Would execute job: ${job}`);
-      JOB_MAP[job]();
+  const { body } = req;
+  const validationResult = JobKeyListSchema.safeParse(body);
+  if (!validationResult.success) {
+    logger.error('Invalid jobs:', validationResult.error);
+    res.status(400).json({
+      error: 'Invalid request data',
+      details: validationResult?.error?.errors,
     });
-
-    res.status(204).end();
-  } catch (error) {
-    logger.error(error);
-    res.status(500).json({ error });
+    return;
   }
+
+  body.forEach((job: Job) => {
+    logger.debug(`Would execute job: ${job}`);
+    JOB_MAP[job]();
+  });
+
+  res.status(204).end();
 });
 
 

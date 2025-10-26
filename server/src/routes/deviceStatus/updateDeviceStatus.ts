@@ -74,14 +74,9 @@ const updateSettings = async (settings: Partial<DeviceStatus['settings']>) => {
 export const updateDeviceStatus = async (deviceStatus: DeepPartial<DeviceStatus>) => {
   logger.info(`Updating device status..`);
 
-  try {
-    if (deviceStatus.isPriming) await executeFunction('PRIME');
-    if (deviceStatus?.left) await updateSide('left', deviceStatus.left);
-    if (deviceStatus?.right) await updateSide('right', deviceStatus.right);
-    if (deviceStatus?.settings) await updateSettings(deviceStatus.settings);
-    logger.info('Finished updating device status');
-  } catch (error) {
-    logger.error('Error updating device status:', error);
-    throw error;
-  }
+  if (deviceStatus.isPriming) await executeFunction('PRIME');
+  if (deviceStatus?.left) await updateSide('left', deviceStatus.left);
+  if (deviceStatus?.right) await updateSide('right', deviceStatus.right);
+  if (deviceStatus?.settings) await updateSettings(deviceStatus.settings);
+  logger.info('Finished updating device status');
 };

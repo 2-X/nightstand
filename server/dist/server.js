@@ -1,3 +1,4 @@
+import './instrument.js';
 import express from 'express';
 import schedule from 'node-schedule';
 import logger from './logger.js';
@@ -9,6 +10,7 @@ import setupRoutes from './setup/routes.js';
 import config from './config.js';
 import serverStatus from './serverStatus.js';
 import { prisma } from './db/prisma.js';
+import { setupSentryTags } from './setupSentryTags.js';
 const port = 3000;
 const app = express();
 let server;
@@ -95,6 +97,7 @@ async function startServer() {
     // Initialize Franken once before listening
     if (!config.remoteDevMode) {
         initFranken()
+            .then(() => setupSentryTags())
             .catch(error => {
             serverStatus.status.franken.status = 'failed';
             const message = error instanceof Error ? error.message : String(error);

@@ -26,13 +26,8 @@ router.post('/deviceStatus', async (req: Request, res: Response) => {
     return;
   }
 
-  try {
-    await updateDeviceStatus(body as DeepPartial<DeviceStatus>);
-    res.status(204).end();
-  } catch (error) {
-    logger.error(error);
-    res.status(500).json({ error });
-  }
+  await updateDeviceStatus(body as DeepPartial<DeviceStatus>);
+  res.status(204).end();
 });
 
 

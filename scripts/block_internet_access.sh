@@ -5,6 +5,36 @@ echo "Blocking internet access..."
 # IPv4 Rules
 echo "Configuring IPv4 rules..."
 
+# -----------------------------------------------------------------------------------------------------
+# Allow traffic to Sentry servers for error logging
+
+# https://docs.sentry.io/security-legal-pii/security/ip-ranges/#event-ingestion
+
+# Check if ALLOW_SENTRY is true
+if [ "$ALLOW_SENTRY" = "false" ]; then
+  echo "ALLOW_SENTRY is not true — skipping Sentry firewall configuration."
+
+else
+  echo -e "\e[33mIP rules were setup to allow error logs to be sent to Sentry servers\e[0m"
+  echo -e "\e[33mSentry error logs will NOT be sent to Sentry unless error logging is explicitly enabled in the UI. (It's off by default)\e[0m"
+  echo -e "\e[33m\e[0m"
+  # --- US IPs ---
+  iptables -C INPUT  -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \
+  iptables -I INPUT  -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+  iptables -C OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \
+  iptables -I OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+
+  iptables -A OUTPUT -d 35.186.247.156 -j ACCEPT
+  iptables -A OUTPUT -d 34.120.195.249 -j ACCEPT
+  iptables -A OUTPUT -d 34.36.122.224  -j ACCEPT
+  iptables -A OUTPUT -d 34.36.87.148 -j ACCEPT
+  iptables -A OUTPUT -d 34.120.62.213 -j ACCEPT
+  iptables -A OUTPUT -d 130.211.36.74 -j ACCEPT
+  echo "Sentry error logging IP rules applied successfully."
+fi
+
+# -----------------------------------------------------------------------------------------------------
+
 # Allow LAN traffic Class A (10.0.0.0/8)
 iptables -A INPUT -s 10.0.0.0/8 -j ACCEPT
 iptables -A OUTPUT -d 10.0.0.0/8 -j ACCEPT

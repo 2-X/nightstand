@@ -16,26 +16,20 @@ const JOB_MAP = {
     biometricsCalibrationRight,
 };
 router.post('/jobs', async (req, res) => {
-    try {
-        const { body } = req;
-        const validationResult = JobKeyListSchema.safeParse(body);
-        if (!validationResult.success) {
-            logger.error('Invalid jobs:', validationResult.error);
-            res.status(400).json({
-                error: 'Invalid request data',
-                details: validationResult?.error?.errors,
-            });
-            return;
-        }
-        body.forEach((job) => {
-            logger.debug(`Would execute job: ${job}`);
-            JOB_MAP[job]();
+    const { body } = req;
+    const validationResult = JobKeyListSchema.safeParse(body);
+    if (!validationResult.success) {
+        logger.error('Invalid jobs:', validationResult.error);
+        res.status(400).json({
+            error: 'Invalid request data',
+            details: validationResult?.error?.errors,
         });
-        res.status(204).end();
+        return;
     }
-    catch (error) {
-        logger.error(error);
-        res.status(500).json({ error });
-    }
+    body.forEach((job) => {
+        logger.debug(`Would execute job: ${job}`);
+        JOB_MAP[job]();
+    });
+    res.status(204).end();
 });
 export default router;
