@@ -42,3 +42,6 @@ export type ServerStatus = {
   biometricsCalibrationLeft?: StatusInfo;
   biometricsCalibrationRight?: StatusInfo;
 };
+
+// eslint-disable-next-line @typescript-eslint/no-type-alias
+export type ServerStatusKey = keyof ServerStatus;

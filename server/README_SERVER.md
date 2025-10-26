@@ -10,7 +10,8 @@ Express server intended to run on the 8 sleep pod.
 ```
 systemctl stop free-sleep
 systemctl disable free-sleep
-cd /home/dac/free-sleep/server && npm run dev
+su dac
+cd /home/dac/free-sleep/server && /home/dac/.volta/bin/npm run dev
 
 # When you're done, undo this by CTR+C out of the npm run dev command & run:
 systemctl enable free-sleep

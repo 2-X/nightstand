@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import deviceStatus from '../routes/deviceStatus/deviceStatus.js';
 import execute from '../routes/execute/execute.js';
+import jobs from '../routes/jobs/jobs.js';
 import settings from '../routes/settings/settings.js';
 import services from '../routes/services/services.js';
 import schedules from '../routes/schedules/schedules.js';
@@ -17,6 +18,7 @@ export default function (app) {
     app.use('/api/', deviceStatus);
     app.use('/api/', execute);
     app.use('/api/', schedules);
+    app.use('/api/', jobs);
     app.use('/api/', settings);
     app.use('/api/', services);
     app.use('/api/metrics/', movement);
