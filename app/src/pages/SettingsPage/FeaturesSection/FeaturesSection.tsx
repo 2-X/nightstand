@@ -1,11 +1,14 @@
-import { CircularProgress, FormControlLabel, Typography, Switch } from '@mui/material';
+import InfoIcon from '@mui/icons-material/Info';
+import { Box, CircularProgress, FormControlLabel, Typography, Switch } from '@mui/material';
 import Section from '../Section.tsx';
 import { Services, useServices, postServices } from '@api/services.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { DeepPartial } from 'ts-essentials';
+import { useServerStatus } from '@api/serverStatus.ts';
 
 export default function FeaturesSection() {
   const { data: services, refetch, isLoading } = useServices();
+  const { data: serverStatus } = useServerStatus();
   const setIsUpdating = useAppStore(state => state.setIsUpdating);
   const isUpdating = useAppStore(state => state.isUpdating);
 
@@ -26,14 +29,26 @@ export default function FeaturesSection() {
       <FormControlLabel
         control={
           <Switch
-            disabled={ isUpdating }
+            disabled={ isUpdating || serverStatus?.biometricsInstallation?.status !== 'healthy' }
             checked={ services.biometrics.enabled }
             onChange={ (event) => updateServices({ biometrics: { enabled: event.target.checked } }) }
           />
         }
         label="Biometrics"
       />
-      <Typography color='text.secondary'>Biometrics to run on the pod</Typography>
+      <Box display='flex' gap={ 1 }>
+
+        <InfoIcon sx={ { color: 'text.secondary' } }/>
+
+        <Typography color='text.secondary'>
+          Calculate biometrics for the pod.
+          Requires you to run this command on your pod. Once installation completes successfully, you can toggle this on/off.
+          <Typography color='text.secondary' sx={ { fontFamily: 'monospace' } }>
+            sh /home/dac/free-sleep/scripts/enable_biometrics.sh
+          </Typography>
+        </Typography>
+
+      </Box>
       { /*<br />*/ }
       { /*<FormControlLabel*/ }
       { /*  control={*/ }
