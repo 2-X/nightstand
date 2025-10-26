@@ -1,3 +1,5 @@
+
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="fac25006-3d1e-5059-ae48-f8d607bf4009")}catch(e){}}();
 import _ from 'lodash';
 import express from 'express';
 import logger from '../../logger.js';
@@ -37,3 +39,5 @@ router.post('/schedules', async (req, res) => {
     res.status(200).json(schedulesDB.data);
 });
 export default router;
+//# sourceMappingURL=schedules.js.map
+//# debugId=fac25006-3d1e-5059-ae48-f8d607bf4009

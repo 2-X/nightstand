@@ -1,3 +1,5 @@
+
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="685941cb-a506-5379-9ca1-9e499663d95f")}catch(e){}}();
 export class SequentialQueue {
     executing = Promise.resolve();
     execInternal(f) {
@@ -24,3 +26,5 @@ export class SequentialQueue {
         });
     }
 }
+//# sourceMappingURL=sequentialQueue.js.map
+//# debugId=685941cb-a506-5379-9ca1-9e499663d95f

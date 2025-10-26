@@ -1,3 +1,5 @@
+
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="4e820525-4b2c-50f2-89fa-42b313e4d3db")}catch(e){}}();
 export class MessageStream {
     stream;
     separator;
@@ -26,3 +28,5 @@ export class MessageStream {
         this.buffer = Buffer.concat([this.buffer, read]);
     }
 }
+//# sourceMappingURL=messageStream.js.map
+//# debugId=4e820525-4b2c-50f2-89fa-42b313e4d3db

@@ -1,3 +1,5 @@
+
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="e022964b-443d-5f68-9062-5c28b1e0b4f8")}catch(e){}}();
 import express from 'express';
 import logger from '../../logger.js';
 import { executeAnalyzeSleep } from '../../jobs/analyzeSleep.js';
@@ -33,3 +35,5 @@ router.post('/jobs', async (req, res) => {
     res.status(204).end();
 });
 export default router;
+//# sourceMappingURL=jobs.js.map
+//# debugId=e022964b-443d-5f68-9062-5c28b1e0b4f8

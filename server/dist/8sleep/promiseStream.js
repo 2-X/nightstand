@@ -5,6 +5,8 @@
 //
 // So I made a copy of their packages here, so we don't depend on being able to install
 // @eight/promises && @eight/promise-streams
+
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="83624b7c-063b-55be-8827-45e03306e857")}catch(e){}}();
 import { toPromise } from './promises.js';
 import { Readable, Writable, Duplex } from 'stream';
 class StreamReader {
@@ -185,3 +187,5 @@ export class PromiseStreams {
         throw new Error('not a promise-stream');
     }
 }
+//# sourceMappingURL=promiseStream.js.map
+//# debugId=83624b7c-063b-55be-8827-45e03306e857

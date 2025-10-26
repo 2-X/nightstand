@@ -1,3 +1,5 @@
+
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="0a92f603-62dd-5c57-9987-eb00063e5d9e")}catch(e){}}();
 import schedule from 'node-schedule';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import { getDayIndexForSchedule, getDayOfWeekIndex, logJob } from './utils.js';
@@ -98,3 +100,5 @@ export const schedulePowerOffAndSleepAnalysis = (settingsData, side, day, power)
         }
     });
 };
+//# sourceMappingURL=powerScheduler.js.map
+//# debugId=0a92f603-62dd-5c57-9987-eb00063e5d9e

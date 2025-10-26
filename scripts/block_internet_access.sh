@@ -17,6 +17,7 @@ if [ "$ALLOW_SENTRY" = "false" ]; then
 else
   echo -e "\e[33mIP rules were setup to allow error logs to be sent to Sentry servers\e[0m"
   echo -e "\e[33mSentry error logs will NOT be sent to Sentry unless error logging is explicitly enabled in the UI. (It's off by default)\e[0m"
+  echo -e "\e[33mIf you'd like to block Sentry servers, run: 'ALLOW_SENTRY=false sh scripts/block_internet_access.sh'\e[0m"
   echo -e "\e[33m\e[0m"
   # --- US IPs ---
   iptables -C INPUT  -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \

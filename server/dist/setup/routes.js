@@ -1,3 +1,5 @@
+
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="0e1a55b1-7e9d-51d8-bc35-cd195af03e91")}catch(e){}}();
 import * as Sentry from '@sentry/node';
 import express from 'express';
 import path from 'path';
@@ -59,3 +61,5 @@ export default function (app) {
     });
     logger.debug('Registered routes!');
 }
+//# sourceMappingURL=routes.js.map
+//# debugId=0e1a55b1-7e9d-51d8-bc35-cd195af03e91

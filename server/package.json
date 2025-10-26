@@ -6,14 +6,15 @@
   "main": "index.js",
   "scripts": {
     "start": "dotenv -e .env.pod -- node dist/server.js",
-    "build": "tsc",
+    "build": "tsc && npm run sentry:sourcemaps",
     "dev": "MODE=dev dotenv -e .env.pod -- nodemon --watch src --ext ts --exec \"node --loader ts-node/esm\" src/server.ts",
     "dev:local": "dotenv -e .env.local -- nodemon --watch src --ext ts --exec \"node --loader ts-node/esm\" src/server.ts",
     "lint": "npx eslint src/ --ext .ts,.tsx",
     "migrate": "dotenv -e .env.pod -- npx prisma migrate dev --name ",
     "generate": "dotenv -e .env.pod -- npx prisma generate",
     "migrate:local": "dotenv -e .env.local -- npx prisma migrate dev --name ",
-    "generate:local": "dotenv -e .env.local -- npx prisma generate"
+    "generate:local": "dotenv -e .env.local -- npx prisma generate",
+    "sentry:sourcemaps": "sentry-cli sourcemaps inject --org free-sleep --project server ./dist && sentry-cli sourcemaps upload --org free-sleep --project server ./dist"
   },
   "keywords": [],
   "author": "",
@@ -23,6 +24,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.4.0",
+    "@sentry/cli": "^2.57.0",
     "@sentry/node": "^10.22.0",
     "bree": "^9.2.0",
     "cbor": "^9.0.0",

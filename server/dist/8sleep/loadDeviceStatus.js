@@ -1,3 +1,5 @@
+
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="f69dfb46-2d49-5f82-97f4-81ae49c7914f")}catch(e){}}();
 import { z } from 'zod';
 import { Version } from '../routes/deviceStatus/deviceStatusSchema.js';
 import logger from '../logger.js';
@@ -164,3 +166,5 @@ export async function loadDeviceStatus(response) {
         settings: decodeSettings(rawDeviceData.settings),
     };
 }
+//# sourceMappingURL=loadDeviceStatus.js.map
+//# debugId=f69dfb46-2d49-5f82-97f4-81ae49c7914f

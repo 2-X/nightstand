@@ -1,3 +1,5 @@
+
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="faaadabd-414e-5e6e-bf26-0935f0d0157b")}catch(e){}}();
 import { SequentialQueue } from './sequentialQueue.js';
 import { MessageStream } from './messageStream.js';
 import { PromiseStreams } from './promiseStream.js';
@@ -102,3 +104,5 @@ export async function getFranken() {
     franken = await frankenServer.waitForFranken();
     return franken;
 }
+//# sourceMappingURL=frankenServer.js.map
+//# debugId=faaadabd-414e-5e6e-bf26-0935f0d0157b

@@ -1,3 +1,5 @@
+
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="69877fe6-e2f8-5387-89e9-4601e9a855a5")}catch(e){}}();
 import express from 'express';
 import moment from 'moment-timezone';
 import { loadMovementRecords } from '../../db/loadMovementRecords.js';
@@ -28,3 +30,5 @@ router.get('/movement', async (req, res) => {
     res.json(formattedRecords);
 });
 export default router;
+//# sourceMappingURL=movement.js.map
+//# debugId=69877fe6-e2f8-5387-89e9-4601e9a855a5

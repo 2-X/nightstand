@@ -1,3 +1,5 @@
+
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="f21ab786-7037-58c8-a3bd-6d56b45c70f7")}catch(e){}}();
 import logger from '../logger.js';
 import { exec } from 'child_process';
 import fs from 'fs';
@@ -22,3 +24,5 @@ export const executePythonScript = ({ script, args = [] }) => {
         }
     });
 };
+//# sourceMappingURL=executePython.js.map
+//# debugId=f21ab786-7037-58c8-a3bd-6d56b45c70f7

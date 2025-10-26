@@ -1,3 +1,5 @@
+
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="2efcf3b8-70c2-5db3-b724-37c09d837f44")}catch(e){}}();
 import { isSystemDateValid } from './jobs/isSystemDateValid.js';
 import servicesDB from './db/services.js';
 import { prisma } from './db/prisma.js';
@@ -141,3 +143,5 @@ class ServerStatus {
     }
 }
 export default ServerStatus.getInstance();
+//# sourceMappingURL=serverStatus.js.map
+//# debugId=2efcf3b8-70c2-5db3-b724-37c09d837f44

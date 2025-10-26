@@ -1,4 +1,6 @@
 // LowDB, stores the schedules in /persistent/free-sleep-data/lowdb/schedulesDB.json
+
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="dd87559d-e6c9-5d7e-b4f7-f70a5c6c9b32")}catch(e){}}();
 import _ from 'lodash';
 import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
@@ -40,3 +42,5 @@ await schedulesDB.read();
 schedulesDB.data = _.merge({}, defaultData, schedulesDB.data);
 await schedulesDB.write();
 export default schedulesDB;
+//# sourceMappingURL=schedules.js.map
+//# debugId=dd87559d-e6c9-5d7e-b4f7-f70a5c6c9b32

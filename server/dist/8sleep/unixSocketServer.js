@@ -1,3 +1,5 @@
+
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="3d2049cb-3433-53a8-bcb0-d63323ffab3c")}catch(e){}}();
 import { createServer } from 'net';
 import { unlink as unlinkCb } from 'fs';
 import logger from '../logger.js';
@@ -69,3 +71,5 @@ export class UnixSocketServer {
         }
     }
 }
+//# sourceMappingURL=unixSocketServer.js.map
+//# debugId=3d2049cb-3433-53a8-bcb0-d63323ffab3c

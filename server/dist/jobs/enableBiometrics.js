@@ -18,3 +18,5 @@ export const enableBiometrics = () => {
         }
     });
 };
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="043810bc-76ea-5110-8418-52777ee0bd12")}catch(e){}}();
+//# debugId=043810bc-76ea-5110-8418-52777ee0bd12
