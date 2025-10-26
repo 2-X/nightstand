@@ -1,4 +1,3 @@
-import { PrismaClient } from '@prisma/client';
 import express from 'express';
 import schedule from 'node-schedule';
 import { Server } from 'http';
@@ -12,12 +11,12 @@ import setupMiddleware from './setup/middleware.js';
 import setupRoutes from './setup/routes.js';
 import config from './config.js';
 import serverStatus from './serverStatus.js';
+import { prisma } from './db/prisma.js';
 
 const port = 3000;
 const app = express();
 let server: Server | undefined;
 
-const prisma = new PrismaClient();
 
 async function disconnectPrisma() {
   try {
@@ -131,7 +130,7 @@ async function startServer() {
     await gracefulShutdown('uncaughtException');
   });
   process.on('unhandledRejection', async (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
     await gracefulShutdown('unhandledRejection');
   });
 }

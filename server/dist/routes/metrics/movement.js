@@ -1,8 +1,8 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
 import moment from 'moment-timezone';
 import { loadMovementRecords } from '../../db/loadMovementRecords.js';
-const prisma = new PrismaClient();
+import logger from '../../logger.js';
+import { prisma } from '../../db/prisma.js';
 const router = express.Router();
 router.get('/movement', async (req, res) => {
     try {
@@ -30,7 +30,7 @@ router.get('/movement', async (req, res) => {
         res.json(formattedRecords);
     }
     catch (error) {
-        console.error('Error in GET /movement:', error);
+        logger.error('Error in GET /movement:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -40,7 +40,7 @@ router.get('/movementdelete', async (req, res) => {
         res.json({ msg: 'deleted rows!' });
     }
     catch (error) {
-        console.error('Error in GET /movement:', error);
+        logger.error('Error in GET /movement:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

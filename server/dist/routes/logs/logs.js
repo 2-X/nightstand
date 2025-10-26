@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import readline from 'readline';
+import logger from '../../logger.js';
 const router = express.Router();
 const LOGS_DIRS = ['/persistent/free-sleep-data/logs', '/var/log'];
 // Endpoint to list all log files as clickable links
@@ -22,7 +23,7 @@ router.get('/', (req, res) => {
                         : null;
                 }
                 catch (error) {
-                    console.warn(`Skipping invalid file: ${fullPath}`);
+                    logger.warn(`Skipping invalid file: ${fullPath}`);
                     return null;
                 }
             })
@@ -31,7 +32,7 @@ router.get('/', (req, res) => {
             allLogFiles = [...allLogFiles, ...files];
         }
         catch (err) {
-            console.error(`Error reading logs from ${dir}:`, err);
+            logger.error(`Error reading logs from ${dir}:`, err);
         }
     });
     // @ts-ignore

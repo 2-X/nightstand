@@ -1,9 +1,10 @@
 import express, { Request, Response } from 'express';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import moment from 'moment-timezone';
 import { sleepRecordSchema, SleepRecord } from '../../db/sleepRecordsSchema.js';
 import { loadSleepRecords } from '../../db/loadSleepRecords.js';
-const prisma = new PrismaClient();
+import logger from '../../logger.js';
+import { prisma } from '../../db/prisma.js';
 
 const router = express.Router();
 
@@ -43,7 +44,7 @@ router.get('/sleep', async (req: Request<object, object, object, SleepQuery>, re
     const formattedRecords = await loadSleepRecords(sleepRecords);
     res.json(formattedRecords);
   } catch (error) {
-    console.error('Error in GET /sleep:', error);
+    logger.error('Error in GET /sleep:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -115,7 +116,7 @@ router.put<
     const loadedNewRecord = await loadSleepRecords([dbUpdatedRecord]);
     return res.json(loadedNewRecord[0]);
   } catch (error) {
-    console.error('Error updating sleep record:', error);
+    logger.error('Error updating sleep record:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -127,7 +128,7 @@ router.delete('/sleep/:id', async (req, res) => {
     await prisma.sleep_records.delete({ where: { id: parseInt(id, 10) } });
     res.status(204).send();
   } catch (error) {
-    console.error('Error deleting record:', error);
+    logger.error('Error deleting record:', error);
     res.status(500).json({ error: 'Failed to delete record' });
   }
 });

@@ -1,7 +1,6 @@
-import { PrismaClient } from '@prisma/client';
 import { isSystemDateValid } from './jobs/isSystemDateValid.js';
 import servicesDB from './db/services.js';
-const prisma = new PrismaClient();
+import { prisma } from './db/prisma.js';
 await servicesDB.read();
 class ServerStatus {
     // eslint-disable-next-line no-use-before-define
@@ -86,8 +85,16 @@ class ServerStatus {
     async updateDB() {
         try {
             await prisma.$queryRaw `SELECT 1`;
-            this.status.database.status = 'healthy';
-            this.status.database.message = '';
+            const quick = await prisma.$queryRawUnsafe(`PRAGMA quick_check;`);
+            const quickCheckHealthy = quick?.[0] && Object.values(quick[0])[0] === 'ok';
+            if (quickCheckHealthy) {
+                this.status.database.status = 'healthy';
+                this.status.database.message = '';
+            }
+            else {
+                this.status.database.status = 'failed';
+                this.status.database.message = `SQLite DB is unhealthy! - ${JSON.stringify(quick)}`;
+            }
         }
         catch (error) {
             this.status.database.status = 'failed';

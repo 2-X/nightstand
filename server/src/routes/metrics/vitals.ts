@@ -1,10 +1,12 @@
 import express, { Request, Response } from 'express';
-import { PrismaClient, Prisma, vitals as VitalRecord } from '@prisma/client'; // Import the type
+import { Prisma, vitals as VitalRecord } from '@prisma/client';
 import moment from 'moment-timezone';
 import settingsDB from '../../db/settings.js';
 import { loadVitals } from '../../db/loadVitals.js';
+import logger from '../../logger.js';
+import { prisma } from '../../db/prisma.js';
 
-const prisma = new PrismaClient();
+
 const router = express.Router();
 
 // Define query params
@@ -18,7 +20,6 @@ interface VitalsQuery {
 router.get('/vitals', async (req: Request<object, object, object, VitalsQuery>, res: Response) => {
   try {
     const { side, startTime, endTime } = req.query;
-
     const query: Prisma.vitalsWhereInput = {};
 
     if (side) query.side = side;
@@ -40,7 +41,8 @@ router.get('/vitals', async (req: Request<object, object, object, VitalsQuery>, 
 
     res.json(formattedVitals);
   } catch (error) {
-    console.error('Error fetching vitals:', error);
+    logger.error('Error fetching vitals:');
+    logger.error(error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
@@ -92,7 +94,7 @@ router.get('/vitals/summary', async (req: Request<object, object, object, Vitals
       avgBreathingRate: Math.round(avgBreathingRate._avg.breathing_rate || 0),
     });
   } catch (error) {
-    console.error('Error fetching vitals summary:', error);
+    logger.error('Error fetching vitals summary:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });

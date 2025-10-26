@@ -1,10 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { ServerStatus as ServerStatusType } from './routes/serverStatus/serverStatusSchema.js';
 import { isSystemDateValid } from './jobs/isSystemDateValid.js';
 import servicesDB from './db/services.js';
+import { prisma } from './db/prisma.js';
 
-
-const prisma = new PrismaClient();
 await servicesDB.read();
 
 class ServerStatus {
@@ -94,8 +92,17 @@ class ServerStatus {
   async updateDB() {
     try {
       await prisma.$queryRaw`SELECT 1`;
-      this.status.database.status = 'healthy';
-      this.status.database.message = '';
+      const quick = await prisma.$queryRawUnsafe<
+        Array<{ quick_check: string }>
+      >(`PRAGMA quick_check;`);
+      const quickCheckHealthy = quick?.[0] && Object.values(quick[0])[0] === 'ok';
+      if (quickCheckHealthy) {
+        this.status.database.status = 'healthy';
+        this.status.database.message = '';
+      } else {
+        this.status.database.status = 'failed';
+        this.status.database.message = `SQLite DB is unhealthy! - ${JSON.stringify(quick)}`;
+      }
     } catch (error) {
       this.status.database.status = 'failed';
       const message = error instanceof Error ? error.message : String(error);

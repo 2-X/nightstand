@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import readline from 'readline';
+import logger from '../../logger.js';
 
 const router = express.Router();
 
@@ -26,7 +27,7 @@ router.get('/', (req, res) => {
               ? { name: file, path: fullPath, mtime: stat.mtime.getTime() }
               : null;
           } catch (error) {
-            console.warn(`Skipping invalid file: ${fullPath}`);
+            logger.warn(`Skipping invalid file: ${fullPath}`);
             return null;
           }
         })
@@ -35,7 +36,7 @@ router.get('/', (req, res) => {
       // @ts-ignore
       allLogFiles = [...allLogFiles, ...files];
     } catch (err) {
-      console.error(`Error reading logs from ${dir}:`, err);
+      logger.error(`Error reading logs from ${dir}:`, err);
     }
   });
 

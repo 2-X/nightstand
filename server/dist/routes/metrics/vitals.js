@@ -1,9 +1,9 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client'; // Import the type
 import moment from 'moment-timezone';
 import settingsDB from '../../db/settings.js';
 import { loadVitals } from '../../db/loadVitals.js';
-const prisma = new PrismaClient();
+import logger from '../../logger.js';
+import { prisma } from '../../db/prisma.js';
 const router = express.Router();
 router.get('/vitals', async (req, res) => {
     try {
@@ -26,7 +26,8 @@ router.get('/vitals', async (req, res) => {
         res.json(formattedVitals);
     }
     catch (error) {
-        console.error('Error fetching vitals:', error);
+        logger.error('Error fetching vitals:');
+        logger.error(error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -73,7 +74,7 @@ router.get('/vitals/summary', async (req, res) => {
         });
     }
     catch (error) {
-        console.error('Error fetching vitals summary:', error);
+        logger.error('Error fetching vitals summary:', error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
