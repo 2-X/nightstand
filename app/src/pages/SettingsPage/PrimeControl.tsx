@@ -10,6 +10,5 @@ export default function PrimeControl() {
       :
       <PrimeButton refetch={ refetch }/>
   );
-
 }
 

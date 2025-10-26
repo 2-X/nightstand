@@ -32,7 +32,10 @@ export const useAppStore = create<AppState>((set) => ({
 
 // AppStoreProvider to sync Zustand with react-query's isFetching
 export function AppStoreProvider({ children }: React.PropsWithChildren) {
-  const isFetching = useIsFetching() > 0;
+  const isFetching = useIsFetching({
+    // @ts-expect-error
+    predicate: (query) => query?.options?.method !== 'GET',
+  }) > 0;
   const { data: settings } = useSettings();
 
   const { side, setSide } = useAppStore();
