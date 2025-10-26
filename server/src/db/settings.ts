@@ -8,6 +8,7 @@ import config from '../config.js';
 
 
 const defaultData: Settings = {
+  id: crypto.randomUUID(),
   timeZone: null,
   temperatureFormat: 'fahrenheit',
   rebootDaily: true,

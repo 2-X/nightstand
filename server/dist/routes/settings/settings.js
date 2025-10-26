@@ -19,6 +19,7 @@ router.post('/settings', async (req, res) => {
         });
         return;
     }
+    delete body.id;
     await settingsDB.read();
     _.merge(settingsDB.data, body);
     await settingsDB.write();

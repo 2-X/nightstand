@@ -4,6 +4,7 @@ import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
 import config from '../config.js';
 const defaultData = {
+    id: crypto.randomUUID(),
     timeZone: null,
     temperatureFormat: 'fahrenheit',
     rebootDaily: true,

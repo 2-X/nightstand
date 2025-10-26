@@ -75,6 +75,14 @@ for entry in "${FILES_TO_MOVE[@]}"; do
   fi
 done
 
+if [ -d /persistent/deviceinfo/ ]; then
+  setfacl -R -m u:"$USERNAME":rX /persistent/deviceinfo/
+fi
+
+if [ -d /deviceinfo/ ]; then
+  setfacl -R -m u:"$USERNAME":rX /deviceinfo/
+fi
+
 # Change ownership and permissions
 chown -R "$USERNAME":"$USERNAME" /persistent/free-sleep-data/
 chmod 770 /persistent/free-sleep-data/

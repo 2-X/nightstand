@@ -24,7 +24,16 @@ export const DeviceStatusSchema = z.object({
     gainRight: z.number(),
     ledBrightness: z.number(),
   }),
+  coverVersion: z.string(),
+  hubVersion: z.string(),
 }).strict();
 
 export type SideStatus = z.infer<typeof SideStatusSchema>;
 export type DeviceStatus = z.infer<typeof DeviceStatusSchema>;
+
+export enum Version {
+  NotFound = 'Version not found',
+  Pod3 = 'Pod 3',
+  Pod4 = 'Pod 4',
+  Pod5 = 'Pod 5',
+}

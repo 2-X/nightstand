@@ -21,4 +21,13 @@ export const DeviceStatusSchema = z.object({
         gainRight: z.number(),
         ledBrightness: z.number(),
     }),
+    coverVersion: z.string(),
+    hubVersion: z.string(),
 }).strict();
+export var Version;
+(function (Version) {
+    Version["NotFound"] = "Version not found";
+    Version["Pod3"] = "Pod 3";
+    Version["Pod4"] = "Pod 4";
+    Version["Pod5"] = "Pod 5";
+})(Version || (Version = {}));

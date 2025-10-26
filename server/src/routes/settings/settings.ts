@@ -14,7 +14,6 @@ router.get('/settings', async (req: Request, res: Response) => {
 
 
 router.post('/settings', async (req: Request, res: Response) => {
-
   const { body } = req;
   const validationResult = SettingsSchema.deepPartial().safeParse(body);
   if (!validationResult.success) {
@@ -25,6 +24,7 @@ router.post('/settings', async (req: Request, res: Response) => {
     });
     return;
   }
+  delete body.id;
   await settingsDB.read();
   _.merge(settingsDB.data, body);
   await settingsDB.write();

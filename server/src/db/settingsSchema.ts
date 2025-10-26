@@ -12,6 +12,7 @@ const SideSettingsSchema = z.object({
 }).strict();
 
 export const SettingsSchema = z.object({
+  id: z.string(),
   timeZone: z.enum(TIME_ZONES).nullable(),
   left: SideSettingsSchema,
   right: SideSettingsSchema,
