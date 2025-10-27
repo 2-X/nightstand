@@ -1,7 +1,7 @@
 import { Box, Chip, Typography } from '@mui/material';
 import { useDeviceStatus } from '@api/deviceStatus.ts';
 import { Version } from '@api/deviceStatusSchema';
-import UpdateAvailable from '@components/UpdateAvailable.tsx';
+import VersionStatus from '@components/VersionStatus.tsx';
 
 
 export default function DeviceInfo() {
@@ -22,14 +22,12 @@ export default function DeviceInfo() {
           !hideHub && <Chip label={ `${deviceStatus.hubVersion} Hub` } size='small'/>
         }
       </Box>
-      <Box sx={ { display: 'flex', gap: 1, align: 'center', alignItems: 'center' } }>
-
+      <Box sx={ { display: 'flex', gap: 1, align: 'center', alignItems: 'center', mb: 1 } }>
         <Typography variant='body2'>Free Sleep Build</Typography>
         <Chip label={ `v${deviceStatus.freeSleep?.version}` } size='small'/>
         <Chip label={ deviceStatus.freeSleep.branch } size='small'/>
       </Box>
-      <UpdateAvailable />
-
+      <VersionStatus />
     </>
   );
 }

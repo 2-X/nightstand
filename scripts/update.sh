@@ -33,3 +33,5 @@ fi
 # Block internet access again
 sh /home/dac/free-sleep/scripts/block_internet_access.sh
 echo -e "\033[0;32mUpdate completed successfully!\033[0m"
+echo -e "\033[0;32mRestarting Pod in 3 seconds...\033[0m"
+reboot -h now
