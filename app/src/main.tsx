@@ -1,3 +1,6 @@
+import { initSentry } from './sentry.ts';
+initSentry();
+
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { createRoot } from 'react-dom/client';
 import { CssBaseline } from '@mui/material';
@@ -94,7 +97,7 @@ const App = () => {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ErrorBoundary>
+    <ErrorBoundary componentName='App'>
       <App />
     </ErrorBoundary>
   </StrictMode>

@@ -1,58 +1,63 @@
-import { Component, ErrorInfo, ReactNode } from 'react';
+import { PropsWithChildren, useState } from 'react';
+import * as Sentry from '@sentry/react';
+import { Alert, Typography } from '@mui/material';
 
-interface ErrorBoundaryProps {
-  children: ReactNode;
+
+type ErrorInfo = {
+  error: Error;
+  componentStack: string;
+  eventId: string;
 }
 
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-  errorInfo: ErrorInfo | null;
+type ErrorMessageProps = {
+  componentName: string;
+  errorInfo?: ErrorInfo;
 }
 
-export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-      errorInfo: null,
-    };
+
+const ErrorMessage = ({ componentName, errorInfo }: ErrorMessageProps) => {
+  if (errorInfo && import.meta.env.VITE_ENV === 'dev') {
+    const errorMessage =
+      errorInfo?.error instanceof Error
+        ? errorInfo.error.message
+        : typeof errorInfo?.error === 'string'
+          ? errorInfo.error
+          : '';
+
+    return (
+      <Alert severity='error'>
+
+        <Typography color='text.secondary' sx={ { fontFamily: 'monospace' } }>
+          ERROR: &nbsp;
+          { errorMessage }
+          <br />
+          { errorInfo.componentStack }
+        </Typography>
+      </Alert>
+
+    );
+  } else {
+    return (
+      <Alert severity='error'>
+        { componentName } failed to load
+      </Alert>
+    );
   }
+};
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    // Update state to render fallback UI
-    return { hasError: true, error, errorInfo: null };
-  }
+type ErrorBoundaryProps = PropsWithChildren<Pick<ErrorMessageProps, 'componentName'>>;
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Catch errors in the component tree
-    this.setState({ errorInfo });
+// eslint-disable-next-line react/no-multi-comp
+export default function ErrorBoundary({ children, componentName }: ErrorBoundaryProps) {
+  const [errorInfo, setErrorInfo] = useState<ErrorInfo | undefined>();
 
-    // Optional: Log error to an external service
-    this.logError(error, errorInfo);
-  }
-
-  logError(error: Error, errorInfo: ErrorInfo) {
-    console.error('Logging error to service:', { error, errorInfo });
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div>
-          <h1>Something went wrong.</h1>
-          { process.env.NODE_ENV === 'development' && (
-            <details style={ { whiteSpace: 'pre-wrap' } }>
-              <summary>Error details</summary>
-              <p>{ this.state.error?.toString() }</p>
-              <pre>{ this.state.errorInfo?.componentStack }</pre>
-            </details>
-          ) }
-        </div>
-      );
-    }
-
-    return this.props.children;
-  }
+  return (
+    <Sentry.ErrorBoundary
+      fallback={ <ErrorMessage componentName={ componentName } errorInfo={ errorInfo }/> }
+      // @ts-expect-error
+      onError={ (error, componentStack, eventId) => setErrorInfo({ error, componentStack, eventId }) }
+    >
+      { children }
+    </Sentry.ErrorBoundary>
+  );
 }

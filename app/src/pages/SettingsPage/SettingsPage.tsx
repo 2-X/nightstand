@@ -16,6 +16,7 @@ import Divider from './Divider.tsx';
 import FeaturesSection from './FeaturesSection/FeaturesSection.tsx';
 import Section from './Section.tsx';
 import DeviceSettingsSection from './DeviceSettingsSection/DeviceSettingsSection.tsx';
+import ErrorBoundary from '@components/ErrorBoundary.tsx';
 
 
 export default function SettingsPage() {
@@ -35,7 +36,9 @@ export default function SettingsPage() {
 
   return (
     <PageContainer sx={ { mb: 15, mt: 2 } }>
-      <DeviceSettingsSection updateSettings={ updateSettings } />
+      <ErrorBoundary componentName='Device settings'>
+        <DeviceSettingsSection updateSettings={ updateSettings } />
+      </ErrorBoundary>
       <Section title="Priming">
 
         <DailyPriming settings={ settings } updateSettings={ updateSettings }/>
