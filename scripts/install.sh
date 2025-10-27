@@ -76,11 +76,11 @@ for entry in "${FILES_TO_MOVE[@]}"; do
 done
 
 if [ -d /persistent/deviceinfo/ ]; then
-  setfacl -R -m u:"$USERNAME":rX /persistent/deviceinfo/
+  chown -R "$USERNAME":"$USERNAME" /persistent/deviceinfo/
 fi
 
 if [ -d /deviceinfo/ ]; then
-  setfacl -R -m u:"$USERNAME":rX /deviceinfo/
+  chown -R "$USERNAME":"$USERNAME" /deviceinfo/
 fi
 
 # Change ownership and permissions
