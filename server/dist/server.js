@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="f4e537ad-e4b7-5714-8749-2245f4fe4ff8")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="201c382f-e2b2-5c80-a7f0-2b1a5603534e")}catch(e){}}();
 import './instrument.js';
 import express from 'express';
 import schedule from 'node-schedule';
@@ -82,6 +82,7 @@ async function initFranken() {
     logger.info('Initializing Franken on startup...');
     serverStatus.status.franken.status = 'started';
     // Force creation of the Franken and FrankenServer so it’s ready before we listen
+    await getFrankenServer();
     await getFranken();
     serverStatus.status.franken.status = 'healthy';
     logger.info('Franken has been initialized successfully.');
@@ -98,8 +99,10 @@ async function startServer() {
     serverStatus.status.logger.status = 'healthy';
     // Initialize Franken once before listening
     if (!config.remoteDevMode) {
-        initFranken()
-            .then(() => setupSentryTags())
+        void initFranken()
+            .then(() => {
+            setupSentryTags();
+        })
             .catch(error => {
             serverStatus.status.franken.status = 'failed';
             const message = error instanceof Error ? error.message : String(error);
@@ -127,4 +130,4 @@ startServer().catch((err) => {
     process.exit(1);
 });
 //# sourceMappingURL=server.js.map
-//# debugId=f4e537ad-e4b7-5714-8749-2245f4fe4ff8
+//# debugId=201c382f-e2b2-5c80-a7f0-2b1a5603534e

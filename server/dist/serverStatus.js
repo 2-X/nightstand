@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="2efcf3b8-70c2-5db3-b724-37c09d837f44")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="6cba58a5-a5c9-595d-8b2a-96b7ad5651f9")}catch(e){}}();
 import { isSystemDateValid } from './jobs/isSystemDateValid.js';
 import servicesDB from './db/services.js';
 import { prisma } from './db/prisma.js';
@@ -117,10 +117,10 @@ class ServerStatus {
     }
     async updateServices() {
         await servicesDB.read();
+        this.status.biometricsInstallation = servicesDB.data.biometrics.jobs.installation;
         if (servicesDB.data.biometrics.enabled) {
             this.status.analyzeSleepLeft = servicesDB.data.biometrics.jobs.analyzeSleepLeft;
             this.status.analyzeSleepRight = servicesDB.data.biometrics.jobs.analyzeSleepRight;
-            this.status.biometricsInstallation = servicesDB.data.biometrics.jobs.installation;
             this.status.biometricsCalibrationLeft = servicesDB.data.biometrics.jobs.calibrateLeft;
             this.status.biometricsCalibrationRight = servicesDB.data.biometrics.jobs.calibrateRight;
             this.status.biometricsStream = servicesDB.data.biometrics.jobs.stream;
@@ -129,7 +129,6 @@ class ServerStatus {
             // Delete keys from server status
             delete this.status.analyzeSleepLeft;
             delete this.status.analyzeSleepRight;
-            delete this.status.biometricsInstallation;
             delete this.status.biometricsCalibrationLeft;
             delete this.status.biometricsCalibrationRight;
             delete this.status.biometricsStream;
@@ -144,4 +143,4 @@ class ServerStatus {
 }
 export default ServerStatus.getInstance();
 //# sourceMappingURL=serverStatus.js.map
-//# debugId=2efcf3b8-70c2-5db3-b724-37c09d837f44
+//# debugId=6cba58a5-a5c9-595d-8b2a-96b7ad5651f9

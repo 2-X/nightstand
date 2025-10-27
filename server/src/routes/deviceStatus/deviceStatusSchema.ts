@@ -26,6 +26,10 @@ export const DeviceStatusSchema = z.object({
   }),
   coverVersion: z.string(),
   hubVersion: z.string(),
+  freeSleep: z.object({
+    version: z.string(),
+    branch: z.string(),
+  })
 }).strict();
 
 export type SideStatus = z.infer<typeof SideStatusSchema>;

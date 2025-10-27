@@ -4,11 +4,9 @@ import Section from '../Section.tsx';
 import { Services, useServices, postServices } from '@api/services.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { DeepPartial } from 'ts-essentials';
-import { useServerStatus } from '@api/serverStatus.ts';
 
 export default function FeaturesSection() {
   const { data: services, refetch, isLoading } = useServices();
-  const { data: serverStatus } = useServerStatus();
   const setIsUpdating = useAppStore(state => state.setIsUpdating);
   const isUpdating = useAppStore(state => state.isUpdating);
 
@@ -24,12 +22,13 @@ export default function FeaturesSection() {
   };
 
   if (isLoading || !services) return <CircularProgress />;
+
   return (
     <Section title='Features'>
       <FormControlLabel
         control={
           <Switch
-            disabled={ isUpdating || serverStatus?.biometricsInstallation?.status !== 'healthy' }
+            disabled={ isUpdating || services?.biometrics.jobs.installation.status !== 'healthy' }
             checked={ services.biometrics.enabled }
             onChange={ (event) => updateServices({ biometrics: { enabled: event.target.checked } }) }
           />

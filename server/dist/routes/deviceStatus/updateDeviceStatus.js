@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="b16edb3a-2372-5e54-b617-0d6c65b5b006")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="4e6d15f8-c2a4-5fab-8f74-665e169f86d6")}catch(e){}}();
 import _ from 'lodash';
 import cbor from 'cbor';
 import { executeFunction } from '../../8sleep/deviceApi.js';
@@ -16,12 +16,12 @@ const updateSide = async (side, sideStatus) => {
     const settings = settingsDB.data;
     if (side === 'left') {
         if (settings.left.awayMode) {
-            throw new Error('Left side is in away mode, not updating side');
+            logger.warn('Left side is in away mode, not updating side');
         }
     }
     else {
         if (settings.right.awayMode) {
-            throw new Error('Right side is in away mode, not updating side');
+            logger.warn('Right side is in away mode, not updating side');
         }
     }
     const controlBothSides = settings.left.awayMode || settings.right.awayMode;
@@ -80,4 +80,4 @@ export const updateDeviceStatus = async (deviceStatus) => {
     logger.info('Finished updating device status');
 };
 //# sourceMappingURL=updateDeviceStatus.js.map
-//# debugId=b16edb3a-2372-5e54-b617-0d6c65b5b006
+//# debugId=4e6d15f8-c2a4-5fab-8f74-665e169f86d6

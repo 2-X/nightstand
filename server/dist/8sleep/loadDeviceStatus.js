@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="f69dfb46-2d49-5f82-97f4-81ae49c7914f")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="2c72ec1a-d34b-5a2b-8222-190656cfc0c5")}catch(e){}}();
 import { z } from 'zod';
 import { Version } from '../routes/deviceStatus/deviceStatusSchema.js';
 import logger from '../logger.js';
@@ -8,6 +8,7 @@ import cbor from 'cbor';
 import { access, readFile } from 'fs/promises';
 import { constants } from 'fs';
 import _ from 'lodash';
+import serverInfo from '../serverInfo.json' with { type: 'json' };
 const RawDeviceData = z.object({
     tgHeatLevelR: z.string().regex(/^-?\d+$/, { message: 'tgHeatLevelR must be a numeric value in a string' }),
     tgHeatLevelL: z.string().regex(/^-?\d+$/, { message: 'tgHeatLevelL must be a numeric value in a string' }),
@@ -161,10 +162,14 @@ export async function loadDeviceStatus(response) {
         },
         coverVersion: detectCoverVersion(rawDeviceData.sensorLabel),
         hubVersion: HUB_VERSION,
+        freeSleep: {
+            version: serverInfo.version,
+            branch: serverInfo.branch,
+        },
         waterLevel: rawDeviceData.waterLevel,
         isPriming: rawDeviceData.priming === 'true',
         settings: decodeSettings(rawDeviceData.settings),
     };
 }
 //# sourceMappingURL=loadDeviceStatus.js.map
-//# debugId=f69dfb46-2d49-5f82-97f4-81ae49c7914f
+//# debugId=2c72ec1a-d34b-5a2b-8222-190656cfc0c5

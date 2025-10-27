@@ -19,11 +19,11 @@ const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideSt
   const settings = settingsDB.data;
   if (side === 'left') {
     if (settings.left.awayMode) {
-      throw new Error('Left side is in away mode, not updating side');
+      logger.warn('Left side is in away mode, not updating side');
     }
   } else {
     if (settings.right.awayMode) {
-      throw new Error('Right side is in away mode, not updating side');
+      logger.warn('Right side is in away mode, not updating side');
     }
   }
   const controlBothSides = settings.left.awayMode || settings.right.awayMode;

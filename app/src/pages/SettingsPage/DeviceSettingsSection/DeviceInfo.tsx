@@ -1,20 +1,35 @@
-import { Box, Chip } from '@mui/material';
+import { Box, Chip, Typography } from '@mui/material';
 import { useDeviceStatus } from '@api/deviceStatus.ts';
 import { Version } from '@api/deviceStatusSchema';
+import UpdateAvailable from '@components/UpdateAvailable.tsx';
+
 
 export default function DeviceInfo() {
   const { data: deviceStatus, isLoading } = useDeviceStatus();
   if (isLoading || !deviceStatus) return null;
   const hideCover = deviceStatus.coverVersion === Version.NotFound;
   const hideHub = deviceStatus.hubVersion === Version.NotFound;
+
   return (
-    <Box sx={ { display: 'flex', gap: 1 } }>
-      {
-        !hideCover && <Chip label={ `${deviceStatus.coverVersion} Cover` } />
-      }
-      {
-        !hideHub && <Chip label={ `${deviceStatus.hubVersion} Hub` } />
-      }
-    </Box>
+    <>
+      <Box sx={ { display: 'flex', gap: 1, mb: 1 } }>
+        <Typography variant='body2'>Device</Typography>
+
+        {
+          !hideCover && <Chip label={ `${deviceStatus.coverVersion} Cover` } size='small'/>
+        }
+        {
+          !hideHub && <Chip label={ `${deviceStatus.hubVersion} Hub` } size='small'/>
+        }
+      </Box>
+      <Box sx={ { display: 'flex', gap: 1, align: 'center', alignItems: 'center' } }>
+
+        <Typography variant='body2'>Free Sleep Build</Typography>
+        <Chip label={ `v${deviceStatus.freeSleep?.version}` } size='small'/>
+        <Chip label={ deviceStatus.freeSleep.branch } size='small'/>
+      </Box>
+      <UpdateAvailable />
+
+    </>
   );
 }

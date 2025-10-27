@@ -6,6 +6,8 @@ import cbor from 'cbor';
 import { access, readFile } from 'fs/promises';
 import { constants } from 'fs';
 import _ from 'lodash';
+import serverInfo from '../serverInfo.json' with { type: 'json' };
+
 
 const RawDeviceData = z.object({
   tgHeatLevelR: z.string().regex(/^-?\d+$/, { message: 'tgHeatLevelR must be a numeric value in a string' }),
@@ -163,6 +165,10 @@ export async function loadDeviceStatus(response: string): Promise<DeviceStatus> 
     },
     coverVersion: detectCoverVersion(rawDeviceData.sensorLabel),
     hubVersion: HUB_VERSION,
+    freeSleep: {
+      version: serverInfo.version,
+      branch: serverInfo.branch,
+    },
     waterLevel: rawDeviceData.waterLevel,
     isPriming: rawDeviceData.priming === 'true',
     settings: decodeSettings(rawDeviceData.settings),

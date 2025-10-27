@@ -91,6 +91,7 @@ async function initFranken() {
   logger.info('Initializing Franken on startup...');
   serverStatus.status.franken.status = 'started';
   // Force creation of the Franken and FrankenServer so it’s ready before we listen
+  await getFrankenServer();
   await getFranken();
   serverStatus.status.franken.status = 'healthy';
   logger.info('Franken has been initialized successfully.');
@@ -111,8 +112,10 @@ async function startServer() {
 
   // Initialize Franken once before listening
   if (!config.remoteDevMode) {
-    initFranken()
-      .then(() => setupSentryTags())
+    void initFranken()
+      .then(() => {
+        setupSentryTags();
+      })
       .catch(error => {
         serverStatus.status.franken.status = 'failed';
         const message = error instanceof Error ? error.message : String(error);

@@ -123,10 +123,10 @@ class ServerStatus {
 
   async updateServices() {
     await servicesDB.read();
+    this.status.biometricsInstallation = servicesDB.data.biometrics.jobs.installation;
     if (servicesDB.data.biometrics.enabled) {
       this.status.analyzeSleepLeft = servicesDB.data.biometrics.jobs.analyzeSleepLeft;
       this.status.analyzeSleepRight = servicesDB.data.biometrics.jobs.analyzeSleepRight;
-      this.status.biometricsInstallation = servicesDB.data.biometrics.jobs.installation;
       this.status.biometricsCalibrationLeft = servicesDB.data.biometrics.jobs.calibrateLeft;
       this.status.biometricsCalibrationRight = servicesDB.data.biometrics.jobs.calibrateRight;
       this.status.biometricsStream = servicesDB.data.biometrics.jobs.stream;
@@ -134,7 +134,6 @@ class ServerStatus {
       // Delete keys from server status
       delete this.status.analyzeSleepLeft;
       delete this.status.analyzeSleepRight;
-      delete this.status.biometricsInstallation;
       delete this.status.biometricsCalibrationLeft;
       delete this.status.biometricsCalibrationRight;
       delete this.status.biometricsStream;
