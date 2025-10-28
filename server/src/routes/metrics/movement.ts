@@ -18,16 +18,15 @@ router.get('/movement', async (req: Request<object, object, object, MovementQuer
   const query: Prisma.movementWhereInput = {
     timestamp: {},
   };
+
   if (side) query.side = side;
   if (startTime) {
-    query.timestamp = {
-      gte: moment(startTime).unix(),
-    };
+    // @ts-expect-error
+    query.timestamp.gte = moment(startTime).unix();
   }
   if (endTime) {
-    query.timestamp = {
-      lte: moment(endTime).unix(),
-    };
+    // @ts-expect-error
+    query.timestamp.lte = moment(endTime).unix();
   }
 
   const movementRecords = await prisma.movement.findMany({
