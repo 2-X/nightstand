@@ -9,13 +9,26 @@
 
 ## 👉 [Installation Instructions](./INSTALLATION.md)
 
+--- 
 
-## [🤖 Custom ChatGPT Support Bot](https://chatgpt.com/g/g-68fb217791dc8191b82d2d0ae7b29940-free-sleep-bot) 
+## Overview
+Free Sleep is an open-source project designed to control and manage temperature schedules and settings for a device locally. It includes:
+- **Server**: A backend that interacts with the device through custom APIs.
+- **App**: A frontend React application for user-friendly interaction with the device.
+
+This project is intended to be entirely ran on an 8 sleep pod
+
+
+---  
+![App](docs/app.gif)
+
+---
+
+## [🤖 Custom ChatGPT Support Bot](https://chatgpt.com/g/g-68fb217791dc8191b82d2d0ae7b29940-free-sleep-bot)
 
 - A custom ChatGPT with Free Sleep documentation and related resources. It can help troubleshoot installations, answer setup questions, and guide you through common issues.
 
----  
-
+---
 ## Is it reversible? 
 Yes, I tested reversing it on my pod 3 by  [resetting the firmware](docs/pod_3_teardown/6_firmware_reset.jpeg). After the reset, setup your pod as a new pod again.
 
@@ -63,29 +76,11 @@ All biometric and sleep data is inserted into SQLite @ `/persistent/free-sleep-d
 
 1. Vitals (Heart rate, breath rate, HRV) `biometrics/stream/stream.py` - This runs 24/7 and calculates vitals when it detects presence.
 Vitals are inserted once every 60 seconds & you can access the raw data @ <POD_IP>/api/metrics/vitals
-**Data will not show in the UI if you don't have scheduled on/off times and daily primes enabled**
-
-2. Sleep periods `biometrics/sleep_detection/analyze_sleep.py` - This is scheduled under `server/src/jobs/jobScheduler.ts`
-DEPENDS ON:
-- Scheduled on/off times
-  - The sleep period is only calculated whenever the pod is scheduled to turn off on a side for that day
-- Daily priming enabled (this should be during a period no one is ever present on the pod)
-  - This establishes a base level threshold in order to detect when a user is present
-
 
 ## Limitations
 - Requires your device to be on the same Wi-Fi as the pod
 - No authentication is implemented
 - Pod 4 & 5 taps do not work
-
---- 
-
-## Overview
-Free Sleep is an open-source project designed to control and manage temperature schedules and settings for a device locally. It includes:
-- **Server**: A backend that interacts with the device through custom APIs.
-- **App**: A frontend React application for user-friendly interaction with the device.
-
-This project is intended to be entirely ran on an 8 sleep pod
 
 ---
 
@@ -102,19 +97,6 @@ This project is intended to be entirely ran on an 8 sleep pod
 - **Database**: LowDB for simple JSON-based storage.
 
 ---
-
-## App screenshots
-![App](docs/app.gif)
-![Device on](docs/on.png)
-![Device off](docs/off.png)
-![Device off](docs/water_notification.png)
-![Scheduled temperature adjustments](docs/scheduled_temperatures.png)
-![Scheduled alarms](docs/alarm_schedule.png)
-![Settings](docs/settings.png)
-![Biometrics - 1](docs/biometrics_1.png)
-![Biometrics - 2](docs/biometrics_2.png)
-![Biometrics - 3](docs/biometrics_3.png)
-
 ## Contributing
 
 - Reach out to me on Discord @free_sleep to coordinate work so we don't step on each other's toes
@@ -126,9 +108,26 @@ This project is intended to be entirely ran on an 8 sleep pod
 
 ## Support
 
-If you find this project helpful and would like to support its continued development, you can send a tip to my Bitcoin address.   
+If you find this project helpful and would like to support its continued development, you can send a tip to my Bitcoin address.
 
 BTC Address:
 bc1qjapkufh65gs68v2mkvrzq2ney3vnvv87jdxxg6
 
 Thank you for your support!
+
+---
+
+## App screenshots
+![Device on](docs/on.PNG)
+![Device off](docs/off.PNG)
+![Scheduled temperature adjustments](docs/schedules.PNG)
+![Health status](docs/health_status.PNG)
+![Settings](docs/settings.PNG)
+![Biometrics - 1](docs/sleep_data.PNG)
+![Biometrics - 2](docs/metrics.PNG)
+![Biometrics - 3](docs/movement.PNG)
+![Settings](docs/settings.PNG)
+![Settings](docs/settings_2.PNG)
+![Support](docs/support.PNG)
+
+
