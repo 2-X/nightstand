@@ -111,11 +111,13 @@ def _build_logger(logger: BaseLogger, name: LoggerName):
 def _load_sentry_tags():
     try:
         print('Getting sentry tags...')
-        services_url = "http://127.0.0.1:3000/api/deviceStatus"
+        with urllib.request.urlopen("http://127.0.0.1:3000/api/settings", timeout=5) as response:
+            user_id = json.load(response)["id"]
 
-        with urllib.request.urlopen(services_url, timeout=5) as response:
+        with urllib.request.urlopen("http://127.0.0.1:3000/api/deviceStatus", timeout=5) as response:
             data = json.load(response)
             return {
+                "user_id": user_id,
                 "branch": data["freeSleep"]["branch"],
                 "version": data["freeSleep"]["version"],
                 "hubVersion": data["hubVersion"],
@@ -125,6 +127,7 @@ def _load_sentry_tags():
         print('Failed to load Sentry tags!')
         print(error)
         return {
+            "user_id": "error",
             "branch": "error",
             "version": "error",
             "hubVersion": "error",
