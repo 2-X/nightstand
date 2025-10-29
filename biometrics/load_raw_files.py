@@ -127,35 +127,51 @@ def _rename_keys(data: dict):
             data[new_key] = data.pop(old_key)
 
 
-def load_raw_files(folder_path: str, start_time: datetime, end_time: datetime, side: Side, sensor_count=2, raw_data_types: List[RawDataTypes] = None):
-    data = {}
-    if raw_data_types is None:
-        raw_data_types = ['bedTemp', 'capSense', 'frzTemp', 'log', 'piezo-dual']
-
-    for field in raw_data_types:
-        data[field] = []
-    logger.debug(f'Loading RAW files from {folder_path} | {start_time.isoformat()} -> {end_time.isoformat()}')
-
-    file_paths = get_current_files(folder_path)
-
-    if len(file_paths) == 0:
-        logger.error('No file paths detected!')
-        raise FileNotFoundError(f'No files found for: {folder_path}! Is internet blocked?')
-
-    for file_path in file_paths:
-        if os.path.isfile(file_path):
-            _decode_cbor_file(file_path, data, start_time, end_time, side, sensor_count)
+def _debug_data(data: dict):
+    for key in data:
+        if isinstance(data[key], list) and len(data[key]) > 0:
+            logger.debug(f'{key} - {data[key][0]}')
         else:
-            logger.warning(f'File path deleted before parsed! {file_path}')
+            logger.warning(f'Unexpected type for loading raw file {type(data[key])}')
 
-    _rename_keys(data)
-    data_found = False
-    for key in data.keys():
-        if len(data[key]) > 0:
-            data_found = True
-        logger.debug(f"{key} - Rows found: {len(data[key])}")
 
-    if not data_found:
-        logger.warning('No data found! Mattress topper may be disconnected!')
-    gc.collect()
-    return data
+def load_raw_files(folder_path: str, start_time: datetime, end_time: datetime, side: Side, sensor_count=2, raw_data_types: List[RawDataTypes] = None):
+    try:
+        data = {}
+        if raw_data_types is None:
+            raw_data_types = ['bedTemp', 'capSense', 'frzTemp', 'log', 'piezo-dual']
+
+        for field in raw_data_types:
+            data[field] = []
+        logger.debug(f'Loading RAW files from {folder_path} | {start_time.isoformat()} -> {end_time.isoformat()}')
+
+        file_paths = get_current_files(folder_path)
+
+        if len(file_paths) == 0:
+            logger.error('No file paths detected!')
+            raise FileNotFoundError(f'No files found for: {folder_path}! Is internet blocked?')
+
+        for file_path in file_paths:
+            if os.path.isfile(file_path):
+                _decode_cbor_file(file_path, data, start_time, end_time, side, sensor_count)
+            else:
+                logger.warning(f'File path deleted before parsed! {file_path}')
+
+        _rename_keys(data)
+        data_found = False
+        for key in data.keys():
+            if len(data[key]) > 0:
+                data_found = True
+            logger.debug(f"{key} - Rows found: {len(data[key])}")
+
+        if not data_found:
+            logger.warning('No data found! Mattress topper may be disconnected!')
+        gc.collect()
+        _debug_data(data)
+
+        return data
+    except Exception as error:
+        logger.error(error)
+        _debug_data(data)
+
+        raise error

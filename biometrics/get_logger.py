@@ -1,11 +1,15 @@
 from typing import Literal, get_args, Optional, Tuple, List
 import platform
-import traceback
 import logging
 from logging.handlers import RotatingFileHandler
-import sys
 from datetime import datetime
 import os
+import sys
+import urllib.request
+import json
+
+import sentry_sdk
+
 
 LoggerName = Literal['sleep-analyzer', 'calibrate-sensor', 'free-sleep-stream']
 LOGGER_NAMES: List[LoggerName] = list(get_args(LoggerName))
@@ -88,7 +92,7 @@ def _get_console_handler():
 def _build_logger(logger: BaseLogger, name: LoggerName):
     logger.date = datetime.now().strftime('%Y-%m-%d')
     logger.start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
+    logger.propagate = False
     if platform.system().lower() == 'linux':
         logger.env = 'prod'
         logger.folder_path = '/persistent/free-sleep-data/'
@@ -101,6 +105,63 @@ def _build_logger(logger: BaseLogger, name: LoggerName):
     logger.addHandler(_get_file_handler(logger.folder_path, name))
 
 
+
+
+
+def _load_sentry_tags():
+    try:
+        print('Getting sentry tags...')
+        services_url = "http://127.0.0.1:3000/api/deviceStatus"
+
+        with urllib.request.urlopen(services_url, timeout=5) as response:
+            data = json.load(response)
+            return {
+                "branch": data["freeSleep"]["branch"],
+                "version": data["freeSleep"]["version"],
+                "hubVersion": data["hubVersion"],
+                "coverVersion": data["coverVersion"],
+            }
+    except Exception as error:
+        print('Failed to load Sentry tags!')
+        print(error)
+        return {
+            "branch": "error",
+            "version": "error",
+            "hubVersion": "error",
+            "coverVersion": "error",
+        }
+
+
+def _is_sentry_enabled():
+    try:
+        print('Checking if sentry is enabled...')
+        services_url = "http://127.0.0.1:3000/api/services"
+
+        with urllib.request.urlopen(services_url, timeout=5) as response:
+            data = json.load(response)
+            return data["sentryLogging"]["enabled"]
+    except Exception as error:
+        print('Failed to check if Sentry is enabled, enabling Sentry!')
+        print(error)
+        return True
+
+
+
+
+def _init_sentry():
+    if _is_sentry_enabled():
+
+        sentry_sdk.init(
+            dsn="https://71dec16dc7338369a770c424783d1712@o4510246020710401.ingest.us.sentry.io/4510252550979584",
+            # Add data like request headers and IP for users,
+            # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
+            send_default_pii=False,
+        )
+        sentry_tags = _load_sentry_tags()
+        sentry_sdk.set_tags(sentry_tags)
+
+
+
 def get_logger(name: Optional[LoggerName] = None) -> BaseLogger:
     """
     Returns:
@@ -110,4 +171,7 @@ def get_logger(name: Optional[LoggerName] = None) -> BaseLogger:
     logger, name = _get_logger_instance(name)
     if not logger.handlers:
         _build_logger(logger, name)
+        _init_sentry()
+
     return logger
+
