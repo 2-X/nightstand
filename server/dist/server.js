@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="201c382f-e2b2-5c80-a7f0-2b1a5603534e")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="0ba52cd9-a136-53dc-bccc-68eb922fc3f9")}catch(e){}}();
 import './instrument.js';
 import express from 'express';
 import schedule from 'node-schedule';
@@ -13,6 +13,7 @@ import config from './config.js';
 import serverStatus from './serverStatus.js';
 import { prisma } from './db/prisma.js';
 import { setupSentryTags } from './setupSentryTags.js';
+import { loadWifiSignalStrength } from './8sleep/wifiSignalStrength.js';
 const port = 3000;
 const app = express();
 let server;
@@ -110,6 +111,8 @@ async function startServer() {
             logger.error(error);
         });
     }
+    void loadWifiSignalStrength();
+    setInterval(loadWifiSignalStrength, 10_000);
     // Register signal handlers for graceful shutdown
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     process.on('SIGINT', () => gracefulShutdown('SIGINT'));
@@ -130,4 +133,4 @@ startServer().catch((err) => {
     process.exit(1);
 });
 //# sourceMappingURL=server.js.map
-//# debugId=201c382f-e2b2-5c80-a7f0-2b1a5603534e
+//# debugId=0ba52cd9-a136-53dc-bccc-68eb922fc3f9

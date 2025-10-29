@@ -17,6 +17,9 @@ type AppState = {
 };
 
 const SIDE_KEY = 'side';
+export const USER_ID_KEY = 'user_id';
+export const HUB_VERSION_KEY = 'pod_version';
+export const COVER_VERSION_KEY = 'cover_version';
 
 // Create Zustand store
 export const useAppStore = create<AppState>((set) => ({
@@ -48,6 +51,10 @@ export function AppStoreProvider({ children }: React.PropsWithChildren) {
 
   useEffect(() => {
     if (!settings || !deviceStatus || !services) return;
+    localStorage.setItem(USER_ID_KEY, settings.id);
+    localStorage.setItem(HUB_VERSION_KEY, deviceStatus.hubVersion);
+    localStorage.setItem(COVER_VERSION_KEY, deviceStatus.coverVersion);
+
     if (services.sentryLogging) {
       initSentryTags(settings, deviceStatus);
     } else {

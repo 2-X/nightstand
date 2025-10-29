@@ -7,6 +7,7 @@ import { access, readFile } from 'fs/promises';
 import { constants } from 'fs';
 import _ from 'lodash';
 import serverInfo from '../serverInfo.json' with { type: 'json' };
+import { WIFI_SIGNAL_STRENGTH } from './wifiSignalStrength.js';
 
 
 const RawDeviceData = z.object({
@@ -172,5 +173,6 @@ export async function loadDeviceStatus(response: string): Promise<DeviceStatus> 
     waterLevel: rawDeviceData.waterLevel,
     isPriming: rawDeviceData.priming === 'true',
     settings: decodeSettings(rawDeviceData.settings),
+    wifiStrength: WIFI_SIGNAL_STRENGTH,
   };
 }

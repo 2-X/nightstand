@@ -29,7 +29,8 @@ export const DeviceStatusSchema = z.object({
   freeSleep: z.object({
     version: z.string(),
     branch: z.string(),
-  })
+  }),
+  wifiStrength: z.number(),
 }).strict();
 
 export type SideStatus = z.infer<typeof SideStatusSchema>;

@@ -14,6 +14,7 @@ import config from './config.js';
 import serverStatus from './serverStatus.js';
 import { prisma } from './db/prisma.js';
 import { setupSentryTags } from './setupSentryTags.js';
+import { loadWifiSignalStrength } from './8sleep/wifiSignalStrength.js';
 
 const port = 3000;
 const app = express();
@@ -124,6 +125,8 @@ async function startServer() {
         logger.error(error);
       });
   }
+  void loadWifiSignalStrength();
+  setInterval(loadWifiSignalStrength, 10_000);
 
   // Register signal handlers for graceful shutdown
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

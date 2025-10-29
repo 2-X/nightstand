@@ -2,6 +2,7 @@ import { Box, Chip, Typography } from '@mui/material';
 import { useDeviceStatus } from '@api/deviceStatus.ts';
 import { Version } from '@api/deviceStatusSchema';
 import VersionStatus from '@components/VersionStatus.tsx';
+import WifiStrength from './WifiStrength.tsx';
 
 
 export default function DeviceInfo() {
@@ -21,6 +22,7 @@ export default function DeviceInfo() {
         {
           !hideHub && <Chip label={ `${deviceStatus.hubVersion} Hub` } size='small'/>
         }
+        <WifiStrength />
       </Box>
       <Box sx={ { display: 'flex', gap: 1, align: 'center', alignItems: 'center', mb: 1 } }>
         <Typography variant='body2'>Free Sleep Build</Typography>

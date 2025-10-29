@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="2c72ec1a-d34b-5a2b-8222-190656cfc0c5")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="0f914eba-9e23-5c16-8e1c-b8435692ea64")}catch(e){}}();
 import { z } from 'zod';
 import { Version } from '../routes/deviceStatus/deviceStatusSchema.js';
 import logger from '../logger.js';
@@ -9,6 +9,7 @@ import { access, readFile } from 'fs/promises';
 import { constants } from 'fs';
 import _ from 'lodash';
 import serverInfo from '../serverInfo.json' with { type: 'json' };
+import { WIFI_SIGNAL_STRENGTH } from './wifiSignalStrength.js';
 const RawDeviceData = z.object({
     tgHeatLevelR: z.string().regex(/^-?\d+$/, { message: 'tgHeatLevelR must be a numeric value in a string' }),
     tgHeatLevelL: z.string().regex(/^-?\d+$/, { message: 'tgHeatLevelL must be a numeric value in a string' }),
@@ -169,7 +170,8 @@ export async function loadDeviceStatus(response) {
         waterLevel: rawDeviceData.waterLevel,
         isPriming: rawDeviceData.priming === 'true',
         settings: decodeSettings(rawDeviceData.settings),
+        wifiStrength: WIFI_SIGNAL_STRENGTH,
     };
 }
 //# sourceMappingURL=loadDeviceStatus.js.map
-//# debugId=2c72ec1a-d34b-5a2b-8222-190656cfc0c5
+//# debugId=0f914eba-9e23-5c16-8e1c-b8435692ea64

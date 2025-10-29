@@ -1,6 +1,6 @@
 // WARNING! - Any changes here MUST be the same between app/src/api & server/src/db/
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="eccd9dd8-8320-5b1d-b15b-104c9a64679a")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="a30013e4-a9a3-59a9-a75b-4713ae53bbaa")}catch(e){}}();
 import { z } from 'zod';
 const SideStatusSchema = z.object({
     currentTemperatureLevel: z.number(),
@@ -28,7 +28,8 @@ export const DeviceStatusSchema = z.object({
     freeSleep: z.object({
         version: z.string(),
         branch: z.string(),
-    })
+    }),
+    wifiStrength: z.number(),
 }).strict();
 export var Version;
 (function (Version) {
@@ -38,4 +39,4 @@ export var Version;
     Version["Pod5"] = "Pod 5";
 })(Version || (Version = {}));
 //# sourceMappingURL=deviceStatusSchema.js.map
-//# debugId=eccd9dd8-8320-5b1d-b15b-104c9a64679a
+//# debugId=a30013e4-a9a3-59a9-a75b-4713ae53bbaa
