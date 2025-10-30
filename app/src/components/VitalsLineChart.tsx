@@ -1,4 +1,5 @@
 /* eslint-disable react/no-multi-comp */
+import { useMemo } from 'react';
 import Alert, { AlertProps } from '@mui/material/Alert';
 import Link from '@mui/material/Link';
 import InfoIcon from '@mui/icons-material/Info';
@@ -16,10 +17,11 @@ type VitalsLineChartProps = {
   metric: Metric;
 };
 
-const downsampleData = (data: VitalsRecord[], factor: number) => {
-  return data.filter((_, index) => index % factor === 0);
-};
 
+function downsampleData<T>(data: readonly T[], factor: number): T[] {
+  if (!Number.isFinite(factor) || factor <= 1) return [...data];
+  return data.filter((_, i) => i % factor === 0);
+}
 type BannerProps = {
   metric: Metric;
   label: string;
@@ -65,7 +67,28 @@ const Banner = ({ metric }: BannerProps) => {
 export default function VitalsLineChart({ vitalsRecords, metric }: VitalsLineChartProps) {
   const { width = 300, ref } = useResizeDetector();
   const theme = useTheme();
+
+  const cleanedVitalsRecords = useMemo(() => {
+    if (!vitalsRecords) return [];
+    const pxPerPoint = 3;
+    const allowedPoints = width / pxPerPoint;
+    const downsampleTo = Math.ceil(vitalsRecords?.length / allowedPoints);
+    return downsampleData(vitalsRecords, downsampleTo)
+      .filter(
+        (record) =>
+          record.timestamp &&
+          !isNaN(new Date(record.timestamp).getTime()) &&
+          !isNaN(record[metric])
+      )
+      .map((record) => ({
+        ...record,
+        timestamp: new Date(record.timestamp),
+        [metric]: Number(record[metric]),
+      }));
+  }, [vitalsRecords]);
+
   if (!vitalsRecords) return;
+
   const vitalsMap = {
     heart_rate: {
       label: 'Heart rate',
@@ -82,22 +105,6 @@ export default function VitalsLineChart({ vitalsRecords, metric }: VitalsLineCha
   };
   const { label, color } = vitalsMap[metric];
 
-  const pxPerPoint = 3;
-  const allowedPoints = width / pxPerPoint;
-  const downsampleTo = Math.ceil(vitalsRecords.length / allowedPoints);
-
-  const cleanedVitalsRecords = downsampleData(vitalsRecords, downsampleTo)
-    .filter(
-      (record) =>
-        record.timestamp &&
-        !isNaN(new Date(record.timestamp).getTime()) &&
-        !isNaN(record[metric])
-    )
-    .map((record) => ({
-      ...record,
-      timestamp: new Date(record.timestamp),
-      [metric]: Number(record[metric]),
-    }));
 
   return (
     <Card sx={ { pt: 1, mt: 2, pl: 2, pr: 2, pb: 2 } }>

@@ -1,4 +1,4 @@
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/GridLegacy';
 import Switch from '@mui/material/Switch';
 import { Box, TextField, Typography } from '@mui/material';
 import { DeepPartial } from 'ts-essentials';

@@ -7,10 +7,10 @@ import {
   Card,
   CardContent,
   CardHeader,
-  Grid,
   Stack,
   Typography,
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy';
 
 import StatusChip from './StatusChip.tsx';
 import { postJobs, JobSchema, Jobs } from '@api/jobs.ts';

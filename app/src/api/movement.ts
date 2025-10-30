@@ -10,7 +10,7 @@ interface MovementQueryParams {
 }
 
 
-export const useMovementRecords = (params?: MovementQueryParams) => {
+export const useMovementRecords = (params?: MovementQueryParams, enabled=true) => {
   return useQuery<MovementRecord[]>({
     queryKey: ['useMovementRecords', params],
     queryFn: async () => {
@@ -23,6 +23,7 @@ export const useMovementRecords = (params?: MovementQueryParams) => {
       const response = await axios.get<MovementRecord[]>(`/metrics/movement?${queryParams.toString()}`);
       return response.data;
     },
+    enabled,
   });
 };
 

@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { create } from 'zustand';
-import { useIsFetching } from '@tanstack/react-query';
 import moment from 'moment-timezone';
+
 import { useSettings } from '@api/settings.ts';
 import { useServices } from '@api/services.ts';
 import { closeSentry, initSentryTags } from '../sentry.tsx';
@@ -38,11 +38,6 @@ export function AppStoreProvider({ children }: React.PropsWithChildren) {
   const { data: services } = useServices();
   const { data: deviceStatus } = useDeviceStatus();
 
-  const isFetching = useIsFetching({
-    // @ts-expect-error
-    predicate: (query) => query?.options?.method !== 'GET',
-  }) > 0;
-
   useEffect(() => {
     if (!settings) return;
     // @ts-ignore
@@ -61,11 +56,6 @@ export function AppStoreProvider({ children }: React.PropsWithChildren) {
       closeSentry();
     }
   }, [settings, deviceStatus, services]);
-
-  // Directly update the store's state
-  useEffect(() => {
-    useAppStore.setState({ isUpdating: isFetching });
-  }, [isFetching]);
 
   return <>{ children }</>;
 }

@@ -1,10 +1,11 @@
 import moment from 'moment-timezone';
 import { useServerStatus } from '@api/serverStatus.ts';
 import {
-  Grid,
+  CircularProgress,
   Stack,
   Typography,
 } from '@mui/material';
+import Grid from '@mui/material/GridLegacy';
 
 import PageContainer from '../PageContainer.tsx';
 import StatusCard from './StatusCard.tsx';
@@ -12,10 +13,8 @@ import { ServerStatusKey, StatusInfo } from '@api/serverStatusSchema.ts';
 
 export default function StatusPage() {
   const { data, isLoading, dataUpdatedAt } = useServerStatus(5_000);
-  if (isLoading || !data) return null;
   const updatedAt = moment(dataUpdatedAt);
   const formatted = updatedAt.format('YYYY-MM-DD HH:mm:ss z');
-
   return (
     <PageContainer
       sx={ {
@@ -40,20 +39,27 @@ export default function StatusPage() {
         >
           Updated at: { formatted }
         </Typography>
-
       </Stack>
-      <Grid container spacing={ 2.5 } sx={ { mt: 1 } }>
-        {
-          // @ts-expect-error
-          Object.keys(data).map((job: ServerStatusKey) => (
-            <StatusCard
-              key={ job }
-              job={ job }
-              statusInfo={ data[job] as StatusInfo }
-            />
-          ))
-        }
-      </Grid>
+      { isLoading && <CircularProgress /> }
+
+      {
+        data && (
+          <Grid container spacing={ 2.5 } sx={ { mt: 1 } }>
+            {
+              // @ts-expect-error
+              Object.keys(data).map((job: ServerStatusKey) => (
+                <StatusCard
+                  key={ job }
+                  job={ job }
+                  statusInfo={ data[job] as StatusInfo }
+                />
+              ))
+            }
+          </Grid>
+        )
+
+      }
+
     </PageContainer>
   );
 }

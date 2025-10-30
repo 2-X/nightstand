@@ -10,7 +10,7 @@ interface VitalsRecordQueryParams {
 }
 
 
-export const useVitalsRecords = (params?: VitalsRecordQueryParams) => {
+export const useVitalsRecords = (params?: VitalsRecordQueryParams, enabled=true) => {
   return useQuery<VitalsRecord[]>({
     queryKey: ['useVitalsRecords', params],
     queryFn: async () => {
@@ -23,6 +23,7 @@ export const useVitalsRecords = (params?: VitalsRecordQueryParams) => {
       const response = await axios.get<VitalsRecord[]>(`/metrics/vitals?${queryParams.toString()}`);
       return response.data;
     },
+    enabled,
   });
 };
 

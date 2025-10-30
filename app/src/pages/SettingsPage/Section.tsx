@@ -9,7 +9,7 @@ type SectionProps = PropsWithChildren<{
 
 export default function Section({ title, children }: SectionProps) {
   return (
-    <Card sx={ { width: '98%' } }>
+    <Card sx={ { width: '98%', overflowWrap: 'break-word', wordBreak: 'break-word' } }>
       <CardContent>
         {
           title && (

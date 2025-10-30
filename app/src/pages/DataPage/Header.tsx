@@ -1,5 +1,7 @@
 import { ReactNode } from 'react';
-import { Grid, Typography } from '@mui/material';
+import { Typography } from '@mui/material';
+import Grid from '@mui/material/GridLegacy';
+
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import { useNavigate } from 'react-router-dom';
 

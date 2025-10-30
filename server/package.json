@@ -20,7 +20,7 @@
   "author": "",
   "license": "ISC",
   "volta": {
-    "node": "22.21.0"
+    "node": "24.11.0"
   },
   "dependencies": {
     "@prisma/client": "^6.4.0",
@@ -44,7 +44,7 @@
     "@types/cors": "^2.8.0",
     "@types/express": "^5.0.0",
     "@types/lodash": "^4.17.0",
-    "@types/node": "^22.13.0",
+    "@types/node": "^24.0.0",
     "@types/node-schedule": "^2.1.0",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",

@@ -15,21 +15,22 @@ export default function DeviceInfo() {
     <>
       <Box sx={ { display: 'flex', gap: 1, mb: 1 } }>
         <Typography variant='body2'>Device</Typography>
-
         {
           !hideCover && <Chip label={ `${deviceStatus.coverVersion} Cover` } size='small'/>
         }
         {
           !hideHub && <Chip label={ `${deviceStatus.hubVersion} Hub` } size='small'/>
         }
-        <WifiStrength />
       </Box>
       <Box sx={ { display: 'flex', gap: 1, align: 'center', alignItems: 'center', mb: 1 } }>
         <Typography variant='body2'>Free Sleep Build</Typography>
         <Chip label={ `v${deviceStatus.freeSleep?.version}` } size='small'/>
         <Chip label={ deviceStatus.freeSleep.branch } size='small'/>
       </Box>
-      <VersionStatus />
+      <Box sx={ { display: 'flex', gap: 1, mt: 1 } }>
+        <VersionStatus />
+        <WifiStrength />
+      </Box>
     </>
   );
 }

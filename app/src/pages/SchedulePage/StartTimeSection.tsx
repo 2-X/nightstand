@@ -14,6 +14,7 @@ export default function StartTimeSection({ displayCelsius }: { displayCelsius: b
       <TextField
         label="Power on"
         type="time"
+        variant='standard'
         value={ selectedSchedule?.power.on || '21:00' }
         disabled={ disabled }
         onChange={ (event) => {

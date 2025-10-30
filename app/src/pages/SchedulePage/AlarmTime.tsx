@@ -38,7 +38,7 @@ export default function AlarmTime() {
       type="time"
       value={ selectedSchedule?.alarm.time || '09:00' }
       onChange={ (e) => handleChange(e.target.value) }
-
+      variant='standard'
       error={ !validations.alarmTimeIsValid }
       helperText={
         validations.alarmTimeIsValid

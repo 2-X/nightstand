@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { ScatterChart } from '@mui/x-charts/ScatterChart';
 import { Card, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
@@ -9,25 +10,32 @@ type MovementChartProps = {
   movementRecords: MovementRecord[];
   label: string;
 }
+function downsampleData<T>(data: readonly T[], factor: number): T[] {
+  if (!Number.isFinite(factor) || factor <= 1) return [...data];
+  return data.filter((_, i) => i % factor === 0);
+}
+
 export default function MovementChart({ movementRecords, label }: MovementChartProps) {
   const { width = 300, ref } = useResizeDetector();
   const theme = useTheme();
+
+  const cleanedRecords = useMemo(() => {
+    if (!movementRecords) return [];
+    //Down sampling
+    const pxPerPoint = 5;
+    const allowedPoints = width / pxPerPoint;
+    const downsampleTo = Math.ceil(movementRecords.length / allowedPoints);
+    const downsampled = downsampleData(movementRecords, downsampleTo).map((record) => ({
+      id: record.id,
+      timestamp: new Date(record.timestamp),
+      total_movement: Number(record.total_movement),
+    }));
+    const filtered = downsampled.filter(row => row.total_movement > 20);
+    return filtered;
+  }, [movementRecords]);
+
   if (!movementRecords || movementRecords.length === 0) return null;
-
   const color = theme.palette.primary.light;
-
-  // Optional down sampling
-  const pxPerPoint = 5;
-  const allowedPoints = width / pxPerPoint;
-  const downsampleTo = Math.ceil(movementRecords.length / allowedPoints);
-  // @ts-ignore
-  const downsampleData = (data, factor) => data.filter((_, i) => i % factor === 0);
-  // @ts-ignore
-  const cleanedRecords = downsampleData(movementRecords, downsampleTo).map((record) => ({
-    id: record.id,
-    timestamp: new Date(record.timestamp),
-    total_movement: Number(record.total_movement),
-  }));
 
   return (
     <Card sx={ { pt: 1, mt: 2, pl: 2 } }>

@@ -22,6 +22,7 @@ export default function AlarmPattern() {
         <Select
           disabled={ isUpdating }
           value={ selectedSchedule?.alarm.vibrationPattern }
+          variant='standard'
           onChange={ (event) => {
             updateSelectedSchedule(
               {

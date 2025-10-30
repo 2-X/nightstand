@@ -76,9 +76,8 @@ const App = () => {
                   <Route path="temperature" element={ <ControlTempPage/> }/>
                   <Route path="left" element={ <ControlTempPage/> }/>
                   <Route path="right" element={ <ControlTempPage/> }/>
-
-
                   <Route path="status" element={ <StatusPage /> } />
+
                   <Route path="data" element={ <DataPage /> }>
                     <Route path="sleep" element={ <SleepPage/> }/>
                     <Route path="logs" element={ <LogsPage/> }/>
@@ -92,7 +91,6 @@ const App = () => {
             </BrowserRouter>
           </AppStoreProvider>
         </LocalizationProvider>
-
       </ThemeProvider>
     </QueryClientProvider>
   );

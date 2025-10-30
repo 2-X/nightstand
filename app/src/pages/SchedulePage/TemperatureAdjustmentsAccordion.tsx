@@ -134,6 +134,7 @@ export default function TemperatureAdjustmentsAccordion({ displayCelsius }: { di
                 <TextField
                   label="Time"
                   type="time"
+                  variant='standard'
                   value={ time }
                   sx={ { flexGrow: 1 } }
                   onChange={ (event) => handleUpdateTime(time, event.target.value) }
@@ -154,6 +155,7 @@ export default function TemperatureAdjustmentsAccordion({ displayCelsius }: { di
                   }
                   sx={ { width: '110px' } }
                   disabled={ isUpdating }
+                  size='small'
                 >
                   {
                     TEMPERATURES_LIST.map((temp) => (

@@ -42,7 +42,7 @@ export default function PowerOffTime() {
       type="time"
       value={ selectedSchedule?.power?.off || '09:00' }
       onChange={ (e) => handleChange(e.target.value) }
-
+      variant='standard'
       error={ !validations.powerOffTimeIsValid }
       helperText={
         !validations.powerOffTimeIsValid
