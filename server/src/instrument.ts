@@ -15,6 +15,7 @@ export const initSentry = () => {
     // Setting this option to true will send default PII data to Sentry.
     // For example, automatic IP address collection on events
     sendDefaultPii: false,
+    tracesSampleRate: 1.0,
     initialScope: {
       tags: {
         ...serverInfo,

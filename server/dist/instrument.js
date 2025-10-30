@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="64d012f9-b578-56a6-a121-7b9af0093b22")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="fd348813-afbb-59b7-9c37-6d603faa0dc0")}catch(e){}}();
 import * as Sentry from '@sentry/node';
 import servicesDB from './db/services.js';
 import serverInfo from './serverInfo.json' with { type: 'json' };
@@ -13,6 +13,7 @@ export const initSentry = () => {
         // Setting this option to true will send default PII data to Sentry.
         // For example, automatic IP address collection on events
         sendDefaultPii: false,
+        tracesSampleRate: 1.0,
         initialScope: {
             tags: {
                 ...serverInfo,
@@ -27,4 +28,4 @@ if (servicesDB.data.sentryLogging.enabled) {
     initSentry();
 }
 //# sourceMappingURL=instrument.js.map
-//# debugId=64d012f9-b578-56a6-a121-7b9af0093b22
+//# debugId=fd348813-afbb-59b7-9c37-6d603faa0dc0

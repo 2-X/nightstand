@@ -2,6 +2,7 @@ import { ServerStatus as ServerStatusType } from './routes/serverStatus/serverSt
 import { isSystemDateValid } from './jobs/isSystemDateValid.js';
 import servicesDB from './db/services.js';
 import { prisma } from './db/prisma.js';
+import moment from 'moment-timezone';
 
 await servicesDB.read();
 
@@ -129,6 +130,13 @@ class ServerStatus {
       this.status.analyzeSleepRight = servicesDB.data.biometrics.jobs.analyzeSleepRight;
       this.status.biometricsCalibrationLeft = servicesDB.data.biometrics.jobs.calibrateLeft;
       this.status.biometricsCalibrationRight = servicesDB.data.biometrics.jobs.calibrateRight;
+
+      const time = moment(servicesDB.data.biometrics.jobs.stream.timestamp);
+      if (moment().diff(time, 'minutes') >= 5) {
+        servicesDB.data.biometrics.jobs.stream.status = 'failed';
+        servicesDB.data.biometrics.jobs.stream.message = 'Biometrics stream died! Run `systemctl restart free-sleep-stream`';
+      }
+      await servicesDB.write();
       this.status.biometricsStream = servicesDB.data.biometrics.jobs.stream;
     } else {
       // Delete keys from server status

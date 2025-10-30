@@ -1,8 +1,9 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="6cba58a5-a5c9-595d-8b2a-96b7ad5651f9")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="85f063f5-0a87-530f-9bfb-a177bdb60a87")}catch(e){}}();
 import { isSystemDateValid } from './jobs/isSystemDateValid.js';
 import servicesDB from './db/services.js';
 import { prisma } from './db/prisma.js';
+import moment from 'moment-timezone';
 await servicesDB.read();
 class ServerStatus {
     // eslint-disable-next-line no-use-before-define
@@ -123,6 +124,12 @@ class ServerStatus {
             this.status.analyzeSleepRight = servicesDB.data.biometrics.jobs.analyzeSleepRight;
             this.status.biometricsCalibrationLeft = servicesDB.data.biometrics.jobs.calibrateLeft;
             this.status.biometricsCalibrationRight = servicesDB.data.biometrics.jobs.calibrateRight;
+            const time = moment(servicesDB.data.biometrics.jobs.stream.timestamp);
+            if (moment().diff(time, 'minutes') >= 5) {
+                servicesDB.data.biometrics.jobs.stream.status = 'failed';
+                servicesDB.data.biometrics.jobs.stream.message = 'Biometrics stream died! Run `systemctl restart free-sleep-stream`';
+            }
+            await servicesDB.write();
             this.status.biometricsStream = servicesDB.data.biometrics.jobs.stream;
         }
         else {
@@ -143,4 +150,4 @@ class ServerStatus {
 }
 export default ServerStatus.getInstance();
 //# sourceMappingURL=serverStatus.js.map
-//# debugId=6cba58a5-a5c9-595d-8b2a-96b7ad5651f9
+//# debugId=85f063f5-0a87-530f-9bfb-a177bdb60a87

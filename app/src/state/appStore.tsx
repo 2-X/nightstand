@@ -4,7 +4,7 @@ import { useIsFetching } from '@tanstack/react-query';
 import moment from 'moment-timezone';
 import { useSettings } from '@api/settings.ts';
 import { useServices } from '@api/services.ts';
-import { closeSentry, initSentryTags } from '../sentry.ts';
+import { closeSentry, initSentryTags } from '../sentry.tsx';
 import { useDeviceStatus } from '@api/deviceStatus.ts';
 
 export type Side = 'left' | 'right';

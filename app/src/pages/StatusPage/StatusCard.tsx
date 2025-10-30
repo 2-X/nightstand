@@ -86,8 +86,8 @@ export default function StatusCard({ job, statusInfo }: StatusCardProps) {
             statusInfo.message && (
               <Typography
                 variant="body2"
+                color='error'
                 sx={ {
-                  color: (t) => t.palette.text.secondary,
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
                   minHeight: 24,

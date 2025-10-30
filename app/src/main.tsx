@@ -1,5 +1,6 @@
-import { initSentry } from './sentry.ts';
+import { initSentry } from './sentry.tsx';
 initSentry();
+import * as Sentry from '@sentry/react';
 
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { createRoot } from 'react-dom/client';
@@ -49,6 +50,8 @@ const queryClient = new QueryClient({
   },
 });
 
+const SentryRoutes = Sentry.withSentryReactRouterV7Routing(Routes);
+
 
 const App = () => {
   return (
@@ -67,7 +70,7 @@ const App = () => {
               } }
             />
             <BrowserRouter basename="/">
-              <Routes>
+              <SentryRoutes>
                 <Route path="/" element={ <Layout/> }>
                   <Route index element={ <SettingsPage/> }/>
                   <Route path="temperature" element={ <ControlTempPage/> }/>
@@ -85,7 +88,7 @@ const App = () => {
                   <Route path="settings" element={ <SettingsPage/> }/>
                   <Route path="schedules" element={ <SchedulePage/> }/>
                 </Route>
-              </Routes>
+              </SentryRoutes>
             </BrowserRouter>
           </AppStoreProvider>
         </LocalizationProvider>

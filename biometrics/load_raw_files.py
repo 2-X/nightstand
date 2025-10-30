@@ -130,8 +130,8 @@ def _rename_keys(data: dict):
 def _debug_data(data: dict):
     for key in data:
         if isinstance(data[key], list) and len(data[key]) > 0:
-            logger.debug(f'{key} - {data[key][0]}')
-        else:
+            logger.info(f'{key} - {data[key][0]}')
+        elif not isinstance(data[key], list):
             logger.warning(f'Unexpected type for loading raw file {type(data[key])}')
 
 
@@ -143,7 +143,7 @@ def load_raw_files(folder_path: str, start_time: datetime, end_time: datetime, s
 
         for field in raw_data_types:
             data[field] = []
-        logger.debug(f'Loading RAW files from {folder_path} | {start_time.isoformat()} -> {end_time.isoformat()}')
+        logger.info(f'Loading RAW files from {folder_path} | {start_time.isoformat()} -> {end_time.isoformat()}')
 
         file_paths = get_current_files(folder_path)
 

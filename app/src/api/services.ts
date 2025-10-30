@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 // WARNING! - Any changes here MUST be the same between app/src/api & server/src/db/
 import { Services } from '../../../server/src/db/servicesSchema.ts';
 import { DeepPartial } from 'ts-essentials';
-import { closeSentry, initSentry } from '../sentry.ts';
+import { closeSentry, initSentry } from '../sentry.tsx';
 export * from '../../../server/src/db/servicesSchema.ts';
 
 
