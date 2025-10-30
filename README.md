@@ -115,6 +115,17 @@ bc1qjapkufh65gs68v2mkvrzq2ney3vnvv87jdxxg6
 
 Thank you for your support!
 
+
+---
+## Supporters
+
+### Sentry.io 
+Sentry
+has generously sponsored error monitoring for the Free Sleep open-source project.
+Their support helps us maintain a more reliable experience for users by 
+enabling real-time visibility into issues and performance data — thank you, Sentry, 
+for supporting open-source innovation!
+
 ---
 
 ## App screenshots
