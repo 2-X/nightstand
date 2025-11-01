@@ -1,17 +1,11 @@
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import logger from '../logger.js';
 
 export default function update() {
-  logger.debug('Updating pod...');
-  exec('sudo sh /home/dac/free-sleep/scripts/update.sh', (error, stdout, stderr) => {
-    if (error) {
-      logger.error(`Error: ${error.message}`);
-      return;
-    }
-    if (stderr) {
-      logger.error(`Stderr: ${stderr}`);
-      return;
-    }
-    logger.debug(`Stdout: ${stdout}`);
+  logger.debug('Updating free-sleep...');
+  const child = spawn('sudo', ['/bin/systemctl', 'start', 'free-sleep-update.service', '--no-block'], {
+    stdio: 'ignore',
+    detached: true,
   });
+  child.unref();
 }

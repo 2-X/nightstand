@@ -1,4 +1,4 @@
-import { Button } from '@mui/material';
+import { Button, CircularProgress } from '@mui/material';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -26,6 +26,7 @@ const Transition = forwardRef(function Transition(
 export default function UpdateFreeSleepButton() {
   const [open, setOpen] = useState(false);
   const { data: serverInfo } = useServerInfo();
+  const [isUpdating, setIsUpdating] = useState(true);
 
   const handleClickOpen = () => {
     setOpen(true);
@@ -36,6 +37,7 @@ export default function UpdateFreeSleepButton() {
   };
 
   const update = () => {
+    setIsUpdating(true);
     postJobs(['update'])
       .catch(error => {
         console.error(error);
@@ -44,7 +46,7 @@ export default function UpdateFreeSleepButton() {
 
   return (
     <>
-      <Button variant="outlined" onClick={ handleClickOpen } size='small' sx={ { width: '150px' } }>
+      <Button variant="outlined" onClick={ handleClickOpen } size="small" sx={ { width: '150px' } }>
         Update free sleep
       </Button>
       <Dialog
@@ -55,18 +57,53 @@ export default function UpdateFreeSleepButton() {
         keepMounted
         onClose={ handleClose }
       >
-        <DialogTitle>Update Free Sleep?</DialogTitle>
+        {
+          isUpdating ?
+            <DialogTitle>Updating Free Sleep...</DialogTitle>
+            :
+            <DialogTitle>Update Free Sleep?</DialogTitle>
+        }
+
         <DialogContent>
-          <DialogContentText>
-            Update from { currentServerInfo.version } to { serverInfo?.version }?
-            This should take about 3 minutes.
-            This website will be unavailable during the update.
-          </DialogContentText>
+          {
+            isUpdating ?
+              (
+                <>
+                  <DialogContentText>
+                    Updating from { currentServerInfo.version } to { serverInfo?.version }.
+                    This page will be unavailable until update is complete.
+                    &nbsp;<CircularProgress size={ 20 }/>
+                  </DialogContentText>
+                </>
+              )
+              :
+              (
+                <DialogContentText>
+                  Update from { currentServerInfo.version } to { serverInfo?.version }?
+                  This should take about 3 minutes.
+                  This website will be unavailable during the update.
+                </DialogContentText>
+              )
+          }
+
         </DialogContent>
-        <DialogActions>
-          <Button onClick={ handleClose }>Cancel</Button>
-          <Button onClick={ update }>Confirm</Button>
-        </DialogActions>
+        {
+          isUpdating ?
+            (
+              <DialogActions>
+                <Button onClick={ handleClose }>Close</Button>
+              </DialogActions>
+
+            )
+            :
+            (
+              <DialogActions>
+                <Button onClick={ handleClose }>Cancel</Button>
+                <Button onClick={ update }>Confirm</Button>
+              </DialogActions>
+            )
+        }
+
       </Dialog>
     </>
   );

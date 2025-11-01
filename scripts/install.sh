@@ -175,6 +175,29 @@ systemctl start free-sleep.service
 echo "Checking service status..."
 systemctl status free-sleep.service --no-pager || true
 
+# -----------------------------------------------------------------------------------------------------
+# Create systemd service for updating
+
+UPDATE_SERVICE_FILE="/etc/systemd/system/free-sleep-update.service"
+echo "Creating systemd service file at $UPDATE_SERVICE_FILE..."
+chmod 755 /home/dac/free-sleep/scripts/update_service.sh
+
+cat > "$UPDATE_SERVICE_FILE" <<EOF
+[Unit]
+Description=Free Sleep Updater
+After=free-sleep.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/dac/free-sleep/scripts/update_service.sh
+User=root
+Group=root
+KillMode=process
+# Also capture logs at the unit level (append so your file grows)
+StandardOutput=append:/persistent/free-sleep-data/logs/free-sleep-update.log
+StandardError=append:/persistent/free-sleep-data/logs/free-sleep-update.log
+
+EOF
 # --------------------------------------------------------------------------------
 # Graceful device time update (optional)
 
@@ -202,7 +225,7 @@ else
 fi
 
 # Updates
-SUDOERS_UPDATE_RULE="$USERNAME ALL=(ALL) NOPASSWD: /bin/sh /home/dac/free-sleep/scripts/update.sh"
+SUDOERS_UPDATE_RULE="$USERNAME ALL=(root) NOPASSWD: /bin/systemctl start free-sleep-update.service --no-block"
 if sudo grep -Fxq "$SUDOERS_UPDATE_RULE" "$SUDOERS_FILE" 2>/dev/null; then
   echo "Rule for '$USERNAME' update permissions already exists."
 else
@@ -210,6 +233,7 @@ else
   sudo chmod 440 "$SUDOERS_FILE"
   echo "Passwordless permission for updates granted to '$USERNAME'."
 fi
+
 
 # Biometrics enablement
 SUDOERS_BIOMETRICS_RULE="$USERNAME ALL=(ALL) NOPASSWD: /bin/sh /home/dac/free-sleep/scripts/enable_biometrics.sh"
