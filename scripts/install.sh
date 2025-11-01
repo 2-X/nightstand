@@ -187,21 +187,41 @@ else
 fi
 
 # --------------------------------------------------------------------------------
-# Setup passwordless reboot for 'dac'
+# Setup passwordless sudo scripts for dac user
 
 SUDOERS_FILE="/etc/sudoers.d/$USERNAME"
-SUDOERS_RULE="$USERNAME ALL=(ALL) NOPASSWD: /sbin/reboot"
 
+# Reboot
+SUDOERS_RULE="$USERNAME ALL=(ALL) NOPASSWD: /sbin/reboot"
 if sudo grep -Fxq "$SUDOERS_RULE" "$SUDOERS_FILE" 2>/dev/null; then
   echo "Rule for '$USERNAME' reboot permissions already exists."
 else
   echo "$SUDOERS_RULE" | sudo tee "$SUDOERS_FILE" > /dev/null
   sudo chmod 440 "$SUDOERS_FILE"
-  echo "Passwordless permission for reboot granted to '$USERNAME'."
+  echo "Passwordless permission for reboots granted to '$USERNAME'."
+fi
+
+# Updates
+SUDOERS_UPDATE_RULE="$USERNAME ALL=(ALL) NOPASSWD: /bin/sh /home/dac/free-sleep/scripts/update.sh"
+if sudo grep -Fxq "$SUDOERS_UPDATE_RULE" "$SUDOERS_FILE" 2>/dev/null; then
+  echo "Rule for '$USERNAME' update permissions already exists."
+else
+  echo "$SUDOERS_UPDATE_RULE" | sudo tee -a "$SUDOERS_FILE" >> /dev/null
+  sudo chmod 440 "$SUDOERS_FILE"
+  echo "Passwordless permission for updates granted to '$USERNAME'."
+fi
+
+# Biometrics enablement
+SUDOERS_BIOMETRICS_RULE="$USERNAME ALL=(ALL) NOPASSWD: /bin/sh /home/dac/free-sleep/scripts/enable_biometrics.sh"
+if sudo grep -Fxq "$SUDOERS_BIOMETRICS_RULE" "$SUDOERS_FILE" 2>/dev/null; then
+  echo "Rule for '$USERNAME' biometrics permissions already exists."
+else
+  echo "$SUDOERS_BIOMETRICS_RULE" | sudo tee -a "$SUDOERS_FILE" >> /dev/null
+  sudo chmod 440 "$SUDOERS_FILE"
+  echo "Passwordless permission for biometrics granted to '$USERNAME'."
 fi
 
 echo ""
-
 
 # --------------------------------------------------------------------------------
 # Finish

@@ -1,6 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="8309cf4b-2720-55af-9bf4-c98c7dc600c6")}catch(e){}}();
-import { exec } from 'child_process';
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="f87d278a-9345-5986-93c0-6b6e1923886e")}catch(e){}}();
 import schedule from 'node-schedule';
 import logger from '../logger.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
@@ -9,6 +8,7 @@ import moment from 'moment-timezone';
 import settingsDB from '../db/settings.js';
 import serverStatus from '../serverStatus.js';
 import servicesDB from '../db/services.js';
+import reboot from './reboot.js';
 const scheduleRebootJob = (onHour, onMinute, timeZone) => {
     const dailyRule = new schedule.RecurrenceRule();
     dailyRule.hour = onHour;
@@ -24,17 +24,7 @@ const scheduleRebootJob = (onHour, onMinute, timeZone) => {
                 return;
             }
             logger.info(`Executing scheduled reboot job`);
-            exec('sudo /sbin/reboot', (error, stdout, stderr) => {
-                if (error) {
-                    logger.error(`Error: ${error.message}`);
-                    return;
-                }
-                if (stderr) {
-                    logger.error(`Stderr: ${stderr}`);
-                    return;
-                }
-                logger.debug(`Stdout: ${stdout}`);
-            });
+            reboot();
             serverStatus.status.alarmSchedule.status = 'healthy';
             serverStatus.status.alarmSchedule.message = '';
         }
@@ -95,4 +85,4 @@ export const schedulePrimingRebootAndCalibration = (settingsData) => {
     });
 };
 //# sourceMappingURL=primeScheduler.js.map
-//# debugId=8309cf4b-2720-55af-9bf4-c98c7dc600c6
+//# debugId=f87d278a-9345-5986-93c0-6b6e1923886e

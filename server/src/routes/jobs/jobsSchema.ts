@@ -5,6 +5,8 @@ export const JobSchema = z.enum([
   'analyzeSleepRight',
   'biometricsCalibrationLeft',
   'biometricsCalibrationRight',
+  'reboot',
+  'update',
 ]);
 export type Job = z.infer<typeof JobSchema>;
 

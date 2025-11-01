@@ -1,4 +1,5 @@
 import { DeepPartial } from 'ts-essentials';
+import { Box } from '@mui/material';
 
 import { Settings } from '@api/settingsSchema.ts';
 import Section from '../Section.tsx';
@@ -8,6 +9,7 @@ import DailyReboot from './DailyReboot.tsx';
 import LedBrightnessSlider from './LedBrightnessSlider.tsx';
 import { useSettings } from '@api/settings.ts';
 import DeviceInfo from './DeviceInfo.tsx';
+
 
 type UpdateSettingsFn = (settings: DeepPartial<Settings>) => void;
 
@@ -20,15 +22,13 @@ export default function DeviceSettingsSection({ updateSettings }: DeviceSettings
 
   return (
     <Section title="Device settings">
-      <TimeZoneSelector settings={ settings } updateSettings={ updateSettings }/>
-      <br/>
-      <TemperatureFormatSelector settings={ settings } updateSettings={ updateSettings }/>
-      <br/>
-      <DailyReboot settings={ settings } updateSettings={ updateSettings }/>
-      <br/>
-      <LedBrightnessSlider/>
-      <br />
-      <DeviceInfo />
+      <Box display='flex' flexDirection='column' gap={ 1 }>
+        <TimeZoneSelector settings={ settings } updateSettings={ updateSettings }/>
+        <TemperatureFormatSelector settings={ settings } updateSettings={ updateSettings }/>
+        <DailyReboot settings={ settings } updateSettings={ updateSettings }/>
+        <LedBrightnessSlider/>
+        <DeviceInfo />
+      </Box>
     </Section>
   );
 }

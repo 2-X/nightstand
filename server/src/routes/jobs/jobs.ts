@@ -4,6 +4,8 @@ import { executeAnalyzeSleep } from '../../jobs/analyzeSleep.js';
 import { executeCalibrateSensors } from '../../jobs/calibrateSensors.js';
 import moment from 'moment-timezone';
 import { Job, JobKeyListSchema } from './jobsSchema.js';
+import update from '../../jobs/update.js';
+import reboot from '../../jobs/reboot.js';
 
 const router = express.Router();
 
@@ -38,12 +40,15 @@ const JOB_MAP: Record<Job, () => void> = {
   analyzeSleepRight,
   biometricsCalibrationLeft,
   biometricsCalibrationRight,
+  reboot,
+  update,
 };
 
 
 router.post('/jobs', async (req: Request, res: Response) => {
   const { body } = req;
   const validationResult = JobKeyListSchema.safeParse(body);
+
   if (!validationResult.success) {
     logger.error('Invalid jobs:', validationResult.error);
     res.status(400).json({
@@ -54,7 +59,6 @@ router.post('/jobs', async (req: Request, res: Response) => {
   }
 
   body.forEach((job: Job) => {
-    logger.debug(`Would execute job: ${job}`);
     JOB_MAP[job]();
   });
 

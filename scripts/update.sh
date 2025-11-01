@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# Save output to /persistent/free-sleep-data/logs/free-sleep-update.log
+echo -e "\033[33mWARNING: Logs are saved to /persistent/free-sleep-data/logs/free-sleep-update.log\033[0m"
+LOG_FILE="/persistent/free-sleep-data/logs/free-sleep-update.log"
+exec >>"$LOG_FILE" 2>&1
+echo "=== $(date '+%Y-%m-%d %H:%M:%S') Starting update.sh ==="
+
+export PATH="/usr/sbin:/sbin:/usr/bin:/bin"
+
 # Optional: Exit immediately on error
 set -e
 

@@ -3,6 +3,7 @@ import { useDeviceStatus } from '@api/deviceStatus.ts';
 import { Version } from '@api/deviceStatusSchema';
 import VersionStatus from '@components/VersionStatus.tsx';
 import WifiStrength from './WifiStrength.tsx';
+import RebootButton from './RebootButton.tsx';
 
 
 export default function DeviceInfo() {
@@ -28,9 +29,10 @@ export default function DeviceInfo() {
         <Chip label={ deviceStatus.freeSleep.branch } size='small'/>
       </Box>
       <Box sx={ { display: 'flex', gap: 1, mt: 1 } }>
-        <VersionStatus />
+        <RebootButton />
         <WifiStrength />
       </Box>
+      <VersionStatus />
     </>
   );
 }

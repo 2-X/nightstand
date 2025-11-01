@@ -28,6 +28,5 @@ export default function DailyReboot({ settings, updateSettings }: DailyRebootPro
         Reboot time is scheduled 1 hour before the daily prime time.
       </Typography>
     </>
-
   );
 }

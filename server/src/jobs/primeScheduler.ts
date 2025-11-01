@@ -1,4 +1,3 @@
-import { exec } from 'child_process';
 import schedule from 'node-schedule';
 import { Settings } from '../db/settingsSchema.js';
 import logger from '../logger.js';
@@ -10,6 +9,7 @@ import moment from 'moment-timezone';
 import settingsDB from '../db/settings.js';
 import serverStatus from '../serverStatus.js';
 import servicesDB from '../db/services.js';
+import reboot from './reboot.js';
 
 
 const scheduleRebootJob = (onHour: number, onMinute: number, timeZone: TimeZone) => {
@@ -29,17 +29,7 @@ const scheduleRebootJob = (onHour: number, onMinute: number, timeZone: TimeZone)
         return;
       }
       logger.info(`Executing scheduled reboot job`);
-      exec('sudo /sbin/reboot', (error, stdout, stderr) => {
-        if (error) {
-          logger.error(`Error: ${error.message}`);
-          return;
-        }
-        if (stderr) {
-          logger.error(`Stderr: ${stderr}`);
-          return;
-        }
-        logger.debug(`Stdout: ${stdout}`);
-      });
+      reboot();
       serverStatus.status.alarmSchedule.status = 'healthy';
       serverStatus.status.alarmSchedule.message = '';
     } catch (error: unknown) {
