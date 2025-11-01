@@ -26,7 +26,7 @@ const Transition = forwardRef(function Transition(
 export default function UpdateFreeSleepButton() {
   const [open, setOpen] = useState(false);
   const { data: serverInfo } = useServerInfo();
-  const [isUpdating, setIsUpdating] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const handleClickOpen = () => {
     setOpen(true);

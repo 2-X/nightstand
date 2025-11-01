@@ -180,7 +180,6 @@ systemctl status free-sleep.service --no-pager || true
 
 UPDATE_SERVICE_FILE="/etc/systemd/system/free-sleep-update.service"
 echo "Creating systemd service file at $UPDATE_SERVICE_FILE..."
-chmod 755 /home/dac/free-sleep/scripts/update_service.sh
 
 cat > "$UPDATE_SERVICE_FILE" <<EOF
 [Unit]
@@ -233,6 +232,7 @@ else
   sudo chmod 440 "$SUDOERS_FILE"
   echo "Passwordless permission for updates granted to '$USERNAME'."
 fi
+chmod 755 /home/dac/free-sleep/scripts/update_service.sh
 
 
 # Biometrics enablement
