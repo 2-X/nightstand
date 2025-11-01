@@ -1,7 +1,7 @@
 import SearchIcon from '@mui/icons-material/Search';
 import Button from '@mui/material/Button';
 import { postDeviceStatus } from '@api/deviceStatus.ts';
-import { DeviceStatus, SideStatus, } from '@api/deviceStatusSchema.ts';
+import { DeviceStatus } from '@api/deviceStatusSchema.ts';
 import { DeepPartial } from 'ts-essentials';
 import { useAppStore } from '@state/appStore.tsx';
 import { useSettings } from '@api/settings.ts';
@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { useServices } from '@api/services.ts';
 import { Job, postJobs } from '@api/jobs.ts';
 import AnalyzeSleepNotification from './AnalyzeSleepNotification.tsx';
+import { useControlTempStore } from './controlTempStore.tsx';
 
 
 type PowerButtonProps = {
@@ -20,31 +21,34 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
   const { isUpdating, setIsUpdating, side } = useAppStore();
   const { data: settings } = useSettings();
   const { data: services } = useServices();
+  const setDeviceStatus = useControlTempStore(state => state.setDeviceStatus);
   const isInAwayMode = settings?.[side].awayMode;
   const disabled = isUpdating || isInAwayMode;
   const [showAnalyzeSleep, setShowAnalyzeSleep] = useState(false);
   const [showAnalyzeNotification, setShowAnalyzeNotification] = useState(false);
 
-  const handleOnClick = () => {
-    const sideStatus: Partial<SideStatus> = { isOn: !isOn };
-    const deviceStatus: DeepPartial<DeviceStatus> = {};
-
-    deviceStatus[side] = sideStatus;
-    if (isOn) {
+  const handleOnClick = (powerOn: boolean) => {
+    const deviceStatus: DeepPartial<DeviceStatus> = {
+      [side]: {
+        isOn: powerOn
+      }
+    };
+    if (powerOn) {
+      setShowAnalyzeSleep(false);
+    } else {
       setShowAnalyzeSleep(true);
       setTimeout(() => setShowAnalyzeSleep(false), 20_000);
-
-    } else {
-      setShowAnalyzeSleep(false);
     }
 
     setIsUpdating(true);
+    setDeviceStatus(deviceStatus);
     postDeviceStatus(deviceStatus)
       .then(() => {
         // Wait 1 second before refreshing the device status
         return new Promise((resolve) => setTimeout(resolve, 1_000));
       })
       .then(() => refetch())
+      .then((data) => setDeviceStatus(data.data))
       .catch(error => {
         console.error(error);
       })
@@ -67,7 +71,7 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
 
   return (
     <>
-      <Button variant="outlined" disabled={ disabled } onClick={ handleOnClick }>
+      <Button variant="outlined" disabled={ disabled } onClick={ () => handleOnClick(!isOn) }>
         { isOn ? 'Turn off' : 'Turn on' }
       </Button>
       {

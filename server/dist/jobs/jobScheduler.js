@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="872c9afa-fc7f-50f0-80f7-0cb605e0b812")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="029f5abe-e912-5272-b3e2-3c716a9ab134")}catch(e){}}();
 import chokidar from 'chokidar';
 import moment from 'moment-timezone';
 import schedule from 'node-schedule';
@@ -15,7 +15,7 @@ import { scheduleAlarm } from './alarmScheduler.js';
 import { isSystemDateValid } from './isSystemDateValid.js';
 async function setupJobs() {
     try {
-        if (serverStatus.status.jobs.status !== 'not_started') {
+        if (serverStatus.status.jobs.status === 'started') {
             logger.debug('Job setup already running, skipping duplicate execution.');
             return;
         }
@@ -92,4 +92,4 @@ chokidar.watch(config.lowDbFolder).on('change', () => {
 // Initial job setup
 waitForValidDateAndSetupJobs();
 //# sourceMappingURL=jobScheduler.js.map
-//# debugId=872c9afa-fc7f-50f0-80f7-0cb605e0b812
+//# debugId=029f5abe-e912-5272-b3e2-3c716a9ab134

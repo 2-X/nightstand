@@ -16,7 +16,7 @@ import { isSystemDateValid } from './isSystemDateValid.js';
 
 async function setupJobs() {
   try {
-    if (serverStatus.status.jobs.status !== 'not_started') {
+    if (serverStatus.status.jobs.status === 'started') {
       logger.debug('Job setup already running, skipping duplicate execution.');
       return;
     }

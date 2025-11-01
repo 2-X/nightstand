@@ -39,10 +39,14 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
     if (!deviceStatus) return;
 
     setIsUpdating(true);
-    await postDeviceStatus(deviceStatus)
+    void postDeviceStatus({
+      [side]: {
+        targetTemperatureF: deviceStatus[side].targetTemperatureF
+      }
+    })
       .then(() => {
         // Wait 1 second before refreshing the device status
-        return new Promise((resolve) => setTimeout(resolve, 1_000));
+        return new Promise((resolve) => setTimeout(resolve, 1_500));
       })
       .then(() => refetch())
       .catch(error => {

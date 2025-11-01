@@ -18,16 +18,11 @@ import PrimingNotification from './PrimingNotification.tsx';
 
 
 export default function ControlTempPage() {
-  const { data: deviceStatusOriginal, isError, refetch } = useDeviceStatus();
-  const { setOriginalDeviceStatus, deviceStatus } = useControlTempStore();
+  const { isError, refetch } = useDeviceStatus();
+  const { deviceStatus } = useControlTempStore();
   const { data: settings } = useSettings();
   const { isUpdating, side } = useAppStore();
   const theme = useTheme();
-
-  useEffect(() => {
-    if (!deviceStatusOriginal) return;
-    setOriginalDeviceStatus(deviceStatusOriginal);
-  }, [deviceStatusOriginal]);
 
   const sideStatus = deviceStatus?.[side];
   const isOn = sideStatus?.isOn || false;
