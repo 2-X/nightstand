@@ -6,15 +6,13 @@ import { useControlTempStore } from './controlTempStore.tsx';
 import { useAppStore } from '@state/appStore.tsx';
 import { postDeviceStatus } from '@api/deviceStatus.ts';
 import { useSettings } from '@api/settings.ts';
-
+import { MIN_TEMP_F, MAX_TEMP_F } from '@lib/temperatureConversions.ts';
 
 type TemperatureButtonsProps = {
   refetch: any;
   currentTargetTemp: number;
 }
 
-const MIN_TEMP_F = 55;
-const MAX_TEMP_F = 110;
 const DEBOUNCE_MS = 2000;
 export default function TemperatureButtons({ refetch, currentTargetTemp }: TemperatureButtonsProps) {
   const { side, setIsUpdating, isUpdating } = useAppStore();

@@ -1,10 +1,12 @@
 import Typography from '@mui/material/Typography';
-import styles from './TemperatureLabel.module.scss';
 import { useTheme } from '@mui/material/styles';
-import { useSchedules } from '@api/schedules.ts';
 import moment from 'moment-timezone';
+
+import { useSchedules } from '@api/schedules.ts';
+import styles from './TemperatureLabel.module.scss';
 import { useSettings } from '@api/settings.ts';
 import { useAppStore } from '@state/appStore.tsx';
+import { formatTemperature } from '@lib/temperatureConversions.ts';
 
 
 type TemperatureLabelProps = {
@@ -16,17 +18,6 @@ type TemperatureLabelProps = {
   displayCelsius: boolean;
 }
 
-function farenheitToCelcius(farenheit: number) {
-  return (farenheit - 32) * 5 / 9;
-}
-
-function roundToNearestHalf(number: number) {
-  return Math.round(number * 2) / 2;
-}
-
-export function formatTemperature(temperature: number, celcius: boolean) {
-  return celcius ? `${roundToNearestHalf(farenheitToCelcius(temperature))}°C` : `${temperature}°F`;
-}
 
 export default function TemperatureLabel({
   isOn,

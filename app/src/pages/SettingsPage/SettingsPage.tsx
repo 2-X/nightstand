@@ -39,40 +39,47 @@ export default function SettingsPage() {
       <ErrorBoundary componentName='Device settings'>
         <DeviceSettingsSection updateSettings={ updateSettings } />
       </ErrorBoundary>
-      <Section title="Priming">
+      <ErrorBoundary componentName='Priming settings'>
+        <Section title="Priming">
+          <DailyPriming settings={ settings } updateSettings={ updateSettings }/>
+          <br/>
+          <PrimeControl/>
 
-        <DailyPriming settings={ settings } updateSettings={ updateSettings }/>
-        <br/>
-        <PrimeControl/>
-
-        <Box display="flex" gap={ 1 } sx={ { mt: 2 } }>
-          <InfoIcon sx={ { color: 'text.secondary' } }/>
-          <Typography color='text.secondary'>
+          <Box display="flex" gap={ 1 } sx={ { mt: 2 } }>
+            <InfoIcon sx={ { color: 'text.secondary' } }/>
+            <Typography color='text.secondary'>
             Regular priming helps prevent air bubbles, ensures even cooling and heating.
             Schedule priming during a time that you're not on the bed.
-          </Typography>
-        </Box>
-      </Section>
-      <FeaturesSection/>
-      <Section title="Side settings">
-        <SideSettings side="left" settings={ settings } updateSettings={ updateSettings }/>
-        <br/>
-        <SideSettings side="right" settings={ settings } updateSettings={ updateSettings }/>
-        <Box display="flex" gap={ 1 } sx={ { mt: 1 } }>
+            </Typography>
+          </Box>
+        </Section>
+      </ErrorBoundary>
 
-          <InfoIcon sx={ { color: 'text.secondary' } }/>
-          <Typography color="text.secondary">
+      <FeaturesSection/>
+      <ErrorBoundary componentName='Side settings'>
+
+        <Section title="Side settings">
+          <SideSettings side="left" settings={ settings } updateSettings={ updateSettings }/>
+          <br/>
+          <SideSettings side="right" settings={ settings } updateSettings={ updateSettings }/>
+          <Box display="flex" gap={ 1 } sx={ { mt: 1 } }>
+
+            <InfoIcon sx={ { color: 'text.secondary' } }/>
+            <Typography color="text.secondary">
             Away mode:
             Disables schedules and temperature control for one side.
             That side will mirror any temperature or schedule changes from the active side.
             If both sides are in away mode, no schedules will apply.
-          </Typography>
-        </Box>
-      </Section>
-      <DiscordLink/>
-      <Donate/>
-      <Divider/>
-      <LicenseModal/>
+            </Typography>
+          </Box>
+        </Section>
+      </ErrorBoundary>
+      <ErrorBoundary componentName='Info section'>
+        <DiscordLink/>
+        <Donate/>
+        <Divider/>
+        <LicenseModal/>
+      </ErrorBoundary>
     </PageContainer>
   );
 }

@@ -8,6 +8,7 @@ import { useControlTempStore } from './controlTempStore.tsx';
 import { useTheme } from '@mui/material/styles';
 import { useResizeDetector } from 'react-resize-detector';
 import { useSettings } from '@api/settings.ts';
+import { MAX_TEMP_F, MIN_TEMP_F, getTemperatureColor } from '@lib/temperatureConversions.ts';
 
 type SliderProps = {
   isOn: boolean;
@@ -15,15 +16,6 @@ type SliderProps = {
   currentTemperatureF: number;
   refetch: any;
   displayCelsius: boolean;
-}
-
-function getTemperatureColor(temp: number | undefined) {
-  if (temp === undefined) return '#262626';
-  if (temp === undefined) return '#262626';
-  if (temp <= 70) return '#1c54b2';
-  if (temp <= 82) return '#5393ff';
-  if (temp <= 95) return '#db5858';
-  return '#d32f2f';
 }
 
 export default function Slider({ isOn, currentTargetTemp, refetch, currentTemperatureF, displayCelsius }: SliderProps) {
@@ -73,8 +65,8 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
           onControlFinished={ handleControlFinished }
           size={ width }
           trackWidth={ 6 }
-          minValue={ 55 }
-          maxValue={ 110 }
+          minValue={ MIN_TEMP_F }
+          maxValue={ MAX_TEMP_F }
           startAngle={ 60 }
           endAngle={ 300 }
           angleType={ {

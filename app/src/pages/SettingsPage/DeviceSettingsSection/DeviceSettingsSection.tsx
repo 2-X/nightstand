@@ -9,6 +9,7 @@ import DailyReboot from './DailyReboot.tsx';
 import LedBrightnessSlider from './LedBrightnessSlider.tsx';
 import { useSettings } from '@api/settings.ts';
 import DeviceInfo from './DeviceInfo.tsx';
+import ErrorBoundary from '@components/ErrorBoundary.tsx';
 
 
 type UpdateSettingsFn = (settings: DeepPartial<Settings>) => void;
@@ -27,7 +28,9 @@ export default function DeviceSettingsSection({ updateSettings }: DeviceSettings
         <TemperatureFormatSelector settings={ settings } updateSettings={ updateSettings }/>
         <DailyReboot settings={ settings } updateSettings={ updateSettings }/>
         <LedBrightnessSlider/>
-        <DeviceInfo />
+        <ErrorBoundary componentName='Device info'>
+          <DeviceInfo />
+        </ErrorBoundary>
       </Box>
     </Section>
   );

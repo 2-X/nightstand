@@ -25,8 +25,8 @@ export default function DeviceInfo() {
       </Box>
       <Box sx={ { display: 'flex', gap: 1, align: 'center', alignItems: 'center', mb: 1 } }>
         <Typography variant='body2'>Free Sleep Build</Typography>
-        <Chip label={ `v${deviceStatus.freeSleep?.version}` } size='small'/>
-        <Chip label={ deviceStatus.freeSleep.branch } size='small'/>
+        <Chip label={ `v${deviceStatus?.freeSleep?.version}` } size='small'/>
+        <Chip label={ deviceStatus?.freeSleep?.branch } size='small'/>
       </Box>
       <Box sx={ { display: 'flex', gap: 1, mt: 1 } }>
         <RebootButton />
