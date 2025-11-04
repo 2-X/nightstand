@@ -15,10 +15,10 @@ export default function AlarmNotification() {
   if (!currentDay) return null;
   // @ts-expect-error
   const power = schedules?.[side]?.[currentDay]?.power;
-
-  if (!power?.enabled) return null;
   // @ts-expect-error
   const alarm = schedules?.[side]?.[currentDay].alarm;
+
+  if (!power?.enabled || !alarm?.enabled) return null;
   const alarmTime = moment(alarm?.time, 'HH:mm').format('h:mm A');
 
   return (
