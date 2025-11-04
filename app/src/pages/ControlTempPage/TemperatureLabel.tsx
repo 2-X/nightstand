@@ -27,8 +27,6 @@ export default function TemperatureLabel({
   currentTemperatureF,
   displayCelsius
 }: TemperatureLabelProps) {
-
-
   const theme = useTheme();
   const { side } = useAppStore();
   const { data: schedules } = useSchedules();

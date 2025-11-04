@@ -18,8 +18,8 @@ import PrimingNotification from './PrimingNotification.tsx';
 
 
 export default function ControlTempPage() {
-  const { isError, refetch } = useDeviceStatus();
-  const { deviceStatus } = useControlTempStore();
+  const { isError, refetch, data: deviceStatus } = useDeviceStatus();
+  const setDeviceStatus = useControlTempStore(state => state.setDeviceStatus);
   const { data: settings } = useSettings();
   const { isUpdating, side } = useAppStore();
   const theme = useTheme();
@@ -30,6 +30,11 @@ export default function ControlTempPage() {
   useEffect(() => {
     refetch();
   }, [side]);
+
+  useEffect(() => {
+    if (!deviceStatus) return;
+    setDeviceStatus(deviceStatus);
+  }, [deviceStatus]);
 
   return (
     <PageContainer
@@ -66,9 +71,9 @@ export default function ControlTempPage() {
           )
         }
         <AwayNotification settings={ settings }/>
-        <WaterNotification deviceStatus={ deviceStatus }/>
+        <WaterNotification />
       </Box>
-      <AlarmDismissal deviceStatus={ deviceStatus } refetch={ refetch }/>
+      <AlarmDismissal refetch={ refetch }/>
       { isUpdating && <CircularProgress/> }
     </PageContainer>
   );

@@ -1,13 +1,11 @@
 import Alert from '@mui/material/Alert';
-import { DeviceStatus } from '@api/deviceStatusSchema.ts';
 import Link from '@mui/material/Link';
+import { useDeviceStatus } from '@api/deviceStatus.ts';
 
 
-type WaterNotificationProps = {
-  deviceStatus?: DeviceStatus;
-}
 
-export default function WaterNotification({ deviceStatus }: WaterNotificationProps) {
+export default function WaterNotification() {
+  const { data: deviceStatus } = useDeviceStatus();
 
   if (deviceStatus?.waterLevel === 'false') {
     return (

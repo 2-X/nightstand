@@ -7,14 +7,13 @@ import {
   useTheme,
 } from '@mui/material';
 import { useAppStore } from '@state/appStore.tsx';
-import { DeviceStatus } from '@api/deviceStatusSchema.ts';
 import AlarmIcon from '@mui/icons-material/Alarm';
 import { keyframes } from '@mui/system';
 import { postDeviceStatus } from '@api/deviceStatus.ts';
+import { useControlTempStore } from './controlTempStore.tsx';
 
 
 type AlarmDismissalProps = {
-  deviceStatus?: DeviceStatus;
   refetch: any;
 }
 
@@ -29,8 +28,9 @@ const pulse = keyframes`
 `;
 
 
-export default function AlarmDismissal({ deviceStatus, refetch }: AlarmDismissalProps) {
+export default function AlarmDismissal({ refetch }: AlarmDismissalProps) {
   const { side, setIsUpdating } = useAppStore();
+  const deviceStatus = useControlTempStore(state => state.deviceStatus);
 
   const [dismissed, setDismissed] = useState(false);
 
