@@ -109,7 +109,7 @@ export default function TemperatureLabel({
               { `Currently at ${formatTemperature(currentTemperatureF, displayCelsius)}` }
             </Typography>
             {
-              power.enabled && (
+              power?.enabled && (
                 <Typography
                   sx={ { textWrap: 'nowrap' } }
                   color={ theme.palette.grey[500] }
