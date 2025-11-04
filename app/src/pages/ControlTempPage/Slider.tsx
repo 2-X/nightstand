@@ -1,4 +1,4 @@
-import CircularSlider from 'react-circular-slider-svg';
+import { CircularSliderWithChildren } from 'react-circular-slider-svg';
 import { postDeviceStatus } from '@api/deviceStatus.ts';
 import { useAppStore } from '@state/appStore';
 import styles from './Slider.module.scss';
@@ -57,10 +57,13 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
   const isHeating = (sideStatus?.currentTemperatureF ?? 55) < (sideStatus?.targetTemperatureF ?? 55);
 
   return (
-    <div ref={ ref } style={ { position: 'relative', display: 'inline-block', width: '100%' } }>
+    <div
+      ref={ ref }
+      style={ { position: 'relative', display: 'inline-block', width: '100%', maxWidth: '400px' } }
+    >
       { /* Circular Slider */ }
       <div className={ `${styles.Slider} ${disabled && styles.Disabled} ${isHeating && styles.Heating}` }>
-        <CircularSlider
+        <CircularSliderWithChildren
           disabled={ disabled }
           onControlFinished={ handleControlFinished }
           size={ width }
@@ -95,16 +98,17 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
             },
           } }
           handleSize={ 8 }
-        />
+        >
+          <TemperatureLabel
+            isOn={ isOn }
+            sliderTemp={ deviceStatus?.[side]?.targetTemperatureF || 55 }
+            sliderColor={ sliderColor }
+            currentTargetTemp={ currentTargetTemp }
+            currentTemperatureF={ currentTemperatureF }
+            displayCelsius={ displayCelsius }
+          />
+        </CircularSliderWithChildren>
       </div>
-      <TemperatureLabel
-        isOn={ isOn }
-        sliderTemp={ deviceStatus?.[side]?.targetTemperatureF || 55 }
-        sliderColor={ sliderColor }
-        currentTargetTemp={ currentTargetTemp }
-        currentTemperatureF={ currentTemperatureF }
-        displayCelsius={ displayCelsius }
-      />
       {
         isOn && (
           <TemperatureButtons refetch={ refetch } currentTargetTemp={ currentTargetTemp }/>

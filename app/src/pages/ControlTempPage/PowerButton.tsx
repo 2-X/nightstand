@@ -1,5 +1,5 @@
 import SearchIcon from '@mui/icons-material/Search';
-import Button from '@mui/material/Button';
+import { Button, Box } from '@mui/material';
 import { postDeviceStatus } from '@api/deviceStatus.ts';
 import { DeviceStatus } from '@api/deviceStatusSchema.ts';
 import { DeepPartial } from 'ts-essentials';
@@ -70,7 +70,7 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
   if (isInAwayMode) return null;
 
   return (
-    <>
+    <Box sx={ { mt: -6, display: 'flex', flexDirection: 'column', gap: 2 } }>
       <Button variant="outlined" disabled={ disabled } onClick={ () => handleOnClick(!isOn) }>
         { isOn ? 'Turn off' : 'Turn on' }
       </Button>
@@ -91,6 +91,6 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
           <AnalyzeSleepNotification />
         )
       }
-    </>
+    </Box>
   );
 }

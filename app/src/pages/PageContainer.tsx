@@ -2,6 +2,7 @@ import React from 'react';
 import { Container, ContainerProps } from '@mui/material';
 import { SxProps } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
+import ErrorBoundary from '@components/ErrorBoundary.tsx';
 
 
 type PageContainerProps = {
@@ -13,32 +14,34 @@ export default function PageContainer({ children, sx, containerProps }: React.Pr
   const theme = useTheme();
 
   return (
-    <Container
-      { ...containerProps }
-      id='PageContainer'
-      sx={ {
-        display: 'flex',
-        flexDirection: 'column',
-        flexGrow: 1,
-        alignItems: 'center',
-        gap: 2,
-        margin: 0,
-        justifyContent: 'center',
-        [theme.breakpoints.up('sm')]: {
-          width: '90%',
-          padding: 0,
-          paddingTop: 6,
-          paddingBottom: 6,
-          maxWidth: '700px',
-        },
-        [theme.breakpoints.down('sm')]: {
-          width: '100%',
-          padding: 1,
-        },
-        ...sx,
-      } }
-    >
-      { children }
-    </Container>
+    <ErrorBoundary componentName='Page container'>
+      <Container
+        { ...containerProps }
+        id='PageContainer'
+        sx={ {
+          display: 'flex',
+          flexDirection: 'column',
+          flexGrow: 1,
+          alignItems: 'center',
+          gap: 2,
+          margin: 0,
+          justifyContent: 'center',
+          [theme.breakpoints.up('sm')]: {
+            width: '90%',
+            padding: 0,
+            paddingTop: 6,
+            paddingBottom: 6,
+            maxWidth: '700px',
+          },
+          [theme.breakpoints.down('sm')]: {
+            width: '100%',
+            padding: 1,
+          },
+          ...sx,
+        } }
+      >
+        { children }
+      </Container>
+    </ErrorBoundary>
   );
 }

@@ -5,21 +5,26 @@
     }
     color: #87868b;
   }
+
   &.Disabled {
     circle {
       display: none;
     }
   }
+
   &:not(.Disabled) circle:nth-last-child(1) {
     display: none;
   }
+
   &:not(.Disabled) circle:nth-last-child(2) {
     display: block;
   }
+
   &.Heating {
     &:not(.Disabled) circle:nth-last-child(1) {
       display: block;
     }
+
     &:not(.Disabled) circle:nth-last-child(2) {
       display: none;
     }

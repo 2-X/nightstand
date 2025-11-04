@@ -1,9 +1,8 @@
-import Typography from '@mui/material/Typography';
+import { Box, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import moment from 'moment-timezone';
 
 import { useSchedules } from '@api/schedules.ts';
-import styles from './TemperatureLabel.module.scss';
 import { useSettings } from '@api/settings.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { formatTemperature } from '@lib/temperatureConversions.ts';
@@ -34,9 +33,10 @@ export default function TemperatureLabel({
   const isInAwayMode = settings?.[side].awayMode;
 
   const currentDay = settings?.timeZone && moment.tz(settings?.timeZone).format('dddd').toLowerCase();
-  // @ts-ignore
+  // @ts-expect-error
   const power = currentDay ? schedules?.[side]?.[currentDay]?.power : undefined;
   const formattedTime = moment(power?.on, 'HH:mm').format('h:mm A');
+  const powerOffTime = moment(power?.off, 'HH:mm').format('h:mm A');
 
   let topTitle: string;
   // Handle user actively changing temp
@@ -64,7 +64,6 @@ export default function TemperatureLabel({
         position: 'absolute',
         top: '10%',
         left: '50%',
-        transform: 'translate(-50%, -50%)',
         pointerEvents: 'none',
         textAlign: 'center',
         height: '300px',
@@ -73,10 +72,22 @@ export default function TemperatureLabel({
     >
       {
         isOn ? (
-          <>
+          <Box
+            sx={ {
+              position: 'absolute',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              pointerEvents: 'none',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              textAlign: 'center',
+              width: '100%',
+            } }
+          >
             <Typography
-              style={ { top: '70%', } }
-              className={ styles.label }
+              sx={ { textWrap: 'nowrap', textAlign: 'center' } }
               color={ theme.palette.grey[400] }
             >
               { topTitle }
@@ -84,47 +95,63 @@ export default function TemperatureLabel({
 
             { /* Temperature */ }
             <Typography
-              style={ { top: '80%' } }
+              sx={ { textWrap: 'nowrap', mb: .5 } }
               variant="h2"
               color={ sliderColor }
-              className={ styles.label }
             >
               { formatTemperature(currentTargetTemp !== sliderTemp ? sliderTemp : currentTargetTemp, displayCelsius) }
             </Typography>
-
             { /* Currently at label */ }
             <Typography
-              style={ { top: '105%' } }
-              className={ styles.label }
+              sx={ { textWrap: 'nowrap', mb: 1 } }
               color={ theme.palette.grey[400] }
             >
               { `Currently at ${formatTemperature(currentTemperatureF, displayCelsius)}` }
             </Typography>
-          </>
+            {
+              power.enabled && (
+                <Typography
+                  sx={ { textWrap: 'nowrap' } }
+                  color={ theme.palette.grey[500] }
+                >
+                  Turns off at { powerOffTime }
+                </Typography>
+              )
+            }
+          </Box>
         ) : (
-          <>
+          <Box
+            sx={ {
+              position: 'absolute',
+              top: '10%',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              pointerEvents: 'none',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              textAlign: 'center',
+              width: '100%',
+            } }
+          >
             <Typography
-              style={ { top: '80%' } }
               variant="h3"
               color={ theme.palette.grey[800] }
-              className={ styles.label }
             >
               Off
             </Typography>
             {
               power?.enabled && !isInAwayMode && (
                 <Typography
-                  style={ { top: '105%' } }
-                  // variant="h3"
+                  sx={ { textWrap: 'nowrap' } }
                   color={ theme.palette.grey[800] }
-                  className={ styles.label }
                 >
-
                   Turns on at { formattedTime }
                 </Typography>
               )
             }
-          </>
+          </Box>
         )
       }
     </div>

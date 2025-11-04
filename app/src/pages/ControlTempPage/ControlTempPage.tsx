@@ -15,6 +15,7 @@ import { useDeviceStatus } from '@api/deviceStatus';
 import { useSettings } from '@api/settings.ts';
 import { useTheme } from '@mui/material/styles';
 import PrimingNotification from './PrimingNotification.tsx';
+import AlarmNotification from './AlarmNotification.tsx';
 
 
 export default function ControlTempPage() {
@@ -53,6 +54,7 @@ export default function ControlTempPage() {
         currentTemperatureF={ sideStatus?.currentTemperatureF || 55 }
         displayCelsius={ settings?.temperatureFormat === 'celsius' || false }
       />
+
       { isError ? (
         <Button
           variant="contained"
@@ -70,6 +72,7 @@ export default function ControlTempPage() {
             <PrimingNotification/>
           )
         }
+        <AlarmNotification />
         <AwayNotification settings={ settings }/>
         <WaterNotification />
       </Box>
