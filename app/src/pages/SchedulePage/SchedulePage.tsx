@@ -107,7 +107,7 @@ export default function SchedulePage() {
         mb: 15,
       } }
     >
-      <SideControl title={ 'Schedules' }/>
+      <SideControl/>
       <DayTabs/>
       <ErrorBoundary componentName='Scheduling chart'>
         <TemperatureScheduleChart />

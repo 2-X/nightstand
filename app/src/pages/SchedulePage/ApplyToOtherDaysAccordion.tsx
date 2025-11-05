@@ -1,4 +1,13 @@
-import { Accordion, AccordionSummary, Box, Checkbox, FormControlLabel, FormGroup, Typography } from '@mui/material';
+import {
+  Accordion,
+  AccordionSummary,
+  Box,
+  Button,
+  Checkbox,
+  FormControlLabel,
+  FormGroup,
+  Typography
+} from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { AccordionExpanded } from './SchedulePage.types.ts';
 import { DayOfWeek } from '@api/schedulesSchema.ts';
@@ -19,6 +28,20 @@ export default function ApplyToOtherDaysAccordion() {
   } = useScheduleStore();
   const { isUpdating } = useAppStore();
 
+  const setWeekdays = () => {
+    daysOfWeek.slice(0, 5).map(day => {
+      // @ts-expect-error
+      toggleSelectedDay(day.toLowerCase());
+    });
+  };
+
+  const setWeekends= () => {
+    // @ts-expect-error
+    toggleSelectedDay(daysOfWeek[5].toLowerCase());
+    // @ts-expect-error
+    toggleSelectedDay(daysOfWeek[6].toLowerCase());
+  };
+
   return (
     <Accordion
       sx={ { width: '100%', mt: -2 } }
@@ -31,6 +54,10 @@ export default function ApplyToOtherDaysAccordion() {
         </Typography>
       </AccordionSummary>
       <Box sx={ { mt: -2, p: 2 } }>
+        <Box sx={ { display: 'flex', gap: 1 } }>
+          <Button variant="contained" sx={ { mb: 1 } } onClick={ setWeekdays }>Weekdays</Button>
+          <Button variant="contained" sx={ { mb: 1 } } onClick={ setWeekends }>Weekends</Button>
+        </Box>
         <FormGroup>
           {
             daysOfWeek.map((day) => {

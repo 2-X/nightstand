@@ -46,7 +46,6 @@ export default function ControlTempPage() {
         },
       } }
     >
-      <SideControl title={ 'Temperature' }/>
       <Slider
         isOn={ isOn }
         currentTargetTemp={ sideStatus?.targetTemperatureF || 55 }
@@ -66,18 +65,20 @@ export default function ControlTempPage() {
       ) : (
         <PowerButton isOn={ sideStatus?.isOn || false } refetch={ refetch }/>
       ) }
+
       <Box sx={ { display: 'flex', flexDirection: 'column', gap: 1 } }>
         {
           deviceStatus?.isPriming && (
             <PrimingNotification/>
           )
         }
-        <AlarmNotification />
+        <AlarmNotification/>
         <AwayNotification settings={ settings }/>
-        <WaterNotification />
+        <WaterNotification/>
       </Box>
       <AlarmDismissal refetch={ refetch }/>
       { isUpdating && <CircularProgress/> }
+      <SideControl showTemp={ true }/>
     </PageContainer>
   );
 }
