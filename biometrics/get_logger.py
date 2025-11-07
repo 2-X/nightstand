@@ -1,3 +1,4 @@
+import traceback
 from typing import Literal, get_args, Optional, Tuple, List
 import platform
 import logging
@@ -26,6 +27,11 @@ class BaseLogger(logging.Logger):
 
     def runtime(self):
         return str(datetime.now() - datetime.strptime(self.start_time, '%Y-%m-%d %H:%M:%S'))
+
+    def error(self, msg, *args, **kwargs):
+        super().error(msg, *args, **kwargs)
+        if isinstance(msg, Exception):
+            super().error(traceback.print_exception(msg), *args, **kwargs)
 
 
 def _get_logger_instance(name: str = None) -> Tuple[BaseLogger, LoggerName]:

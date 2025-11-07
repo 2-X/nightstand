@@ -1,8 +1,10 @@
-import { TextField } from '@mui/material';
+import AccessTime from '@mui/icons-material/AccessTime';
+import { InputAdornment, TextField } from '@mui/material';
 import moment from 'moment-timezone';
 import { useScheduleStore } from './scheduleStore';
 import { useAppStore } from '@state/appStore';
 import { Time } from '@api/schedulesSchema.ts';
+import { useTheme } from '@mui/material/styles';
 
 
 export default function PowerOffTime() {
@@ -13,6 +15,7 @@ export default function PowerOffTime() {
     updateSelectedSchedule,
   } = useScheduleStore();
   const { isUpdating } = useAppStore();
+  const theme = useTheme();
 
   const handleChange = (time: Time) => {
     const currentDate = moment().format('YYYY-MM-DD');
@@ -50,7 +53,22 @@ export default function PowerOffTime() {
           : ''
       }
       disabled={ disabled }
-      sx={ { mt: 2, width: '100%' } }
+      sx={ {
+        width: '110px',
+        // Hide native indicator (where it exists)
+        '& input::-webkit-calendar-picker-indicator': {
+          opacity: 0,
+          display: 'none',
+        },
+      } }
+      InputProps={ {
+        endAdornment: (
+          <InputAdornment position="end" sx={ { cursor: 'pointer' } } >
+            <AccessTime sx={ { color: theme.palette.grey[500] } } fontSize='small'/>
+          </InputAdornment>
+        ),
+      } }
+
     />
   );
 }

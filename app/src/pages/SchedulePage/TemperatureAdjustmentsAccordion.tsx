@@ -8,7 +8,7 @@ import {
   Typography,
   IconButton,
   Select,
-  MenuItem,
+  MenuItem, InputAdornment,
 } from '@mui/material';
 import { Add, ExpandMore, Remove } from '@mui/icons-material';
 import _ from 'lodash';
@@ -19,6 +19,8 @@ import { DailySchedule } from '@api/schedulesSchema.ts';
 import ThermostatIcon from '@mui/icons-material/Thermostat';
 
 import { formatTemperature } from '@lib/temperatureConversions.ts';
+import AccessTime from '@mui/icons-material/AccessTime';
+import { useTheme } from '@mui/material/styles';
 
 const ACCORDION_NAME = 'temperatureAdjustments';
 const TEMPERATURES_LIST = _.range(55, 111); // Generates a range from 55 to 110 inclusive
@@ -32,6 +34,7 @@ export default function TemperatureAdjustmentsAccordion({ displayCelsius }: { di
     updateSelectedTemperatures,
   } = useScheduleStore();
   const { isUpdating } = useAppStore();
+  const theme = useTheme();
 
 
   // Add a new schedule with default values
@@ -96,6 +99,7 @@ export default function TemperatureAdjustmentsAccordion({ displayCelsius }: { di
   return (
     <Accordion
       sx={ { width: '100%' } }
+      disabled={ !selectedSchedule?.power.enabled }
       expanded={ accordionExpanded === ACCORDION_NAME }
       onChange={ () => setAccordionExpanded(ACCORDION_NAME) }
     >
@@ -136,7 +140,6 @@ export default function TemperatureAdjustmentsAccordion({ displayCelsius }: { di
                   type="time"
                   variant='standard'
                   value={ time }
-                  sx={ { flexGrow: 1 } }
                   onChange={ (event) => handleUpdateTime(time, event.target.value) }
                   error={ !isTimeValid(time) }
                   helperText={
@@ -145,6 +148,21 @@ export default function TemperatureAdjustmentsAccordion({ displayCelsius }: { di
                       : ''
                   }
                   disabled={ isUpdating }
+                  sx={ {
+                    width: '110px',
+                    // Hide native indicator (where it exists)
+                    '& input::-webkit-calendar-picker-indicator': {
+                      opacity: 0,
+                      display: 'none',
+                    },
+                  } }
+                  InputProps={ {
+                    endAdornment: (
+                      <InputAdornment position="end" sx={ { cursor: 'pointer' } } >
+                        <AccessTime sx={ { color: theme.palette.grey[500] } } fontSize='small'/>
+                      </InputAdornment>
+                    ),
+                  } }
                 />
 
                 { /* Temperature selector */ }

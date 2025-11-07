@@ -25,11 +25,19 @@ export default function ApplyToOtherDaysAccordion() {
     toggleSelectedDay,
     accordionExpanded,
     setAccordionExpanded,
+    selectedSchedule,
   } = useScheduleStore();
   const { isUpdating } = useAppStore();
 
   const setWeekdays = () => {
     daysOfWeek.slice(0, 5).map(day => {
+      // @ts-expect-error
+      toggleSelectedDay(day.toLowerCase());
+    });
+  };
+
+  const setEveryday = () => {
+    daysOfWeek.map(day => {
       // @ts-expect-error
       toggleSelectedDay(day.toLowerCase());
     });
@@ -47,6 +55,8 @@ export default function ApplyToOtherDaysAccordion() {
       sx={ { width: '100%', mt: -2 } }
       expanded={ accordionExpanded === ACCORDION_NAME }
       onChange={ () => setAccordionExpanded(ACCORDION_NAME) }
+      disabled={ !selectedSchedule?.power.enabled }
+
     >
       <AccordionSummary expandIcon={ <ExpandMoreIcon/> }>
         <Typography sx={ { display: 'flex', alignItems: 'center', gap: 3 } }>
@@ -55,8 +65,9 @@ export default function ApplyToOtherDaysAccordion() {
       </AccordionSummary>
       <Box sx={ { mt: -2, p: 2 } }>
         <Box sx={ { display: 'flex', gap: 1 } }>
-          <Button variant="contained" sx={ { mb: 1 } } onClick={ setWeekdays }>Weekdays</Button>
+          <Button variant="contained" sx={ { mb: 1 } } onClick={ setWeekdays } >Weekdays</Button>
           <Button variant="contained" sx={ { mb: 1 } } onClick={ setWeekends }>Weekends</Button>
+          <Button variant="contained" sx={ { mb: 1 } } onClick={ setEveryday }>Everyday</Button>
         </Box>
         <FormGroup>
           {

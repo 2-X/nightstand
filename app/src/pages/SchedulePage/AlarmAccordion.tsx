@@ -49,6 +49,7 @@ export default function AlarmAccordion() {
       sx={ { width: '100%', mt: -2 } }
       expanded={ accordionExpanded === ACCORDION_NAME }
       onChange={ () => setAccordionExpanded(ACCORDION_NAME) }
+      disabled={ !selectedSchedule?.power.enabled }
     >
       <AccordionSummary expandIcon={ <ExpandMoreIcon/> } >
         <Typography sx={ { display: 'flex', alignItems: 'center', gap: 3 } }>

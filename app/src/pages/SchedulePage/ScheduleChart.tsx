@@ -1,7 +1,7 @@
 /* eslint-disable react/no-multi-comp */
 import { useTheme } from '@mui/material/styles';
 import { useMemo } from 'react';
-import Box from '@mui/material/Box';
+import { Paper } from '@mui/material';
 import { LineChart, lineElementClasses, areaElementClasses } from '@mui/x-charts/LineChart';
 import { useDrawingArea } from '@mui/x-charts/hooks';
 
@@ -209,8 +209,9 @@ export default function TemperatureScheduleChart() {
   const gradAreaId = 'temp-x-grad-area';
   const gradLineId = 'temp-x-grad-line';
   const axisColor = theme.palette.grey['600'];
+
   return (
-    <Box sx={ { width: '100%', height: 300, p: 2 } }>
+    <Paper sx={ { width: '100%', height: 300, p: 2 } }>
       <LineChart
         xAxis={ [{
           scaleType: 'time',
@@ -277,6 +278,6 @@ export default function TemperatureScheduleChart() {
           lineAlpha={ LINE_ALPHA }
         />
       </LineChart>
-    </Box>
+    </Paper>
   );
 }

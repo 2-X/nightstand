@@ -8,11 +8,10 @@ import AlarmAccordion from './AlarmAccordion.tsx';
 import ApplyToOtherDaysAccordion from './ApplyToOtherDaysAccordion.tsx';
 import DayTabs from './DayTabs.tsx';
 import EnabledSwitch from './EnabledSwitch.tsx';
-import PowerOffTime from './PowerOffTime.tsx';
 import PageContainer from '../PageContainer.tsx';
 import SaveButton from './SaveButton.tsx';
 import SideControl from '../../components/SideControl.tsx';
-import StartTimeSection from './StartTimeSection.tsx';
+import PowerScheduleSection from './PowerScheduleSection.tsx';
 import TemperatureAdjustmentsAccordion from './TemperatureAdjustmentsAccordion.tsx';
 import { DayOfWeek, Schedules } from '@api/schedulesSchema.ts';
 import { postSchedules } from '@api/schedules';
@@ -108,25 +107,21 @@ export default function SchedulePage() {
       } }
     >
       <SideControl/>
+
       <DayTabs/>
       <ErrorBoundary componentName='Scheduling chart'>
         <TemperatureScheduleChart />
       </ErrorBoundary>
-      <StartTimeSection displayCelsius={ displayCelsius }/>
-      <PowerOffTime/>
+
+      <PowerScheduleSection displayCelsius={ displayCelsius }/>
       <Box sx={ { mt: 2, display: 'flex', justifyContent: 'space-between', width: '100%', mb: 2 } }>
         <EnabledSwitch/>
         <SaveButton onSave={ handleSave }/>
       </Box>
-      {
-        selectedSchedule?.power.enabled && (
-          <>
-            <TemperatureAdjustmentsAccordion displayCelsius={ displayCelsius }/>
-            <AlarmAccordion/>
-            <ApplyToOtherDaysAccordion/>
-          </>
-        )
-      }
+      <TemperatureAdjustmentsAccordion displayCelsius={ displayCelsius }/>
+      <AlarmAccordion/>
+      <ApplyToOtherDaysAccordion/>
+
     </PageContainer>
   );
 }

@@ -25,9 +25,6 @@ echo "Setting up the installation directory..."
 rm -rf "$REPO_DIR"
 mv free-sleep-main "$REPO_DIR"
 
-# Optional: remove the leftover free-sleep-main directory if the `unzip` created extra files
-# (In this script we're already moving it, so there's no leftover)
-# rm -rf free-sleep-main
 
 chown -R "$USERNAME":"$USERNAME" "$REPO_DIR"
 

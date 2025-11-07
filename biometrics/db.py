@@ -18,7 +18,8 @@ DB_FILE_PATH = f'{logger.folder_path}free-sleep.db'
 conn = sqlite3.connect(DB_FILE_PATH, isolation_level=None, check_same_thread=False)
 conn.execute("PRAGMA journal_mode=WAL;")  # Enable WAL mode
 conn.execute("PRAGMA busy_timeout=5000;")  # Wait up to 5 seconds if locked
-cursor = conn.cursor()
+conn.execute("PRAGMA synchronous=NORMAL;")
+conn.execute("PRAGMA foreign_keys=ON;")
 atexit.register(lambda: conn.close())
 
 
@@ -54,6 +55,8 @@ def insert_vitals(data: dict):
     """
     Inserts a record into the 'vitals' table. If a conflict occurs, it skips the insertion.
     """
+    cursor = conn.cursor()
+
     sql = """
     INSERT INTO vitals (side, timestamp, heart_rate, hrv, breathing_rate)
     VALUES (:side, :timestamp, :heart_rate, :hrv, :breathing_rate)
@@ -73,11 +76,10 @@ def insert_vitals(data: dict):
     logger.debug('Inserting vitals record...')
     try:
         cursor.execute(sql, data)
-        conn.commit()
-    except sqlite3.Error as e:
-        error_message = traceback.format_exc()
-        logger.error(e)
-        logger.error(error_message)
+    except sqlite3.Error as error:
+        logger.error(error)
+    finally:
+        cursor.close()
 
 
 def insert_sleep_records(sleep_records: List[SleepRecord]):
@@ -92,61 +94,64 @@ def insert_sleep_records(sleep_records: List[SleepRecord]):
       - present_intervals (list of [start, end] datetime pairs)
       - not_present_intervals (list of [start, end] datetime pairs)
     """
-    if len(sleep_records) == 0:
-        logger.warning(f'No sleep records to insert, exiting...')
-        return
-    else:
-        logger.info(f'Inserting {len(sleep_records)} sleep record(s) into {DB_FILE_PATH}...')
-        logger.info(json.dumps(sleep_records, indent=4, default=custom_serializer))
+    try:
+        cursor = conn.cursor()
 
-    conn = sqlite3.connect(DB_FILE_PATH)
-    cur = conn.cursor()
-    insert_query = """
-    INSERT OR IGNORE INTO sleep_records (
-        side,
-        entered_bed_at,
-        left_bed_at,
-        sleep_period_seconds,
-        times_exited_bed,
-        present_intervals,
-        not_present_intervals
-    ) VALUES (?, ?, ?, ?, ?, ?, ?);
-    """
+        if len(sleep_records) == 0:
+            logger.warning(f'No sleep records to insert, exiting...')
+            return
+        else:
+            logger.info(f'Inserting {len(sleep_records)} sleep record(s) into {DB_FILE_PATH}...')
+            logger.info(json.dumps(sleep_records, indent=4, default=custom_serializer))
 
-    # Convert records to tuples for insertion
-    values_to_insert = []
-    for sleep_record in sleep_records:
-        side = sleep_record['side']
-        entered_bed_at = int(sleep_record['entered_bed_at'].timestamp())
-        left_bed_at = int(sleep_record.get('left_bed_at').timestamp())
-        sleep_period_seconds = sleep_record.get('sleep_period_seconds', 0)
-        times_exited_bed = sleep_record.get('times_exited_bed', 0)
-
-        # Encode intervals as JSON strings
-        present_intervals_str = json.dumps([
-            [int(start.timestamp()), int(end.timestamp())] for start, end in sleep_record.get('present_intervals', [])
-        ])
-        not_present_intervals_str = json.dumps([
-            [int(start.timestamp()), int(end.timestamp())] for start, end in sleep_record.get('not_present_intervals', [])
-        ])
-
-        # Prepare the data tuple
-        row_tuple = (
+        insert_query = """
+        INSERT OR IGNORE INTO sleep_records (
             side,
             entered_bed_at,
             left_bed_at,
             sleep_period_seconds,
             times_exited_bed,
-            present_intervals_str,
-            not_present_intervals_str
-        )
-        values_to_insert.append(row_tuple)
+            present_intervals,
+            not_present_intervals
+        ) VALUES (?, ?, ?, ?, ?, ?, ?);
+        """
 
-    cur.executemany(insert_query, values_to_insert)
-    conn.commit()
-    cur.close()
-    conn.close()
-    logger.info(f"Inserted {len(sleep_records)} record(s) into 'sleep_records' (ignoring duplicates).")
+        # Convert records to tuples for insertion
+        values_to_insert = []
+        for sleep_record in sleep_records:
+            side = sleep_record['side']
+            entered_bed_at = int(sleep_record['entered_bed_at'].timestamp())
+            left_bed_at = int(sleep_record.get('left_bed_at').timestamp())
+            sleep_period_seconds = sleep_record.get('sleep_period_seconds', 0)
+            times_exited_bed = sleep_record.get('times_exited_bed', 0)
+
+            # Encode intervals as JSON strings
+            present_intervals_str = json.dumps([
+                [int(start.timestamp()), int(end.timestamp())] for start, end in sleep_record.get('present_intervals', [])
+            ])
+            not_present_intervals_str = json.dumps([
+                [int(start.timestamp()), int(end.timestamp())] for start, end in sleep_record.get('not_present_intervals', [])
+            ])
+
+            # Prepare the data tuple
+            row_tuple = (
+                side,
+                entered_bed_at,
+                left_bed_at,
+                sleep_period_seconds,
+                times_exited_bed,
+                present_intervals_str,
+                not_present_intervals_str
+            )
+            values_to_insert.append(row_tuple)
+
+        cursor.executemany(insert_query, values_to_insert)
+        logger.info(f"Inserted {len(sleep_records)} record(s) into 'sleep_records' (ignoring duplicates).")
+    except Exception as error:
+        logger.error(error)
+    finally:
+        cursor.close()
+
 
 
 def insert_movement_df(movement_df: pd.DataFrame):
