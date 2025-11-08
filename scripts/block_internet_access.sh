@@ -54,11 +54,14 @@ iptables -I INPUT -p udp --sport 123 -j ACCEPT
 
 echo "Updating the timesyncd config"
 # New configuration content
-NEW_TIME_SYNC_CONFIG="[Time]
-NTP=pool.ntp.org
-FallbackNTP=time1.google.com time2.google.com time3.google.com time4.google.com"
-
-echo "$NEW_TIME_SYNC_CONFIG" > "/etc/systemd/timesyncd.conf"
+cat > /etc/systemd/timesyncd.conf <<EOF
+[Time]
+NTP=pool.ntp.org 0.pool.ntp.org 1.pool.ntp.org 2.pool.ntp.org 3.pool.ntp.org
+FallbackNTP=time1.google.com time2.google.com time3.google.com time4.google.com
+RootDistanceMaxSec=5
+PollIntervalMinSec=32
+PollIntervalMaxSec=2048
+EOF
 
 # Restart timesyncd to apply changes
 systemctl restart systemd-timesyncd
