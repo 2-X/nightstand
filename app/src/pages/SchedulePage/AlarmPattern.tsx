@@ -27,7 +27,6 @@ export default function AlarmPattern() {
             updateSelectedSchedule(
               {
                 alarm: {
-                  // @ts-ignore
                   vibrationPattern: event.target.value,
                 },
               }

@@ -35,7 +35,6 @@ router.post('/schedules', async (req: Request, res: Response) => {
     });
     return;
   }
-  // @ts-ignore
   const schedules: DeepPartial<Schedules> = validationResult.data;
   await schedulesDB.read();
 

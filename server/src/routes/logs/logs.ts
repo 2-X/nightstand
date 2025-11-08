@@ -8,9 +8,15 @@ const router = express.Router();
 
 const LOGS_DIRS = ['/persistent/free-sleep-data/logs', '/var/log'];
 
+type LogFile = {
+  name: string;
+  path: string;
+  mtime: number;
+};
+
 // Endpoint to list all log files as clickable links
 router.get('/', (req, res) => {
-  let allLogFiles: string[] = [];
+  let allLogFiles: LogFile[] = [];
 
   // Read logs from both directories
   LOGS_DIRS.forEach((dir) => {
@@ -33,7 +39,7 @@ router.get('/', (req, res) => {
         })
         .filter(Boolean);
 
-      // @ts-ignore
+      // @ts-expect-error
       allLogFiles = [...allLogFiles, ...files];
     } catch (err) {
       logger.error(`Error reading logs from ${dir}:`, err);
@@ -41,17 +47,14 @@ router.get('/', (req, res) => {
   });
 
 
-  // @ts-ignore
   allLogFiles.sort((a, b) => b.mtime - a.mtime);
 
   res.json({
-    // @ts-ignore
     logs: allLogFiles.map(log => log.name),
   });
 });
 
 
-// @ts-ignore
 router.get('/:filename', async (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');

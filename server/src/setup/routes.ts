@@ -52,7 +52,7 @@ export default function (app: Express) {
     const status = Number(err?.status) || 500;
     const body: any = { error: { message: err?.message || 'Internal Server Error' } };
     if (!isProd) body.error.stack = err?.stack;
-
+    logger.error(body);
     logger.error(JSON.stringify(body));
     res.status(status).json(body);
   });

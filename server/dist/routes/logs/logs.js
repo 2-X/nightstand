@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="2182097c-0335-5bb8-9c62-9bbb6dfb6ffc")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="d2cc44a2-f392-55d1-9456-543f413186d7")}catch(e){}}();
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -30,21 +30,18 @@ router.get('/', (req, res) => {
                 }
             })
                 .filter(Boolean);
-            // @ts-ignore
+            // @ts-expect-error
             allLogFiles = [...allLogFiles, ...files];
         }
         catch (err) {
             logger.error(`Error reading logs from ${dir}:`, err);
         }
     });
-    // @ts-ignore
     allLogFiles.sort((a, b) => b.mtime - a.mtime);
     res.json({
-        // @ts-ignore
         logs: allLogFiles.map(log => log.name),
     });
 });
-// @ts-ignore
 router.get('/:filename', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -91,4 +88,4 @@ router.get('/:filename', async (req, res) => {
 });
 export default router;
 //# sourceMappingURL=logs.js.map
-//# debugId=2182097c-0335-5bb8-9c62-9bbb6dfb6ffc
+//# debugId=d2cc44a2-f392-55d1-9456-543f413186d7

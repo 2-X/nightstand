@@ -1,17 +1,19 @@
+import path from 'path';
 import chokidar from 'chokidar';
 import moment from 'moment-timezone';
 import schedule from 'node-schedule';
+
+import config from '../config.js';
 import logger from '../logger.js';
 import schedulesDB from '../db/schedules.js';
+import serverStatus from '../serverStatus.js';
 import settingsDB from '../db/settings.js';
 import { DayOfWeek, Side } from '../db/schedulesSchema.js';
-import { schedulePowerOffAndSleepAnalysis, schedulePowerOn } from './powerScheduler.js';
-import { scheduleTemperatures } from './temperatureScheduler.js';
-import { schedulePrimingRebootAndCalibration } from './primeScheduler.js';
-import config from '../config.js';
-import serverStatus from '../serverStatus.js';
-import { scheduleAlarm } from './alarmScheduler.js';
 import { isSystemDateValid } from './isSystemDateValid.js';
+import { scheduleAlarm, scheduleAlarmOverride } from './alarmScheduler.js';
+import { schedulePowerOffAndSleepAnalysis, schedulePowerOn } from './powerScheduler.js';
+import { schedulePrimingRebootAndCalibration } from './primeScheduler.js';
+import { scheduleTemperatures } from './temperatureScheduler.js';
 
 
 async function setupJobs() {
@@ -39,6 +41,8 @@ async function setupJobs() {
     const settingsData = settingsDB.data;
 
     logger.info('Scheduling jobs...');
+    scheduleAlarmOverride(settingsData, 'left');
+    scheduleAlarmOverride(settingsData, 'right');
     Object.entries(schedulesData).forEach(([side, sideSchedule]) => {
       Object.entries(sideSchedule).forEach(([day, schedule]) => {
         schedulePowerOn(settingsData, side as Side, day as DayOfWeek, schedule.power);
@@ -76,7 +80,7 @@ function waitForValidDateAndSetupJobs() {
     void setupJobs();
   } else if(RETRY_COUNT < 20) {
     serverStatus.status.systemDate.status = 'retrying';
-    const message = `System date is invalid (year 2010). Retrying in 10 seconds... (Attempt #${RETRY_COUNT}})`;
+    const message = `System date is invalid (year 2010). Retrying in 5 seconds... (Attempt #${RETRY_COUNT}})`;
     serverStatus.status.systemDate.message = message;
     RETRY_COUNT++;
     logger.debug(message);
@@ -90,8 +94,15 @@ function waitForValidDateAndSetupJobs() {
 
 
 // Monitor the JSON file and refresh jobs on change
-chokidar.watch(config.lowDbFolder).on('change', () => {
-  logger.info('Detected DB change, reloading...');
+chokidar.watch(config.lowDbFolder).on('change', (changedPath) => {
+  const fileName = path.basename(changedPath);
+  if (fileName === 'servicesDB.json') {
+    logger.info(`Skipping restarting jobs for DB change: ${fileName}`);
+    return;
+  } else {
+    logger.info(`Detected DB change, reloading... ${fileName}`);
+  }
+
   if (serverStatus.status.systemDate.status === 'healthy') {
     void setupJobs();
   } else {

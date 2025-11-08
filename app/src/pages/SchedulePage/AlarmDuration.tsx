@@ -7,7 +7,7 @@ import { useAppStore } from '@state/appStore.tsx';
 import { useScheduleStore } from './scheduleStore.tsx';
 import _ from 'lodash';
 
-const DURATION_LIST = _.range(1, 180);
+const DURATION_LIST = _.range(10, 190, 10);
 
 export default function AlarmDuration() {
   const { isUpdating } = useAppStore();

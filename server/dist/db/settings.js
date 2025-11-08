@@ -1,22 +1,44 @@
 // LowDB, stores the schedules in /persistent/free-sleep-data/lowdb/settingsDB.json
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="b60762cb-1150-5f13-a600-7a11b5ffbad5")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="e1a19d3f-444e-5e3f-bea6-92484922382e")}catch(e){}}();
 import _ from 'lodash';
 import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
 import config from '../config.js';
 const defaultData = {
     id: crypto.randomUUID(),
-    timeZone: null,
+    timeZone: 'UTC',
     temperatureFormat: 'fahrenheit',
     rebootDaily: true,
     left: {
         name: 'Left',
         awayMode: false,
+        scheduleOverrides: {
+            temperatureSchedules: {
+                disabled: false,
+                expiresAt: ''
+            },
+            alarm: {
+                disabled: false,
+                timeOverride: '',
+                expiresAt: '',
+            }
+        },
     },
     right: {
         name: 'Right',
         awayMode: false,
+        scheduleOverrides: {
+            temperatureSchedules: {
+                disabled: false,
+                expiresAt: ''
+            },
+            alarm: {
+                disabled: false,
+                timeOverride: '',
+                expiresAt: '',
+            }
+        },
     },
     primePodDaily: {
         enabled: false,
@@ -31,4 +53,4 @@ settingsDB.data = _.merge({}, defaultData, settingsDB.data);
 await settingsDB.write();
 export default settingsDB;
 //# sourceMappingURL=settings.js.map
-//# debugId=b60762cb-1150-5f13-a600-7a11b5ffbad5
+//# debugId=e1a19d3f-444e-5e3f-bea6-92484922382e

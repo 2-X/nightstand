@@ -74,12 +74,11 @@ export default function SchedulePage() {
   const handleSave = async () => {
     setIsUpdating(true);
 
-    // @ts-ignore
-    const daysList: DayOfWeek[] = _.uniq(_.keys(_.pickBy(selectedDays, value => value)));
+    const daysList: DayOfWeek[] = _.uniq(_.keys(_.pickBy(selectedDays, value => value))) as DayOfWeek[];
     daysList.push(selectedDay);
     const payload: DeepPartial<Schedules> = { [side]: {}, };
     daysList.forEach(day => {
-      // @ts-ignore
+      // @ts-expect-error
       payload[side][day] = selectedSchedule;
     });
 

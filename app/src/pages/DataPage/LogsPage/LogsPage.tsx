@@ -12,8 +12,8 @@ export default function LogsPage() {
   const [logs, setLogs] = useState<string[]>([]);
   const [logFiles, setLogFiles] = useState<string[]>([]);
   const [selectedLog, setSelectedLog] = useState<string>('');
-  const logsContainerRef = useRef(null);
-  const logsEndRef = useRef(null);
+  const logsContainerRef = useRef<HTMLDivElement | null>(null);
+  const logsEndRef = useRef<HTMLDivElement | null>(null);
   const isUserAtBottom = useRef(true);
   const theme = useTheme();
 
@@ -64,7 +64,6 @@ export default function LogsPage() {
   // Auto-scroll only if user is at the bottom
   useEffect(() => {
     if (isUserAtBottom.current) {
-      // @ts-ignore
       logsEndRef.current?.scrollIntoView({ behavior: 'auto' });
     }
   }, [logs]);

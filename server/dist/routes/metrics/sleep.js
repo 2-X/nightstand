@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="60b8a776-1cd0-5c68-8791-11908de8441c")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="ef61c7be-0170-5667-a459-5e45a787a7a8")}catch(e){}}();
 import express from 'express';
 import moment from 'moment-timezone';
 import { sleepRecordSchema } from '../../db/sleepRecordsSchema.js';
@@ -55,19 +55,18 @@ router.put('/sleep/:id', async (req, res) => {
     // Convert entered_bed_at and exited_bed_at to epoch timestamps
     const updatedRecord = { ...parsedData.data };
     if (updatedRecord.entered_bed_at) {
-        // @ts-ignore
+        // @ts-expect-error
         updatedRecord.entered_bed_at = Math.floor(new Date(updatedRecord.entered_bed_at).getTime() / 1000);
     }
     if (updatedRecord.left_bed_at) {
-        // @ts-ignore
+        // @ts-expect-error
         updatedRecord.left_bed_at = Math.floor(new Date(updatedRecord.left_bed_at).getTime() / 1000);
     }
     // Need to recalculate the number of times someone left the bed during the new sleep interval
-    // @ts-ignore
     if (updatedRecord.entered_bed_at && updatedRecord.left_bed_at) {
-        // @ts-ignore
+        // @ts-expect-error
         updatedRecord.sleep_period_seconds = updatedRecord.left_bed_at - updatedRecord.entered_bed_at;
-        // @ts-ignore
+        // @ts-expect-error
         updatedRecord.times_exited_bed = existingRecord.not_present_intervals.filter(([start, end]) => {
             const startTime = Math.floor(new Date(start).getTime() / 1000);
             const endTime = Math.floor(new Date(end).getTime() / 1000);
@@ -92,4 +91,4 @@ router.delete('/sleep/:id', async (req, res) => {
 });
 export default router;
 //# sourceMappingURL=sleep.js.map
-//# debugId=60b8a776-1cd0-5c68-8791-11908de8441c
+//# debugId=ef61c7be-0170-5667-a459-5e45a787a7a8

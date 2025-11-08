@@ -54,7 +54,9 @@ export const SchedulesSchema = z.object({
 export type DailySchedule = z.infer<typeof DailyScheduleSchema>;
 export type SideSchedule = z.infer<typeof SideScheduleSchema>;
 export type Schedules = z.infer<typeof SchedulesSchema>;
+export type Alarm = z.infer<typeof AlarmSchema>;
 export type Time = z.infer<typeof TimeSchema>;
+
 // eslint-disable-next-line @typescript-eslint/no-type-alias
 export type DayOfWeek = keyof SideSchedule;
 // eslint-disable-next-line @typescript-eslint/no-type-alias

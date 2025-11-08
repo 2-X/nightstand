@@ -1,14 +1,15 @@
 import { useState, useRef } from 'react';
-import { TextField, IconButton, InputAdornment, Typography, Box, Tooltip } from '@mui/material';
+import { Link, TextField, IconButton, InputAdornment, Typography, Box, Tooltip } from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CurrencyBitcoinIcon from '@mui/icons-material/CurrencyBitcoin';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import Section from './Section.tsx';
-
+import paypalIcon from './paypal.png';
 
 export default function Donate() {
   const bitcoinAddress = 'bc1qjapkufh65gs68v2mkvrzq2ney3vnvv87jdxxg6';
   const [copySuccess, setCopySuccess] = useState(false);
-  const textFieldRef = useRef(null);
+  const textFieldRef = useRef<HTMLInputElement>(null);
 
   const handleCopy = async () => {
     try {
@@ -17,7 +18,6 @@ export default function Donate() {
       } else {
         // Fallback for browsers without clipboard API support
         const textField = textFieldRef.current;
-        // @ts-ignore
         textField?.select();
         document.execCommand('copy');
       }
@@ -29,7 +29,7 @@ export default function Donate() {
   };
 
   return (
-    <Section title=''>
+    <Section title="">
       <Box
         sx={ {
           display: 'flex',
@@ -42,10 +42,34 @@ export default function Donate() {
         } }
       >
         <Typography variant="h6" sx={ { display: 'flex', alignItems: 'center' } }>
-        Support the Project <CurrencyBitcoinIcon fontSize="large"/>
+          Support the Project <AttachMoneyIcon fontSize="large"/>
         </Typography>
         <Typography variant="body2" color="textSecondary">
-        Like the app? Don't like paying $200/year elsewhere? Buy me a drink instead!
+          Like the app? Don't like paying $200/year elsewhere? Buy me a drink instead!
+        </Typography>
+        <br />
+        <Box
+          sx={ {
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            width: '100%',
+            flexDirection: 'column',
+          } }
+        >
+          <Link href="https://paypal.me/realfreesleep" target="_blank">
+            <img src={ paypalIcon } alt="Donate via PayPal" width={ 225 } height={ 60 }/>
+          </Link>
+          <Link href="https://paypal.me/realfreesleep" target="_blank">
+            Donate via PayPal
+          </Link>
+        </Box>
+        <br />
+        <Typography variant='h6' sx={ { display: 'flex', alignItems: 'center' } }>
+          Bitcoin <CurrencyBitcoinIcon />
+        </Typography>
+        <Typography variant="body2" color="textSecondary">
+          { copySuccess ? 'Copied!' : 'Copy and send to the bitcoin address below' }
         </Typography>
         <TextField
           inputRef={ textFieldRef }
@@ -53,11 +77,13 @@ export default function Donate() {
           fullWidth
           onSelect={ handleCopy }
           value={ bitcoinAddress }
+          size='small'
           sx={ {
             cursor: 'pointer',
             '& .MuiInputBase-input': {
               cursor: 'pointer',
-              fontSize: '12px', // Adjust the font size here
+              fontSize: '12px',
+              fontFamily: 'monospace',
             }
           } }
           inputProps={ { readOnly: true } }
@@ -73,11 +99,7 @@ export default function Donate() {
             ),
           } }
         />
-        <Typography variant="body2" color="textSecondary">
-          { copySuccess ? 'Copied!' : 'Copy and send to the bitcoin address above.' }
-        </Typography>
       </Box>
     </Section>
-
   );
 }

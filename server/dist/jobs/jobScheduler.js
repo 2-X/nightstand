@@ -1,18 +1,19 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="029f5abe-e912-5272-b3e2-3c716a9ab134")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="06057641-4ecd-5809-98b7-74a1353640a9")}catch(e){}}();
+import path from 'path';
 import chokidar from 'chokidar';
 import moment from 'moment-timezone';
 import schedule from 'node-schedule';
+import config from '../config.js';
 import logger from '../logger.js';
 import schedulesDB from '../db/schedules.js';
-import settingsDB from '../db/settings.js';
-import { schedulePowerOffAndSleepAnalysis, schedulePowerOn } from './powerScheduler.js';
-import { scheduleTemperatures } from './temperatureScheduler.js';
-import { schedulePrimingRebootAndCalibration } from './primeScheduler.js';
-import config from '../config.js';
 import serverStatus from '../serverStatus.js';
-import { scheduleAlarm } from './alarmScheduler.js';
+import settingsDB from '../db/settings.js';
 import { isSystemDateValid } from './isSystemDateValid.js';
+import { scheduleAlarm, scheduleAlarmOverride } from './alarmScheduler.js';
+import { schedulePowerOffAndSleepAnalysis, schedulePowerOn } from './powerScheduler.js';
+import { schedulePrimingRebootAndCalibration } from './primeScheduler.js';
+import { scheduleTemperatures } from './temperatureScheduler.js';
 async function setupJobs() {
     try {
         if (serverStatus.status.jobs.status === 'started') {
@@ -32,6 +33,8 @@ async function setupJobs() {
         const schedulesData = schedulesDB.data;
         const settingsData = settingsDB.data;
         logger.info('Scheduling jobs...');
+        scheduleAlarmOverride(settingsData, 'left');
+        scheduleAlarmOverride(settingsData, 'right');
         Object.entries(schedulesData).forEach(([side, sideSchedule]) => {
             Object.entries(sideSchedule).forEach(([day, schedule]) => {
                 schedulePowerOn(settingsData, side, day, schedule.power);
@@ -67,7 +70,7 @@ function waitForValidDateAndSetupJobs() {
     }
     else if (RETRY_COUNT < 20) {
         serverStatus.status.systemDate.status = 'retrying';
-        const message = `System date is invalid (year 2010). Retrying in 10 seconds... (Attempt #${RETRY_COUNT}})`;
+        const message = `System date is invalid (year 2010). Retrying in 5 seconds... (Attempt #${RETRY_COUNT}})`;
         serverStatus.status.systemDate.message = message;
         RETRY_COUNT++;
         logger.debug(message);
@@ -80,8 +83,15 @@ function waitForValidDateAndSetupJobs() {
     }
 }
 // Monitor the JSON file and refresh jobs on change
-chokidar.watch(config.lowDbFolder).on('change', () => {
-    logger.info('Detected DB change, reloading...');
+chokidar.watch(config.lowDbFolder).on('change', (changedPath) => {
+    const fileName = path.basename(changedPath);
+    if (fileName === 'servicesDB.json') {
+        logger.info(`Skipping restarting jobs for DB change: ${fileName}`);
+        return;
+    }
+    else {
+        logger.info(`Detected DB change, reloading... ${fileName}`);
+    }
     if (serverStatus.status.systemDate.status === 'healthy') {
         void setupJobs();
     }
@@ -92,4 +102,4 @@ chokidar.watch(config.lowDbFolder).on('change', () => {
 // Initial job setup
 waitForValidDateAndSetupJobs();
 //# sourceMappingURL=jobScheduler.js.map
-//# debugId=029f5abe-e912-5272-b3e2-3c716a9ab134
+//# debugId=06057641-4ecd-5809-98b7-74a1353640a9

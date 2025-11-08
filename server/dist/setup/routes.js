@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="0e1a55b1-7e9d-51d8-bc35-cd195af03e91")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="90b07b84-8cf8-5005-b887-769b5b2634f1")}catch(e){}}();
 import * as Sentry from '@sentry/node';
 import express from 'express';
 import path from 'path';
@@ -50,6 +50,7 @@ export default function (app) {
         const body = { error: { message: err?.message || 'Internal Server Error' } };
         if (!isProd)
             body.error.stack = err?.stack;
+        logger.error(body);
         logger.error(JSON.stringify(body));
         res.status(status).json(body);
     });
@@ -62,4 +63,4 @@ export default function (app) {
     logger.debug('Registered routes!');
 }
 //# sourceMappingURL=routes.js.map
-//# debugId=0e1a55b1-7e9d-51d8-bc35-cd195af03e91
+//# debugId=90b07b84-8cf8-5005-b887-769b5b2634f1

@@ -9,16 +9,38 @@ import config from '../config.js';
 
 const defaultData: Settings = {
   id: crypto.randomUUID(),
-  timeZone: null,
+  timeZone: 'UTC',
   temperatureFormat: 'fahrenheit',
   rebootDaily: true,
   left: {
     name: 'Left',
     awayMode: false,
+    scheduleOverrides: {
+      temperatureSchedules: {
+        disabled: false,
+        expiresAt: ''
+      },
+      alarm: {
+        disabled: false,
+        timeOverride: '',
+        expiresAt: '',
+      }
+    },
   },
   right: {
     name: 'Right',
     awayMode: false,
+    scheduleOverrides: {
+      temperatureSchedules: {
+        disabled: false,
+        expiresAt: ''
+      },
+      alarm: {
+        disabled: false,
+        timeOverride: '',
+        expiresAt: '',
+      }
+    },
   },
   primePodDaily: {
     enabled: false,

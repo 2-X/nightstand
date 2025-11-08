@@ -148,8 +148,7 @@ function drawAxes({ chartG, xScale, yScale, height, theme, selectedSleepRecord }
         ? theme.palette.grey[100] // Highlight selected bar's tick
         : theme.palette.grey[500] // Default white for others
     )
-    // @ts-ignore
-    .style('font-family', theme.typography.body1.fontFamily);
+    .style('font-family', theme.typography.body1.fontFamily as string);
   xAxisGroup.selectAll('.tick line').remove();
   xAxisGroup.select('.domain').remove();
 
@@ -164,8 +163,7 @@ function drawAxes({ chartG, xScale, yScale, height, theme, selectedSleepRecord }
   yAxisGroup
     .selectAll('text')
     .attr('fill', theme.palette.grey[500])
-    // @ts-ignore
-    .style('font-family', theme.typography.body1.fontFamily);
+    .style('font-family', theme.typography.body1.fontFamily as string);
   yAxisGroup.selectAll('.tick line').remove();
   yAxisGroup.select('.domain').remove();
 
@@ -300,8 +298,7 @@ export default function SleepBarChart({
       .attr('width', width)
       .attr('height', height)
       .style('background', theme.palette.background.default)
-      // @ts-ignore
-      .style('font-family', theme.typography.body1.fontFamily);
+      .style('font-family', theme.typography.body1.fontFamily as string);
 
     // Clear old content
     svg.selectAll('*').remove();

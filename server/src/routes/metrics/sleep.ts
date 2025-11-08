@@ -49,7 +49,6 @@ router.put<
   { id: string },
   any,
   SleepRecord
-  // @ts-ignore
 >('/sleep/:id', async (req, res) => {
   const { id } = req.params;
   const parsedId = parseInt(id, 10);
@@ -76,21 +75,20 @@ router.put<
   // Convert entered_bed_at and exited_bed_at to epoch timestamps
   const updatedRecord = { ...parsedData.data };
   if (updatedRecord.entered_bed_at) {
-    // @ts-ignore
+    // @ts-expect-error
     updatedRecord.entered_bed_at = Math.floor(new Date(updatedRecord.entered_bed_at).getTime() / 1000);
   }
   if (updatedRecord.left_bed_at) {
-    // @ts-ignore
+    // @ts-expect-error
     updatedRecord.left_bed_at = Math.floor(new Date(updatedRecord.left_bed_at).getTime() / 1000);
   }
 
   // Need to recalculate the number of times someone left the bed during the new sleep interval
-  // @ts-ignore
   if (updatedRecord.entered_bed_at && updatedRecord.left_bed_at) {
-    // @ts-ignore
+    // @ts-expect-error
     updatedRecord.sleep_period_seconds = updatedRecord.left_bed_at - updatedRecord.entered_bed_at;
 
-    // @ts-ignore
+    // @ts-expect-error
     updatedRecord.times_exited_bed = existingRecord.not_present_intervals.filter(([start, end]) => {
       const startTime = Math.floor(new Date(start).getTime() / 1000);
       const endTime = Math.floor(new Date(end).getTime() / 1000);

@@ -3,9 +3,12 @@ import Button from '@mui/material/Button';
 import { Box, CircularProgress } from '@mui/material';
 
 import AlarmDismissal from './AlarmDismissal.tsx';
+import AlarmNotification from './AlarmNotification.tsx';
 import AwayNotification from './AwayNotification.tsx';
+import ErrorBoundary from '@components/ErrorBoundary.tsx';
 import PageContainer from '../PageContainer.tsx';
 import PowerButton from './PowerButton.tsx';
+import PrimingNotification from './PrimingNotification.tsx';
 import SideControl from '../../components/SideControl.tsx';
 import Slider from './Slider.tsx';
 import WaterNotification from './WaterNotification.tsx';
@@ -14,8 +17,6 @@ import { useControlTempStore } from './controlTempStore.tsx';
 import { useDeviceStatus } from '@api/deviceStatus';
 import { useSettings } from '@api/settings.ts';
 import { useTheme } from '@mui/material/styles';
-import PrimingNotification from './PrimingNotification.tsx';
-import AlarmNotification from './AlarmNotification.tsx';
 
 
 export default function ControlTempPage() {
@@ -72,7 +73,9 @@ export default function ControlTempPage() {
             <PrimingNotification/>
           )
         }
-        <AlarmNotification/>
+        <ErrorBoundary componentName='Alarm notification'>
+          <AlarmNotification/>
+        </ErrorBoundary>
         <AwayNotification settings={ settings }/>
         <WaterNotification/>
       </Box>

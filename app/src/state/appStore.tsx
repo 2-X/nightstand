@@ -40,7 +40,6 @@ export function AppStoreProvider({ children }: React.PropsWithChildren) {
 
   useEffect(() => {
     if (!settings) return;
-    // @ts-ignore
     moment.tz.setDefault(settings.timeZone);
   }, [settings]);
 
