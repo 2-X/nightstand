@@ -134,6 +134,7 @@ for supporting open-source innovation!
 ![Device on](docs/on.PNG)
 ![Device off](docs/off.PNG)
 ![Scheduled temperature adjustments](docs/schedules.PNG)
+![Alarms](docs/alarm.PNG)
 ![Health status](docs/health_status.PNG)
 ![Settings](docs/settings.PNG)
 ![Biometrics - 1](docs/sleep_data.PNG)
