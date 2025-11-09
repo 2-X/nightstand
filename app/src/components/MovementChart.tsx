@@ -3,7 +3,7 @@ import { Card, Typography } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { LineChart, lineElementClasses, areaElementClasses } from '@mui/x-charts/LineChart';
 import { useResizeDetector } from 'react-resize-detector';
-import moment from 'moment';
+import moment from 'moment-timezone';
 import type { MovementRecord } from '@api/movement.ts';
 
 type MovementChartProps = {

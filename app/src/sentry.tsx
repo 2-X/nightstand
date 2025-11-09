@@ -14,7 +14,7 @@ import { USER_ID_KEY, HUB_VERSION_KEY, COVER_VERSION_KEY } from '@state/appStore
 
 
 export const initSentry = () => {
-  if (import.meta.env.VITE_ENV === undefined) {
+  if (import.meta.env.VITE_ENV === 'prod') {
     // For some reason, the build assets do not have access to VITE_ENV
     // eslint-disable-next-line no-console
     console.log('Initializing Sentry...');
