@@ -10,6 +10,7 @@ export default [
     ignores: [
       "eslint.config.js",
       "public/mockServiceWorker.js",
+      "dist/*",
     ],
   },
   {files: ["**/*.{js,mjs,cjs,ts,jsx,tsx}"]},

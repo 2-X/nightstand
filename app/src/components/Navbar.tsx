@@ -4,19 +4,18 @@ import Box from '@mui/material/Box';
 import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
 import Toolbar from '@mui/material/Toolbar';
-import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppStore } from '@state/appStore.tsx';
 import { useTheme } from '@mui/material/styles';
 import { PAGES } from './pages';
+import freeSleepIcon from '../../public/free-sleep-icon.svg';
 
 export default function Navbar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { isUpdating } = useAppStore();
   const theme = useTheme(); // Access the Material-UI theme
-  const currentTitle = PAGES.find((page) => page.route === pathname)?.title;
   const [mobileNavValue, setMobileNavValue] = React.useState(
     PAGES.findIndex((page) => page.route === pathname)
   );
@@ -76,9 +75,9 @@ export default function Navbar() {
         } }
       >
         <Toolbar>
-          <Typography variant="h6" component="div" sx={ { flexGrow: 1 } }>
-            { currentTitle || 'Free sleep' }
-          </Typography>
+          <div style={ { flexGrow: 1 } }>
+            <img src={ freeSleepIcon } alt="Join our Discord" width={ 45 } height={ 45 } />
+          </div>
           <Box sx={ { display: 'flex', gap: 2 } }>
             { PAGES.map(({ title, route }) => (
               <Button
