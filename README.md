@@ -1,4 +1,6 @@
-# Free Sleep - Jailbreak 8 Sleep Pod & Control Locally
+# Free Sleep — Local Control for 8 Sleep Pods
+
+## [Demo App](https://free-sleep.vercel.app/)
 
 ## [Discord Server](https://discord.gg/JpArXnBgEj)
 
