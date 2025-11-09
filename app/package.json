@@ -68,7 +68,7 @@
   "msw": {
     "workerDirectory": [
       "dist",
-      "public",
+      "public"
     ]
   }
 }
