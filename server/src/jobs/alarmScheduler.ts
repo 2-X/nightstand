@@ -14,9 +14,6 @@ import { getFranken } from '../8sleep/frankenServer.js';
 import { Settings } from '../db/settingsSchema.js';
 
 
-
-
-
 type ExecuteAlarmArgs = {
   side: Side;
   vibrationIntensity: Alarm['vibrationIntensity'];
@@ -84,8 +81,6 @@ const executeAlarm = async ({ vibrationIntensity, duration, vibrationPattern, si
 };
 
 
-
-
 /**
  * Next occurrence of HH:mm in tz (today or tomorrow depending on 'now').
  * If the HH:mm is already passed for 'now', schedule for tomorrow.
@@ -133,7 +128,6 @@ export function scheduleAlarmOverride(settingsData: Settings, side: Side) {
 }
 
 
-
 export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek, dailySchedule: DailySchedule) => {
   if (!dailySchedule.power.enabled) return;
   if (!dailySchedule.alarm.enabled) return;
@@ -154,19 +148,30 @@ export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek
   logJob('Scheduling alarm job', side, day, dayIndex, time);
 
   schedule.scheduleJob(`${side}-${day}-${time}-alarm`, alarmRule, async () => {
-    logJob('Executing alarm job', side, day, dayIndex, time);
-    await settingsDB.read();
-    const expiresAt = moment(settingsDB.data[side].scheduleOverrides.alarm.expiresAt);
-    const now = moment();
-    if (expiresAt.isBefore(now)) {
+    try {
+      logJob('Executing alarm job', side, day, dayIndex, time);
+      await settingsDB.read();
+
+      if (settingsDB.data[side].scheduleOverrides.alarm.expiresAt) {
+        const expiresAt = moment(settingsDB.data[side].scheduleOverrides.alarm.expiresAt);
+        const now = moment();
+        if (expiresAt.isAfter(now)) {
+          logJob(`Detected alarm override! Skipping alarm! Override expires at: ${expiresAt.format()}`, side, day, dayIndex, time);
+          return;
+        }
+      }
+
       await executeAlarm({
         side,
         vibrationIntensity: dailySchedule.alarm.vibrationIntensity,
         duration: dailySchedule.alarm.duration,
-        vibrationPattern:  dailySchedule.alarm.vibrationPattern,
+        vibrationPattern: dailySchedule.alarm.vibrationPattern,
       });
-    } else {
-      logJob('Detected alarm override! Skipping alarm!', side, day, dayIndex, time);
+    } catch (error: unknown) {
+      serverStatus.status.alarmSchedule.status = 'failed';
+      const message = error instanceof Error ? error.message : String(error);
+      serverStatus.status.alarmSchedule.message = message;
+      logger.error(error);
     }
   });
 };

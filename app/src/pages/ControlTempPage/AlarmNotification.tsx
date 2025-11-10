@@ -57,7 +57,7 @@ export default function AlarmNotification() {
         }
       }
     }
-  }, [settings, schedules]);
+  }, [settings, schedules, side]);
 
   if (!power?.enabled || !alarm?.enabled || !settings) return null;
 
