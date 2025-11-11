@@ -6,6 +6,7 @@ set -e
 # Name of the backup folder with a timestamp
 
 BACKUP_PATH="/home/dac/free-sleep-backup"
+APP_DIR="/home/dac/free-sleep"
 
 systemctl stop free-sleep
 systemctl disable free-sleep
@@ -22,7 +23,16 @@ fi
 echo "Attempting to reinstall free-sleep..."
 if /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/throwaway31265/free-sleep/main/scripts/install.sh)"; then
   echo "Reinstall successful."
-   rm -rf "$BACKUP_PATH"
+  rm -rf "$BACKUP_PATH"
+  if [ -d "$APP_DIR" ]; then
+    rm -rf "$BACKUP_PATH"
+  else
+    echo "Install path missing after installer; restoring backup..."
+    rm -rf "$APP_DIR"
+    mv "$BACKUP_PATH" "$APP_DIR"
+    systemctl enable free-sleep || true
+    systemctl start free-sleep || true
+  fi
 else
   echo "Reinstall failed. Restoring from backup..."
   rm -rf /home/dac/free-sleep
