@@ -15,27 +15,18 @@ logger = get_logger()
 import urllib.request
 import json
 
-req = urllib.request.Request(
-    "http://127.0.0.1:3000/api/services",
-    headers={"Content-Type": "application/json"},
-    method="GET",
-)
-
-with urllib.request.urlopen(req) as response:
-    resp = json.loads(response.read())
 
 def is_biometrics_enabled() -> bool:
     try:
-        req = urllib.request.Request(
-            "http://127.0.0.1:3000/api/services",
-            headers={"Content-Type": "application/json"},
-            method="GET",
-        )
-
-        with urllib.request.urlopen(req) as response:
-            resp = json.loads(response.read())
-        enabled = resp['biometrics']['enabled']
-        return enabled
+        services_db_file_path = '/persistent/free-sleep-data/lowdb/servicesDB.json'
+        if os.path.isfile(services_db_file_path):
+            print('Loading servicesDB.json...')
+            with open(services_db_file_path) as file:
+                services_db = json.load(file)
+                return services_db["biometrics"]["enabled"]
+        else:
+            logger.error(f'File not found! {services_db_file_path}')
+            return False
     except Exception as error:
         logger.error('Error checking if biometrics is enabled, returning false')
         logger.error(error)

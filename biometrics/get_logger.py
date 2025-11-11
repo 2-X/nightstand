@@ -116,29 +116,41 @@ def _build_logger(logger: BaseLogger, name: LoggerName):
 
 def _load_sentry_tags():
     try:
-        print('Getting sentry tags...')
-        with urllib.request.urlopen("http://127.0.0.1:3000/api/settings", timeout=5) as response:
-            user_id = json.load(response)["id"]
-
-        with urllib.request.urlopen("http://127.0.0.1:3000/api/deviceStatus", timeout=5) as response:
-            data = json.load(response)
-            return {
-                "user_id": user_id,
-                "branch": data["freeSleep"]["branch"],
-                "version": data["freeSleep"]["version"],
-                "hubVersion": data["hubVersion"],
-                "coverVersion": data["coverVersion"],
-            }
-    except Exception as error:
-        print('Failed to load Sentry tags!')
-        print(error)
-        return {
+        sentry_tags = {
             "user_id": "error",
             "branch": "error",
             "version": "error",
             "hubVersion": "error",
             "coverVersion": "error",
         }
+        settings_db_file_path = '/persistent/free-sleep-data/lowdb/settingsDB.json'
+        if os.path.isfile(settings_db_file_path):
+            print('Loading settingsDB.json...')
+            with open(settings_db_file_path) as file:
+                settings = json.load(file)
+            sentry_tags['user_id'] = settings['id']
+
+        server_info_file_path = '/home/dac/free-sleep/server/src/serverInfo.json'
+        if os.path.isfile(server_info_file_path):
+            print('Loading serverInfo.json...')
+
+            with open(server_info_file_path) as file:
+                server_info = json.load(file)
+
+            sentry_tags['version'] = server_info['version']
+            sentry_tags['branch'] = server_info['branch']
+
+
+        with urllib.request.urlopen("http://127.0.0.1:3000/api/deviceStatus", timeout=5) as response:
+            data = json.load(response)
+            sentry_tags['hubVersion'] = data['hubVersion']
+            sentry_tags['coverVersion'] = data['coverVersion']
+            return sentry_tags
+
+    except Exception as error:
+        print('Failed to load Sentry tags!')
+        print(error)
+        return sentry_tags
 
 
 def _is_sentry_enabled():

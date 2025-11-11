@@ -34,6 +34,9 @@ import queue
 import threading
 
 from get_logger import get_logger
+# Give time for the express.js server to boot
+print('Sleeping for 30 seconds before starting stream service...')
+time.sleep(30)
 logger = get_logger('free-sleep-stream')
 
 from stream_processor import StreamProcessor
@@ -42,6 +45,16 @@ from service_health import update_health
 
 # Global queue for processing decoded biometric data
 piezo_record_queue = queue.Queue()
+
+
+def _safe_getmtime(path: str) -> float:
+    try:
+        if os.path.exists(path):
+            return os.path.getmtime(path)
+    except FileNotFoundError:
+        logger.warning(f'File path not found, ignoring... {path}')
+        pass
+    return 0  # Default for missing files
 
 
 class LatestRawFileHandler(FileSystemEventHandler):
@@ -61,7 +74,11 @@ class LatestRawFileHandler(FileSystemEventHandler):
             return
 
         # Get the latest file by modification time
-        raw_files.sort(key=lambda f: os.path.getmtime(os.path.join(self.directory, f)), reverse=True)
+        raw_files.sort(
+            key=lambda f: _safe_getmtime(os.path.join(self.directory, f)),
+            reverse=True
+        )
+
         latest_file = os.path.join(self.directory, raw_files[0])
 
         if latest_file != self.latest_file:
@@ -145,9 +162,9 @@ def process_biometrics():
 
 
 def watch_directory(directory="/persistent"):
+    """Monitors the directory for new RAW files and processes only the latest one."""
     logger.info('Steam processor starting...')
     update_health('stream', 'started', '')
-    """Monitors the directory for new RAW files and processes only the latest one."""
     handler = LatestRawFileHandler(directory)
     observer = Observer()
     observer.schedule(handler, directory, recursive=False)

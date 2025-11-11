@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="d2cc44a2-f392-55d1-9456-543f413186d7")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="fb5afdc4-3229-504b-b9cb-9b8c321d6545")}catch(e){}}();
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -7,40 +7,53 @@ import readline from 'readline';
 import logger from '../../logger.js';
 const router = express.Router();
 const LOGS_DIRS = ['/persistent/free-sleep-data/logs', '/var/log'];
+const { promises: fsPromises } = fs;
 // Endpoint to list all log files as clickable links
-router.get('/', (req, res) => {
-    let allLogFiles = [];
-    // Read logs from both directories
-    LOGS_DIRS.forEach((dir) => {
-        if (!fs.existsSync(dir))
-            return;
-        try {
-            const files = fs.readdirSync(dir)
-                .map(file => {
+router.get('/', async (req, res) => {
+    try {
+        const logFilesPerDir = await Promise.all(LOGS_DIRS.map(async (dir) => {
+            try {
+                await fsPromises.access(dir, fs.constants.R_OK);
+            }
+            catch {
+                return [];
+            }
+            let files;
+            try {
+                files = await fsPromises.readdir(dir);
+            }
+            catch (error) {
+                logger.error(`Error reading logs from ${dir}:`, error);
+                return [];
+            }
+            const fileStats = await Promise.all(files.map(async (file) => {
+                if (!file.endsWith('log')) {
+                    return null;
+                }
                 const fullPath = path.join(dir, file);
                 try {
-                    const stat = fs.lstatSync(fullPath);
-                    return stat.isFile() && file.endsWith('log')
-                        ? { name: file, path: fullPath, mtime: stat.mtime.getTime() }
-                        : null;
+                    const stat = await fsPromises.lstat(fullPath);
+                    if (!stat.isFile()) {
+                        return null;
+                    }
+                    return { name: file, path: fullPath, mtime: stat.mtime.getTime() };
                 }
                 catch (error) {
                     logger.warn(`Skipping invalid file: ${fullPath}`);
                     return null;
                 }
-            })
-                .filter(Boolean);
-            // @ts-expect-error
-            allLogFiles = [...allLogFiles, ...files];
-        }
-        catch (err) {
-            logger.error(`Error reading logs from ${dir}:`, err);
-        }
-    });
-    allLogFiles.sort((a, b) => b.mtime - a.mtime);
-    res.json({
-        logs: allLogFiles.map(log => log.name),
-    });
+            }));
+            return fileStats.filter((fileStat) => fileStat !== null);
+        }));
+        const allLogFiles = logFilesPerDir.flat().sort((a, b) => b.mtime - a.mtime);
+        res.json({
+            logs: allLogFiles.map(log => log.name),
+        });
+    }
+    catch (error) {
+        logger.error('Unexpected error while listing log files', error);
+        res.status(500).json({ message: 'Unable to list log files' });
+    }
 });
 router.get('/:filename', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
@@ -50,9 +63,13 @@ router.get('/:filename', async (req, res) => {
     let logFilePath = null;
     for (const dir of LOGS_DIRS) {
         const fullPath = path.join(dir, filename);
-        if (fs.existsSync(fullPath)) {
+        try {
+            await fsPromises.access(fullPath, fs.constants.R_OK);
             logFilePath = fullPath;
             break;
+        }
+        catch {
+            continue;
         }
     }
     if (!logFilePath) {
@@ -88,4 +105,4 @@ router.get('/:filename', async (req, res) => {
 });
 export default router;
 //# sourceMappingURL=logs.js.map
-//# debugId=d2cc44a2-f392-55d1-9456-543f413186d7
+//# debugId=fb5afdc4-3229-504b-b9cb-9b8c321d6545

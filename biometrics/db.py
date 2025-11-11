@@ -20,7 +20,15 @@ conn.execute("PRAGMA journal_mode=WAL;")  # Enable WAL mode
 conn.execute("PRAGMA busy_timeout=5000;")  # Wait up to 5 seconds if locked
 conn.execute("PRAGMA synchronous=NORMAL;")
 conn.execute("PRAGMA foreign_keys=ON;")
-atexit.register(lambda: conn.close())
+
+def _checkpoint_and_close():
+    try:
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+    finally:
+        conn.close()
+
+
+atexit.register(_checkpoint_and_close)
 
 
 def custom_serializer(obj):
@@ -155,12 +163,15 @@ def insert_sleep_records(sleep_records: List[SleepRecord]):
 
 
 def insert_movement_df(movement_df: pd.DataFrame):
-    logger.debug(f'Inserting {movement_df.shape[0]} rows into movement table...')
-    movement_df['timestamp'] = pd.to_datetime(movement_df['timestamp']).astype(int) // 10 ** 9
+    try:
+        logger.debug(f'Inserting {movement_df.shape[0]} rows into movement table...')
+        movement_df['timestamp'] = pd.to_datetime(movement_df['timestamp']).astype(int) // 10 ** 9
 
-    # Upload to SQLite
-    with sqlite3.connect(DB_FILE_PATH) as conn:
+        # Upload to SQLite
         movement_df.to_sql("movement", conn, if_exists='append', index=False)
 
-    logger.debug('Finished inserting rows')
+        logger.debug('Finished inserting rows')
 
+    except Exception as error:
+        logger.error('Failed to insert movement df!')
+        logger.error(error)

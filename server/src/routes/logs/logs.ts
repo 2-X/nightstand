@@ -8,6 +8,8 @@ const router = express.Router();
 
 const LOGS_DIRS = ['/persistent/free-sleep-data/logs', '/var/log'];
 
+const { promises: fsPromises } = fs;
+
 type LogFile = {
   name: string;
   path: string;
@@ -15,43 +17,59 @@ type LogFile = {
 };
 
 // Endpoint to list all log files as clickable links
-router.get('/', (req, res) => {
-  let allLogFiles: LogFile[] = [];
+router.get('/', async (req, res) => {
+  try {
+    const logFilesPerDir = await Promise.all(
+      LOGS_DIRS.map(async (dir) => {
+        try {
+          await fsPromises.access(dir, fs.constants.R_OK);
+        } catch {
+          return [] as LogFile[];
+        }
 
-  // Read logs from both directories
-  LOGS_DIRS.forEach((dir) => {
-    if (!fs.existsSync(dir)) return;
+        let files: string[];
+        try {
+          files = await fsPromises.readdir(dir);
+        } catch (error) {
+          logger.error(`Error reading logs from ${dir}:`, error);
+          return [] as LogFile[];
+        }
 
-    try {
-      const files = fs.readdirSync(dir)
-        .map(file => {
-          const fullPath = path.join(dir, file);
+        const fileStats = await Promise.all(
+          files.map(async (file): Promise<LogFile | null> => {
+            if (!file.endsWith('log')) {
+              return null;
+            }
 
-          try {
-            const stat = fs.lstatSync(fullPath);
-            return stat.isFile() && file.endsWith('log')
-              ? { name: file, path: fullPath, mtime: stat.mtime.getTime() }
-              : null;
-          } catch (error) {
-            logger.warn(`Skipping invalid file: ${fullPath}`);
-            return null;
-          }
-        })
-        .filter(Boolean);
+            const fullPath = path.join(dir, file);
 
-      // @ts-expect-error
-      allLogFiles = [...allLogFiles, ...files];
-    } catch (err) {
-      logger.error(`Error reading logs from ${dir}:`, err);
-    }
-  });
+            try {
+              const stat = await fsPromises.lstat(fullPath);
+              if (!stat.isFile()) {
+                return null;
+              }
 
+              return { name: file, path: fullPath, mtime: stat.mtime.getTime() };
+            } catch (error) {
+              logger.warn(`Skipping invalid file: ${fullPath}`);
+              return null;
+            }
+          })
+        );
 
-  allLogFiles.sort((a, b) => b.mtime - a.mtime);
+        return fileStats.filter((fileStat): fileStat is LogFile => fileStat !== null);
+      })
+    );
 
-  res.json({
-    logs: allLogFiles.map(log => log.name),
-  });
+    const allLogFiles = logFilesPerDir.flat().sort((a, b) => b.mtime - a.mtime);
+
+    res.json({
+      logs: allLogFiles.map(log => log.name),
+    });
+  } catch (error) {
+    logger.error('Unexpected error while listing log files', error);
+    res.status(500).json({ message: 'Unable to list log files' });
+  }
 });
 
 
@@ -65,9 +83,12 @@ router.get('/:filename', async (req, res) => {
   let logFilePath = null;
   for (const dir of LOGS_DIRS) {
     const fullPath = path.join(dir, filename);
-    if (fs.existsSync(fullPath)) {
+    try {
+      await fsPromises.access(fullPath, fs.constants.R_OK);
       logFilePath = fullPath;
       break;
+    } catch {
+      continue;
     }
   }
 

@@ -154,7 +154,7 @@ def update_health_both_sides(status: str, message: str):
 if __name__ == "__main__":
     try:
         if not is_biometrics_enabled():
-            logger.info('Not analyzing sleep, biometrics is disabled')
+            logger.warning('Not analyzing sleep, biometrics is disabled')
 
         logger.debug(f"START Free Memory: {get_available_memory_mb()} MB")
         logger.debug(f"START Memory Usage: {get_memory_usage_unix():.2f} MB")
