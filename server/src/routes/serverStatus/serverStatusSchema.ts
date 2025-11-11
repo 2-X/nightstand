@@ -28,6 +28,7 @@ export type ServerStatus = {
   database: StatusInfo;
   express: StatusInfo;
   franken: StatusInfo;
+  frankenMonitor: StatusInfo;
   jobs: StatusInfo;
   logger: StatusInfo;
   powerSchedule: StatusInfo;

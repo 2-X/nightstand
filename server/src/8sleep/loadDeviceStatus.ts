@@ -8,8 +8,14 @@ import { constants } from 'fs';
 import _ from 'lodash';
 import serverInfo from '../serverInfo.json' with { type: 'json' };
 import { WIFI_SIGNAL_STRENGTH } from './wifiSignalStrength.js';
+import { GestureSchema } from '../db/settingsSchema.js';
 
 
+
+type Gesture = {
+  l: number;
+  r: number;
+}
 const RawDeviceData = z.object({
   tgHeatLevelR: z.string().regex(/^-?\d+$/, { message: 'tgHeatLevelR must be a numeric value in a string' }),
   tgHeatLevelL: z.string().regex(/^-?\d+$/, { message: 'tgHeatLevelL must be a numeric value in a string' }),
@@ -21,6 +27,9 @@ const RawDeviceData = z.object({
   waterLevel: z.string().regex(/^(true|false)$/, { message: 'waterLevel must be "true" or "false"' }),
   priming: z.string().regex(/^(true|false)$/, { message: 'priming must be "true" or "false"' }),
   settings: z.string(),
+  doubleTap: z.string().optional(),
+  tripleTap: z.string().optional(),
+  quadTap: z.string().optional(),
 });
 
 type RawDeviceDataType = z.infer<typeof RawDeviceData>;
@@ -142,12 +151,13 @@ const detectHubVersion = async (): Promise<Version> => {
 const HUB_VERSION = await detectHubVersion();
 
 // The default naming convention was ugly... This remaps the keys to human-readable names
-export async function loadDeviceStatus(response: string): Promise<DeviceStatus> {
+export async function loadDeviceStatus(response: string, getGestures: boolean): Promise<DeviceStatus> {
   const rawDeviceData = parseRawDeviceData(response);
   const leftSideSecondsRemaining = Number(rawDeviceData.heatTimeL);
   const rightSideSecondsRemaining = Number(rawDeviceData.heatTimeR);
   await memoryDB.read();
-  return {
+
+  const deviceStatus: DeviceStatus = {
     left: {
       currentTemperatureLevel: Number.parseInt(rawDeviceData.heatLevelL, 10),
       currentTemperatureF: calculateTempInF(rawDeviceData.heatLevelL),
@@ -175,4 +185,24 @@ export async function loadDeviceStatus(response: string): Promise<DeviceStatus> 
     settings: decodeSettings(rawDeviceData.settings),
     wifiStrength: WIFI_SIGNAL_STRENGTH,
   };
+  if (getGestures) {
+    try {
+      // @ts-expect-error - fields get populated below
+      deviceStatus.left.taps = {};
+      // @ts-expect-error - fields get populated below
+      deviceStatus.right.taps = {};
+      for (const field of GestureSchema.options) {
+        const data = rawDeviceData[field];
+        logger.debug(`loadDeviceStatus.ts:193 LOADING TAPS | field: ${field} | data: ${data}`);
+        if (!data) continue;
+
+        const taps = JSON.parse(data) as Gesture;
+        deviceStatus.left.taps![field] = taps.l;
+        deviceStatus.right.taps![field] = taps.r;
+      }
+    } catch (error) {
+      logger.error(error);
+    }
+  }
+  return deviceStatus;
 }

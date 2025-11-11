@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="0f914eba-9e23-5c16-8e1c-b8435692ea64")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="82e8399b-8ae0-578e-ac74-fb7edc6ff62e")}catch(e){}}();
 import { z } from 'zod';
 import { Version } from '../routes/deviceStatus/deviceStatusSchema.js';
 import logger from '../logger.js';
@@ -10,6 +10,7 @@ import { constants } from 'fs';
 import _ from 'lodash';
 import serverInfo from '../serverInfo.json' with { type: 'json' };
 import { WIFI_SIGNAL_STRENGTH } from './wifiSignalStrength.js';
+import { GestureSchema } from '../db/settingsSchema.js';
 const RawDeviceData = z.object({
     tgHeatLevelR: z.string().regex(/^-?\d+$/, { message: 'tgHeatLevelR must be a numeric value in a string' }),
     tgHeatLevelL: z.string().regex(/^-?\d+$/, { message: 'tgHeatLevelL must be a numeric value in a string' }),
@@ -21,6 +22,9 @@ const RawDeviceData = z.object({
     waterLevel: z.string().regex(/^(true|false)$/, { message: 'waterLevel must be "true" or "false"' }),
     priming: z.string().regex(/^(true|false)$/, { message: 'priming must be "true" or "false"' }),
     settings: z.string(),
+    doubleTap: z.string().optional(),
+    tripleTap: z.string().optional(),
+    quadTap: z.string().optional(),
 });
 // Reads & validates the raw response data from socket and converts it to an object
 const parseRawDeviceData = (response) => {
@@ -139,12 +143,12 @@ const detectHubVersion = async () => {
 };
 const HUB_VERSION = await detectHubVersion();
 // The default naming convention was ugly... This remaps the keys to human-readable names
-export async function loadDeviceStatus(response) {
+export async function loadDeviceStatus(response, getGestures) {
     const rawDeviceData = parseRawDeviceData(response);
     const leftSideSecondsRemaining = Number(rawDeviceData.heatTimeL);
     const rightSideSecondsRemaining = Number(rawDeviceData.heatTimeR);
     await memoryDB.read();
-    return {
+    const deviceStatus = {
         left: {
             currentTemperatureLevel: Number.parseInt(rawDeviceData.heatLevelL, 10),
             currentTemperatureF: calculateTempInF(rawDeviceData.heatLevelL),
@@ -172,6 +176,27 @@ export async function loadDeviceStatus(response) {
         settings: decodeSettings(rawDeviceData.settings),
         wifiStrength: WIFI_SIGNAL_STRENGTH,
     };
+    if (getGestures) {
+        try {
+            // @ts-expect-error - fields get populated below
+            deviceStatus.left.taps = {};
+            // @ts-expect-error - fields get populated below
+            deviceStatus.right.taps = {};
+            for (const field of GestureSchema.options) {
+                const data = rawDeviceData[field];
+                logger.debug(`loadDeviceStatus.ts:193 LOADING TAPS | field: ${field} | data: ${data}`);
+                if (!data)
+                    continue;
+                const taps = JSON.parse(data);
+                deviceStatus.left.taps[field] = taps.l;
+                deviceStatus.right.taps[field] = taps.r;
+            }
+        }
+        catch (error) {
+            logger.error(error);
+        }
+    }
+    return deviceStatus;
 }
 //# sourceMappingURL=loadDeviceStatus.js.map
-//# debugId=0f914eba-9e23-5c16-8e1c-b8435692ea64
+//# debugId=82e8399b-8ae0-578e-ac74-fb7edc6ff62e

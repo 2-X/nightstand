@@ -38,6 +38,12 @@ class ServerStatus {
         description: 'Socket service for controlling the hardware',
         message: '',
       },
+      frankenMonitor: {
+        name: 'Franken monitor',
+        status: 'not_started',
+        description: 'Handles gestures and monitoring the status',
+        message: '',
+      },
       jobs: {
         name: 'Job scheduler',
         status: 'not_started',

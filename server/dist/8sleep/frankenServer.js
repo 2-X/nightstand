@@ -1,33 +1,33 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="faaadabd-414e-5e6e-bf26-0935f0d0157b")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="2851f4d6-1201-5522-89b7-8cbbdb8a34b2")}catch(e){}}();
 import { SequentialQueue } from './sequentialQueue.js';
 import { MessageStream } from './messageStream.js';
-import { PromiseStreams } from './promiseStream.js';
 import { frankenCommands } from './deviceApi.js';
 import { UnixSocketServer } from './unixSocketServer.js';
 import logger from '../logger.js';
 import { loadDeviceStatus } from './loadDeviceStatus.js';
-import { wait } from './promises.js';
 import config from '../config.js';
+import { toPromise, wait } from './promises.js';
 export class Franken {
-    writeStream;
+    socket;
     messageStream;
     sequentialQueue;
-    socket;
-    constructor(writeStream, messageStream, sequentialQueue, socket) {
-        this.writeStream = writeStream;
+    static responseDelayMs = 10;
+    constructor(socket, messageStream, sequentialQueue) {
+        this.socket = socket;
         this.messageStream = messageStream;
         this.sequentialQueue = sequentialQueue;
-        this.socket = socket;
     }
     static separator = Buffer.from('\n\n');
     async sendMessage(message) {
         logger.debug(`Sending message to sock | message: ${message}`);
         const responseBytes = await this.sequentialQueue.exec(async () => {
             const requestBytes = Buffer.concat([Buffer.from(message), Franken.separator]);
-            await this.writeStream.write(requestBytes);
+            await this.write(requestBytes);
             const resp = await this.messageStream.readMessage();
-            await wait(50);
+            if (Franken.responseDelayMs > 0) {
+                await wait(10);
+            }
             return resp;
         });
         const response = responseBytes.toString();
@@ -48,11 +48,11 @@ export class Franken {
         logger.debug(`cleanedArg: ${cleanedArg}`);
         await this.sendMessage(`${commandNumber}\n${cleanedArg}`);
     }
-    async getDeviceStatus() {
+    async getDeviceStatus(getGestures = false) {
         const command = 'DEVICE_STATUS';
         const commandNumber = frankenCommands[command];
         const response = await this.sendMessage(commandNumber);
-        return await loadDeviceStatus(response);
+        return await loadDeviceStatus(response, getGestures);
     }
     close() {
         const socket = this.socket;
@@ -60,10 +60,12 @@ export class Franken {
             socket.destroy();
     }
     static fromSocket(socket) {
-        // @ts-expect-error - Mismatched types
-        const stream = PromiseStreams.toPromise(socket);
-        const messageStream = new MessageStream(stream, Franken.separator);
-        return new Franken(stream, messageStream, new SequentialQueue(), socket);
+        const messageStream = new MessageStream(socket, Franken.separator);
+        return new Franken(socket, messageStream, new SequentialQueue());
+    }
+    async write(data) {
+        // @ts-expect-error
+        await toPromise(cb => this.socket.write(data, cb));
     }
 }
 class FrankenServer {
@@ -87,22 +89,38 @@ class FrankenServer {
     }
 }
 let frankenServer;
-export async function getFrankenServer() {
-    // If we've already started it, reuse:
-    if (frankenServer)
-        return frankenServer;
-    // Otherwise, start a new instance once:
-    frankenServer = await FrankenServer.start(config.dacSockPath);
-    logger.debug('FrankenServer started');
-    return frankenServer;
-}
 let franken;
-export async function getFranken() {
+let connectPromise;
+export async function connectFranken() {
     if (franken)
         return franken;
-    const frankenServer = await getFrankenServer();
-    franken = await frankenServer.waitForFranken();
-    return franken;
+    if (connectPromise)
+        return connectPromise;
+    connectPromise = (async () => {
+        if (!frankenServer) {
+            frankenServer = await FrankenServer.start(config.dacSockPath);
+            logger.debug('FrankenServer started');
+        }
+        logger.debug('Waiting for Franken hardware connection...');
+        franken = await frankenServer.waitForFranken();
+        logger.info('Franken socket connected');
+        return franken;
+    })();
+    try {
+        return await connectPromise;
+    }
+    finally {
+        connectPromise = undefined;
+    }
+}
+export async function disconnectFranken() {
+    connectPromise = undefined;
+    franken?.close();
+    franken = undefined;
+    if (frankenServer) {
+        await frankenServer.close();
+        frankenServer = undefined;
+    }
 }
 //# sourceMappingURL=frankenServer.js.map
-//# debugId=faaadabd-414e-5e6e-bf26-0935f0d0157b
+//# debugId=2851f4d6-1201-5522-89b7-8cbbdb8a34b2

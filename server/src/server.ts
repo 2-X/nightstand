@@ -3,7 +3,8 @@ import express from 'express';
 import schedule from 'node-schedule';
 import { Server } from 'http';
 import logger from './logger.js';
-import { getFranken, getFrankenServer } from './8sleep/frankenServer.js';
+import { connectFranken, disconnectFranken } from './8sleep/frankenServer.js';
+import { FrankenMonitor } from './8sleep/frankenMonitor.js';
 import './jobs/jobScheduler.js';
 
 
@@ -19,7 +20,7 @@ import { loadWifiSignalStrength } from './8sleep/wifiSignalStrength.js';
 const port = 3000;
 const app = express();
 let server: Server | undefined;
-
+let frankenMonitor: FrankenMonitor | undefined;
 
 async function disconnectPrisma() {
   try {
@@ -70,13 +71,9 @@ async function gracefulShutdown(signal: string) {
     }
 
     if (!config.remoteDevMode) {
-      const franken = await getFranken();
-      const frankenServer = await getFrankenServer();
-
-      // Close the Franken instance and server
-      franken.close();
-      await frankenServer.close();
-      logger.debug('Successfully closed Franken & FrankenServer.');
+      frankenMonitor?.stop();
+      await disconnectFranken();
+      logger.debug('Successfully closed Franken components.');
     }
   } catch (err) {
     logger.error(`Error during shutdown: ${err}`);
@@ -92,12 +89,20 @@ async function initFranken() {
   logger.info('Initializing Franken on startup...');
   serverStatus.status.franken.status = 'started';
   // Force creation of the Franken and FrankenServer so it’s ready before we listen
-  await getFrankenServer();
-  await getFranken();
+  await connectFranken();
+
   serverStatus.status.franken.status = 'healthy';
   logger.info('Franken has been initialized successfully.');
 }
 
+
+const initFrankenMonitor = () => {
+  logger.info('Starting franken monitor...');
+  serverStatus.status.frankenMonitor.status = 'started';
+  frankenMonitor = new FrankenMonitor();
+  void frankenMonitor.start();
+  logger.info('Frank monitor started!');
+};
 
 
 // Main startup function
@@ -116,6 +121,7 @@ async function startServer() {
     void initFranken()
       .then(() => {
         setupSentryTags();
+        initFrankenMonitor();
       })
       .catch(error => {
         serverStatus.status.franken.status = 'failed';

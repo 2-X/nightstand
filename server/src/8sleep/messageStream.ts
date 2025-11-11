@@ -1,33 +1,50 @@
-import { PromiseReadStream } from './promiseStream.js';
+import { once } from 'events';
+import binarySplit from 'binary-split';
+import { Transform } from 'stream';
 
 export class MessageStream {
-  private buffer = Buffer.alloc(0);
+  private readonly splitter: Transform;
+  private readonly queue: Buffer[] = [];
+  private ended = false;
+  private error: unknown;
 
   public constructor(
-    private readonly stream: PromiseReadStream<Buffer>,
-    private readonly separator = Buffer.from('\n\n')
+    readable: NodeJS.ReadableStream,
+    separator = Buffer.from('\n\n')
   ) {
+    this.splitter = binarySplit(separator);
+    this.splitter.on('data', (chunk: Buffer) => {
+      this.queue.push(chunk);
+    });
+    this.splitter.on('end', () => {
+      this.ended = true;
+    });
+    this.splitter.on('error', (err: unknown) => {
+      this.error = err;
+    });
+
+    readable.pipe(this.splitter);
+    readable.on('error', (error) => this.splitter.destroy(error));
   }
 
-  public async readMessage() {
+  public async readMessage(): Promise<Buffer> {
     // eslint-disable-next-line no-constant-condition
     while (true) {
-      const index = this.buffer.indexOf(this.separator);
-      if (index >= 0) {
-        const message = this.buffer.slice(0, index);
-
-        const messageLength = index + this.separator.length;
-        this.buffer = this.buffer.slice(messageLength);
-        return message;
+      if (this.queue.length > 0) {
+        return this.queue.shift() as Buffer;
       }
 
-      await this.needMoreData();
-    }
-  }
+      if (this.error) {
+        const err = this.error;
+        this.error = undefined;
+        throw err;
+      }
 
-  private async needMoreData() {
-    const read = await this.stream.read();
-    if (read === undefined) throw new Error('stream ended');
-    this.buffer = Buffer.concat([this.buffer, read]);
+      if (this.ended) {
+        throw new Error('stream ended');
+      }
+
+      await once(this.splitter, 'data');
+    }
   }
 }

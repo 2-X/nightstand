@@ -1,32 +1,43 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="4e820525-4b2c-50f2-89fa-42b313e4d3db")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="e0e3226d-75bc-57dc-a2ce-b489355871f6")}catch(e){}}();
+import { once } from 'events';
+import binarySplit from 'binary-split';
 export class MessageStream {
-    stream;
-    separator;
-    buffer = Buffer.alloc(0);
-    constructor(stream, separator = Buffer.from('\n\n')) {
-        this.stream = stream;
-        this.separator = separator;
+    splitter;
+    queue = [];
+    ended = false;
+    error;
+    constructor(readable, separator = Buffer.from('\n\n')) {
+        this.splitter = binarySplit(separator);
+        this.splitter.on('data', (chunk) => {
+            this.queue.push(chunk);
+        });
+        this.splitter.on('end', () => {
+            this.ended = true;
+        });
+        this.splitter.on('error', (err) => {
+            this.error = err;
+        });
+        readable.pipe(this.splitter);
+        readable.on('error', (error) => this.splitter.destroy(error));
     }
     async readMessage() {
         // eslint-disable-next-line no-constant-condition
         while (true) {
-            const index = this.buffer.indexOf(this.separator);
-            if (index >= 0) {
-                const message = this.buffer.slice(0, index);
-                const messageLength = index + this.separator.length;
-                this.buffer = this.buffer.slice(messageLength);
-                return message;
+            if (this.queue.length > 0) {
+                return this.queue.shift();
             }
-            await this.needMoreData();
+            if (this.error) {
+                const err = this.error;
+                this.error = undefined;
+                throw err;
+            }
+            if (this.ended) {
+                throw new Error('stream ended');
+            }
+            await once(this.splitter, 'data');
         }
-    }
-    async needMoreData() {
-        const read = await this.stream.read();
-        if (read === undefined)
-            throw new Error('stream ended');
-        this.buffer = Buffer.concat([this.buffer, read]);
     }
 }
 //# sourceMappingURL=messageStream.js.map
-//# debugId=4e820525-4b2c-50f2-89fa-42b313e4d3db
+//# debugId=e0e3226d-75bc-57dc-a2ce-b489355871f6

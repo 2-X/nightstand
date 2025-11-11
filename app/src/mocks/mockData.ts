@@ -206,6 +206,24 @@ const createSettings = (): Settings => ({
       temperatureSchedules: { disabled: false, expiresAt: '' },
       alarm: { disabled: false, timeOverride: '', expiresAt: '' },
     },
+    taps: {
+      doubleTap: {
+        type: 'temperature',
+        change: 'decrement',
+        amount: 1,
+      },
+      tripleTap: {
+        type: 'temperature',
+        change: 'increment',
+        amount: 1,
+      },
+      quadTap: {
+        type: 'alarm',
+        behavior: 'dismiss',
+        snoozeDuration: 60,
+        inactiveAlarmBehavior: 'power',
+      },
+    }
   },
   right: {
     name: 'Right side',
@@ -214,6 +232,24 @@ const createSettings = (): Settings => ({
       temperatureSchedules: { disabled: false, expiresAt: '' },
       alarm: { disabled: false, timeOverride: '', expiresAt: '' },
     },
+    taps: {
+      doubleTap: {
+        type: 'temperature',
+        change: 'decrement',
+        amount: 1,
+      },
+      tripleTap: {
+        type: 'temperature',
+        change: 'increment',
+        amount: 1,
+      },
+      quadTap: {
+        type: 'alarm',
+        behavior: 'dismiss',
+        snoozeDuration: 60,
+        inactiveAlarmBehavior: 'power',
+      },
+    }
   },
   primePodDaily: { enabled: true, time: '14:30' },
 });
@@ -328,6 +364,12 @@ const createServerStatus = (): ServerStatus => ({
     name: 'Franken sock',
     status: 'healthy',
     description: 'Hardware socket interface',
+    message: '',
+  },
+  frankenMonitor: {
+    name: 'Franken monitor',
+    status: 'not_started',
+    description: 'Handles gestures and monitoring the status',
     message: '',
   },
   jobs: {

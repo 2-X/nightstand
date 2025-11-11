@@ -4,7 +4,26 @@ import { TimeSchema } from './schedulesSchema.js';
 
 export const TEMPERATURES = ['celsius', 'fahrenheit'] as const;
 const Temperatures = z.enum(TEMPERATURES);
-export type TemperatureFormat = z.infer<typeof Temperatures>;
+
+const TemperatureTapConfig = z.object({
+  type: z.literal('temperature'),
+  change: z.enum(['increment', 'decrement']),
+  amount: z.number().min(0).max(10),
+});
+
+const AlarmTapConfig = z.object({
+  type: z.literal('alarm'),
+  behavior: z.enum(['snooze', 'dismiss']),
+  snoozeDuration: z.number().min(60).max(600),
+  inactiveAlarmBehavior: z.enum(['power', 'none'])
+});
+
+export const TapConfig = z.discriminatedUnion('type', [
+  TemperatureTapConfig,
+  AlarmTapConfig,
+]);
+
+export const GestureSchema = z.enum(['doubleTap', 'tripleTap', 'quadTap']);
 
 const SideSettingsSchema = z.object({
   name: z.string().min(1).max(20),
@@ -20,6 +39,11 @@ const SideSettingsSchema = z.object({
       expiresAt: z.string(),
     })
   }),
+  taps: z.object({
+    doubleTap: TapConfig,
+    tripleTap: TapConfig,
+    quadTap: TapConfig,
+  })
 }).strict();
 
 export const SettingsSchema = z.object({
@@ -37,3 +61,4 @@ export const SettingsSchema = z.object({
 
 export type SideSettings = z.infer<typeof SideSettingsSchema>;
 export type Settings = z.infer<typeof SettingsSchema>;
+export type Gesture = z.infer<typeof GestureSchema>

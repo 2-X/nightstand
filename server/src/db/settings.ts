@@ -3,9 +3,42 @@ import _ from 'lodash';
 import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
 
-import { Settings } from './settingsSchema.js';
+import { Settings, SideSettings } from './settingsSchema.js';
 import config from '../config.js';
 
+const defaultSideSettings: SideSettings = {
+  name: 'Side',
+  awayMode: false,
+  scheduleOverrides: {
+    temperatureSchedules: {
+      disabled: false,
+      expiresAt: ''
+    },
+    alarm: {
+      disabled: false,
+      timeOverride: '',
+      expiresAt: '',
+    }
+  },
+  taps: {
+    doubleTap: {
+      type: 'temperature',
+      change: 'decrement',
+      amount: 1,
+    },
+    tripleTap: {
+      type: 'temperature',
+      change: 'increment',
+      amount: 1,
+    },
+    quadTap: {
+      type: 'alarm',
+      behavior: 'dismiss',
+      snoozeDuration: 60,
+      inactiveAlarmBehavior: 'power',
+    },
+  }
+};
 
 const defaultData: Settings = {
   id: crypto.randomUUID(),
@@ -13,34 +46,12 @@ const defaultData: Settings = {
   temperatureFormat: 'fahrenheit',
   rebootDaily: true,
   left: {
+    ..._.cloneDeep(defaultSideSettings),
     name: 'Left',
-    awayMode: false,
-    scheduleOverrides: {
-      temperatureSchedules: {
-        disabled: false,
-        expiresAt: ''
-      },
-      alarm: {
-        disabled: false,
-        timeOverride: '',
-        expiresAt: '',
-      }
-    },
   },
   right: {
+    ..._.cloneDeep(defaultSideSettings),
     name: 'Right',
-    awayMode: false,
-    scheduleOverrides: {
-      temperatureSchedules: {
-        disabled: false,
-        expiresAt: ''
-      },
-      alarm: {
-        disabled: false,
-        timeOverride: '',
-        expiresAt: '',
-      }
-    },
   },
   primePodDaily: {
     enabled: false,

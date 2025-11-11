@@ -1,59 +1,50 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="3d2049cb-3433-53a8-bcb0-d63323ffab3c")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="b2d3bd81-ba65-5c58-8f9b-00cf2dafe827")}catch(e){}}();
+import { once } from 'events';
+import { unlink } from 'fs/promises';
 import { createServer } from 'net';
-import { unlink as unlinkCb } from 'fs';
 import logger from '../logger.js';
-import { toPromise } from './promises.js';
-async function unlink(path) {
-    // @ts-ignore
-    await toPromise((cb) => unlinkCb(path, cb));
-}
 export class UnixSocketServer {
     server;
-    lastConnection;
-    resolveWaiting;
+    pendingConnections = [];
+    waiting;
     constructor(server) {
         this.server = server;
-        this.server.on('connection', this.onConnection.bind(this));
+        this.server.on('connection', (socket) => this.handleConnection(socket));
     }
-    cleanupExistingConnection() {
-        const existingConnection = this.lastConnection;
-        if (existingConnection !== undefined) {
-            this.lastConnection = undefined;
-            existingConnection.destroy();
+    handleConnection(socket) {
+        socket.on('error', (error) => logger.error({ error, message: 'Unix socket connection error' }));
+        if (this.waiting) {
+            const resolve = this.waiting;
+            this.waiting = undefined;
+            resolve(socket);
+            return;
         }
-    }
-    onConnection(socket) {
-        this.cleanupExistingConnection();
-        if (this.resolveWaiting !== undefined) {
-            logger.debug('Resolving connection waiting promise');
-            const resolveWaiting = this.resolveWaiting;
-            this.resolveWaiting = undefined;
-            resolveWaiting(socket);
+        while (this.pendingConnections.length > 0) {
+            const stale = this.pendingConnections.shift();
+            stale?.destroy();
         }
-        else {
-            this.lastConnection = socket;
-        }
+        this.pendingConnections.push(socket);
     }
     async close() {
-        // @ts-ignore
-        await toPromise((cb) => this.server.close(cb));
+        this.waiting = undefined;
+        this.pendingConnections.splice(0).forEach(socket => socket.destroy());
+        this.server.close();
+        await once(this.server, 'close');
     }
-    waitForConnection() {
-        if (this.lastConnection !== undefined) {
-            logger.debug('Returning existing connection');
-            const connection = this.lastConnection;
-            this.lastConnection = undefined;
-            return Promise.resolve(connection);
+    async waitForConnection() {
+        if (this.pendingConnections.length > 0) {
+            const connection = this.pendingConnections.shift();
+            return connection;
         }
         logger.debug('Waiting for future connection');
-        return new Promise(resolve => this.resolveWaiting = resolve);
+        return new Promise((resolve) => this.waiting = resolve);
     }
     static async start(path) {
         logger.debug('Creating socket connection...');
         await UnixSocketServer.tryCleanup(path);
         const unixSocketServer = createServer();
-        unixSocketServer.on('error', (error) => logger.error({ error: error, message: 'Unix socket server error' }));
+        unixSocketServer.on('error', (error) => logger.error({ error, message: 'Unix socket server error' }));
         await new Promise((resolve) => unixSocketServer.listen(path, resolve));
         const socket = new UnixSocketServer(unixSocketServer);
         logger.debug('Created socket connection!');
@@ -64,7 +55,6 @@ export class UnixSocketServer {
             await unlink(path);
         }
         catch (err) {
-            // ignore if the path doesn't exist
             if (err?.code === 'ENOENT')
                 return;
             throw err;
@@ -72,4 +62,4 @@ export class UnixSocketServer {
     }
 }
 //# sourceMappingURL=unixSocketServer.js.map
-//# debugId=3d2049cb-3433-53a8-bcb0-d63323ffab3c
+//# debugId=b2d3bd81-ba65-5c58-8f9b-00cf2dafe827

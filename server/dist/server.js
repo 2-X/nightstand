@@ -1,10 +1,11 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="0ba52cd9-a136-53dc-bccc-68eb922fc3f9")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="210befd7-c320-5850-b71a-1315d8fbbe93")}catch(e){}}();
 import './instrument.js';
 import express from 'express';
 import schedule from 'node-schedule';
 import logger from './logger.js';
-import { getFranken, getFrankenServer } from './8sleep/frankenServer.js';
+import { connectFranken, disconnectFranken } from './8sleep/frankenServer.js';
+import { FrankenMonitor } from './8sleep/frankenMonitor.js';
 import './jobs/jobScheduler.js';
 // Setup code
 import setupMiddleware from './setup/middleware.js';
@@ -17,6 +18,7 @@ import { loadWifiSignalStrength } from './8sleep/wifiSignalStrength.js';
 const port = 3000;
 const app = express();
 let server;
+let frankenMonitor;
 async function disconnectPrisma() {
     try {
         logger.debug('Flushing SQLite');
@@ -63,12 +65,9 @@ async function gracefulShutdown(signal) {
             });
         }
         if (!config.remoteDevMode) {
-            const franken = await getFranken();
-            const frankenServer = await getFrankenServer();
-            // Close the Franken instance and server
-            franken.close();
-            await frankenServer.close();
-            logger.debug('Successfully closed Franken & FrankenServer.');
+            frankenMonitor?.stop();
+            await disconnectFranken();
+            logger.debug('Successfully closed Franken components.');
         }
     }
     catch (err) {
@@ -83,11 +82,17 @@ async function initFranken() {
     logger.info('Initializing Franken on startup...');
     serverStatus.status.franken.status = 'started';
     // Force creation of the Franken and FrankenServer so it’s ready before we listen
-    await getFrankenServer();
-    await getFranken();
+    await connectFranken();
     serverStatus.status.franken.status = 'healthy';
     logger.info('Franken has been initialized successfully.');
 }
+const initFrankenMonitor = () => {
+    logger.info('Starting franken monitor...');
+    serverStatus.status.frankenMonitor.status = 'started';
+    frankenMonitor = new FrankenMonitor();
+    void frankenMonitor.start();
+    logger.info('Frank monitor started!');
+};
 // Main startup function
 async function startServer() {
     setupMiddleware(app);
@@ -103,6 +108,7 @@ async function startServer() {
         void initFranken()
             .then(() => {
             setupSentryTags();
+            initFrankenMonitor();
         })
             .catch(error => {
             serverStatus.status.franken.status = 'failed';
@@ -133,4 +139,4 @@ startServer().catch((err) => {
     process.exit(1);
 });
 //# sourceMappingURL=server.js.map
-//# debugId=0ba52cd9-a136-53dc-bccc-68eb922fc3f9
+//# debugId=210befd7-c320-5850-b71a-1315d8fbbe93

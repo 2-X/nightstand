@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import { getFranken } from './frankenServer.js';
+import { connectFranken } from './frankenServer.js';
 import logger from '../logger.js';
 
 
@@ -33,7 +33,7 @@ export type FrankenCommand = keyof typeof frankenCommands;
 export async function executeFunction(command: FrankenCommand, arg = 'empty'): Promise<void> {
   logger.debug(`Executing command | command: ${command} | arg: ${arg}`);
 
-  const franken = await getFranken();
+  const franken = await connectFranken();
   // const frankenCommand = funcNameToFrankenCommand[name];
   // if franken disconnects right before a function call this will throw
   // the error will bubble up to the main loop of the device-api-client (protocol handling)
