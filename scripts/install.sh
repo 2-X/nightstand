@@ -53,9 +53,13 @@ sudo -u "$USERNAME" bash -c "source /home/$USERNAME/.profile && volta install no
 # Setup /persistent/free-sleep-data (migrate old configs, logs, etc.)
 mkdir -p /persistent/free-sleep-data/logs/
 mkdir -p /persistent/free-sleep-data/lowdb/
+grep -oP '(?<=DAC_SOCKET=)[^ ]*dac.sock' /opt/eight/bin/frank.sh > /persistent/free-sleep-data/dac_sock_path.txt
 
 # Extract the DAC_SOCKET path from frank.sh (if present) and put it in DAC_SOCK_PATH file
-grep -oP '(?<=DAC_SOCKET=)[^ ]*dac.sock' /opt/eight/bin/frank.sh > /persistent/free-sleep-data/dac_sock_path.txt
+DAC_SOCK_PATH="/persistent/free-sleep-data/dac_sock_path.txt"
+if [ ! -s "$DAC_SOCK_PATH" ]; then
+  grep -oP '(?<=DAC_SOCKET=)[^ ]*dac.sock' /opt/eight/bin/frank.sh > "$DAC_SOCK_PATH"
+fi
 
 # DO NOT REMOVE, OLD VERSIONS WILL LOSE settings & schedules
 FILES_TO_MOVE=(
