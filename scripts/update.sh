@@ -30,8 +30,6 @@ if /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/throwaway31265/f
     echo "Install path missing after installer; restoring backup..."
     rm -rf "$APP_DIR"
     mv "$BACKUP_PATH" "$APP_DIR"
-    systemctl enable free-sleep || true
-    systemctl start free-sleep || true
   fi
 else
   echo "Reinstall failed. Restoring from backup..."
@@ -40,6 +38,9 @@ else
   systemctl enable free-sleep
   systemctl start free-sleep
 fi
+
+systemctl enable free-sleep || true
+systemctl start free-sleep || true
 
 # Block internet access again
 sh /home/dac/free-sleep/scripts/block_internet_access.sh
