@@ -145,7 +145,7 @@ async function startServer() {
     await gracefulShutdown('uncaughtException');
   });
   process.on('unhandledRejection', async (reason, promise) => {
-    logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    logger.error(`Unhandled Rejection at: ${promise}, reason: ${reason}`);
     await gracefulShutdown('unhandledRejection');
   });
 }
