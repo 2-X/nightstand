@@ -9,7 +9,6 @@ print_json_if_exists() {
   local label="$2"
 
   if [ -f "$file_path" ]; then
-    print_green "- $file_path"
     python3 -m json.tool "$file_path" \
       | sed 's/^/      /' \
       | sed $'s/^/\033[0;90m/' \
