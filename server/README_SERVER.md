@@ -8,13 +8,9 @@ Express server intended to run on the 8 sleep pod.
 ### Hot Reloading (on Pod) 
 1. SSH into the Pod and run
 ```
-systemctl stop free-sleep
-systemctl disable free-sleep
-su - dac
-cd /home/dac/free-sleep/server && /home/dac/.volta/bin/npm run dev
+fs-dev-server
 
 # When you're done, undo this by CTR+C out of the npm run dev command & run:
-systemctl enable free-sleep
 systemctl start free-sleep
 ```
 2. Run the front-end app with hot reload and point it to your Pod [app/README_APP.md](../app/README_APP.md#Developing)

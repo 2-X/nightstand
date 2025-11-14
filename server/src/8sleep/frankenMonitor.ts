@@ -26,7 +26,6 @@ export class FrankenMonitor {
       logger.warn('FrankenMonitor is already running');
       return;
     }
-    logger.info('Starting franken monitor...');
     this.isRunning = true;
     this.frankenLoop().catch(error => {
       logger.error(error);
@@ -82,10 +81,11 @@ export class FrankenMonitor {
 
   private async frankenLoop() {
     const franken = await connectFranken();
-    this.deviceStatus = await franken.getDeviceStatus(true);
+    this.deviceStatus = await franken.getDeviceStatus(false);
     let hasGestures = this.deviceStatus.coverVersion !== Version.Pod3;
-    let waitTime = hasGestures ? 3_000 : 60_000;
+    let waitTime = hasGestures ? 2_000 : 60_000;
     if (hasGestures) {
+      this.deviceStatus = await franken.getDeviceStatus(false);
       logger.debug(`Gestures supported for ${this.deviceStatus.coverVersion}`);
     } else {
       logger.debug(`Gestures not supported for ${this.deviceStatus.coverVersion}`);

@@ -11,6 +11,15 @@ import { loadDeviceStatus } from './loadDeviceStatus.js';
 import config from '../config.js';
 import { toPromise, wait } from './promises.js';
 
+const FRANKEN_CONNECTION_TIMEOUT_MS = 25_000;
+
+class FrankenConnectionTimeoutError extends Error {
+  public constructor() {
+    super('Timed out waiting for Franken hardware connection');
+    this.name = 'FrankenConnectionTimeoutError';
+  }
+}
+
 export class Franken {
   private static readonly responseDelayMs = 10;
 
@@ -101,24 +110,79 @@ class FrankenServer {
   }
 }
 
+function promiseWithTimeout<T>(promise: Promise<T>, onTimeout: () => Error) {
+  let timeout: NodeJS.Timeout | undefined;
+  return new Promise<T>((resolve, reject) => {
+    timeout = setTimeout(() => {
+      reject(onTimeout());
+    }, FRANKEN_CONNECTION_TIMEOUT_MS);
+
+    promise
+      .then(value => {
+        if (timeout) clearTimeout(timeout);
+        resolve(value);
+      })
+      .catch(error => {
+        if (timeout) clearTimeout(timeout);
+        reject(error);
+      });
+  });
+}
+
+
 let frankenServer: FrankenServer | undefined;
 let franken: Franken | undefined;
 let connectPromise: Promise<Franken> | undefined;
+
+function waitForFrankenWithTimeout(server: FrankenServer) {
+  if (!FRANKEN_CONNECTION_TIMEOUT_MS) {
+    return server.waitForFranken();
+  }
+
+  const timeoutMessage = `Restarting Franken after ${FRANKEN_CONNECTION_TIMEOUT_MS / 1_000}s timeout`;
+  return promiseWithTimeout(server.waitForFranken(), () => {
+    logger.warn(timeoutMessage);
+    return new FrankenConnectionTimeoutError();
+  });
+}
+
+
+async function shutdownFrankenServer() {
+  franken?.close();
+  franken = undefined;
+  if (frankenServer) {
+    await frankenServer.close();
+    frankenServer = undefined;
+  }
+}
 
 export async function connectFranken(): Promise<Franken> {
   if (franken) return franken;
   if (connectPromise) return connectPromise;
 
   connectPromise = (async () => {
-    if (!frankenServer) {
-      frankenServer = await FrankenServer.start(config.dacSockPath);
-      logger.debug('FrankenServer started');
-    }
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      if (!frankenServer) {
+        frankenServer = await FrankenServer.start(config.dacSockPath);
+        logger.debug('FrankenServer started');
+      }
 
-    logger.debug('Waiting for Franken hardware connection...');
-    franken = await frankenServer.waitForFranken();
-    logger.info('Franken socket connected');
-    return franken;
+      try {
+        logger.debug('Waiting for Franken hardware connection...');
+        franken = await waitForFrankenWithTimeout(frankenServer);
+        logger.info('Franken socket connected');
+        return franken;
+      } catch (error) {
+        if (error instanceof FrankenConnectionTimeoutError) {
+          logger.warn('Unable to connect to Franken within timeout, restarting socket server...');
+          await shutdownFrankenServer();
+          continue;
+        }
+        await shutdownFrankenServer();
+        throw error;
+      }
+    }
   })();
 
   try {
@@ -130,10 +194,5 @@ export async function connectFranken(): Promise<Franken> {
 
 export async function disconnectFranken() {
   connectPromise = undefined;
-  franken?.close();
-  franken = undefined;
-  if (frankenServer) {
-    await frankenServer.close();
-    frankenServer = undefined;
-  }
+  await shutdownFrankenServer();
 }

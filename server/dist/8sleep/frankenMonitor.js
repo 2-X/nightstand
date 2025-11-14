@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="0b11e416-9116-5538-945d-18308932ed1a")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="9eb2647f-7871-5439-a4db-80e10068e73a")}catch(e){}}();
 import moment from 'moment-timezone';
 import logger from '../logger.js';
 import settingsDB from '../db/settings.js';
@@ -21,7 +21,6 @@ export class FrankenMonitor {
             logger.warn('FrankenMonitor is already running');
             return;
         }
-        logger.info('Starting franken monitor...');
         this.isRunning = true;
         this.frankenLoop().catch(error => {
             logger.error(error);
@@ -73,10 +72,11 @@ export class FrankenMonitor {
     }
     async frankenLoop() {
         const franken = await connectFranken();
-        this.deviceStatus = await franken.getDeviceStatus(true);
+        this.deviceStatus = await franken.getDeviceStatus(false);
         let hasGestures = this.deviceStatus.coverVersion !== Version.Pod3;
-        let waitTime = hasGestures ? 3_000 : 60_000;
+        let waitTime = hasGestures ? 2_000 : 60_000;
         if (hasGestures) {
+            this.deviceStatus = await franken.getDeviceStatus(false);
             logger.debug(`Gestures supported for ${this.deviceStatus.coverVersion}`);
         }
         else {
@@ -115,4 +115,4 @@ export class FrankenMonitor {
     }
 }
 //# sourceMappingURL=frankenMonitor.js.map
-//# debugId=0b11e416-9116-5538-945d-18308932ed1a
+//# debugId=9eb2647f-7871-5439-a4db-80e10068e73a

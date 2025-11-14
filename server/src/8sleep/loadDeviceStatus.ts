@@ -193,7 +193,6 @@ export async function loadDeviceStatus(response: string, getGestures: boolean): 
       deviceStatus.right.taps = {};
       for (const field of GestureSchema.options) {
         const data = rawDeviceData[field];
-        logger.debug(`loadDeviceStatus.ts:193 LOADING TAPS | field: ${field} | data: ${data}`);
         if (!data) continue;
 
         const taps = JSON.parse(data) as Gesture;
