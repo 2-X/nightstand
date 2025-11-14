@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PROFILE_FILE_PATH="$HOME/.profile"
+PROFILE_FILE_PATH="~/.profile"
 
 # Ensure .profile exists
 if [ ! -f "$PROFILE_FILE_PATH" ]; then
