@@ -89,7 +89,7 @@ export class FrankenMonitor {
     let hasGestures = this.deviceStatus.coverVersion !== Version.Pod3;
     let waitTime = hasGestures ? 2_000 : 60_000;
     if (hasGestures) {
-      this.deviceStatus = await franken.getDeviceStatus(false);
+      this.deviceStatus = await franken.getDeviceStatus(true);
       logger.debug(`Gestures supported for ${this.deviceStatus.coverVersion}`);
     } else {
       logger.debug(`Gestures not supported for ${this.deviceStatus.coverVersion}`);
