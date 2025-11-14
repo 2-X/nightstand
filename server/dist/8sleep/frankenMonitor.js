@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="fd2d8a87-74f3-5814-afea-4ee37402b4ea")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="0b11e416-9116-5538-945d-18308932ed1a")}catch(e){}}();
 import moment from 'moment-timezone';
 import logger from '../logger.js';
 import settingsDB from '../db/settings.js';
@@ -51,7 +51,7 @@ export class FrankenMonitor {
             logger.debug(`Processing gesture temperature change for ${side}. ${currentTemperatureTarget} -> ${newTemperatureTargetF}`);
             return await updateDeviceStatus({ [side]: { targetTemperatureF: newTemperatureTargetF } });
         }
-        else {
+        else if (behavior.type) {
             // TODO: Add alarm handling
             logger.warn('Skipping gesture...');
         }
@@ -59,9 +59,6 @@ export class FrankenMonitor {
     processGesturesForSide(nextDeviceStatus, side) {
         for (const gesture of GestureSchema.options) {
             if (nextDeviceStatus[side].taps[gesture] !== this.deviceStatus[side].taps[gesture]) {
-                logger.debug('Difference detected!');
-                logger.debug(`nextDeviceStatus[side].taps![gesture]: ${nextDeviceStatus[side].taps[gesture]}`);
-                logger.debug(`this.deviceStatus![side].taps![gesture]: ${this.deviceStatus[side].taps[gesture]}`);
                 this.processGesture(side, gesture);
             }
         }
@@ -90,7 +87,7 @@ export class FrankenMonitor {
             try {
                 while (this.isRunning) {
                     hasGestures = this.deviceStatus.coverVersion !== Version.Pod3;
-                    waitTime = hasGestures ? 3_000 : 60_000;
+                    waitTime = hasGestures ? 2_000 : 60_000;
                     await wait(waitTime);
                     if (!this.isRunning)
                         break;
@@ -118,4 +115,4 @@ export class FrankenMonitor {
     }
 }
 //# sourceMappingURL=frankenMonitor.js.map
-//# debugId=fd2d8a87-74f3-5814-afea-4ee37402b4ea
+//# debugId=0b11e416-9116-5538-945d-18308932ed1a

@@ -1,9 +1,11 @@
-import { Box, FormControlLabel, TextField } from '@mui/material';
+import { Box, FormControlLabel, InputAdornment, TextField } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 
 import { Settings } from '@api/settingsSchema.ts';
 import { DeepPartial } from 'ts-essentials';
 import { useAppStore } from '@state/appStore.tsx';
 import Switch from '@mui/material/Switch';
+import AccessTime from '@mui/icons-material/AccessTime';
 
 
 type PrimePodScheduleProps = {
@@ -13,6 +15,7 @@ type PrimePodScheduleProps = {
 
 export default function DailyPriming({ settings, updateSettings }: PrimePodScheduleProps) {
   const { isUpdating } = useAppStore();
+  const theme = useTheme();
 
   return (
     <>
@@ -35,6 +38,21 @@ export default function DailyPriming({ settings, updateSettings }: PrimePodSched
           value={ settings?.primePodDaily?.time || '12:00' }
           onChange={ (e) => updateSettings({ primePodDaily: { time: e.target.value } }) }
           disabled={ isUpdating || settings?.primePodDaily?.enabled === false }
+          sx={ {
+            width: '110px',
+            // Hide native indicator (where it exists)
+            '& input::-webkit-calendar-picker-indicator': {
+              opacity: 0,
+              display: 'none',
+            },
+          } }
+          InputProps={ {
+            endAdornment: (
+              <InputAdornment position="end" sx={ { cursor: 'pointer' } } >
+                <AccessTime sx={ { color: theme.palette.grey[500] } } fontSize='small'/>
+              </InputAdornment>
+            ),
+          } }
         />
       </Box>
     </>

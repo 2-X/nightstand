@@ -251,28 +251,9 @@ http://192.168.1.50:3000/
 7. If it's not working
    1. Create an issue in GitHub with the output from your minicom session
    2. Login as root to your device with your minicom session again and paste the output of these commands
-```
-systemctl list-units --type=service --no-pager
-journalctl -u free-sleep --no-pager --output=cat -n 300
-journalctl -u free-sleep-stream --no-pager --output=cat -n 100
-ps aux
-find /home/dac/free-sleep/server -path /home/dac/free-sleep/server/node_modules -prune -o -type f -print
-which npm
-node -v
-which node
-node -v
-iptables -L
-```
 
 
-You can view logs with `journalctl -u free-sleep --no-pager --output=cat` 
-I will eventually add a shell script to execute to upgrade free-sleep. Feel free to create pull requests to add new features or fix bugs. Thanks! 
-
-
-
----
-
-## 19. (Optional) - Add firewall rules to block access to the internet (optional, but recommended)
+## 18. (Optional) - Add firewall rules to block access to the internet (optional, but recommended)
 ```
 sh /home/dac/free-sleep/scripts/block_internet_access.sh
 
@@ -283,7 +264,7 @@ sh /home/dac/free-sleep/scripts/unblock_internet_access.sh
 ---
 
 
-## 20. (Optional) - Add an ssh config
+## 19. (Optional) - Add an ssh config
 This will ask for a public key, ssh access is on port 8822 (ex: `ssh root@<POD_IP> -p 8822') 
 ```
 sh /home/dac/free-sleep/scripts/setup_ssh.sh

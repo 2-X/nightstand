@@ -4,6 +4,21 @@
 set -e
 
 # Name of the backup folder with a timestamp
+print_json_if_exists() {
+  local file_path="$1"
+  local label="$2"
+
+  if [ -f "$file_path" ]; then
+    print_green "- $file_path"
+    python3 -m json.tool "$file_path" \
+      | sed 's/^/      /' \
+      | sed $'s/^/\033[0;90m/' \
+      | sed $'s/$/\033[0m/'
+  else
+    print_red "File not found: $file_path ❌"
+  fi
+}
+print_json_if_exists "/home/dac/free-sleep/server/src/serverInfo.json" "Server info"
 
 BACKUP_PATH="/home/dac/free-sleep-backup"
 APP_DIR="/home/dac/free-sleep"
@@ -35,8 +50,6 @@ else
   echo "Reinstall failed. Restoring from backup..."
   rm -rf /home/dac/free-sleep
   mv "$BACKUP_PATH" /home/dac/free-sleep
-  systemctl enable free-sleep
-  systemctl start free-sleep
 fi
 
 systemctl enable free-sleep || true

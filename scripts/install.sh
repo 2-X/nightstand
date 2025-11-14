@@ -15,6 +15,7 @@ USERNAME="dac"
 echo "Downloading the repository..."
 curl -L -o "$ZIP_FILE" "$REPO_URL"
 
+echo ""
 echo "Unzipping the repository..."
 unzip -o -q "$ZIP_FILE"
 echo "Removing the zip file..."
@@ -42,6 +43,8 @@ else
     echo -e '\nexport VOLTA_HOME="/home/dac/.volta"\nexport PATH="$VOLTA_HOME/bin:$PATH"\n' \
       >> "/home/$USERNAME/.profile"
   fi
+  echo "Finished installing Volta"
+  echo ""
 fi
 
 
@@ -118,6 +121,7 @@ NEW_PATH="/home/dac/free-sleep/server/package-lock.json"
 NODE_MODULES_BACKUP="/home/dac/free-sleep-backup/server/node_modules"
 NODE_MODULES_NEW="/home/dac/free-sleep/server/node_modules"
 
+echo "Reviewing npm dependencies for changes..."
 if [ -f "$BACKUP_PATH" ] && [ -f "$NEW_PATH" ]; then
   BACKUP_HASH=$(sha256sum "$BACKUP_PATH" | awk '{print $1}')
   NEW_HASH=$(sha256sum "$NEW_PATH" | awk '{print $1}')
@@ -143,9 +147,11 @@ else
   echo "One or both package-lock.json files missing, running npm install..."
   sudo -u "$USERNAME" bash -c "cd '$SERVER_DIR' && /home/$USERNAME/.volta/bin/npm install"
 fi
+echo ""
 
 # --------------------------------------------------------------------------------
 # Run Prisma migrations
+
 
 # Stop the free-sleep-stream service if it was running
 # This is needed to close out the lock files for the SQLite file
@@ -192,6 +198,8 @@ if [ "$biometrics_enabled" = "true" ]; then
   systemctl restart free-sleep-stream
 fi
 
+echo ""
+
 # --------------------------------------------------------------------------------
 # Create systemd service
 
@@ -224,8 +232,9 @@ systemctl enable free-sleep.service
 echo "Starting free-sleep.service..."
 systemctl start free-sleep.service
 
-echo "Checking service status..."
+echo "Checking free-sleep service status..."
 systemctl status free-sleep.service --no-pager || true
+echo ""
 
 # -----------------------------------------------------------------------------------------------------
 # Create systemd service for updating
@@ -260,11 +269,12 @@ else
   echo -e "\033[0;33mWARNING: Unable to retrieve date from Google... Skipping time update.\033[0m"
 fi
 
+echo ""
 # --------------------------------------------------------------------------------
 # Setup passwordless sudo scripts for dac user
 
 SUDOERS_FILE="/etc/sudoers.d/$USERNAME"
-
+echo "Setting up sudoers rules..."
 # Reboot
 SUDOERS_RULE="$USERNAME ALL=(ALL) NOPASSWD: /sbin/reboot"
 if sudo grep -Fxq "$SUDOERS_RULE" "$SUDOERS_FILE" 2>/dev/null; then
@@ -298,6 +308,8 @@ else
 fi
 
 echo ""
+
+sh /home/dac/free-sleep/scripts/add_shortcuts.sh
 
 # --------------------------------------------------------------------------------
 # Finish

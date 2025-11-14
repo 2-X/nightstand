@@ -55,7 +55,7 @@ export class FrankenMonitor {
       }
       logger.debug(`Processing gesture temperature change for ${side}. ${currentTemperatureTarget} -> ${newTemperatureTargetF}`);
       return await updateDeviceStatus({ [side]: { targetTemperatureF: newTemperatureTargetF } } as DeepPartial<DeviceStatus>);
-    } else {
+    } else if (behavior.type) {
       // TODO: Add alarm handling
       logger.warn('Skipping gesture...');
     }
@@ -64,9 +64,6 @@ export class FrankenMonitor {
   private processGesturesForSide(nextDeviceStatus: DeviceStatus, side: Side) {
     for (const gesture of GestureSchema.options) {
       if (nextDeviceStatus[side].taps![gesture] !== this.deviceStatus![side].taps![gesture]) {
-        logger.debug('Difference detected!');
-        logger.debug(`nextDeviceStatus[side].taps![gesture]: ${nextDeviceStatus[side].taps![gesture]}`);
-        logger.debug(`this.deviceStatus![side].taps![gesture]: ${this.deviceStatus![side].taps![gesture]}`);
         this.processGesture(side, gesture);
       }
     }
@@ -98,7 +95,7 @@ export class FrankenMonitor {
       try {
         while (this.isRunning) {
           hasGestures = this.deviceStatus.coverVersion !== Version.Pod3;
-          waitTime = hasGestures ? 3_000 : 60_000;
+          waitTime = hasGestures ? 2_000 : 60_000;
           await wait(waitTime);
           if (!this.isRunning) break;
           const franken = await connectFranken();

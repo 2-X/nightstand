@@ -14,6 +14,7 @@ import Grid from '@mui/material/GridLegacy';
 
 import StatusChip from './StatusChip.tsx';
 import { postJobs, JobSchema, Jobs } from '@api/jobs.ts';
+import { useState } from 'react';
 
 
 type StatusCardProps = {
@@ -27,11 +28,14 @@ export default function StatusCard({ job, statusInfo }: StatusCardProps) {
   if (JobSchema.options.includes(job)) {
     isRunnable = true;
   }
+  const [disabled, setDisabled] = useState(false);
   const startJob = () => {
+    setDisabled(true);
     postJobs([job] as Jobs)
       .catch(error => {
         console.error(error);
       });
+    setTimeout(() => setDisabled(false), 30_000);
   };
 
   return (
@@ -46,11 +50,11 @@ export default function StatusCard({ job, statusInfo }: StatusCardProps) {
       >
         <CardHeader
           title={
-            <Stack direction="row" spacing={ 1.25 } alignItems="center" >
+            <Stack direction="row" spacing={ 1.25 } alignItems="center">
               <Typography variant="subtitle1" fontWeight={ 700 }>
                 { statusInfo.name }
               </Typography>
-              <StatusChip info={ statusInfo } />
+              <StatusChip info={ statusInfo }/>
             </Stack>
           }
         />
@@ -86,7 +90,7 @@ export default function StatusCard({ job, statusInfo }: StatusCardProps) {
             statusInfo.message && (
               <Typography
                 variant="body2"
-                color='error'
+                color="error"
                 sx={ {
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
@@ -109,9 +113,9 @@ export default function StatusCard({ job, statusInfo }: StatusCardProps) {
                   width: '100%',
                 } }
               >
-                <Button onClick={ startJob } variant='contained' size='small'>
+                <Button onClick={ startJob } variant="contained" size="small" disabled={ disabled || statusInfo.status === 'started' }>
                   Run
-                  <PlayArrowIcon />
+                  <PlayArrowIcon/>
                 </Button>
               </Box>
             )
