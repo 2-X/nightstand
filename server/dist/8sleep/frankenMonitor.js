@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="9eb2647f-7871-5439-a4db-80e10068e73a")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="fa3b0f6b-aebe-5d45-8190-343ae3958930")}catch(e){}}();
 import moment from 'moment-timezone';
 import logger from '../logger.js';
 import settingsDB from '../db/settings.js';
@@ -56,10 +56,15 @@ export class FrankenMonitor {
         }
     }
     processGesturesForSide(nextDeviceStatus, side) {
-        for (const gesture of GestureSchema.options) {
-            if (nextDeviceStatus[side].taps[gesture] !== this.deviceStatus[side].taps[gesture]) {
-                this.processGesture(side, gesture);
+        try {
+            for (const gesture of GestureSchema.options) {
+                if (nextDeviceStatus[side].taps?.[gesture] !== this?.deviceStatus?.[side].taps?.[gesture]) {
+                    this.processGesture(side, gesture);
+                }
             }
+        }
+        catch (error) {
+            logger.error(error);
         }
     }
     async processGestures(nextDeviceStatus) {
@@ -115,4 +120,4 @@ export class FrankenMonitor {
     }
 }
 //# sourceMappingURL=frankenMonitor.js.map
-//# debugId=9eb2647f-7871-5439-a4db-80e10068e73a
+//# debugId=fa3b0f6b-aebe-5d45-8190-343ae3958930

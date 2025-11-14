@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="210befd7-c320-5850-b71a-1315d8fbbe93")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="9db73c62-f014-5de8-b792-af2dbfb404df")}catch(e){}}();
 import './instrument.js';
 import express from 'express';
 import schedule from 'node-schedule';
@@ -129,7 +129,7 @@ async function startServer() {
         await gracefulShutdown('uncaughtException');
     });
     process.on('unhandledRejection', async (reason, promise) => {
-        logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+        logger.error(`Unhandled Rejection at: ${promise}, reason: ${reason}`);
         await gracefulShutdown('unhandledRejection');
     });
 }
@@ -139,4 +139,4 @@ startServer().catch((err) => {
     process.exit(1);
 });
 //# sourceMappingURL=server.js.map
-//# debugId=210befd7-c320-5850-b71a-1315d8fbbe93
+//# debugId=9db73c62-f014-5de8-b792-af2dbfb404df

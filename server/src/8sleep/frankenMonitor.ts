@@ -61,10 +61,14 @@ export class FrankenMonitor {
   }
 
   private processGesturesForSide(nextDeviceStatus: DeviceStatus, side: Side) {
-    for (const gesture of GestureSchema.options) {
-      if (nextDeviceStatus[side].taps![gesture] !== this.deviceStatus![side].taps![gesture]) {
-        this.processGesture(side, gesture);
+    try {
+      for (const gesture of GestureSchema.options) {
+        if (nextDeviceStatus[side].taps?.[gesture] !== this?.deviceStatus?.[side].taps?.[gesture]) {
+          this.processGesture(side, gesture);
+        }
       }
+    } catch (error) {
+      logger.error(error);
     }
   }
 
