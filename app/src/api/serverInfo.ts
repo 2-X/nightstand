@@ -9,16 +9,26 @@ export type ServerInfo = {
   updateAvailable: boolean;
 }
 
+type LatestVersion = {
+  version: string;
+  branch: string;
+}
+
+export const getLatestVersion = async () => {
+  return axios.get<LatestVersion>(
+    'https://raw.githubusercontent.com/throwaway31265/free-sleep/main/server/src/serverInfo.json'
+  );
+};
+
+
 export const useServerInfo = () => useQuery<ServerInfo>({
   queryKey: ['useServerInfo'],
   queryFn: async () => {
-    const response = await axios.get(
-      'https://raw.githubusercontent.com/throwaway31265/free-sleep/main/server/src/serverInfo.json'
-    );
+    const response = await getLatestVersion();
+
     return {
       ...response.data,
       updateAvailable: semver.gt(response.data.version, serverInfo.version),
-
     };
   },
   staleTime: 60_000,

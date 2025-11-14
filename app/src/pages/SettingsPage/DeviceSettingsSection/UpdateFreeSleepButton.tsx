@@ -10,7 +10,8 @@ import { useState, forwardRef, type ReactElement, type Ref } from 'react';
 import currentServerInfo from '../../../../../server/src/serverInfo.json';
 
 import { postJobs } from '@api/jobs.ts';
-import { useServerInfo } from '@api/serverInfo.ts';
+import { getLatestVersion, useServerInfo } from '@api/serverInfo.ts';
+import { getDeviceStatus } from '@api/deviceStatus.ts';
 
 
 const Transition = forwardRef(function Transition(
@@ -22,12 +23,16 @@ const Transition = forwardRef(function Transition(
   return <Slide direction="up" ref={ ref } { ...props } />;
 });
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+
 // eslint-disable-next-line react/no-multi-comp
 export default function UpdateFreeSleepButton() {
   const [open, setOpen] = useState(false);
   const { data: serverInfo } = useServerInfo();
   const [isUpdating, setIsUpdating] = useState(false);
-
+  const [updateTitle, setUpdateTitle] = useState<undefined | string>();
+  const [updateMessage, setUpdateMessage] = useState<undefined | string>();
   const handleClickOpen = () => {
     setOpen(true);
   };
@@ -36,9 +41,36 @@ export default function UpdateFreeSleepButton() {
     setOpen(false);
   };
 
+  const waitUntilReady = async () => {
+    const latestVersionResp = await getLatestVersion();
+    const latestVersion = latestVersionResp.data.version;
+    await sleep(6_000);
+    while (true) {
+      try {
+        const deviceStatus = await getDeviceStatus();
+        if (deviceStatus.data.freeSleep.version !== latestVersion) {
+          setUpdateTitle('Update failed- Reach out on Discord for help!');
+          setUpdateMessage(`Latest version: ${latestVersion} -- Current version: ${deviceStatus.data.freeSleep.version}`);
+        } else {
+          setUpdateTitle('Update completed!');
+          setUpdateMessage('Refreshing page...');
+          await sleep(2_000);
+          window.location.href = window.location.href.split('?')[0] + '?cachebuster=' + Date.now();
+        }
+        break;
+      } catch (err) {
+        console.warn('Device not ready yet, retrying getDeviceStatus in 1s...', err);
+        await sleep(1_000);
+      }
+    }
+  };
+
   const update = () => {
     setIsUpdating(true);
     postJobs(['update'])
+      .then(() => {
+        return waitUntilReady();
+      })
       .catch(error => {
         console.error(error);
       });
@@ -58,32 +90,38 @@ export default function UpdateFreeSleepButton() {
         onClose={ handleClose }
       >
         {
-          isUpdating ?
-            <DialogTitle>Updating Free Sleep...</DialogTitle>
+          updateTitle ?
+            <DialogTitle>{ updateTitle }</DialogTitle>
             :
-            <DialogTitle>Update Free Sleep?</DialogTitle>
+            isUpdating ?
+              <DialogTitle>Updating Free Sleep...</DialogTitle>
+              :
+              <DialogTitle>Update Free Sleep?</DialogTitle>
         }
 
         <DialogContent>
           {
-            isUpdating ?
-              (
-                <>
-                  <DialogContentText>
-                    Updating from { currentServerInfo.version } to { serverInfo?.version }.
-                    This page will be unavailable until update is complete.
-                    &nbsp;<CircularProgress size={ 20 }/>
-                  </DialogContentText>
-                </>
-              )
+            updateMessage ?
+              <DialogContentText>{ updateMessage }</DialogContentText>
               :
-              (
-                <DialogContentText>
-                  Update from { currentServerInfo.version } to { serverInfo?.version }?
-                  This should take about 3 minutes.
-                  This website will be unavailable during the update.
-                </DialogContentText>
-              )
+              isUpdating ?
+                (
+                  <>
+                    <DialogContentText>
+                      Updating from { currentServerInfo.version } to { serverInfo?.version }.
+                      This page will be unavailable until update is complete.
+                      &nbsp;<CircularProgress size={ 20 }/>
+                    </DialogContentText>
+                  </>
+                )
+                :
+                (
+                  <DialogContentText>
+                    Update from { currentServerInfo.version } to { serverInfo?.version }?
+                    This should take about 3 minutes.
+                    This website will be unavailable during the update.
+                  </DialogContentText>
+                )
           }
 
         </DialogContent>

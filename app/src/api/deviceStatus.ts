@@ -4,10 +4,14 @@ import { DeepPartial } from 'ts-essentials';
 import { DeviceStatus } from './deviceStatusSchema';
 
 
+export const getDeviceStatus = async () => {
+  return axios.get<DeviceStatus>('/deviceStatus');
+};
+
 export const useDeviceStatus = () => useQuery<DeviceStatus>({
   queryKey: ['useDeviceStatus'],
   queryFn: async () => {
-    const response = await axios.get<DeviceStatus>('/deviceStatus');
+    const response = await getDeviceStatus();
     return response.data;
   },
   refetchInterval: 30_000,
