@@ -25,10 +25,13 @@ export const useServerInfo = () => useQuery<ServerInfo>({
   queryKey: ['useServerInfo'],
   queryFn: async () => {
     const response = await getLatestVersion();
-
+    let updateAvailable = semver.gt(response.data.version, serverInfo.version);
+    if (import.meta.env.VITE_ENV === 'demo') {
+      updateAvailable = true;
+    }
     return {
       ...response.data,
-      updateAvailable: semver.gt(response.data.version, serverInfo.version),
+      updateAvailable
     };
   },
   staleTime: 60_000,
