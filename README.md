@@ -1,25 +1,31 @@
 # Free Sleep — Local Control for 8 Sleep Pods
 
-## [Demo App](https://free-sleep.vercel.app/)
+## 👀 [Demo App](https://free-sleep.vercel.app/)
 
-## [Discord Server](https://discord.gg/JpArXnBgEj)
+## 💬 [Discord Server](https://discord.gg/JpArXnBgEj)
 
 - Support
 - Feature requests
 - Updates
 - Contributing
 
-## 👉 [Installation Instructions](./INSTALLATION.md)
+## 🛠️ [Installation Instructions](./INSTALLATION.md)
 
 --- 
 
 ## Overview
-Free Sleep is an open-source project designed to control and manage temperature schedules and settings for a device locally. It includes:
-- **Server**: A backend that interacts with the device through custom APIs.
-- **App**: A frontend React application for user-friendly interaction with the device.
+Free Sleep is an open-source project that lets you control your Eight Sleep Pod locally — without relying on the cloud or the official app.
+Each Pod actually runs a small Linux computer inside it. Free Sleep installs a lightweight server on that computer, giving you full local control.
+- **Server**: Runs directly on the Pod and talks to its hardware using custom APIs.
+- **App**: A simple, user-friendly web interface for changing temperatures, schedules, alarms, and settings. See [app demo here](https://free-sleep.vercel.app/)
 
-This project is intended to be entirely ran on an 8 sleep pod
-
+## Compatability
+- Pod 1 - ❌ **NOT COMPATIBLE**
+- Pod 2 - ❌ **NOT COMPATIBLE**
+- Pod 3 - **(With SD card)** - ✅
+- Pod 3 - **(No SD card)** - ✅ FCC ID: 2AYXT61100001 (The FCC ID is located in the back of the pod where you plug in the water tubes)
+- Pod 4 ✅
+- Pod 5 ✅
 
 ---  
 ![App](docs/app.gif)
@@ -31,20 +37,16 @@ This project is intended to be entirely ran on an 8 sleep pod
 - A custom ChatGPT with Free Sleep documentation and related resources. It can help troubleshoot installations, answer setup questions, and guide you through common issues.
 
 ---
-## Is it reversible? 
-Yes, I tested reversing it on my pod 3 by  [resetting the firmware](docs/pod_3_teardown/6_firmware_reset.jpeg). After the reset, setup your pod as a new pod again.
+## FAQ
+### Is it reversible?
+Yes, you can easily firmware reset the pod and go back to the official 8 Sleep App
 
-## Will I brick my pod?
+### Will I brick my pod?
 Pod 3 **without** the SD card, Pod 4, and Pod 5 are impossible to brick - _as long as you follow the directions_ 
 
-
-## Compatability
-- Pod 1 - ❌ **NOT COMPATIBLE**
-- Pod 2 - ❌ **NOT COMPATIBLE**
-- Pod 3 - **(With SD card)** - ✅ 
-- Pod 3 - **(No SD card)** - ✅ FCC ID: 2AYXT61100001 (The FCC ID is located in the back of the pod where you plug in the water tubes)
-- Pod 4 ✅
-- Pod 5 ✅
+### Will it void my warranty?
+Free Sleep is not officially supported by 8 Sleep, so there’s always a chance it could affect your warranty.
+That said, you can fully reset the firmware and return the Pod to its original state at any time, and there’s no permanent modification made to the hardware.
 
 
 ## Features
@@ -58,6 +60,7 @@ Pod 3 **without** the SD card, Pod 4, and Pod 5 are impossible to brick - _as lo
   - Alarms - If you turn off the Pod prior to the alarm running, then the alarm will not run
 - Settings customization: Configure timezones, away mode, brightness of LED on pod
 - Website works on desktop and mobile
+
 
 ### Biometrics 📈
 - **The only biometrics data that has been validated is heart rate**, HRV & breathing rates have not been validated & may be inaccurate.
@@ -79,12 +82,9 @@ All biometric and sleep data is inserted into SQLite @ `/persistent/free-sleep-d
 1. Vitals (Heart rate, breath rate, HRV) `biometrics/stream/stream.py` - This runs 24/7 and calculates vitals when it detects presence.
 Vitals are inserted once every 60 seconds & you can access the raw data @ <POD_IP>/api/metrics/vitals
 
-## Limitations
-- Requires your device to be on the same Wi-Fi as the pod
-- No authentication is implemented
-- Pod 4 & 5 taps do not work
 
 ---
+## Technical details
 
 ### **Server**
 - REST API for managing device settings, schedules, and status.
@@ -98,22 +98,22 @@ Vitals are inserted once every 60 seconds & you can access the raw data @ <POD_I
 - **App**: React, Material-UI, Zustand, React Query.
 - **Database**: LowDB for simple JSON-based storage.
 
----
 ## Contributing
+- Read [contributing docs](CONTRIBUTING.md) 
 
-- Reach out to me on Discord @free_sleep to coordinate work so we don't step on each other's toes
-- Make sure you run `npm run lint` in `server/` & `app/`
-- Your changes must not have any conflicts with the main branch, I don't have the bandwidth to fix your git conflicts
-- Changes must be in TS
+### Developing
+- [front-end](app/README_APP.md)
+- [back-end](server/README_SERVER.md)
+
 
 ---
 
 ## Support
 
-If you find this project helpful and would like to support its continued development, you can send a tip to my Bitcoin address.
+If you find this project helpful and would like to support its continued development, you can send a tip to my Bitcoin address or PayPal
 
-BTC Address:
-bc1qjapkufh65gs68v2mkvrzq2ney3vnvv87jdxxg6
+- [PayPal](https://paypal.me/realfreesleep)
+- BTC Address: `bc1qjapkufh65gs68v2mkvrzq2ney3vnvv87jdxxg6`
 
 Thank you for your support!
 
@@ -127,6 +127,17 @@ has generously sponsored error monitoring for the Free Sleep open-source project
 Their support helps us maintain a more reliable experience for users by 
 enabling real-time visibility into issues and performance data — thank you, Sentry, 
 for supporting open-source innovation!
+
+---
+
+## License
+This project is licensed under the MIT License. See the `LICENSE.md` file for details.
+
+---
+
+## Acknowledgments
+- Huge thanks to [@bobobo1618](https://github.com/bobobo1618) & their research on how the device is controlled via dac.sock
+
 
 ---
 

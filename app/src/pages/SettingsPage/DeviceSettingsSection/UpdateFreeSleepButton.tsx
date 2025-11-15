@@ -13,6 +13,10 @@ import { postJobs } from '@api/jobs.ts';
 import { getLatestVersion, useServerInfo } from '@api/serverInfo.ts';
 import { getDeviceStatus } from '@api/deviceStatus.ts';
 
+// Hack for demo app
+if (import.meta.env.VITE_ENV === 'demo') {
+  currentServerInfo.version = '1.0.0';
+}
 
 const Transition = forwardRef(function Transition(
   props: TransitionProps & {

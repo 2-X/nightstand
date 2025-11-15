@@ -24,20 +24,8 @@ systemctl start free-sleep
 1. I have IntelliJ setup to auto upload my file changes to the Pod [IntelliJ documentation for this config](https://www.jetbrains.com/help/idea/tutorial-deployment-in-product.html#downloading).
 VSCode also has a similar feature, I think this is the documentation for it [VSCode](https://code.visualstudio.com/docs/remote/ssh)
 
-
 --- 
 
-
-## Features
-- DOES NOT DEPEND ON INTERNET, if your internet goes out, your device will still run
-- API capabilities
-  - Full control over the temperature
-  - Priming the device
-  - Scheduling on/off
-  - Scheduling temperature changes
-  - Alarm scheduling - (work in progress, NOT COMPLETE)
-
----
 
 ## Architecture
 The server is composed of the following key components:
@@ -87,8 +75,7 @@ The server is composed of the following key components:
 ## Installation
 
 ### Prerequisites
-- Node.js (v16 or higher) - This is not optional, the 8 sleep pod has node v-16.14.2
-- NPM or Yarn
+- Volta for node version control
 
 ### Setup
 1. Clone the repository.
@@ -127,11 +114,4 @@ server/
 ---
 
 
-## License
-This project is licensed under the MIT License. See the `LICENSE.md` file for details.
-
----
-
-## Acknowledgments
-- Huge thanks to [@bobobo1618](https://github.com/bobobo1618) & their research on how the device is controlled via dac.sock
 
