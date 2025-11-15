@@ -21,6 +21,38 @@ function getLocalIp(): string {
   return 'localhost'; // Default to localhost if LAN IP isn't found
 }
 
+/**
+ * Check if the request origin is allowed, i.e., from localhost or LAN IP, or
+ * matches the `ALLOWED_ORIGIN` environment variable. The function also allows
+ * requests with no origin (e.g., `curl`).
+ *
+ * If `ALLOWED_ORIGIN` is set to a wildcard (`*`), all origins are allowed.
+ *
+ * @param origin - The origin to check.
+ * @returns True if the origin is allowed, false otherwise.
+ */
+function isAllowedOrigin(origin: string | undefined): boolean {
+  if (!origin) {
+    return true;
+  }
+
+  if (ALLOWED_ORIGIN === '*') {
+    return true;
+  }
+
+  if (
+    origin.startsWith(`http://${getLocalIp()}:`) ||
+    origin.startsWith('http://localhost') ||
+    origin.startsWith('http://192.168.') ||
+    origin.startsWith('http://172.16.') ||
+    origin.startsWith('http://10.0.') ||
+    (ALLOWED_ORIGIN && origin.startsWith(ALLOWED_ORIGIN))
+  ) {
+    return true;
+  }
+
+  return false;
+}
 
 export default function (app: Express) {
   app.use((req, res, next) => {
@@ -41,20 +73,11 @@ export default function (app: Express) {
   app.use(
     cors({
       origin: (origin, callback) => {
-        // Allow if origin is LAN IP or localhost
-        if (
-          !origin ||
-          origin?.startsWith(`http://${getLocalIp()}:`) ||
-          origin?.startsWith('http://localhost') ||
-          origin?.startsWith('http://192.168.') ||
-          origin?.startsWith('http://172.16.') ||
-          origin?.startsWith('http://10.0.') ||
-          (ALLOWED_ORIGIN && origin?.startsWith(ALLOWED_ORIGIN))
-        ) {
-          callback(null, true);
-        } else {
-          callback(new Error('Not allowed by CORS'));
+        if (isAllowedOrigin(origin)) {
+          return callback(null, true);
         }
+
+        return callback(new Error('Not allowed by CORS'));
       }
     })
   );
