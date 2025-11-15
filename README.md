@@ -4,12 +4,18 @@
 
 ## 💬 [Discord Server](https://discord.gg/JpArXnBgEj)
 
+## [🤖 Custom ChatGPT Support Bot](https://chatgpt.com/g/g-68fb217791dc8191b82d2d0ae7b29940-free-sleep-bot)
+
+- A custom ChatGPT with Free Sleep documentation and related resources. It can help troubleshoot installations, answer setup questions, and guide you through common issues.
+
+---
+
 - Support
 - Feature requests
 - Updates
 - Contributing
 
-## 🛠️ [Installation Instructions](./INSTALLATION.md)
+## 🛠️ [Installation Instructions](./INSTALLATION.md) 🛠
 
 --- 
 
@@ -29,12 +35,6 @@ Each Pod actually runs a small Linux computer inside it. Free Sleep installs a l
 
 ---  
 ![App](docs/app.gif)
-
----
-
-## [🤖 Custom ChatGPT Support Bot](https://chatgpt.com/g/g-68fb217791dc8191b82d2d0ae7b29940-free-sleep-bot)
-
-- A custom ChatGPT with Free Sleep documentation and related resources. It can help troubleshoot installations, answer setup questions, and guide you through common issues.
 
 ---
 ## FAQ
