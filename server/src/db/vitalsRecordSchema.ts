@@ -1,7 +1,8 @@
 import { z } from 'zod';
+import { SideSchema } from './schedulesSchema.js';
 
 export const vitalsRecordSchema = z.object({
-  side: z.enum(['right', 'left']),
+  side: SideSchema,
   timestamp: z.number().int(), // Epoch timestamp
   heart_rate: z.number().int().min(30).max(90),
   hrv: z.number().int().min(0).max(200),

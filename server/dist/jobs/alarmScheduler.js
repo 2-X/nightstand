@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="cbd4d246-c6e4-5213-9987-6f084bd5585f")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="a950b43d-ac4b-5af5-90ba-73c22ede1de5")}catch(e){}}();
 import schedule from 'node-schedule';
 import cbor from 'cbor';
 import moment from 'moment-timezone';
@@ -11,7 +11,7 @@ import settingsDB from '../db/settings.js';
 import { executeFunction } from '../8sleep/deviceApi.js';
 import { getDayIndexForSchedule, logJob } from './utils.js';
 import { connectFranken } from '../8sleep/frankenServer.js';
-const executeAlarm = async ({ vibrationIntensity, duration, vibrationPattern, side }) => {
+export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPattern, side }) => {
     try {
         const min10Duration = Math.max(10, duration);
         // Exit is side is in away mode
@@ -148,4 +148,4 @@ export const scheduleAlarm = (settingsData, side, day, dailySchedule) => {
     });
 };
 //# sourceMappingURL=alarmScheduler.js.map
-//# debugId=cbd4d246-c6e4-5213-9987-6f084bd5585f
+//# debugId=a950b43d-ac4b-5af5-90ba-73c22ede1de5

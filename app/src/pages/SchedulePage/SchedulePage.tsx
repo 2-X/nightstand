@@ -4,7 +4,7 @@ import { Box } from '@mui/material';
 import { DeepPartial } from 'ts-essentials';
 import moment from 'moment-timezone';
 
-import AlarmAccordion from './AlarmAccordion.tsx';
+import AlarmAccordion from './AlarmSection/AlarmAccordion.tsx';
 import ApplyToOtherDaysAccordion from './ApplyToOtherDaysAccordion.tsx';
 import DayTabs from './DayTabs.tsx';
 import EnabledSwitch from './EnabledSwitch.tsx';

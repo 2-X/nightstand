@@ -1,5 +1,5 @@
 import { Box, Slider, Typography } from '@mui/material';
-import { useScheduleStore } from './scheduleStore.tsx';
+import { useScheduleStore } from '../scheduleStore.tsx';
 import { useAppStore } from '@state/appStore.tsx';
 import { useTheme } from '@mui/material/styles';
 

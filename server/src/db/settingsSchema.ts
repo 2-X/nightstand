@@ -5,6 +5,7 @@ import { TimeSchema } from './schedulesSchema.js';
 export const TEMPERATURES = ['celsius', 'fahrenheit'] as const;
 const Temperatures = z.enum(TEMPERATURES);
 
+
 const TemperatureTapConfig = z.object({
   type: z.literal('temperature'),
   change: z.enum(['increment', 'decrement']),

@@ -7,21 +7,14 @@ import memoryDB from '../db/memoryDB.js';
 import serverStatus from '../serverStatus.js';
 import schedulesDB from '../db/schedules.js';
 import settingsDB from '../db/settings.js';
-import { Alarm, DailySchedule, DayOfWeek, Side } from '../db/schedulesSchema.js';
+import { AlarmJob, DailySchedule, DayOfWeek, Side } from '../db/schedulesSchema.js';
 import { executeFunction } from '../8sleep/deviceApi.js';
 import { getDayIndexForSchedule, logJob } from './utils.js';
 import { connectFranken } from '../8sleep/frankenServer.js';
 import { Settings } from '../db/settingsSchema.js';
 
 
-type ExecuteAlarmArgs = {
-  side: Side;
-  vibrationIntensity: Alarm['vibrationIntensity'];
-  duration: Alarm['duration'];
-  vibrationPattern: Alarm['vibrationPattern'];
-}
-
-const executeAlarm = async ({ vibrationIntensity, duration, vibrationPattern, side }: ExecuteAlarmArgs) => {
+export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPattern, side }: AlarmJob) => {
   try {
     const min10Duration = Math.max(10, duration);
     // Exit is side is in away mode

@@ -1,22 +1,28 @@
 // WARNING! - Any changes here MUST be the same between app/src/api & server/src/db/
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="04cf8a21-c4d3-5bf4-a2a7-b43286e201f2")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="222bb18b-9545-5213-8372-6784f4ee0fb7")}catch(e){}}();
 import { z } from 'zod';
 const timeRegexFormat = /^([01]\d|2[0-3]):([0-5]\d)$/;
+export const SideSchema = z.enum(['right', 'left']);
 // Reusable Zod type for time
 export const TimeSchema = z.string().regex(timeRegexFormat, 'Invalid time format, must be HH:mm');
 export const TemperatureSchema = z.number().int().min(55).max(110);
 export const AlarmSchema = z.object({
-    time: TimeSchema,
     vibrationIntensity: z.number().int().min(1).max(100),
     vibrationPattern: z.enum(['double', 'rise']),
     duration: z.number().int().positive().min(0).max(180),
+}).strict();
+export const AlarmJobSchema = AlarmSchema.extend({
+    side: SideSchema,
+}).strict();
+export const AlarmScheduleSchema = AlarmSchema.extend({
+    time: TimeSchema,
     enabled: z.boolean(),
     alarmTemperature: TemperatureSchema,
 }).strict();
 export const DailyScheduleSchema = z.object({
     temperatures: z.record(TimeSchema, TemperatureSchema),
-    alarm: AlarmSchema,
+    alarm: AlarmScheduleSchema,
     power: z.object({
         on: TimeSchema,
         off: TimeSchema,
@@ -40,4 +46,4 @@ export const SchedulesSchema = z.object({
     right: SideScheduleSchema,
 }).strict();
 //# sourceMappingURL=schedulesSchema.js.map
-//# debugId=04cf8a21-c4d3-5bf4-a2a7-b43286e201f2
+//# debugId=222bb18b-9545-5213-8372-6784f4ee0fb7

@@ -1,7 +1,7 @@
 import moment from 'moment-timezone';
 import { InputAdornment, TextField } from '@mui/material';
 import { useAppStore } from '@state/appStore.tsx';
-import { useScheduleStore } from './scheduleStore.tsx';
+import { useScheduleStore } from '../scheduleStore.tsx';
 import { Time } from '@api/schedulesSchema.ts';
 import AccessTime from '@mui/icons-material/AccessTime';
 import { useTheme } from '@mui/material/styles';

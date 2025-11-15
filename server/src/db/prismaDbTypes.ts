@@ -12,7 +12,7 @@ export interface VitalRecord {
 
 export interface SleepRecord {
   id: number;
-  side: 'left' | 'right';
+  side: Side;
   entered_bed_at: string;
   left_bed_at: string;
   sleep_period_seconds: number;
@@ -23,7 +23,7 @@ export interface SleepRecord {
 
 export interface MovementRecord {
   timestamp: string;
-  side: 'left' | 'right';
+  side: Side;
   total_movement: number;
 }
 

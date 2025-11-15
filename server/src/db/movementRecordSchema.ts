@@ -1,8 +1,9 @@
 import { z } from 'zod';
+import { SideSchema } from './schedulesSchema.js';
 
 export const movementRecordSchema = z.object({
   id: z.number(),
-  side: z.enum(['right', 'left']),
+  side: SideSchema,
   timestamp: z.number().int(), // Epoch timestamp
   total_movement: z.number().int()
 });

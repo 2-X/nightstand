@@ -4,11 +4,12 @@ import MenuItem from '@mui/material/MenuItem';
 import FormControl from '@mui/material/FormControl';
 import Select from '@mui/material/Select';
 import { useAppStore } from '@state/appStore.tsx';
-import { useScheduleStore } from './scheduleStore.tsx';
+import { useScheduleStore } from '../scheduleStore.tsx';
+import _ from 'lodash';
 
+const DURATION_LIST = _.range(10, 190, 10);
 
-const PATTERNS = ['rise', 'double'];
-export default function AlarmPattern() {
+export default function AlarmDuration() {
   const { isUpdating } = useAppStore();
   const {
     selectedSchedule,
@@ -16,26 +17,26 @@ export default function AlarmPattern() {
   } = useScheduleStore();
 
   return (
-    <Box sx={ { minWidth: 120 } }>
+    <Box sx={ { width: '100%' } }>
       <FormControl fullWidth>
-        <InputLabel>Vibration pattern</InputLabel>
+        <InputLabel>Alarm Duration (seconds)</InputLabel>
         <Select
           disabled={ isUpdating }
-          value={ selectedSchedule?.alarm.vibrationPattern }
+          value={ selectedSchedule?.alarm.duration }
           variant='standard'
           onChange={ (event) => {
             updateSelectedSchedule(
               {
                 alarm: {
-                  vibrationPattern: event.target.value,
+                  duration: event.target.value as number,
                 },
               }
             );
           } }
         >
           {
-            PATTERNS.map((pattern) => (
-              <MenuItem value={ pattern } key={ pattern }>{ pattern }</MenuItem>
+            DURATION_LIST.map((duration) => (
+              <MenuItem value={ duration } key={ duration }>{ duration }</MenuItem>
             ))
           }
         </Select>
