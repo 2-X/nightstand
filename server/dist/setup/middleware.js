@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="c51cf9b7-9dbf-5a69-a5f5-e4455730e9cc")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="635124b4-1e48-5793-8ddc-c9d5acc18465")}catch(e){}}();
 import express from 'express';
 import cors from 'cors';
 import logger from '../logger.js';
@@ -19,6 +19,33 @@ function getLocalIp() {
     }
     return 'localhost'; // Default to localhost if LAN IP isn't found
 }
+/**
+ * Check if the request origin is allowed, i.e., from localhost or LAN IP, or
+ * matches the `ALLOWED_ORIGIN` environment variable. The function also allows
+ * requests with no origin (e.g., `curl`).
+ *
+ * If `ALLOWED_ORIGIN` is set to a wildcard (`*`), all origins are allowed.
+ *
+ * @param origin - The origin to check.
+ * @returns True if the origin is allowed, false otherwise.
+ */
+function isAllowedOrigin(origin) {
+    if (!origin) {
+        return true;
+    }
+    if (ALLOWED_ORIGIN === '*') {
+        return true;
+    }
+    if (origin.startsWith(`http://${getLocalIp()}:`) ||
+        origin.startsWith('http://localhost') ||
+        origin.startsWith('http://192.168.') ||
+        origin.startsWith('http://172.16.') ||
+        origin.startsWith('http://10.0.') ||
+        (ALLOWED_ORIGIN && origin.startsWith(ALLOWED_ORIGIN))) {
+        return true;
+    }
+    return false;
+}
 export default function (app) {
     app.use((req, res, next) => {
         const startTime = Date.now();
@@ -33,19 +60,10 @@ export default function (app) {
     // Allow local development
     app.use(cors({
         origin: (origin, callback) => {
-            // Allow if origin is LAN IP or localhost
-            if (!origin ||
-                origin?.startsWith(`http://${getLocalIp()}:`) ||
-                origin?.startsWith('http://localhost') ||
-                origin?.startsWith('http://192.168.') ||
-                origin?.startsWith('http://172.16.') ||
-                origin?.startsWith('http://10.0.') ||
-                (ALLOWED_ORIGIN && origin?.startsWith(ALLOWED_ORIGIN))) {
-                callback(null, true);
+            if (isAllowedOrigin(origin)) {
+                return callback(null, true);
             }
-            else {
-                callback(new Error('Not allowed by CORS'));
-            }
+            return callback(new Error('Not allowed by CORS'));
         }
     }));
     // Logging
@@ -58,4 +76,4 @@ export default function (app) {
     });
 }
 //# sourceMappingURL=middleware.js.map
-//# debugId=c51cf9b7-9dbf-5a69-a5f5-e4455730e9cc
+//# debugId=635124b4-1e48-5793-8ddc-c9d5acc18465
