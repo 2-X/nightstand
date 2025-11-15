@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="a950b43d-ac4b-5af5-90ba-73c22ede1de5")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="9b6d15ca-ed31-5efc-9e72-af74268fe3ab")}catch(e){}}();
 import schedule from 'node-schedule';
 import cbor from 'cbor';
 import moment from 'moment-timezone';
@@ -11,12 +11,12 @@ import settingsDB from '../db/settings.js';
 import { executeFunction } from '../8sleep/deviceApi.js';
 import { getDayIndexForSchedule, logJob } from './utils.js';
 import { connectFranken } from '../8sleep/frankenServer.js';
-export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPattern, side }) => {
+export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPattern, side, force = false }) => {
     try {
         const min10Duration = Math.max(10, duration);
         // Exit is side is in away mode
         await settingsDB.read();
-        if (settingsDB.data[side].awayMode) {
+        if (settingsDB.data[side].awayMode && !force) {
             if (settingsDB.data[side].awayMode) {
                 logger.debug('Not executing alarm, this side is in away mode!');
                 return;
@@ -25,7 +25,7 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
         // Exit if side is off
         const franken = await connectFranken();
         const resp = await franken.getDeviceStatus();
-        if (!resp[side].isOn) {
+        if (!resp[side].isOn && !force) {
             logger.debug('Not executing alarm, side is off!');
             return;
         }
@@ -148,4 +148,4 @@ export const scheduleAlarm = (settingsData, side, day, dailySchedule) => {
     });
 };
 //# sourceMappingURL=alarmScheduler.js.map
-//# debugId=a950b43d-ac4b-5af5-90ba-73c22ede1de5
+//# debugId=9b6d15ca-ed31-5efc-9e72-af74268fe3ab

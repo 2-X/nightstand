@@ -14,12 +14,12 @@ import { connectFranken } from '../8sleep/frankenServer.js';
 import { Settings } from '../db/settingsSchema.js';
 
 
-export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPattern, side }: AlarmJob) => {
+export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPattern, side, force=false }: AlarmJob) => {
   try {
     const min10Duration = Math.max(10, duration);
     // Exit is side is in away mode
     await settingsDB.read();
-    if (settingsDB.data[side].awayMode) {
+    if (settingsDB.data[side].awayMode && !force) {
       if (settingsDB.data[side].awayMode) {
         logger.debug('Not executing alarm, this side is in away mode!');
         return;
@@ -29,7 +29,7 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
     // Exit if side is off
     const franken = await connectFranken();
     const resp = await franken.getDeviceStatus();
-    if (!resp[side].isOn) {
+    if (!resp[side].isOn && !force) {
       logger.debug('Not executing alarm, side is off!');
       return;
     }

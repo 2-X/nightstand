@@ -19,6 +19,7 @@ export default function AlarmTest() {
       vibrationIntensity: selectedSchedule.alarm.vibrationIntensity,
       duration: TEST_DURATION_SECONDS,
       vibrationPattern: selectedSchedule.alarm.vibrationPattern,
+      force: true,
     })
       .then(() => {
         setIsTesting(true);

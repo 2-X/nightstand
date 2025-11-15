@@ -18,6 +18,7 @@ export const AlarmSchema = z.object({
 
 export const AlarmJobSchema = AlarmSchema.extend({
   side: SideSchema,
+  force: z.boolean().optional(),
 }).strict();
 
 export const AlarmScheduleSchema = AlarmSchema.extend({
