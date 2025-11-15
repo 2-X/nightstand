@@ -3,20 +3,25 @@
 ## Compatability
 - Pod 1 - ❌ **NOT COMPATIBLE**
 - Pod 2 - ❌ **NOT COMPATIBLE**
+
+
 - Pod 3 - **(With SD card)** - ✅  _most people who have tried this have gotten it working_
-  - Option 1:
-    - Follow the steps [here](https://blopker.com/writing/04-zerosleep-1/) to get root
-    - Start from step 11 **(SKIP step 12)**
-    - It's important you run step 11 ASAP after you ssh in, or else your pod will auto update firmware and kick you out
-  - Option 2:
-    - Try [this script](https://github.com/Pixel-Meister/freesleep_script/blob/main/modify_eight_sleep.sh) to modify 8 sleeps SD card (I have not personally tested this) 
+  - **USE LINUX FOR THIS**
+    - Option 1:
+      - Follow the steps [here](https://blopker.com/writing/04-zerosleep-1/) to get root
+      - Start from step 11 **(SKIP step 12)**
+      - It's important you run step 11 ASAP after you ssh in, or else your pod will auto update firmware and kick you out
+    - Option 2:
+      - Try [this script](https://github.com/Pixel-Meister/freesleep_script/blob/main/modify_eight_sleep.sh) to modify 8 sleeps SD card (I have not personally tested this)
+
+
 - Pod 3 - **(No SD card)** - ✅ FCC ID: 2AYXT61100001 (The FCC ID is located in the back of the pod where you plug in the water tubes)
 - Pod 4 ✅
 - Pod 5 ✅
 
 
 ## Tools required
-- [TC2070-IDC ($50)](https://www.tag-connect.com/product/tc2070-idc)
+- [TC2070-IDC ($50)](https://www.tag-connect.com/product/tc2070-idc) - You can also solder the 3 required wires to the JTAG header instead
 - [FTDI FT232RL ($13)](https://www.amazon.com/gp/product/B07TXVRQ7V/)
 - [Dupont wires ($7)](https://www.amazon.com/Elegoo-EL-CP-004-Multicolored-Breadboard-arduino/dp/B01EV70C78)
 - PSA - The instructions contained here are specific to mac and linux. If you have Windows, you'll have to figure that out yourself (it's do-able, I just refuse to use Windows)
@@ -148,7 +153,7 @@ reboot -f
 ---
 
 ## 10. Login as root with the password we set
-On the pod 4, this screen will be slightly different, that's OK
+On the pod 4 & 5, this screen will be slightly different, that's OK
 
 ![Login](docs/installation/3_login.png)
 
