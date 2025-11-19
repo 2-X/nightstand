@@ -131,8 +131,21 @@ tail_if_exists() {
 log_if_exists "/etc/rat_version" "OS Version"
 free -h | awk '/Mem:/ {printf "Memory: %s, Available: %s\n", $2, $7}'
 df -h | sed $'s/^/\033[0;90m/' | sed $'s/$/\033[0m/'
+echo ""
+print_grey "Time & Date"
+timedatectl 2>&1 | while IFS= read -r line; do
+  print_grey "      $line"
+done
 
-
+echo ""
+print_grey "DNS info - /etc/resolv.conf"
+if [ -f /etc/resolv.conf ]; then
+  while IFS= read -r line; do
+    print_grey "      $line"
+  done < /etc/resolv.conf
+else
+  print_grey "      (file not found)"
+fi
 
 printf "\n\nSystem Services\n"
 
@@ -140,12 +153,12 @@ check_service_status "free-sleep"
 check_service_status "free-sleep-stream"
 check_service_status "capybara"
 check_service_status "frank"
+check_service_status "systemd-timesyncd"
 
 printf "\n\nFree Sleep Status\n"
 print_json_if_exists "/home/dac/free-sleep/server/src/serverInfo.json" "Server info"
 check_free_sleep_install
 check_local_server
 
-
-echo "-----------------------------------------------------------------------------------------------------"
+echo "--------------------------------------------- END REPORT ---------------------------------------------"
 
