@@ -272,9 +272,9 @@ sh /home/dac/free-sleep/scripts/unblock_internet_access.sh
 
 
 #### Free sleep commands available (run this in the terminal through an SSH session on your pod)
-`fs-debug` - Prints a debug report  for the pod & free sleep
-`fs-restart` - Restarts the free sleep service
-`fs-reset-db` - Deletes the biometrics DB and recreates it (helpful for corrupted DB files)
-`fs-reset` - Wipes free-sleep data and does a fresh install (can fix corrupted DB or issues switching from beta branch to main branch (requires confirmation in a prompt before executing)
-`fs-update` - Manually runs the update script
-`fs-dev-server` - Run express server with nodemon (for devs)
+- `fs-debug` - Prints a debug report  for the pod & free sleep
+- `fs-restart` - Restarts the free sleep service
+- `fs-reset-db` - Deletes the biometrics DB and recreates it (helpful for corrupted DB files)
+- `fs-reset` - Wipes free-sleep data and does a fresh install (can fix corrupted DB or issues switching from beta branch to main branch (requires confirmation in a prompt before executing)
+- `fs-update` - Manually runs the update script
+- `fs-dev-server` - Run express server with nodemon (for devs)
