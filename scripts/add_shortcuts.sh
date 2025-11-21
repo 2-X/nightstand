@@ -11,6 +11,7 @@ SHORTCUTS=(
   "alias fs-debug='sh /home/dac/free-sleep/scripts/debug.sh'"
   "alias fs-restart='sh /home/dac/free-sleep/scripts/restart.sh'"
   "alias fs-reset='sh /home/dac/free-sleep/scripts/reset.sh'"
+  "alias fs-reset-db='sh /home/dac/free-sleep/scripts/reset_db.sh'"
   "alias fs-update='sh /home/dac/free-sleep/scripts/update.sh'"
   "alias fs-dev-server='systemctl stop free-sleep && su - dac -c \"cd /home/dac/free-sleep/server && /home/dac/.volta/bin/npm run dev\"'"
 )

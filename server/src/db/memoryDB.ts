@@ -5,6 +5,9 @@ import { Low, Memory } from 'lowdb';
 
 type SideState = {
   isAlarmVibrating: boolean;
+  analyzeSleep: {
+    lastRan?: number;
+  }
 };
 
 type MemoryDB = {
@@ -15,9 +18,15 @@ type MemoryDB = {
 const defaultMemoryDB: MemoryDB = {
   left: {
     isAlarmVibrating: false,
+    analyzeSleep: {
+      lastRan: undefined,
+    }
   },
   right: {
     isAlarmVibrating: false,
+    analyzeSleep: {
+      lastRan: undefined,
+    }
   },
 };
 

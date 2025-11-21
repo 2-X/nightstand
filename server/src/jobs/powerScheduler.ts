@@ -9,6 +9,8 @@ import moment from 'moment-timezone';
 import serverStatus from '../serverStatus.js';
 import logger from '../logger.js';
 import servicesDB from '../db/services.js';
+import memoryDB from '../db/memoryDB.js';
+
 
 
 export const schedulePowerOn = (settingsData: Settings, side: Side, day: DayOfWeek, power: DailySchedule['power']) => {
@@ -63,6 +65,20 @@ const scheduleAnalyzeSleep = (dayOfWeekIndex: number, offHour: number, offMinute
       logger.debug('Not executing sleep analyzer job, biometrics is disabled');
       return;
     }
+
+    await memoryDB.read();
+    const now = performance.now();
+    if (memoryDB.data[side].analyzeSleep.lastRan) {
+      const diffMs = now - memoryDB.data[side].analyzeSleep.lastRan;
+      const tenMinutesMs = 10 * 60 * 1000;
+      if (diffMs <= tenMinutesMs) {
+        logJob('Duplicate job detected, exiting!', side, day, dayOfWeekIndex, time);
+        return;
+      }
+    }
+    memoryDB.data[side].analyzeSleep.lastRan = now;
+    await memoryDB.write();
+
     logJob('Executing daily sleep analyzer job', side, day, dayOfWeekIndex, time);
     // Subtract a fixed start time
     executeAnalyzeSleep(side, moment().subtract(12, 'hours').toISOString(), moment().add(1, 'hours').toISOString());
