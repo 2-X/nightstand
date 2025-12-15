@@ -22,7 +22,7 @@ interface PresenceData {
 
 // In-memory storage for presence data
 // Default values are null until first update
-const presenceData: PresenceData = {
+let presenceData: PresenceData = {
   left: null,
   right: null,
   lastUpdated: {
@@ -47,7 +47,7 @@ const isDataStale = (timestamp: number | null): boolean => {
  * - { "left": true, "right": false } - Update both sides
  * - {} - No side specified (invalid, returns 400)
  */
-router.post('/', (req: Request, res: Response) => {
+router.post('/presence', (req: Request, res: Response) => {
   try {
     const { left, right } = req.body;
     
@@ -113,7 +113,7 @@ router.post('/', (req: Request, res: Response) => {
  * - ?side=right - Get right side presence only
  * - (no params) - Get overall presence (true if either side has presence)
  */
-router.get('/', (req: Request, res: Response) => {
+router.get('/presence', (req: Request, res: Response) => {
   try {
     const { side } = req.query;
     

@@ -13,6 +13,7 @@ import schedules from '../routes/schedules/schedules.js';
 import sleep from '../routes/metrics/sleep.js';
 import movement from '../routes/metrics/movement.js';
 import vitals from '../routes/metrics/vitals.js';
+import presence from '../routes/metrics/presence.js';
 import logs from '../routes/logs/logs.js';
 import serverStatus from '../routes/serverStatus/serverStatus.js';
 import logger from '../logger.js';
@@ -32,6 +33,7 @@ export default function (app: Express) {
   app.use('/api/metrics/', movement);
   app.use('/api/metrics/', sleep);
   app.use('/api/metrics/', vitals);
+  app.use('/api/metrics/', presence);
   app.use('/api/logs', logs);
   app.use('/api/serverStatus', serverStatus);
   app.use('/api', (req: Request, res: Response) => {
