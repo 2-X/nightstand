@@ -22,7 +22,7 @@ interface PresenceData {
 
 // In-memory storage for presence data
 // Default values are null until first update
-let presenceData: PresenceData = {
+const presenceData: PresenceData = {
   left: null,
   right: null,
   lastUpdated: {
