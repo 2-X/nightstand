@@ -24,7 +24,8 @@ import traceback
 import numpy as np
 import json
 from collections import deque
-import requests  # Added for API requests
+import urllib.request
+import urllib.error
 
 from get_logger import get_logger
 from heart.exceptions import BadSignalWarning
@@ -135,22 +136,30 @@ class BiometricProcessor:
                 self.side: is_present
             }
             
-            # Make POST request to presence API
-            response = requests.post(
+            # Convert payload to JSON bytes
+            data = json.dumps(payload).encode('utf-8')
+            
+            # Create the request
+            req = urllib.request.Request(
                 self.presence_api_url,
-                json=payload,
-                timeout=2  # 2 second timeout to avoid blocking
+                data=data,
+                headers={'Content-Type': 'application/json'},
+                method='POST'
             )
             
-            if response.status_code == 200:
-                logger.debug(f'Successfully updated presence API for {self.side} side: {is_present}')
+            # Make the request with timeout
+            with urllib.request.urlopen(req, timeout=2) as response:
+                if response.status == 200:
+                    logger.debug(f'Successfully updated presence API for {self.side} side: {is_present}')
+                else:
+                    response_body = response.read().decode('utf-8')
+                    logger.warning(f'Presence API returned status {response.status}: {response_body}')
+                    
+        except urllib.error.URLError as e:
+            if isinstance(e.reason, TimeoutError):
+                logger.warning(f'Presence API request timed out for {self.side} side')
             else:
-                logger.warning(f'Presence API returned status {response.status_code}: {response.text}')
-                
-        except requests.exceptions.Timeout:
-            logger.warning(f'Presence API request timed out for {self.side} side')
-        except requests.exceptions.ConnectionError:
-            logger.warning(f'Could not connect to presence API at {self.presence_api_url}')
+                logger.warning(f'Could not connect to presence API at {self.presence_api_url}: {e.reason}')
         except Exception as e:
             logger.error(f'Error updating presence API: {e}')
 
