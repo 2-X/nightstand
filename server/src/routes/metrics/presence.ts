@@ -46,7 +46,7 @@ const formatSideData = (present: boolean | null, timestamp: number | null): Side
   const stale = isDataStale(timestamp);
   return {
     present: present ?? false,
-    lastUpdatedAt: timestamp ? moment(timestamp).tz('America/New_York').format() : 'never',
+    lastUpdatedAt: timestamp ? moment(timestamp).utc().format() : 'never',
     isStale: stale
   };
 };

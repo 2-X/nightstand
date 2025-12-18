@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="97a7cc61-db83-5e50-b485-6d7228eb565c")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="c5554f32-dc08-5d0b-9088-1e380f2426d7")}catch(e){}}();
 import express from 'express';
 import moment from 'moment-timezone';
 const router = express.Router();
@@ -30,7 +30,7 @@ const formatSideData = (present, timestamp) => {
     const stale = isDataStale(timestamp);
     return {
         present: present ?? false,
-        lastUpdatedAt: timestamp ? moment(timestamp).tz('America/New_York').format() : 'never',
+        lastUpdatedAt: timestamp ? moment(timestamp).utc().format() : 'never',
         isStale: stale
     };
 };
@@ -131,4 +131,4 @@ router.get('/presence', (req, res) => {
 });
 export default router;
 //# sourceMappingURL=presence.js.map
-//# debugId=97a7cc61-db83-5e50-b485-6d7228eb565c
+//# debugId=c5554f32-dc08-5d0b-9088-1e380f2426d7
