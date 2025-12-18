@@ -126,19 +126,21 @@ class BiometricProcessor:
     def _update_presence_api(self, is_present: bool):
         """
         Send presence update to the API endpoint.
-        
+
         Args:
             is_present: Boolean indicating if presence is detected
         """
         try:
             # Build the payload based on which side this processor handles
             payload = {
-                self.side: is_present
+                self.side: {
+                    "present": is_present,
+                }
             }
-            
+
             # Convert payload to JSON bytes
             data = json.dumps(payload).encode('utf-8')
-            
+
             # Create the request
             req = urllib.request.Request(
                 self.presence_api_url,
@@ -146,7 +148,7 @@ class BiometricProcessor:
                 headers={'Content-Type': 'application/json'},
                 method='POST'
             )
-            
+
             # Make the request with timeout
             with urllib.request.urlopen(req, timeout=2) as response:
                 if response.status == 200:
@@ -154,7 +156,7 @@ class BiometricProcessor:
                 else:
                     response_body = response.read().decode('utf-8')
                     logger.warning(f'Presence API returned status {response.status}: {response_body}')
-                    
+
         except urllib.error.URLError as e:
             if isinstance(e.reason, TimeoutError):
                 logger.warning(f'Presence API request timed out for {self.side} side')
@@ -168,7 +170,7 @@ class BiometricProcessor:
         if signal_range > 200_000:
             self.not_present_for = 0
             self.present_for = self.present_for + 1
-            
+
             # Update presence to True if not already set
             if not self.present:
                 self.present = True
@@ -182,7 +184,7 @@ class BiometricProcessor:
                 self.present = False
                 self.present_for = 0
                 self.reset()
-                
+
                 # Update API that presence is no longer detected
                 self._update_presence_api(False)
 
