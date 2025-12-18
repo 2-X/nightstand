@@ -24,24 +24,14 @@ interface PresenceData {
   right: SidePresent;
 }
 
-// Internal storage structure
-interface InternalPresenceData {
-  left: boolean | null;
-  right: boolean | null;
-  lastUpdated: {
-    left: number | null;
-    right: number | null;
-  };
-}
-
 // In-memory storage for presence data
 // Default values are null until first update
-const presenceData: InternalPresenceData = {
-  left: null,
-  right: null,
+let presenceData = {
+  left: null as boolean | null,
+  right: null as boolean | null,
   lastUpdated: {
-    left: null,
-    right: null
+    left: null as number | null,
+    right: null as number | null
   }
 };
 

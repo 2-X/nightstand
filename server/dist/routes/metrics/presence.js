@@ -1,5 +1,5 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="82a8d938-bf0e-5ee0-a5be-ea3e81928602")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="97a7cc61-db83-5e50-b485-6d7228eb565c")}catch(e){}}();
 import express from 'express';
 import moment from 'moment-timezone';
 const router = express.Router();
@@ -11,7 +11,7 @@ const router = express.Router();
 const STALE_DATA_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 // In-memory storage for presence data
 // Default values are null until first update
-const presenceData = {
+let presenceData = {
     left: null,
     right: null,
     lastUpdated: {
@@ -131,4 +131,4 @@ router.get('/presence', (req, res) => {
 });
 export default router;
 //# sourceMappingURL=presence.js.map
-//# debugId=82a8d938-bf0e-5ee0-a5be-ea3e81928602
+//# debugId=97a7cc61-db83-5e50-b485-6d7228eb565c
