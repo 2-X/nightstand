@@ -1,6 +1,7 @@
 
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="e9007459-fa0f-56e9-abb5-dd7a8c95eafe")}catch(e){}}();
+!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="82a8d938-bf0e-5ee0-a5be-ea3e81928602")}catch(e){}}();
 import express from 'express';
+import moment from 'moment-timezone';
 const router = express.Router();
 // ============================================================
 // CONFIGURATION
@@ -23,6 +24,15 @@ const isDataStale = (timestamp) => {
     if (!timestamp)
         return true;
     return Date.now() - timestamp > STALE_DATA_TIMEOUT_MS;
+};
+// Helper function to format side data
+const formatSideData = (present, timestamp) => {
+    const stale = isDataStale(timestamp);
+    return {
+        present: present ?? false,
+        lastUpdatedAt: timestamp ? moment(timestamp).tz('America/New_York').format() : 'never',
+        isStale: stale
+    };
 };
 /**
  * POST /presence
@@ -87,81 +97,29 @@ router.post('/presence', (req, res) => {
 });
 /**
  * GET /presence
- * Get presence data for one or both sides
+ * Get presence data for both sides
  *
  * Query parameters:
- * - ?side=left - Get left side presence only
- * - ?side=right - Get right side presence only
- * - (no params) - Get overall presence (true if either side has presence)
+ * - ?side=left - Get left side presence only (returns single SidePresent object)
+ * - ?side=right - Get right side presence only (returns single SidePresent object)
+ * - (no params) - Get both sides (returns PresenceData object)
  */
 router.get('/presence', (req, res) => {
     try {
         const { side } = req.query;
-        // Check if data is available (not null and not stale)
-        const isLeftAvailable = presenceData.left !== null && !isDataStale(presenceData.lastUpdated.left);
-        const isRightAvailable = presenceData.right !== null && !isDataStale(presenceData.lastUpdated.right);
-        // If specific side is requested
+        // If specific side is requested, return just that side
         if (side === 'left') {
-            if (!isLeftAvailable) {
-                return res.status(200).json({
-                    side: 'left',
-                    presence: 'not available',
-                    message: 'No recent data available for left side'
-                });
-            }
-            return res.status(200).json({
-                side: 'left',
-                presence: presenceData.left,
-                lastUpdated: presenceData.lastUpdated.left
-            });
+            return res.status(200).json(formatSideData(presenceData.left, presenceData.lastUpdated.left));
         }
         if (side === 'right') {
-            if (!isRightAvailable) {
-                return res.status(200).json({
-                    side: 'right',
-                    presence: 'not available',
-                    message: 'No recent data available for right side'
-                });
-            }
-            return res.status(200).json({
-                side: 'right',
-                presence: presenceData.right,
-                lastUpdated: presenceData.lastUpdated.right
-            });
+            return res.status(200).json(formatSideData(presenceData.right, presenceData.lastUpdated.right));
         }
-        // No side specified - return overall presence
-        // Overall presence is true if either side has presence
-        if (!isLeftAvailable && !isRightAvailable) {
-            return res.status(200).json({
-                side: 'all',
-                presence: 'not available',
-                message: 'No recent data available for either side'
-            });
-        }
-        // If only one side has data, use that
-        let overallPresence;
-        if (isLeftAvailable && !isRightAvailable) {
-            overallPresence = presenceData.left;
-        }
-        else if (!isLeftAvailable && isRightAvailable) {
-            overallPresence = presenceData.right;
-        }
-        else {
-            // Both sides have data - presence if either side is true
-            overallPresence = presenceData.left || presenceData.right;
-        }
-        return res.status(200).json({
-            side: 'all',
-            presence: overallPresence,
-            details: {
-                left: isLeftAvailable ? presenceData.left : 'not available',
-                right: isRightAvailable ? presenceData.right : 'not available'
-            },
-            lastUpdated: {
-                left: presenceData.lastUpdated.left,
-                right: presenceData.lastUpdated.right
-            }
-        });
+        // No side specified - return both sides
+        const response = {
+            left: formatSideData(presenceData.left, presenceData.lastUpdated.left),
+            right: formatSideData(presenceData.right, presenceData.lastUpdated.right)
+        };
+        return res.status(200).json(response);
     }
     catch (error) {
         console.error('Error retrieving presence:', error);
@@ -173,4 +131,4 @@ router.get('/presence', (req, res) => {
 });
 export default router;
 //# sourceMappingURL=presence.js.map
-//# debugId=e9007459-fa0f-56e9-abb5-dd7a8c95eafe
+//# debugId=82a8d938-bf0e-5ee0-a5be-ea3e81928602
