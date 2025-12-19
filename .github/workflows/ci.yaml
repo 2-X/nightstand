@@ -1,10 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
-
   pull_request:
 
 jobs:
@@ -39,11 +35,11 @@ jobs:
 
       - name: Build (server)
         working-directory: server
-        run: npm run build
+        run: npm run build:pr
 
       - name: Build (app)
         working-directory: app
-        run: npm run build
+        run: npm run build:pr
 
       - name: Require clean working directory
         run: |
