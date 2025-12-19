@@ -5,12 +5,12 @@
 Contributions are welcome and appreciated. Free Sleep is open source, but it is maintainer-led and prioritizes stability for real users on real hardware over rapid experimentation.
 
 
-## RULE #1 - COORDINATE BEFORE YOU START ❗
-- Message me on Discord @david_x1 before starting any feature or fix.
-- Do not expect your changes to be merged without **explicit approval** of the work beforehand.
+## RULE #1 — COORDINATE BEFORE YOU START ❗
+- Message me on Discord @david_x1 before starting any new feature.
+  - Small bug fixes or changes under ~100 lines are welcome without prior discussion.
+- Do not expect changes to be merged without **explicit prior approval**.
 - This helps avoid duplicate work and misaligned expectations.
 - Work started without coordination may be declined regardless of effort.
-
 
 ## 🚫 Core Project Policies 🚫
 
