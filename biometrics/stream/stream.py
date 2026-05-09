@@ -166,7 +166,7 @@ def process_biometrics():
 
 def watch_directory(directory="/persistent"):
     """Monitors the directory for new RAW files and processes only the latest one."""
-    logger.info('Steam processor starting...')
+    logger.info('Stream processor starting...')
     update_health('stream', 'started', '')
     handler = LatestRawFileHandler(directory)
     observer = Observer()
@@ -177,7 +177,7 @@ def watch_directory(directory="/persistent"):
     processing_thread = threading.Thread(target=process_biometrics, daemon=True)
     processing_thread.start()
 
-    logger.debug('Steam processor set up successfully, running...')
+    logger.debug('Stream processor set up successfully, running...')
     try:
         while True:
             time.sleep(1)
