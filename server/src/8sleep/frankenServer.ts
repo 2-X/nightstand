@@ -12,11 +12,22 @@ import config from '../config.js';
 import { toPromise, wait } from './promises.js';
 
 const FRANKEN_CONNECTION_TIMEOUT_MS = 25_000;
+const FRANKEN_CONNECTION_MAX_ATTEMPTS = 10;
 
 class FrankenConnectionTimeoutError extends Error {
   public constructor() {
     super('Timed out waiting for Franken hardware connection');
     this.name = 'FrankenConnectionTimeoutError';
+  }
+}
+
+class FrankenConnectionFailedError extends Error {
+  public constructor(
+    attempts: number,
+    public readonly lastError: unknown,
+  ) {
+    super(`Unable to connect to Franken hardware after ${attempts} attempts`);
+    this.name = 'FrankenConnectionFailedError';
   }
 }
 
@@ -161,28 +172,32 @@ export async function connectFranken(): Promise<Franken> {
   if (connectPromise) return connectPromise;
 
   connectPromise = (async () => {
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
+    for (let attempt = 1; attempt <= FRANKEN_CONNECTION_MAX_ATTEMPTS; attempt++) {
       if (!frankenServer) {
         frankenServer = await FrankenServer.start(config.dacSockPath);
         logger.debug('FrankenServer started');
       }
 
       try {
-        logger.debug('Waiting for Franken hardware connection...');
+        logger.debug(`Waiting for Franken hardware connection... attempt ${attempt}/${FRANKEN_CONNECTION_MAX_ATTEMPTS}`);
         franken = await waitForFrankenWithTimeout(frankenServer);
         logger.info('Franken socket connected');
         return franken;
       } catch (error) {
         if (error instanceof FrankenConnectionTimeoutError) {
-          logger.warn('Unable to connect to Franken within timeout, restarting socket server...');
           await shutdownFrankenServer();
-          continue;
+          if (attempt < FRANKEN_CONNECTION_MAX_ATTEMPTS) {
+            logger.warn('Unable to connect to Franken within timeout, restarting socket server...');
+            continue;
+          }
+          logger.error(`Unable to connect to Franken after ${FRANKEN_CONNECTION_MAX_ATTEMPTS} attempts`);
+          throw new FrankenConnectionFailedError(FRANKEN_CONNECTION_MAX_ATTEMPTS, error);
         }
         await shutdownFrankenServer();
         throw error;
       }
     }
+    throw new FrankenConnectionFailedError(FRANKEN_CONNECTION_MAX_ATTEMPTS, undefined);
   })();
 
   try {
