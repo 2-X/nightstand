@@ -5,6 +5,7 @@ import FormControl from '@mui/material/FormControl';
 import Select from '@mui/material/Select';
 import { useAppStore } from '@state/appStore.tsx';
 import { useScheduleStore } from '../scheduleStore.tsx';
+import { withCurrentValue } from '@lib/selectOptions.ts';
 import _ from 'lodash';
 
 const DURATION_LIST = _.range(10, 190, 10);
@@ -13,6 +14,7 @@ export default function AlarmDuration() {
   const { isUpdating } = useAppStore();
   const { selectedAlarmIndex, getEditedAlarms, updateSelectedAlarm } = useScheduleStore();
   const alarm = getEditedAlarms()[selectedAlarmIndex];
+  const durations = withCurrentValue(DURATION_LIST, alarm?.duration);
 
   return (
     <Box sx={ { width: '100%' } }>
@@ -27,7 +29,7 @@ export default function AlarmDuration() {
           } }
         >
           {
-            DURATION_LIST.map((duration) => (
+            durations.map((duration) => (
               <MenuItem value={ duration } key={ duration }>{ duration }</MenuItem>
             ))
           }
