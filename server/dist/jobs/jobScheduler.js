@@ -14,6 +14,7 @@ import { schedulePrimingRebootAndCalibration } from './primeScheduler.js';
 import { scheduleTemperatures } from './temperatureScheduler.js';
 import eventBus from '../events/eventBus.js';
 import { emitJobEvent } from './jobEvents.js';
+import { isServicesDbChange } from './isServicesDbChange.js';
 async function setupJobs() {
     try {
         if (serverStatus.status.jobs.status === 'started') {
@@ -106,7 +107,7 @@ function waitForValidDateAndSetupJobs() {
 // Monitor the JSON file and refresh jobs on change
 chokidar.watch(config.lowDbFolder).on('change', (changedPath) => {
     const fileName = path.basename(changedPath);
-    if (fileName === 'servicesDB.json') {
+    if (isServicesDbChange(fileName)) {
         logger.info(`Skipping restarting jobs for DB change: ${fileName}`);
         return;
     }
