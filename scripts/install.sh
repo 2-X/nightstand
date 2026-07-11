@@ -343,6 +343,16 @@ else
   echo "Passwordless permission for biometrics granted to '$USERNAME'."
 fi
 
+# Biometrics disablement
+SUDOERS_BIOMETRICS_DISABLE_RULE="$USERNAME ALL=(ALL) NOPASSWD: /bin/sh /home/dac/free-sleep/scripts/disable_biometrics.sh"
+if sudo grep -Fxq "$SUDOERS_BIOMETRICS_DISABLE_RULE" "$SUDOERS_FILE" 2>/dev/null; then
+  echo "Rule for '$USERNAME' biometrics-disable permissions already exists."
+else
+  echo "$SUDOERS_BIOMETRICS_DISABLE_RULE" | sudo tee -a "$SUDOERS_FILE" >> /dev/null
+  sudo chmod 440 "$SUDOERS_FILE"
+  echo "Passwordless permission for biometrics disable granted to '$USERNAME'."
+fi
+
 echo ""
 
 sh /home/dac/free-sleep/scripts/add_shortcuts.sh

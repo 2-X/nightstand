@@ -261,6 +261,18 @@ else
     || say "WARNING: failed to add revert-to-stock sudoers rule; the Revert to stock control will not work until the next successful update"
 fi
 
+# --- biometrics-disable sudoers rule --------------------------------------------
+# Same self-heal as above: installs that predate this feature never got the
+# sudoers rule for disable_biometrics.sh, so flipping the Settings biometrics
+# toggle off would silently fail to stop free-sleep-stream.service.
+BIOMETRICS_DISABLE_SUDOERS_RULE="dac ALL=(ALL) NOPASSWD: /bin/sh /home/dac/free-sleep/scripts/disable_biometrics.sh"
+if [ -f "$SUDOERS_FILE" ] && grep -Fxq "$BIOMETRICS_DISABLE_SUDOERS_RULE" "$SUDOERS_FILE" 2>/dev/null; then
+  :
+else
+  echo "$BIOMETRICS_DISABLE_SUDOERS_RULE" >> "$SUDOERS_FILE" && chmod 440 "$SUDOERS_FILE" \
+    || say "WARNING: failed to add biometrics-disable sudoers rule; turning biometrics off will not stop the stream service until the next successful update"
+fi
+
 # --- health check --------------------------------------------------------------
 say "Health check (up to 90s)"
 HEALTHY=no
