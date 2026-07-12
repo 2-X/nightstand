@@ -1,60 +1,186 @@
 #!/bin/bash
+# Self-updater for this fork. Downloads the latest main branch of
+# LTimothy/nightstand from GitHub and installs it: backup, stage, atomic
+# swap, health check, automatic rollback on failure.
+#
+# Runs on the pod as root, normally via free-sleep-update.service (triggered
+# from the app's Settings page). Internet access is opened only long enough
+# to download, then re-blocked no matter how the script exits.
+#
+# Env:
+#   FS_UPDATE_FORCE=1   install even if the published version isn't newer
+set -uo pipefail
 
-# Optional: Exit immediately on error
-set -e
+INFO_URL="https://raw.githubusercontent.com/LTimothy/nightstand/main/server/src/serverInfo.json"
+ZIP_URL="https://github.com/LTimothy/nightstand/archive/refs/heads/main.zip"
 
-# Name of the backup folder with a timestamp
-print_json_if_exists() {
-  local file_path="$1"
-  local label="$2"
+LIVE=/home/dac/free-sleep
+PREV=/home/dac/free-sleep-prev
+STAGE=/home/dac/free-sleep-staging
+FAILED=/home/dac/free-sleep-failed
+ZIP=/home/dac/free-sleep-update.zip
+BACKUPS=/persistent/free-sleep-backups
+KEEP_BACKUPS=5
+NPM=/home/dac/.volta/bin/npm
+NPX=/home/dac/.volta/bin/npx
 
-  if [ -f "$file_path" ]; then
-    python3 -m json.tool "$file_path" \
-      | sed 's/^/      /' \
-      | sed $'s/^/\033[0;90m/' \
-      | sed $'s/$/\033[0m/'
-  else
-    print_red "File not found: $file_path ❌"
-  fi
+say() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
+
+WAN_OPEN=no
+open_wan()  { say "Unblocking internet access (temporary)"; sh "$LIVE/scripts/unblock_internet_access.sh" >/dev/null && WAN_OPEN=yes; }
+close_wan() {
+  [ "$WAN_OPEN" = yes ] || return 0
+  say "Re-blocking internet access"
+  sh "$LIVE/scripts/block_internet_access.sh" >/dev/null 2>&1 \
+    || sh "$PREV/scripts/block_internet_access.sh" >/dev/null 2>&1 || true
+  WAN_OPEN=no
 }
-print_json_if_exists "/home/dac/free-sleep/server/src/serverInfo.json" "Server info"
+cleanup() { close_wan; rm -rf "$STAGE" "$STAGE.unzip" "$STAGE.health" "$ZIP"; }
+trap cleanup EXIT
 
-BACKUP_PATH="/home/dac/free-sleep-backup"
-APP_DIR="/home/dac/free-sleep"
+fail() { say "FATAL: $*"; exit 1; }
 
-systemctl stop free-sleep
-systemctl disable free-sleep
+# --- preflight ---------------------------------------------------------------
+[ -d "$LIVE" ] || fail "no live install at $LIVE"
+CUR_VERSION=$(python3 -c 'import json;print(json.load(open("'"$LIVE"'/server/src/serverInfo.json"))["version"])' 2>/dev/null) \
+  || fail "cannot read current version"
 
-# Unblock internet first
-sh /home/dac/free-sleep/scripts/unblock_internet_access.sh
+ROOT_FREE=$(df -m / | awk 'NR==2{print $4}')
+PERS_FREE=$(df -m /persistent | awk 'NR==2{print $4}')
+[ "$ROOT_FREE" -gt 1500 ] || fail "low disk on / (${ROOT_FREE}M free)"
+[ "$PERS_FREE" -gt 2000 ] || fail "low disk on /persistent (${PERS_FREE}M free)"
 
-# If a free-sleep folder exists, back it up
-if [ -d /home/dac/free-sleep ]; then
-  echo "Backing up current free-sleep to $BACKUP_PATH"
-  mv /home/dac/free-sleep $BACKUP_PATH
+# --- resolve what to install --------------------------------------------------
+open_wan
+say "Current version: v$CUR_VERSION. Checking GitHub for the latest build..."
+REMOTE_VERSION=$(curl -fsSL --max-time 20 "$INFO_URL" | python3 -c 'import json,sys;print(json.load(sys.stdin)["version"])') \
+  || fail "could not fetch the published version (check internet access and DNS)"
+
+NEWER=$(python3 -c '
+import sys
+cur = [int(x) for x in sys.argv[1].split(".")]
+pub = [int(x) for x in sys.argv[2].split(".")]
+print("yes" if pub > cur else "no")' "$CUR_VERSION" "$REMOTE_VERSION")
+
+if [ "$NEWER" = no ] && [ "${FS_UPDATE_FORCE:-0}" != 1 ]; then
+  say "Already up to date (published: v$REMOTE_VERSION). Nothing to do."
+  exit 0
 fi
+EXPECTED_VERSION="$REMOTE_VERSION"
 
-echo "Attempting to reinstall free-sleep..."
-if /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/throwaway31265/free-sleep/main/scripts/install.sh)"; then
-  echo "Reinstall successful."
-  rm -rf "$BACKUP_PATH"
-  if [ -d "$APP_DIR" ]; then
-    rm -rf "$BACKUP_PATH"
-  else
-    echo "Install path missing after installer; restoring backup..."
-    rm -rf "$APP_DIR"
-    mv "$BACKUP_PATH" "$APP_DIR"
-  fi
+# --- download + stage --------------------------------------------------------
+say "Downloading v$EXPECTED_VERSION..."
+curl -fL --max-time 300 -o "$ZIP" "$ZIP_URL" || fail "download failed"
+rm -rf "$STAGE" "$STAGE.unzip"
+unzip -q "$ZIP" -d "$STAGE.unzip" || fail "unzip failed"
+# GitHub names the archive's top dir after the repo and ref (repo-name + "-" +
+# branch or tag), so resolve it dynamically rather than hardcoding it.
+STAGED_DIR=$(find "$STAGE.unzip" -mindepth 1 -maxdepth 1 -type d | head -n1)
+[ -d "$STAGED_DIR" ] || fail "unexpected zip layout"
+mv "$STAGED_DIR" "$STAGE" && rm -rf "$STAGE.unzip"
+rm -f "$ZIP"
+chown -R dac:dac "$STAGE"
+
+# the pod runs prebuilt code; refuse anything missing its build output
+[ -f "$STAGE/server/dist/server.js" ] || fail "staged tree is missing server/dist/server.js"
+[ -f "$STAGE/server/public/index.html" ] || fail "staged tree is missing server/public/index.html"
+STAGED_VERSION=$(python3 -c 'import json;print(json.load(open("'"$STAGE"'/server/src/serverInfo.json"))["version"])') \
+  || fail "staged tree has no readable serverInfo.json"
+
+# --- dependencies (old server still running) ---------------------------------
+LOCK_SAME=no
+cmp -s "$LIVE/server/package-lock.json" "$STAGE/server/package-lock.json" && LOCK_SAME=yes
+if [ "$LOCK_SAME" = no ]; then
+  say "package-lock.json changed: running npm install in staging"
+  sudo -u dac bash -c "cd '$STAGE/server' && '$NPM' install --no-audit --no-fund" \
+    || fail "npm install failed; live install untouched"
 else
-  echo "Reinstall failed. Restoring from backup..."
-  rm -rf /home/dac/free-sleep
-  mv "$BACKUP_PATH" /home/dac/free-sleep
+  say "package-lock.json unchanged: reusing existing node_modules"
+fi
+close_wan
+
+# --- backup ------------------------------------------------------------------
+TS=$(date +%Y%m%d-%H%M%S)
+BK="$BACKUPS/${TS}_v${CUR_VERSION}"
+say "Backing up code + data to $BK"
+mkdir -p "$BK"
+tar czf "$BK/code.tar.gz" -C /home/dac --exclude free-sleep/server/node_modules free-sleep || fail "backup failed; aborting, nothing changed"
+cp /persistent/free-sleep-data/free-sleep.db "$BK/" 2>/dev/null || true
+cp -r /persistent/free-sleep-data/lowdb "$BK/lowdb" 2>/dev/null || true
+ls -1dt "$BACKUPS"/*/ | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -rf
+
+# --- atomic swap ---------------------------------------------------------------
+say "Installing v$STAGED_VERSION (service stops now)"
+systemctl stop free-sleep
+rm -rf "$PREV"
+mv "$LIVE" "$PREV" || fail "swap failed moving live aside"
+mv "$STAGE" "$LIVE" || { mv "$PREV" "$LIVE"; systemctl start free-sleep; fail "swap failed; previous version restored"; }
+MOVED_MODULES=no
+if [ "$LOCK_SAME" = yes ]; then
+  mv "$PREV/server/node_modules" "$LIVE/server/node_modules"
+  chown -R dac:dac "$LIVE/server/node_modules"
+  MOVED_MODULES=yes
 fi
 
-systemctl enable free-sleep || true
-systemctl start free-sleep || true
+if ! cmp -s "$PREV/server/prisma/schema.prisma" "$LIVE/server/prisma/schema.prisma"; then
+  say "Prisma schema changed: migrate deploy + generate"
+  sudo -u dac bash -c "cd '$LIVE/server' && '$NPX' dotenv -e .env.pod -- npx prisma migrate deploy && '$NPX' dotenv -e .env.pod -- npx prisma generate" \
+    || say "WARNING: prisma step failed; health check will decide"
+fi
 
-# Block internet access again
-sh /home/dac/free-sleep/scripts/block_internet_access.sh
-echo -e "\033[0;32mUpdate completed successfully!\033[0m"
-echo -e "\033[0;32mRestart your pod with 'reboot -h now'\033[0m"
+systemctl start free-sleep
+systemctl try-restart free-sleep-stream 2>/dev/null || true
+
+# Self-heal exec bits on the updater chain: free-sleep-update.service execs
+# update_service.sh directly on older installs, and a missing exec bit fails
+# the unit with 203/EXEC before it can log anything.
+chmod +x "$LIVE"/scripts/update.sh "$LIVE"/scripts/update_service.sh 2>/dev/null || true
+
+# --- health check --------------------------------------------------------------
+say "Health check (up to 90s)"
+HEALTHY=no
+HBODY="$STAGE.health"
+for _ in $(seq 1 30); do
+  sleep 3
+  # Log every attempt's HTTP status so a failed update log shows the shape of
+  # the failure on its own (000 = no/aborted response, 503 = still starting).
+  CODE=$(curl -s -o "$HBODY" -w '%{http_code}' --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" 2>/dev/null || echo 000)
+  say "  health attempt: HTTP $CODE"
+  [ "$CODE" = 200 ] || continue
+  R=$(cat "$HBODY" 2>/dev/null) || continue
+  OK=$(printf '%s' "$R" | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    assert d['freeSleep']['version'] == '$STAGED_VERSION'
+    assert isinstance(d['left']['currentTemperatureF'], (int, float))
+    print('yes')
+except Exception:
+    print('no')" 2>/dev/null)
+  [ "$OK" = yes ] && { HEALTHY=yes; break; }
+done
+[ "$HEALTHY" = yes ] && systemctl is-active free-sleep >/dev/null || HEALTHY=no
+
+if [ "$HEALTHY" = yes ]; then
+  say "SUCCESS: pod is serving v$STAGED_VERSION. Previous version kept at $PREV; backup at $BK"
+  exit 0
+fi
+
+# --- automatic rollback ---------------------------------------------------------
+say "Health check FAILED: rolling back to v$CUR_VERSION"
+say "Last 60 server log lines from the failed build (for diagnosis):"
+tail -n 60 /persistent/free-sleep-data/logs/free-sleep.log 2>/dev/null || say "  (no server log available)"
+systemctl stop free-sleep || true
+rm -rf "$FAILED"
+mv "$LIVE" "$FAILED"
+mv "$PREV" "$LIVE"
+if [ "$MOVED_MODULES" = yes ]; then
+  mv "$FAILED/server/node_modules" "$LIVE/server/node_modules"
+fi
+systemctl start free-sleep
+sleep 8
+if curl -sf --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" >/dev/null; then
+  fail "update failed but rollback OK (pod back on v$CUR_VERSION). Failed tree kept at $FAILED; see journalctl -u free-sleep"
+else
+  fail "update failed AND rollback health check failed. Backup tarball: $BK. Check journalctl -u free-sleep. The bed hardware itself keeps running regardless."
+fi

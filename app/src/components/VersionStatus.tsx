@@ -24,7 +24,7 @@ export default function VersionStatus() {
               <Typography variant="body2" sx={ { mb: 1 } }>
                 Current version: { currentServerInfo.version }
               </Typography>
-              <UpdateFreeSleepButton/>
+              <UpdateFreeSleepButton runningVersion={ currentServerInfo.version }/>
             </Alert>
           </>
         )
