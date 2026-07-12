@@ -51,7 +51,7 @@ export default function SchedulePage() {
     selectDay
   } = useScheduleStore();
   const { data: settings } = useSettings();
-  const displayCelsius = settings?.temperatureFormat === 'celsius';
+  const format = settings?.temperatureFormat ?? 'fahrenheit';
   // TODO: Add changes lost notification using changesPresent when user tries to switch tab before saving
 
   useEffect(() => {
@@ -112,12 +112,12 @@ export default function SchedulePage() {
         <TemperatureScheduleChart />
       </ErrorBoundary>
 
-      <PowerScheduleSection displayCelsius={ displayCelsius }/>
+      <PowerScheduleSection format={ format }/>
       <Box sx={ { mt: 2, display: 'flex', justifyContent: 'space-between', width: '100%', mb: 2 } }>
         <EnabledSwitch/>
         <SaveButton onSave={ handleSave }/>
       </Box>
-      <TemperatureAdjustmentsAccordion displayCelsius={ displayCelsius }/>
+      <TemperatureAdjustmentsAccordion format={ format }/>
       <AlarmAccordion/>
       <ApplyToOtherDaysAccordion/>
 
