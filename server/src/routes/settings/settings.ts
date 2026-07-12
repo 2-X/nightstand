@@ -24,9 +24,14 @@ router.post('/settings', async (req: Request, res: Response) => {
     });
     return;
   }
-  delete body.id;
+  // Merge the validated/stripped result, not the raw body: some nested
+  // schemas here aren't `.strict()`, so extra attacker-supplied properties
+  // on those nested objects pass validation and would otherwise be written
+  // into settingsDB.data verbatim if the raw body were merged instead.
+  const validatedUpdate = validationResult.data;
+  delete validatedUpdate.id;
   await settingsDB.read();
-  _.merge(settingsDB.data, body);
+  _.merge(settingsDB.data, validatedUpdate);
   await settingsDB.write();
   res.status(200).json(settingsDB.data);
 });
