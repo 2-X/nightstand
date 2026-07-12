@@ -6,10 +6,6 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime
 import os
 import sys
-import urllib.request
-import json
-
-import sentry_sdk
 
 
 LoggerName = Literal['sleep-analyzer', 'calibrate-sensor', 'free-sleep-stream']
@@ -79,8 +75,15 @@ def _get_file_handler(data_folder_path: str, name: str):
     handler = RotatingFileHandler(
         filename=f"{folder_path}/{name}.log",
         mode='a',
-        maxBytes=10 * 1024 * 1024,  # 10MB max file size
-        backupCount=0,  # No rotation, just truncate when max size is reached
+        maxBytes=15 * 1024 * 1024,  # 15MB max file size
+        # backupCount must be >= 1 for RotatingFileHandler to actually cap the
+        # size. With backupCount=0 it never rotates and the file grows forever
+        # (this let free-sleep-stream.log reach ~8GB and fill /persistent).
+        # free-sleep-stream.log (DEBUG piezo/presence logging) is the noisiest
+        # of these and fills ~10MB every ~2 hours, so 30MB only held ~1 day of
+        # history. 4 backups => at most ~75MB per logger, ~3 days for that one;
+        # /persistent has 13GB free so this is negligible.
+        backupCount=4,
         encoding="utf-8",
     )
     handler.setFormatter(FORMATTER)
@@ -114,75 +117,6 @@ def _build_logger(logger: BaseLogger, name: LoggerName):
 
 
 
-def _load_sentry_tags():
-    try:
-        sentry_tags = {
-            "user_id": "error",
-            "branch": "error",
-            "version": "error",
-            "hubVersion": "error",
-            "coverVersion": "error",
-        }
-        settings_db_file_path = '/persistent/free-sleep-data/lowdb/settingsDB.json'
-        if os.path.isfile(settings_db_file_path):
-            print('Loading settingsDB.json...')
-            with open(settings_db_file_path) as file:
-                settings = json.load(file)
-            sentry_tags['user_id'] = settings['id']
-
-        server_info_file_path = '/home/dac/free-sleep/server/src/serverInfo.json'
-        if os.path.isfile(server_info_file_path):
-            print('Loading serverInfo.json...')
-
-            with open(server_info_file_path) as file:
-                server_info = json.load(file)
-
-            sentry_tags['version'] = server_info['version']
-            sentry_tags['branch'] = server_info['branch']
-
-
-        with urllib.request.urlopen("http://127.0.0.1:3000/api/deviceStatus", timeout=5) as response:
-            data = json.load(response)
-            sentry_tags['hubVersion'] = data['hubVersion']
-            sentry_tags['coverVersion'] = data['coverVersion']
-            return sentry_tags
-
-    except Exception as error:
-        print('Failed to load Sentry tags!')
-        print(error)
-        return sentry_tags
-
-
-def _is_sentry_enabled():
-    try:
-        print('Checking if sentry is enabled...')
-        services_url = "http://127.0.0.1:3000/api/services"
-
-        with urllib.request.urlopen(services_url, timeout=5) as response:
-            data = json.load(response)
-            return data["sentryLogging"]["enabled"]
-    except Exception as error:
-        print('Failed to check if Sentry is enabled, enabling Sentry!')
-        print(error)
-        return True
-
-
-
-
-def _init_sentry():
-    if _is_sentry_enabled():
-
-        sentry_sdk.init(
-            dsn="https://71dec16dc7338369a770c424783d1712@o4510246020710401.ingest.us.sentry.io/4510252550979584",
-            # Add data like request headers and IP for users,
-            # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
-            send_default_pii=False,
-        )
-        sentry_tags = _load_sentry_tags()
-        sentry_sdk.set_tags(sentry_tags)
-
-
-
 def get_logger(name: Optional[LoggerName] = None) -> BaseLogger:
     """
     Returns:
@@ -192,7 +126,6 @@ def get_logger(name: Optional[LoggerName] = None) -> BaseLogger:
     logger, name = _get_logger_instance(name)
     if not logger.handlers:
         _build_logger(logger, name)
-        _init_sentry()
 
     return logger
 
