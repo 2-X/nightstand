@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import readline from 'readline';
 import logger from '../../logger.js';
+import { isSafeLogFilename } from './logsHelpers.js';
 
 const router = express.Router();
 
@@ -79,6 +80,11 @@ router.get('/:filename', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
 
   const filename = req.params.filename;
+
+  if (!isSafeLogFilename(filename)) {
+    res.write(`data: ${JSON.stringify({ message: 'Log file not found' })}\n\n`);
+    return res.end();
+  }
 
   let logFilePath = null;
   for (const dir of LOGS_DIRS) {
