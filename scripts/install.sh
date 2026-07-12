@@ -254,6 +254,16 @@ StandardOutput=append:/persistent/free-sleep-data/logs/free-sleep-update.log
 StandardError=append:/persistent/free-sleep-data/logs/free-sleep-update.log
 
 EOF
+
+# -----------------------------------------------------------------------------------------------------
+# Create systemd service for instant rollback
+
+echo "Installing instant-rollback service..."
+chmod +x "$REPO_DIR/scripts/rollback_pod.sh"
+cp "$REPO_DIR/scripts/systemd/free-sleep-rollback.service" /etc/systemd/system/
+systemctl daemon-reload
+echo ""
+
 # --------------------------------------------------------------------------------
 # Graceful device time update (optional)
 
@@ -291,6 +301,16 @@ else
   echo "Passwordless permission for updates granted to '$USERNAME'."
 fi
 chmod 755 /home/dac/free-sleep/scripts/update_service.sh
+
+# Instant rollback
+SUDOERS_ROLLBACK_RULE="$USERNAME ALL=(root) NOPASSWD: /bin/systemctl start free-sleep-rollback.service --no-block"
+if sudo grep -Fxq "$SUDOERS_ROLLBACK_RULE" "$SUDOERS_FILE" 2>/dev/null; then
+  echo "Rule for '$USERNAME' rollback permissions already exists."
+else
+  echo "$SUDOERS_ROLLBACK_RULE" | sudo tee -a "$SUDOERS_FILE" >> /dev/null
+  sudo chmod 440 "$SUDOERS_FILE"
+  echo "Passwordless permission for rollback granted to '$USERNAME'."
+fi
 
 
 # Biometrics enablement
