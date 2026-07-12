@@ -89,6 +89,11 @@ Vitals are inserted once every 60 seconds & you can access the raw data @ <POD_I
 - REST API for managing device settings, schedules, and status.
 - Modular design with routes for `deviceStatus`, `settings`, `schedules`, and `execute`.
 - Uses Node.js and Express for lightweight, fast operations.
+- WebSocket push at `/ws/events` for real-time UI updates: temperature
+  changes, scheduled jobs, and service-health flips arrive instantly without
+  the app polling. Falls back to polling automatically if the socket drops.
+- `/api/metrics/server` exposes in-process metrics, including WS client
+  count and job execution counts, for debugging.
 
 ---
 

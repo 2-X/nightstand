@@ -14,6 +14,7 @@ import config from './config.js';
 import serverStatus from './serverStatus.js';
 import { prisma } from './db/prisma.js';
 import { loadWifiSignalStrength } from './8sleep/wifiSignalStrength.js';
+import { wsServer } from './ws/wsServer.js';
 
 const port = 3000;
 const app = express();
@@ -59,6 +60,12 @@ async function gracefulShutdown(signal: string) {
   await schedule.gracefulShutdown();
   await disconnectPrisma();
 
+
+  try {
+    await wsServer.close();
+  } catch (err) {
+    logger.error(`Error closing WS server: ${err}`);
+  }
 
   try {
     if (server) {
@@ -111,6 +118,7 @@ async function startServer() {
   server = app.listen(port, () => {
     logger.debug(`Server running on http://localhost:${port}`);
   });
+  wsServer.attach(server);
   serverStatus.status.express.status = 'healthy';
   serverStatus.status.logger.status = 'healthy';
 
