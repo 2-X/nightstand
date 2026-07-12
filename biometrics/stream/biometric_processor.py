@@ -40,6 +40,73 @@ from data_types import *
 logger = get_logger()
 
 
+class _PresenceCoordinator:
+    """
+    Shared state for cross-side presence arbitration.
+
+    Each piezo sensor picks up some of the OTHER side's signal via mechanical
+    transmission through the mattress. So if you lie on the left, the right
+    sensor also goes well above the empty-bed noise floor, just at a lower
+    amplitude than left. Naively thresholding each side independently produces
+    false positives ("right side is occupied" when only the left is).
+
+    Strategy:
+      1. Each BiometricProcessor reports its current signal_range here.
+      2. We compare both sides and decide who's actually present, using:
+         - A noise-floor threshold (sides below this are definitely empty)
+         - A dominance ratio (one side ≥ DOMINANCE_RATIO × the other → only
+           the dominant side counts as present)
+      3. Each BiometricProcessor reads back its own per-side decision and
+         uses it (with its existing hysteresis) to decide whether to POST.
+
+    Module-level singleton; there's only ever one bed.
+    """
+
+    # Bumped 30k → 100k after observing real numbers: empty bed maxes at ~10k,
+    # occupied jumps to 200k-16M (even on the OFF side via mattress transmission).
+    # 100k cleanly excludes plausible static loads like a laundry pile or
+    # blanket movement, which the user reports happening frequently.
+    NOISE_THRESHOLD = 100_000
+    DOMINANCE_RATIO = 1.3      # one side must be ≥ 1.3× the other to be "alone"
+
+    _latest = {'left': 0.0, 'right': 0.0}
+
+    @classmethod
+    def report(cls, side: str, signal_range: float) -> dict:
+        """Update this side's range and return the decision for both sides."""
+        cls._latest[side] = signal_range
+        return cls._decide()
+
+    @classmethod
+    def _decide(cls) -> dict:
+        L = cls._latest['left']
+        R = cls._latest['right']
+
+        left_above = L >= cls.NOISE_THRESHOLD
+        right_above = R >= cls.NOISE_THRESHOLD
+
+        if not left_above and not right_above:
+            return {'left': False, 'right': False}
+        if left_above and not right_above:
+            return {'left': True, 'right': False}
+        if right_above and not left_above:
+            return {'left': False, 'right': True}
+
+        # Both above noise, so disambiguate using ratio.
+        if L >= R * cls.DOMINANCE_RATIO:
+            return {'left': True, 'right': False}   # left clearly dominant
+        if R >= L * cls.DOMINANCE_RATIO:
+            return {'left': False, 'right': True}   # right clearly dominant
+
+        # Roughly equal AND both high → both occupied
+        return {'left': True, 'right': True}
+
+    @classmethod
+    def snapshot(cls) -> dict:
+        """For debug logging: current state of both sides."""
+        return {'left_range': cls._latest['left'], 'right_range': cls._latest['right']}
+
+
 class BiometricProcessor:
     heart_rates: Deque[float]   # Store last moving_avg_size heart rates (120)
     breath_rates: Deque[float]  # Store last breath rates
@@ -101,11 +168,23 @@ class BiometricProcessor:
         self.window_size = runtime_params['window_size']
         self.runtime_params = runtime_params
         self.init_tracking()
-        self.no_presence_tolerance = 10
+        # Was 30s. The user reported their wife's "in-bed" indicator going
+        # yellow when she stayed still for a while, then green again on
+        # movement. Cause: piezos are AC-coupled, so a perfectly still person
+        # produces only tiny breathing-amplitude signal that can fall below
+        # threshold for stretches of a minute or more. Bumping the tolerance
+        # to 3 minutes gives way more grace before declaring the bed empty,
+        # at the cost of detecting "person actually got out of bed" 3 min
+        # later instead of 30s later.
+        self.no_presence_tolerance = 180
         self.breathing_rate = 0
         self.hrv = 0
         self.not_present_for = 0
         self.present_for = 0
+        # Rolling log of the last 60 signal_range observations so we can debug
+        # what threshold value would actually work for this user. Cheap.
+        self._recent_ranges: Deque[float] = deque([], maxlen=60)
+        self._range_log_counter = 0
         self.combined_measurements: Deque[Measurement] = deque([], maxlen=100)
         self.debug_measurements: List[Measurement] = []
 
@@ -165,27 +244,69 @@ class BiometricProcessor:
         except Exception as e:
             logger.error(f'Error updating presence API: {e}')
 
-    def detect_presence(self, signal: np.ndarray):
-        signal_range = np.ptp(signal)
-        if signal_range > 200_000:
+    @staticmethod
+    def _range_p98_p2(signal: np.ndarray) -> float:
+        """Percentile-based range robust to int32 sentinels and stray outliers."""
+        if signal is None or signal.size == 0:
+            return 0.0
+        s = signal.astype(np.int64, copy=False)
+        p2, p98 = np.percentile(s, [2, 98])
+        return float(p98 - p2)
+
+    def detect_presence(self, signal1: np.ndarray, signal2: Union[None, np.ndarray] = None):
+        # Each side has TWO physical piezos (head + foot of that half of the
+        # bed). Until now presence detection only looked at signal1, throwing
+        # away half the available information. Use the MAX of the two: a
+        # person on the side compresses both piezos directly, so taking the
+        # max picks up activity even if the person's body is closer to one
+        # piezo than the other.
+        r1 = self._range_p98_p2(signal1)
+        r2 = self._range_p98_p2(signal2) if signal2 is not None else 0.0
+        signal_range = max(r1, r2)
+
+        self._recent_ranges.append(signal_range)
+
+        # Cross-side arbitration: report our range to the coordinator and let
+        # it tell us whether THIS side is actually occupied (vs just picking
+        # up mechanical transmission from the other side).
+        decision = _PresenceCoordinator.report(self.side, signal_range)
+        should_be_present = decision[self.side]
+
+        # Periodic debug log: includes both piezos' individual ranges so we
+        # can see whether they're correlated (= real presence) or one is
+        # dominating (= asymmetric transmission).
+        self._range_log_counter += 1
+        if self._range_log_counter >= 30:
+            self._range_log_counter = 0
+            snap = _PresenceCoordinator.snapshot()
+            logger.info(
+                f'[presence-debug] {self.side}: max={signal_range:.0f} '
+                f'p1={r1:.0f} p2={r2:.0f} '
+                f'L={snap["left_range"]:.0f} R={snap["right_range"]:.0f} '
+                f'decision_L={decision["left"]} decision_R={decision["right"]} '
+                f'present={self.present} not_present_for={self.not_present_for}'
+            )
+
+        if should_be_present:
             self.not_present_for = 0
             self.present_for = self.present_for + 1
-
-            # Update presence to True if not already set
-            if not self.present:
+            # Require ≥3 consecutive elevated readings before flipping present.
+            # Filters brief transients like clothes tossed on the bed, blankets
+            # shifted, etc, those produce 1-2 elevated readings then settle,
+            # never reaching 3 in a row. A person lying down sustains the
+            # signal indefinitely so this trips quickly.
+            if not self.present and self.present_for >= 3:
                 self.present = True
                 self._update_presence_api(True)
-            else:
-                self.present = True
         else:
+            self.present_for = 0
             self.not_present_for += 1
             if self.not_present_for == self.no_presence_tolerance:
-                logger.info(f'User not detected for {self.no_presence_tolerance} seconds on {self.side} side, resetting...')
+                logger.info(
+                    f'User not detected for {self.no_presence_tolerance}s on {self.side} side, resetting...'
+                )
                 self.present = False
-                self.present_for = 0
                 self.reset()
-
-                # Update API that presence is no longer detected
                 self._update_presence_api(False)
 
     def _calculate_vitals(self, signal: np.ndarray, epoch: int, update_breathing=False, update_hrv=False):
