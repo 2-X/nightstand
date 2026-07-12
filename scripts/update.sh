@@ -9,10 +9,14 @@
 #
 # Env:
 #   FS_UPDATE_FORCE=1   install even if the published version isn't newer
+#   NIGHTSTAND_REPO     GitHub repo to pull from (default: LTimothy/nightstand)
+#   NIGHTSTAND_BRANCH   branch to pull from (default: main)
 set -uo pipefail
 
-INFO_URL="https://raw.githubusercontent.com/LTimothy/nightstand/main/server/src/serverInfo.json"
-ZIP_URL="https://github.com/LTimothy/nightstand/archive/refs/heads/main.zip"
+NIGHTSTAND_REPO="${NIGHTSTAND_REPO:-LTimothy/nightstand}"
+NIGHTSTAND_BRANCH="${NIGHTSTAND_BRANCH:-main}"
+INFO_URL="https://raw.githubusercontent.com/${NIGHTSTAND_REPO}/${NIGHTSTAND_BRANCH}/server/src/serverInfo.json"
+ZIP_URL="https://github.com/${NIGHTSTAND_REPO}/archive/refs/heads/${NIGHTSTAND_BRANCH}.zip"
 
 LIVE=/home/dac/free-sleep
 PREV=/home/dac/free-sleep-prev
