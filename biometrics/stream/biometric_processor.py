@@ -19,6 +19,7 @@ with sensor data to process and extract biometric metrics.
 """
 import datetime
 import gc
+import os
 from typing import Union, Tuple, TypedDict, List, Optional, Deque
 import traceback
 import numpy as np
@@ -36,8 +37,28 @@ from heart.filtering import filter_signal, remove_baseline_wander
 from heart.heartpy import process
 from db import insert_vitals
 from data_types import *
+from presence_floor import (
+    low_percentile,
+    floor_looks_empty,
+    ambiguous_should_advance,
+    update_occupied_floor_est,
+    FLOOR_PERCENTILE,
+    FLOOR_MIN_WINDOW,
+    FLOOR_EMPTY_FRACTION,
+    FLOOR_EMA_ALPHA,
+    AMBIGUOUS_FREEZE_CAP,
+    AMBIGUOUS_LEAK_DIVISOR,
+)
 
 logger = get_logger()
+
+# Cadence (in ticks, ~1/tick-second) for the throttled `[presence-debug]`
+# snapshot log below. Default matches long-standing behavior (~60s). Override
+# with PRESENCE_DEBUG_LOG_INTERVAL_S=1 for a labeled-night data-collection
+# window when per-tick resolution is needed (e.g. validating a synchrony/floor
+# discriminator). Remember to unset it afterward, since interval=1 is a ~60x
+# increase in this log line's volume against the rotating log budget.
+_PRESENCE_DEBUG_LOG_INTERVAL_S = max(1, int(os.getenv('PRESENCE_DEBUG_LOG_INTERVAL_S', '60')))
 
 
 class _PresenceCoordinator:
@@ -59,14 +80,18 @@ class _PresenceCoordinator:
       3. Each BiometricProcessor reads back its own per-side decision and
          uses it (with its existing hysteresis) to decide whether to POST.
 
-    Module-level singleton; there's only ever one bed.
+    Module-level singleton, there's only ever one bed.
     """
 
-    # Bumped 30k → 100k after observing real numbers: empty bed maxes at ~10k,
-    # occupied jumps to 200k-16M (even on the OFF side via mattress transmission).
-    # 100k cleanly excludes plausible static loads like a laundry pile or
-    # blanket movement, which the user reports happening frequently.
-    NOISE_THRESHOLD = 100_000
+    # Bumped 30k → 100k → 150k after observing real numbers. Occupied jumps to
+    # 200k-16M (even on the OFF side via mattress transmission), so 150k keeps
+    # a 25% margin below the weakest occupied signal. The earlier "empty bed
+    # maxes at ~10k" assumption didn't hold: an empty side has been observed
+    # idling at 40k-110k (both sides off, nobody home), and its occasional
+    # spikes past 100k kept resetting the exit counter, presence stayed
+    # latched for hours and the calibration job's occupancy guard never let
+    # calibration run.
+    NOISE_THRESHOLD = 150_000
     DOMINANCE_RATIO = 1.3      # one side must be ≥ 1.3× the other to be "alone"
 
     _latest = {'left': 0.0, 'right': 0.0}
@@ -92,7 +117,7 @@ class _PresenceCoordinator:
         if right_above and not left_above:
             return {'left': False, 'right': True}
 
-        # Both above noise, so disambiguate using ratio.
+        # Both above noise, disambiguate using ratio.
         if L >= R * cls.DOMINANCE_RATIO:
             return {'left': True, 'right': False}   # left clearly dominant
         if R >= L * cls.DOMINANCE_RATIO:
@@ -103,8 +128,12 @@ class _PresenceCoordinator:
 
     @classmethod
     def snapshot(cls) -> dict:
-        """For debug logging: current state of both sides."""
+        """For debug logging, current state of both sides."""
         return {'left_range': cls._latest['left'], 'right_range': cls._latest['right']}
+
+    @classmethod
+    def is_above_noise(cls, side: str) -> bool:
+        return cls._latest[side] >= cls.NOISE_THRESHOLD
 
 
 class BiometricProcessor:
@@ -168,9 +197,9 @@ class BiometricProcessor:
         self.window_size = runtime_params['window_size']
         self.runtime_params = runtime_params
         self.init_tracking()
-        # Was 30s. The user reported their wife's "in-bed" indicator going
-        # yellow when she stayed still for a while, then green again on
-        # movement. Cause: piezos are AC-coupled, so a perfectly still person
+        # Was 30s. A user reported a side's "in-bed" indicator going yellow
+        # after the occupant stayed still for a while, then green again on
+        # movement. Cause: piezos are AC-coupled, a perfectly still person
         # produces only tiny breathing-amplitude signal that can fall below
         # threshold for stretches of a minute or more. Bumping the tolerance
         # to 3 minutes gives way more grace before declaring the bed empty,
@@ -181,10 +210,85 @@ class BiometricProcessor:
         self.hrv = 0
         self.not_present_for = 0
         self.present_for = 0
-        # Rolling log of the last 60 signal_range observations so we can debug
-        # what threshold value would actually work for this user. Cheap.
-        self._recent_ranges: Deque[float] = deque([], maxlen=60)
+        # Re-POST the current presence state every N seconds even when nothing
+        # changed. Without this:
+        #   - A server restart wipes the in-memory presenceData, but Python
+        #     never re-tells it (only POSTs on transitions). The dot stays
+        #     yellow/grey until the user gets out of bed.
+        #   - The auto-off monitor only knows lastPresenceAt = "first moment
+        #     we saw them tonight", that goes stale by hours and would fire
+        #     prematurely. The heartbeat keeps it within a minute of "now".
+        self._presence_heartbeat_interval = 60
+        self._presence_heartbeat_counter = 0
+        # Tracks "the other side has been clearly dominant", drives one of
+        # the two short-session fast-exit triggers below.
+        self._time_since_clearly_dominant = 0
+        # Wall-clock seconds since this side transitioned to present. Used
+        # to gate fast-exit eligibility: fresh sessions (< _established_threshold)
+        # are eligible for 30 s fast-exit; established sessions are protected
+        # by the slow 3-min grace. This is what differentiates a still,
+        # sleeping occupant (long established session, signal drops because
+        # they're asleep) from a climb-in transient (short session, signal
+        # drops because the user is actually settled on the OTHER side).
+        self._presence_session_seconds = 0
+        self._established_threshold = 60
+        self._fast_exit_grace = 30
+        # Consecutive clearly-dominant frames seen while mid-exit (not_present_for
+        # > 0). A piezo permanently loaded by pillows/a topper idles close
+        # to NOISE_THRESHOLD and spikes above it every few minutes even with
+        # nobody in bed. A lone dominant frame used to hard-reset the exit clock,
+        # so a spiky-but-empty side never reached the 180s slow-exit and stayed
+        # latched "present" for hours. Now a single spike just holds the exit
+        # clock steady; only a short sustained streak counts as a real return.
+        self._reentry_streak = 0
+        self._REENTRY_CONFIRM_FRAMES = 3
+        # Rolling window of recent signal_range observations. Originally a
+        # 60-sample debug log; now ALSO the input to the rolling-floor
+        # discriminator below, so it holds a full FLOOR_MIN_WINDOW (~5 min at
+        # 1 Hz) -- long enough for a stable low-percentile "between-burst
+        # floor" without lagging real departures too badly. Still cheap (a few
+        # hundred floats).
+        self._recent_ranges: Deque[float] = deque([], maxlen=FLOOR_MIN_WINDOW)
         self._range_log_counter = 0
+        # --- is_ambiguous_both exit-freeze discriminators ---
+        # The `is_ambiguous_both` branch used to freeze the exit clock
+        # unconditionally, which let an empty side latch "present" for hours
+        # via cross-mattress crosstalk. We break the freeze by comparing a low
+        # percentile of THIS side's own recent range (its between-burst floor)
+        # against its OWN learned occupied floor -- biased hard toward staying
+        # present (a wrongly-aborted thermal session is worse than a late
+        # auto-off). See presence_floor.py for the pure decision helpers.
+        self._FLOOR_PERCENTILE = FLOOR_PERCENTILE
+        self._FLOOR_MIN_WINDOW = FLOOR_MIN_WINDOW
+        # "Empty-looking" = rolling floor below this fraction of the learned
+        # occupied floor. Deliberately conservative (0.30): on a real
+        # recording the occupied rolling-p20 sat ~2.5M and the crosstalk floor
+        # ~0.7M (~0.28x of it), so 0.30 catches the crosstalk case while
+        # leaving a large margin above any genuine still-sleeper dip (whose
+        # rolling p20 never approached this even during a brief ~0.87M
+        # instantaneous dip that recovered within a minute). Lower = safer
+        # against false exit but catches less crosstalk; chosen for the
+        # approved bias, so it only PARTIALLY closes the false-latch problem.
+        self._FLOOR_EMPTY_FRACTION = FLOOR_EMPTY_FRACTION
+        # Slow EMA so a momentary still stretch cannot drag the reference down.
+        self._FLOOR_EMA_ALPHA = FLOOR_EMA_ALPHA
+        # Learned per-side occupied floor (in-process EMA; None until seeded
+        # from real clear-dominance frames). It lives here rather than in the
+        # daily calibrate_sensor_thresholds.py job on purpose: calibration
+        # learns the EMPTY-bed baseline, but this freeze needs the OCCUPIED-vs-
+        # crosstalk floor, which is only observable live while the side is
+        # genuinely occupied (design 2c spells out why the empty baseline is
+        # the wrong reference here). Cleared on exit so each session relearns.
+        self._occupied_floor_est: Optional[float] = None
+        # Backstop (2d): even with an inconclusive floor, an unbroken run of
+        # ambiguous_both frames longer than this leaks the exit clock forward
+        # (at 1/leak-divisor rate) so nothing can freeze it forever. Set long
+        # and slow so it is effectively unreachable for a genuinely present
+        # sleeper (whose floor resolves the case first) -- a pure "never latch
+        # forever" guarantee, not the primary lever.
+        self._AMBIGUOUS_FREEZE_CAP = AMBIGUOUS_FREEZE_CAP
+        self._AMBIGUOUS_LEAK_DIVISOR = AMBIGUOUS_LEAK_DIVISOR
+        self._ambiguous_streak = 0
         self.combined_measurements: Deque[Measurement] = deque([], maxlen=100)
         self.debug_measurements: List[Measurement] = []
 
@@ -192,7 +296,14 @@ class BiometricProcessor:
         # Running metrics
         self.heart_rates:  Deque[float] = deque([], maxlen=self.moving_avg_size)
         self.breath_rates:  Deque[float] = deque([], maxlen=6)
-        self.hrv_rates:  Deque[float] = deque([], maxlen=10)
+        # HRV varies meaningfully between sleep stages (high in REM, low in
+        # deep), so we don't want to average it away. Was maxlen=10 which -
+        # combined with the 30 s hrv_insertion_frequency, was a 5-minute
+        # smoothing window, exactly the granularity we want to preserve.
+        # Keep a 3-reading (~90 s) window: enough to suppress per-tick spikes,
+        # not enough to erase the per-epoch variability the stage classifier
+        # uses.
+        self.hrv_rates:  Deque[float] = deque([], maxlen=3)
         self.lower_bound = None
         self.upper_bound = None
         self.hr_moving_avg = None
@@ -244,19 +355,63 @@ class BiometricProcessor:
         except Exception as e:
             logger.error(f'Error updating presence API: {e}')
 
+    # Sane ceiling (magnitude, checked symmetrically) for a raw piezo sample,
+    # used to mask out sensor-glitch garbage before computing the p98-p2
+    # range. 16_777_215 (2^24 - 1) is a hard 24-bit ADC/processing clip
+    # ceiling -- no legitimate reading can physically exceed it (confirmed
+    # on-pod, e.g. 16_777_215 and 14_654_897 during an active dual-occupancy
+    # session). 25M gives that hard ceiling ~8.2M (1.5x) of headroom while
+    # still rejecting the known garbage sentinel (~2.15B, e.g.
+    # 2_148_008_185) by ~86x. The bound is symmetric because raw piezo
+    # samples are signed int32 (see load_raw_files.py's
+    # np.frombuffer(..., dtype=np.int32)): int32 overflow/wraparound
+    # produces large-magnitude NEGATIVE garbage just as readily as positive
+    # -- that same 2_148_008_185 sentinel, reinterpreted as signed 32-bit
+    # wraparound, lands at -2_146_959_111.
+    _SANE_MAX_SIGNAL = 25_000_000
+
     @staticmethod
     def _range_p98_p2(signal: np.ndarray) -> float:
         """Percentile-based range robust to int32 sentinels and stray outliers."""
         if signal is None or signal.size == 0:
             return 0.0
         s = signal.astype(np.int64, copy=False)
+        # Mask out individual garbage samples rather than discarding the
+        # whole window -- a single sensor-glitch sample shouldn't throw away
+        # an otherwise-valid second of real signal. Symmetric bound: see
+        # _SANE_MAX_SIGNAL's comment for why negative garbage needs the same
+        # treatment as positive.
+        s = s[np.abs(s) <= BiometricProcessor._SANE_MAX_SIGNAL]
+        if s.size == 0:
+            # Every sample in the window was garbage: no real signal left
+            # to measure.
+            return 0.0
         p2, p98 = np.percentile(s, [2, 98])
         return float(p98 - p2)
+
+    def _exit_presence(self):
+        """Tear down presence state on any exit (slow, fast, or ambiguous-floor).
+
+        Centralizes the previously-duplicated exit side effects and also clears
+        the floor state, so a later re-entry relearns its own occupied
+        floor from scratch rather than measuring the next occupant against the
+        last one's.
+        """
+        self.present = False
+        self.reset()
+        self.present_for = 0
+        self._presence_session_seconds = 0
+        self._time_since_clearly_dominant = 0
+        self._reentry_streak = 0
+        self._ambiguous_streak = 0
+        self._occupied_floor_est = None
+        self._update_presence_api(False)
+        self._presence_heartbeat_counter = 0
 
     def detect_presence(self, signal1: np.ndarray, signal2: Union[None, np.ndarray] = None):
         # Each side has TWO physical piezos (head + foot of that half of the
         # bed). Until now presence detection only looked at signal1, throwing
-        # away half the available information. Use the MAX of the two: a
+        # away half the available information. Use the MAX of the two, a
         # person on the side compresses both piezos directly, so taking the
         # max picks up activity even if the person's body is closer to one
         # piezo than the other.
@@ -270,13 +425,52 @@ class BiometricProcessor:
         # it tell us whether THIS side is actually occupied (vs just picking
         # up mechanical transmission from the other side).
         decision = _PresenceCoordinator.report(self.side, signal_range)
-        should_be_present = decision[self.side]
+        other_side = 'right' if self.side == 'left' else 'left'
 
-        # Periodic debug log: includes both piezos' individual ranges so we
-        # can see whether they're correlated (= real presence) or one is
-        # dominating (= asymmetric transmission).
+        # Three mutually exclusive outcomes from the coordinator:
+        #   - is_clearly_dominant: "I'm clearly the one occupied" (decision_self
+        #     True AND decision_other False), strong signal that justifies
+        #     entering or staying present.
+        #   - is_ambiguous_both: "both above noise, neither dominant by 1.3×"
+        #    , usually cross-mattress transmission while a single user moves
+        #     heavily on one side. NEVER counts toward entering present.
+        #     Holds existing presence steady (doesn't decrement either way).
+        #   - else: this side has no signal worth speaking of, count toward exit.
+        is_clearly_dominant = decision[self.side] and not decision[other_side]
+        other_is_clearly_dominant = decision[other_side] and not decision[self.side]
+        is_ambiguous_both = decision[self.side] and decision[other_side]
+
+        # rolling-floor discriminator (see presence_floor.py).
+        # rolling_floor = a low percentile of THIS side's own recent range (its
+        # between-burst floor). floor_empty is True only with strong evidence
+        # this side is unoccupied: window full AND floor collapsed well below
+        # its learned occupied reference. It stays False during warmup and
+        # whenever we have no reference yet -- i.e. it defaults to "stay
+        # present", per the approved bias.
+        window_ready = len(self._recent_ranges) >= self._FLOOR_MIN_WINDOW
+        rolling_floor = low_percentile(list(self._recent_ranges), self._FLOOR_PERCENTILE)
+        floor_empty = floor_looks_empty(
+            rolling_floor, self._occupied_floor_est,
+            self._FLOOR_EMPTY_FRACTION, window_ready,
+        )
+        # Learn this side's occupied floor only from confident real occupancy:
+        # clear dominance while the floor does NOT look empty. Crosstalk bursts
+        # are clearly-dominant too (an empty side's range can momentarily even
+        # exceed the occupied side's), so gating on `not floor_empty` keeps
+        # them from dragging the reference down toward the crosstalk floor.
+        if is_clearly_dominant and window_ready and not floor_empty:
+            self._occupied_floor_est = update_occupied_floor_est(
+                self._occupied_floor_est, rolling_floor, self._FLOOR_EMA_ALPHA,
+            )
+
+        if is_clearly_dominant:
+            self._time_since_clearly_dominant = 0
+        elif other_is_clearly_dominant:
+            self._time_since_clearly_dominant += 1
+
+        # Periodic debug log
         self._range_log_counter += 1
-        if self._range_log_counter >= 30:
+        if self._range_log_counter >= _PRESENCE_DEBUG_LOG_INTERVAL_S:
             self._range_log_counter = 0
             snap = _PresenceCoordinator.snapshot()
             logger.info(
@@ -284,30 +478,144 @@ class BiometricProcessor:
                 f'p1={r1:.0f} p2={r2:.0f} '
                 f'L={snap["left_range"]:.0f} R={snap["right_range"]:.0f} '
                 f'decision_L={decision["left"]} decision_R={decision["right"]} '
-                f'present={self.present} not_present_for={self.not_present_for}'
+                f'present={self.present} not_present_for={self.not_present_for} '
+                f'session={self._presence_session_seconds}s '
+                f'floor={rolling_floor:.0f} occ_est={self._occupied_floor_est or 0:.0f} '
+                f'floor_empty={floor_empty} ambig_streak={self._ambiguous_streak}'
             )
 
-        if should_be_present:
-            self.not_present_for = 0
-            self.present_for = self.present_for + 1
-            # Require ≥3 consecutive elevated readings before flipping present.
-            # Filters brief transients like clothes tossed on the bed, blankets
-            # shifted, etc, those produce 1-2 elevated readings then settle,
-            # never reaching 3 in a row. A person lying down sustains the
-            # signal indefinitely so this trips quickly.
-            if not self.present and self.present_for >= 3:
+        if is_clearly_dominant:
+            # Real signal on this side. Advance entry counter.
+            self.present_for += 1
+            self._ambiguous_streak = 0
+            if self.not_present_for == 0:
+                self._reentry_streak = 0
+            elif floor_empty:
+                # this "return" is a crosstalk burst on a side whose
+                # rolling floor still looks empty, not a real re-entry -- under
+                # strong crosstalk the empty side's range can momentarily even
+                # exceed the occupied side's. Hold the exit clock steady
+                # (neither reset nor advance) so the ambiguous_both floor path
+                # can keep counting toward exit. Gated on floor_empty, so a
+                # genuinely present sleeper (high floor) keeps the original
+                # confirm-streak reset behavior unchanged.
+                self._reentry_streak = 0
+            else:
+                # Mid-exit and this side just went clearly dominant again.
+                # Require a short sustained streak, not a lone frame, before
+                # cancelling the exit clock (see the _reentry_streak comment
+                # in __init__ for why).
+                self._reentry_streak += 1
+                if self._reentry_streak >= self._REENTRY_CONFIRM_FRAMES:
+                    self.not_present_for = 0
+                    self._reentry_streak = 0
+            # Require ≥5 consecutive seconds of *clear* dominance to enter.
+            # Was 3 + "any decision_self True"; bumped to 5 + clear-dominance-only
+            # to filter brief climb-in transients where the user's body crosses
+            # the wrong-side piezo for a few seconds before settling.
+            if not self.present and self.present_for >= 5:
                 self.present = True
+                self._presence_session_seconds = 0
                 self._update_presence_api(True)
+                self._presence_heartbeat_counter = 0
+        elif is_ambiguous_both:
+            # Both above noise, neither dominant. We can't tell from one tick
+            # whether this is real two-person occupancy or cross-transmission,
+            # so we don't reset present_for here (that lets a second person
+            # joining an already-occupied bed accumulate the 5 s of clear
+            # dominance gradually even when interleaved with ambiguous moments).
+            #
+            # this branch USED to freeze the exit clock unconditionally,
+            # which let an empty side latch present for hours via crosstalk.
+            # Now, while present, we advance the exit clock when this side's
+            # rolling floor looks empty (2b), or leak it once the ambiguous
+            # state has frozen too long regardless of floor (2d backstop). When
+            # the floor still looks occupied we freeze exactly as before -- so a
+            # genuinely present quiet sleeper is unaffected.
+            self._reentry_streak = 0
+            if self.present:
+                self._ambiguous_streak += 1
+                if ambiguous_should_advance(
+                    floor_empty, self._ambiguous_streak,
+                    self._AMBIGUOUS_FREEZE_CAP, self._AMBIGUOUS_LEAK_DIVISOR,
+                ):
+                    self.not_present_for += 1
+                    if self.not_present_for == self.no_presence_tolerance:
+                        logger.info(
+                            f'Slow exit on {self.side} side: ambiguous crosstalk '
+                            f'(floor={rolling_floor:.0f} occ_est='
+                            f'{self._occupied_floor_est or 0:.0f}) reached '
+                            f'{self.no_presence_tolerance}s'
+                        )
+                        self._exit_presence()
+            else:
+                self._ambiguous_streak = 0
         else:
-            self.present_for = 0
+            # No signal here. Count toward exit.
+            # Only reset the entry counter if we haven't entered presence yet.
+            # While we ARE present, present_for doubles as the "seconds since
+            # presence started" gate that downstream calculations (HR, HRV,
+            # breath rate) rely on. Resetting it here on every quiet moment
+            #, which happens routinely during deep sleep when the signal
+            # falls below the noise threshold, would prevent HRV (300 s
+            # gate) from ever recomputing during long sessions, leaving the
+            # rolling-average `self.hrv` frozen at its first stable value.
+            # The slow-exit / fast-exit blocks below explicitly reset
+            # present_for when a session truly ends.
+            self._reentry_streak = 0
+            self._ambiguous_streak = 0
+            if not self.present:
+                self.present_for = 0
             self.not_present_for += 1
             if self.not_present_for == self.no_presence_tolerance:
                 logger.info(
-                    f'User not detected for {self.no_presence_tolerance}s on {self.side} side, resetting...'
+                    f'Slow exit on {self.side} side: '
+                    f'no signal for {self.no_presence_tolerance}s'
                 )
-                self.present = False
-                self.reset()
-                self._update_presence_api(False)
+                self._exit_presence()
+
+        # Short-session fast-exit. The slow 3-min grace exists for established
+        # sleep, an occupant stops moving, signal drops below noise, but
+        # they're still there. We don't want to bypass it for established
+        # presence. But within the first _established_threshold seconds we DO
+        # want to bail quickly if either:
+        #   (a) the signal is gone and stays gone (climb-in transient that
+        #       triggered presence on the wrong side, then user settled on
+        #       the OTHER side, both sides go below noise as the user lies
+        #       still); or
+        #   (b) the OTHER side becomes clearly dominant (= user is genuinely
+        #       on the other side, our "presence" is just transmission).
+        if (
+            self.present
+            and self._presence_session_seconds < self._established_threshold
+            and (
+                self.not_present_for >= self._fast_exit_grace
+                or self._time_since_clearly_dominant >= self._fast_exit_grace
+            )
+        ):
+            reason = (
+                f'no signal for {self.not_present_for}s'
+                if self.not_present_for >= self._fast_exit_grace
+                else f'other side dominant for {self._time_since_clearly_dominant}s'
+            )
+            logger.info(
+                f'Fast exit on {self.side} side: short session '
+                f'({self._presence_session_seconds}s), {reason}'
+            )
+            self._exit_presence()
+
+        # Tick the wall-clock session counter LAST so it reflects "seconds
+        # since entry" at the next call's checks.
+        if self.present:
+            self._presence_session_seconds += 1
+
+        # Periodic heartbeat: re-POST the current state even when nothing
+        # changed. detect_presence is called once per second so this fires
+        # every _presence_heartbeat_interval seconds.
+        self._presence_heartbeat_counter += 1
+        if self._presence_heartbeat_counter >= self._presence_heartbeat_interval:
+            self._presence_heartbeat_counter = 0
+            self._update_presence_api(self.present)
 
     def _calculate_vitals(self, signal: np.ndarray, epoch: int, update_breathing=False, update_hrv=False):
         try:
@@ -461,7 +769,28 @@ class BiometricProcessor:
             # Convert last heart rate to average
             self.combined_measurements[-1]['heart_rate'] = heart_rate
             if not self.debug:
-                insert_vitals(self.combined_measurements[-1])
+                # Presence gate: a side with nobody on it right now
+                # must not write vitals. Without this, a departed/empty side
+                # kept inserting at full rate: first the OTHER side's real
+                # heartbeat (picked up mechanically through the shared
+                # mattress frame), then noise once the whole bed was empty.
+                # self.present is updated by detect_presence(), which runs
+                # earlier in the same processing tick (see
+                # StreamProcessor.process_piezo_record), so this reflects the
+                # current frame with no one-tick lag.
+                #
+                # Known limitation: this only helps when self.present is
+                # itself correct. If cross-mattress transmission is still
+                # fooling detect_presence() into holding self.present True
+                # on the wrong side (dual-occupancy crosstalk -- a different,
+                # already-tracked presence-detection problem, not the noise-
+                # spike issue fixed earlier), this gate will not catch it.
+                if self.present:
+                    insert_vitals(self.combined_measurements[-1])
+                else:
+                    logger.debug(
+                        f'Skipping vitals insert for {self.side} side: not present'
+                    )
             else:
                 last_combined_measurement = list(self.combined_measurements)[-1]
                 ts = datetime.utcfromtimestamp(last_combined_measurement['timestamp']).isoformat()
