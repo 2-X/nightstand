@@ -1,11 +1,4 @@
-import { once } from 'events';
 import binarySplit from 'binary-split';
-export class MessageReadTimeoutError extends Error {
-    constructor(timeoutMs) {
-        super(`Timed out waiting for Franken response after ${timeoutMs}ms`);
-        this.name = 'MessageReadTimeoutError';
-    }
-}
 export class MessageStream {
     splitter;
     queue = [];
@@ -25,26 +18,8 @@ export class MessageStream {
         readable.pipe(this.splitter);
         readable.on('error', (error) => this.splitter.destroy(error));
     }
-    async waitForData(timeoutMs) {
-        if (!timeoutMs) {
-            await once(this.splitter, 'data');
-            return;
-        }
-        let timeout;
-        try {
-            await Promise.race([
-                once(this.splitter, 'data'),
-                new Promise((_resolve, reject) => {
-                    timeout = setTimeout(() => reject(new MessageReadTimeoutError(timeoutMs)), timeoutMs);
-                }),
-            ]);
-        }
-        finally {
-            if (timeout)
-                clearTimeout(timeout);
-        }
-    }
-    async readMessage(timeoutMs) {
+    async readMessage(options) {
+        const signal = options?.signal;
         // eslint-disable-next-line no-constant-condition
         while (true) {
             if (this.queue.length > 0) {
@@ -58,7 +33,34 @@ export class MessageStream {
             if (this.ended) {
                 throw new Error('stream ended');
             }
-            await this.waitForData(timeoutMs);
+            if (signal?.aborted) {
+                throw signal.reason ?? new Error('readMessage aborted');
+            }
+            // Wait for whichever happens first: more data, the source ends, or the
+            // caller aborts. Without racing 'end' here, a stream that ends just
+            // before this method runs would block forever on 'data'.
+            await new Promise((resolve, reject) => {
+                // Closures over `handlers` so each handler can reference the same
+                // cleanup without forward declarations or let/const churn.
+                const handlers = {
+                    onData: () => { },
+                    onEnd: () => { },
+                    onAbort: () => { },
+                };
+                const cleanup = () => {
+                    this.splitter.off('data', handlers.onData);
+                    this.splitter.off('end', handlers.onEnd);
+                    if (signal)
+                        signal.removeEventListener('abort', handlers.onAbort);
+                };
+                handlers.onData = () => { cleanup(); resolve(); };
+                handlers.onEnd = () => { cleanup(); resolve(); };
+                handlers.onAbort = () => { cleanup(); reject(signal?.reason ?? new Error('readMessage aborted')); };
+                this.splitter.once('data', handlers.onData);
+                this.splitter.once('end', handlers.onEnd);
+                if (signal)
+                    signal.addEventListener('abort', handlers.onAbort, { once: true });
+            });
         }
     }
 }
