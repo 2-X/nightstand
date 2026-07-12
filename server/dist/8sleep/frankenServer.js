@@ -10,6 +10,10 @@ import { promiseWithTimeout } from './timeoutPromise.js';
 import metrics from '../metrics/metrics.js';
 const FRANKEN_CONNECTION_TIMEOUT_MS = 25_000;
 const FRANKEN_COMMAND_TIMEOUT_MS = Number(process.env.FRANKEN_COMMAND_TIMEOUT_MS) || 5_000;
+// Hard ceiling on a command's whole trip: queue wait + socket write + read.
+// The per-command timeout above only covers the read, so it never fires for
+// a command stuck waiting in the queue or blocked mid-write.
+const FRANKEN_COMMAND_TOTAL_TIMEOUT_MS = Number(process.env.FRANKEN_COMMAND_TOTAL_TIMEOUT_MS) || 15_000;
 class FrankenConnectionTimeoutError extends Error {
     constructor() {
         super('Timed out waiting for Franken hardware connection');
@@ -17,8 +21,8 @@ class FrankenConnectionTimeoutError extends Error {
     }
 }
 export class FrankenCommandTimeoutError extends Error {
-    constructor(commandNumber, timeoutMs) {
-        super(`Franken command ${commandNumber} did not respond within ${timeoutMs}ms`);
+    constructor(commandNumber, timeoutMs, detail) {
+        super(`Franken command ${commandNumber} did not respond within ${timeoutMs}ms${detail ? ` (${detail})` : ''}`);
         this.name = 'FrankenCommandTimeoutError';
     }
 }
@@ -38,10 +42,12 @@ export class Franken {
         const commandNumber = message.split('\n', 1)[0] ?? '?';
         const startedAt = Date.now();
         let timedOut = false;
+        let writeCompleted = false;
         try {
-            const responseBytes = await this.sequentialQueue.exec(async () => {
+            const execPromise = this.sequentialQueue.exec(async () => {
                 const requestBytes = Buffer.concat([Buffer.from(message), Franken.separator]);
                 await this.write(requestBytes);
+                writeCompleted = true;
                 // Race the read against a per-command timeout. If the timeout fires
                 // we abort the readMessage() listener (so it stops holding a slot in
                 // the message stream) and surface a typed error.
@@ -54,6 +60,19 @@ export class Franken {
                     await wait(10);
                 }
                 return resp;
+            });
+            // If the total deadline below fires, nothing awaits execPromise anymore.
+            // Swallow its eventual settlement so an abandoned task can't surface as
+            // an unhandled rejection (which triggers a graceful shutdown).
+            execPromise.catch(() => undefined);
+            // The read timeout inside the task only starts after the write has
+            // completed. A command stuck in the queue or wedged mid-write would
+            // otherwise hang its caller forever with no timeout and no log line
+            // (observed in production: every /deviceStatus request after a fresh
+            // Franken connect hung silently until the deploy health check gave up).
+            // The deadline error notes where the command got stuck.
+            const responseBytes = await promiseWithTimeout(execPromise, FRANKEN_COMMAND_TOTAL_TIMEOUT_MS, {
+                onTimeout: () => new FrankenCommandTimeoutError(commandNumber, FRANKEN_COMMAND_TOTAL_TIMEOUT_MS, `total deadline; queue depth ${this.sequentialQueue.depth()}, write ${writeCompleted ? 'completed' : 'never completed'}`),
             });
             metrics.recordFrankenCommand(Date.now() - startedAt, false);
             const response = responseBytes.toString();
@@ -146,19 +165,30 @@ function waitForFrankenWithTimeout(server) {
     });
 }
 async function shutdownFrankenServer() {
-    if (franken) {
+    // Grab and null out the module-level singletons synchronously, before any
+    // await. This can run concurrently with itself, e.g. the connect-retry
+    // loop calling this after a connection timeout at the same moment
+    // gracefulShutdown() calls disconnectFranken() from a SIGTERM, and the
+    // old code re-checked franken/frankenServer after an await, so one caller
+    // could null a reference out from under the other mid-close, producing
+    // "Cannot read properties of undefined (reading 'close')". Capturing
+    // locals up front makes a concurrent call see both as already cleared and
+    // become a no-op instead of racing.
+    const currentFranken = franken;
+    const currentFrankenServer = frankenServer;
+    franken = undefined;
+    frankenServer = undefined;
+    if (currentFranken) {
         try {
-            await franken.sequentialQueue.drain();
+            await currentFranken.sequentialQueue.drain();
         }
         catch {
             // ignored
         }
-        franken.close();
-        franken = undefined;
+        currentFranken.close();
     }
-    if (frankenServer) {
-        await frankenServer.close();
-        frankenServer = undefined;
+    if (currentFrankenServer) {
+        await currentFrankenServer.close();
     }
 }
 export async function connectFranken() {
@@ -203,6 +233,9 @@ export async function disconnectFranken() {
 }
 export function getFrankenQueueDepth() {
     return franken?.sequentialQueue.depth() ?? 0;
+}
+export function isFrankenConnected() {
+    return franken !== undefined;
 }
 // Concurrent callers asking for device status share a single roundtrip while
 // one is in flight. Cache lifetime is the duration of the in-flight call only,
