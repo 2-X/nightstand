@@ -243,7 +243,9 @@ After=free-sleep.service
 
 [Service]
 Type=oneshot
-ExecStart=/home/dac/free-sleep/scripts/update_service.sh
+# Run via bash so the updater still works if the script's exec bit is lost
+# (systemd fails with 203/EXEC before writing anything to the log otherwise).
+ExecStart=/bin/bash /home/dac/free-sleep/scripts/update_service.sh
 User=root
 Group=root
 KillMode=process
