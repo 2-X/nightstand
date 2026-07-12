@@ -264,6 +264,15 @@ cp "$REPO_DIR/scripts/systemd/free-sleep-rollback.service" /etc/systemd/system/
 systemctl daemon-reload
 echo ""
 
+# -----------------------------------------------------------------------------------------------------
+# Create systemd service for reverting to stock upstream
+
+echo "Installing revert-to-stock service..."
+chmod +x "$REPO_DIR/scripts/revert-to-stock.sh"
+cp "$REPO_DIR/scripts/systemd/free-sleep-revert.service" /etc/systemd/system/
+systemctl daemon-reload
+echo ""
+
 # --------------------------------------------------------------------------------
 # Graceful device time update (optional)
 
@@ -310,6 +319,16 @@ else
   echo "$SUDOERS_ROLLBACK_RULE" | sudo tee -a "$SUDOERS_FILE" >> /dev/null
   sudo chmod 440 "$SUDOERS_FILE"
   echo "Passwordless permission for rollback granted to '$USERNAME'."
+fi
+
+# Revert to stock upstream
+SUDOERS_REVERT_RULE="$USERNAME ALL=(root) NOPASSWD: /bin/systemctl start free-sleep-revert.service --no-block"
+if sudo grep -Fxq "$SUDOERS_REVERT_RULE" "$SUDOERS_FILE" 2>/dev/null; then
+  echo "Rule for '$USERNAME' revert-to-stock permissions already exists."
+else
+  echo "$SUDOERS_REVERT_RULE" | sudo tee -a "$SUDOERS_FILE" >> /dev/null
+  sudo chmod 440 "$SUDOERS_FILE"
+  echo "Passwordless permission for revert-to-stock granted to '$USERNAME'."
 fi
 
 

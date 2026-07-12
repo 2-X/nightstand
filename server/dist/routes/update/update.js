@@ -2,6 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import logger from '../../logger.js';
 import { triggerRollbackService } from '../../jobs/rollback.js';
+import { triggerRevertToStockService } from '../../jobs/revertToStock.js';
 const router = express.Router();
 // The updater keeps the previous install here after every swap (see
 // scripts/update.sh): reading its serverInfo.json is how we know whether an
@@ -29,6 +30,19 @@ router.post('/rollback', async (_req, res) => {
     catch (error) {
         logger.error('Failed to start rollback', error);
         res.status(500).json({ message: 'Unable to start rollback' });
+    }
+});
+// Full revert to plain upstream free-sleep, undoing Nightstand entirely.
+// Reversible only by re-adopting via scripts/migrate/switch-to-this-fork.sh
+// afterward. There's no in-app way back once stock code is running.
+router.post('/revert-to-stock', async (_req, res) => {
+    try {
+        triggerRevertToStockService();
+        res.status(204).end();
+    }
+    catch (error) {
+        logger.error('Failed to start revert to stock', error);
+        res.status(500).json({ message: 'Unable to start revert to stock' });
     }
 });
 export default router;
