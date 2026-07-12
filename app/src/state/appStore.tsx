@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import moment from 'moment-timezone';
 
 import { useSettings } from '@api/settings.ts';
+import { useEventStream } from '@api/eventStream.ts';
 
 export type Side = 'left' | 'right';
 
@@ -28,6 +29,10 @@ export const useAppStore = create<AppState>((set) => ({
 
 // AppStoreProvider to sync Zustand with react-query's isFetching
 export function AppStoreProvider({ children }: React.PropsWithChildren) {
+  // One WebSocket for the whole app, pushing device-status/service-health
+  // updates straight into the React Query cache. Mounted at the tree root so
+  // there's no per-page connection churn.
+  useEventStream();
   const { data: settings } = useSettings();
 
   useEffect(() => {
