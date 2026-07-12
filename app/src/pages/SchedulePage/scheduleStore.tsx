@@ -1,6 +1,6 @@
 import _ from 'lodash';
 import { create } from 'zustand';
-import { DailySchedule, DayOfWeek, Schedules } from '@api/schedulesSchema.ts';
+import { AlarmSchedule, DailySchedule, DayOfWeek, Schedules } from '@api/schedulesSchema.ts';
 import { DeepPartial } from 'ts-essentials';
 import { AccordionExpanded } from './SchedulePage.types.ts';
 import { DaysSelected } from './SchedulePage.types.ts';
@@ -51,6 +51,15 @@ type ScheduleStore = {
   updateSelectedSchedule: (dailySchedule: DeepPartial<DailySchedule>) => void;
   updateSelectedTemperatures: (temperatures: DailySchedule['temperatures']) => void;
 
+  // Multi-alarm editing. The alarms array is the source of truth; the legacy
+  // single `alarm` field mirrors alarms[0] so older consumers keep working.
+  selectedAlarmIndex: number;
+  selectAlarm: (index: number) => void;
+  getEditedAlarms: () => AlarmSchedule[];
+  updateSelectedAlarm: (alarm: DeepPartial<AlarmSchedule>) => void;
+  addAlarm: () => void;
+  removeAlarm: (index: number) => void;
+
   // Keep a copy of the original schedules
   originalSchedules: Schedules | undefined;
   setOriginalSchedules: (originalSchedules: Schedules) => void;
@@ -75,6 +84,7 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
       accordionExpanded: undefined,
       validations: { ...DEFAULT_VALIDATIONS },
       selectedSchedule,
+      selectedAlarmIndex: 0,
       changesPresent: false,
     });
   },
@@ -122,6 +132,62 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
     _.merge(selectedScheduleCopy, newSelectedSchedule);
 
     set({ selectedSchedule: selectedScheduleCopy });
+    checkForChanges();
+  },
+  selectedAlarmIndex: 0,
+  selectAlarm: (index) => set({ selectedAlarmIndex: index }),
+  // The alarms array drives the editor. A day saved before multi-alarm
+  // support has an empty array, so seed the editor from the legacy alarm.
+  getEditedAlarms: () => {
+    const { selectedSchedule } = get();
+    if (!selectedSchedule) return [];
+    if ((selectedSchedule.alarms ?? []).length > 0) return selectedSchedule.alarms;
+    return [selectedSchedule.alarm];
+  },
+  updateSelectedAlarm: (alarmUpdate) => {
+    const { selectedSchedule, selectedAlarmIndex, getEditedAlarms, checkForChanges } = get();
+    if (!selectedSchedule) return;
+    const alarms = _.cloneDeep(getEditedAlarms());
+    if (!alarms[selectedAlarmIndex]) return;
+    _.merge(alarms[selectedAlarmIndex], alarmUpdate);
+    set({
+      selectedSchedule: {
+        ..._.cloneDeep(selectedSchedule),
+        alarms,
+        alarm: alarms[0],
+      },
+    });
+    checkForChanges();
+  },
+  addAlarm: () => {
+    const { selectedSchedule, getEditedAlarms, checkForChanges } = get();
+    if (!selectedSchedule) return;
+    const alarms = _.cloneDeep(getEditedAlarms());
+    alarms.push({ ...alarms[alarms.length - 1], enabled: true });
+    set({
+      selectedSchedule: {
+        ..._.cloneDeep(selectedSchedule),
+        alarms,
+        alarm: alarms[0],
+      },
+      selectedAlarmIndex: alarms.length - 1,
+    });
+    checkForChanges();
+  },
+  removeAlarm: (index) => {
+    const { selectedSchedule, selectedAlarmIndex, getEditedAlarms, checkForChanges } = get();
+    if (!selectedSchedule) return;
+    const alarms = _.cloneDeep(getEditedAlarms());
+    if (alarms.length <= 1) return;
+    alarms.splice(index, 1);
+    set({
+      selectedSchedule: {
+        ..._.cloneDeep(selectedSchedule),
+        alarms,
+        alarm: alarms[0],
+      },
+      selectedAlarmIndex: Math.min(selectedAlarmIndex, alarms.length - 1),
+    });
     checkForChanges();
   },
   // Updating schedules - (Temperatures) - needs to replace the entire temperatures field instead of merging it

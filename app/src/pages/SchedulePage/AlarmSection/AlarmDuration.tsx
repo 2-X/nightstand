@@ -11,10 +11,8 @@ const DURATION_LIST = _.range(10, 190, 10);
 
 export default function AlarmDuration() {
   const { isUpdating } = useAppStore();
-  const {
-    selectedSchedule,
-    updateSelectedSchedule,
-  } = useScheduleStore();
+  const { selectedAlarmIndex, getEditedAlarms, updateSelectedAlarm } = useScheduleStore();
+  const alarm = getEditedAlarms()[selectedAlarmIndex];
 
   return (
     <Box sx={ { width: '100%' } }>
@@ -22,16 +20,10 @@ export default function AlarmDuration() {
         <InputLabel>Alarm Duration (seconds)</InputLabel>
         <Select
           disabled={ isUpdating }
-          value={ selectedSchedule?.alarm.duration }
+          value={ alarm?.duration }
           variant='standard'
           onChange={ (event) => {
-            updateSelectedSchedule(
-              {
-                alarm: {
-                  duration: event.target.value as number,
-                },
-              }
-            );
+            updateSelectedAlarm({ duration: event.target.value as number });
           } }
         >
           {
