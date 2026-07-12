@@ -46,7 +46,7 @@ class _PresenceCoordinator:
 
     Each piezo sensor picks up some of the OTHER side's signal via mechanical
     transmission through the mattress. So if you lie on the left, the right
-    sensor also goes well above the empty-bed noise floor — just at a lower
+    sensor also goes well above the empty-bed noise floor, just at a lower
     amplitude than left. Naively thresholding each side independently produces
     false positives ("right side is occupied" when only the left is).
 
@@ -59,11 +59,11 @@ class _PresenceCoordinator:
       3. Each BiometricProcessor reads back its own per-side decision and
          uses it (with its existing hysteresis) to decide whether to POST.
 
-    Module-level singleton — there's only ever one bed.
+    Module-level singleton; there's only ever one bed.
     """
 
     # Bumped 30k → 100k after observing real numbers: empty bed maxes at ~10k,
-    # occupied jumps to 200k–16M (even on the OFF side via mattress transmission).
+    # occupied jumps to 200k-16M (even on the OFF side via mattress transmission).
     # 100k cleanly excludes plausible static loads like a laundry pile or
     # blanket movement, which the user reports happening frequently.
     NOISE_THRESHOLD = 100_000
@@ -92,7 +92,7 @@ class _PresenceCoordinator:
         if right_above and not left_above:
             return {'left': False, 'right': True}
 
-        # Both above noise — disambiguate using ratio.
+        # Both above noise, so disambiguate using ratio.
         if L >= R * cls.DOMINANCE_RATIO:
             return {'left': True, 'right': False}   # left clearly dominant
         if R >= L * cls.DOMINANCE_RATIO:
@@ -103,7 +103,7 @@ class _PresenceCoordinator:
 
     @classmethod
     def snapshot(cls) -> dict:
-        """For debug logging — current state of both sides."""
+        """For debug logging: current state of both sides."""
         return {'left_range': cls._latest['left'], 'right_range': cls._latest['right']}
 
 
@@ -170,7 +170,7 @@ class BiometricProcessor:
         self.init_tracking()
         # Was 30s. The user reported their wife's "in-bed" indicator going
         # yellow when she stayed still for a while, then green again on
-        # movement. Cause: piezos are AC-coupled — a perfectly still person
+        # movement. Cause: piezos are AC-coupled, so a perfectly still person
         # produces only tiny breathing-amplitude signal that can fall below
         # threshold for stretches of a minute or more. Bumping the tolerance
         # to 3 minutes gives way more grace before declaring the bed empty,
@@ -256,7 +256,7 @@ class BiometricProcessor:
     def detect_presence(self, signal1: np.ndarray, signal2: Union[None, np.ndarray] = None):
         # Each side has TWO physical piezos (head + foot of that half of the
         # bed). Until now presence detection only looked at signal1, throwing
-        # away half the available information. Use the MAX of the two — a
+        # away half the available information. Use the MAX of the two: a
         # person on the side compresses both piezos directly, so taking the
         # max picks up activity even if the person's body is closer to one
         # piezo than the other.
@@ -272,7 +272,7 @@ class BiometricProcessor:
         decision = _PresenceCoordinator.report(self.side, signal_range)
         should_be_present = decision[self.side]
 
-        # Periodic debug log — includes both piezos' individual ranges so we
+        # Periodic debug log: includes both piezos' individual ranges so we
         # can see whether they're correlated (= real presence) or one is
         # dominating (= asymmetric transmission).
         self._range_log_counter += 1
@@ -292,7 +292,7 @@ class BiometricProcessor:
             self.present_for = self.present_for + 1
             # Require ≥3 consecutive elevated readings before flipping present.
             # Filters brief transients like clothes tossed on the bed, blankets
-            # shifted, etc — those produce 1–2 elevated readings then settle,
+            # shifted, etc, those produce 1-2 elevated readings then settle,
             # never reaching 3 in a row. A person lying down sustains the
             # signal indefinitely so this trips quickly.
             if not self.present and self.present_for >= 3:
