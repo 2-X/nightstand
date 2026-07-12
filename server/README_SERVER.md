@@ -41,20 +41,38 @@ The server is composed of the following key components:
 - **`/api/schedules`:** Handles scheduling for device operations.
 - **`/api/execute`:** Sends commands directly to the device.
 - **`/api/metrics/vitals`:** Biometrics (heart rate, HRV, breathing rate)
-- **`/api/metrics/sleep`:** Sleep intervals 
+- **`/api/metrics/sleep`:** Sleep intervals
+- **`/api/metrics/server`:** In-process metrics, including WS client count
+  and job exec counts. Read-only JSON; useful for debugging on the pod
+  (`curl localhost:3000/api/metrics/server`).
 
-### 3. **Jobs Scheduler (`src/jobs/`):**
+### 3. **WebSocket, `/ws/events`:**
+- Real-time push channel for the React app. Frames are JSON envelopes
+  `{ channel, payload, ts }` with channels:
+  - `device-status`: full DeviceStatus snapshot whenever it changes. The
+    app uses this to update React Query's cache in place, with no
+    follow-up HTTP refetch.
+  - `service-health`: partial server-status patch when a check transitions
+    healthy or failed. Triggers a `useServerStatus` invalidation on the client.
+  - `job-event`: fired when a scheduled job starts, succeeds, or fails
+    (alarms, temperature changes, prime, etc.).
+- Heartbeat: server pings every 15s and drops sockets that miss two pongs.
+- Client wraps native `WebSocket` (no library); auto-reconnects with
+  exponential backoff up to 30s. While disconnected, the React Query hooks
+  fall back to their 30-60s polling.
+
+### 4. **Jobs Scheduler (`src/jobs/`):**
 - Schedules periodic tasks like temperature adjustments, power on/off, and device priming using the `node-schedule` library.
 - Monitors changes to the DB storage files in `src/db/`, clears all schedules and recreates them every time changes are made
 
 
-### 4. **Database (`src/db/`):**
+### 5. **Database (`src/db/`):**
 - The JSON files are created the first time the server runs, you do not need to create them
 - Uses `lowdb` for simple JSON-based storage.
 - Includes schemas for schedules, settings, and time zones, validated with `zod`.
 
 
-### 5. **8 Sleep Integration (`src/8sleep/`):**
+### 6. **8 Sleep Integration (`src/8sleep/`):**
 - Contains utilities to communicate with the "Franken" device using Unix sockets.
   - This is based off of the EXISTING code on the pod in /home/dac/app/
 

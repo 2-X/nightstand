@@ -8,6 +8,7 @@ import Button from '@mui/material/Button';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppStore } from '@state/appStore.tsx';
 import { useTheme } from '@mui/material/styles';
+import { useEventStreamStore } from '@api/eventStream.ts';
 import { PAGES } from './pages';
 import freeSleepIcon from '../../public/free-sleep-icon.svg';
 
@@ -16,6 +17,11 @@ export default function Navbar() {
   const { pathname } = useLocation();
   const { isUpdating } = useAppStore();
   const theme = useTheme(); // Access the Material-UI theme
+  // Show a subtle "Reconnecting…" tag only when the WS is down. When it's
+  // 'open' or freshly mounted ('connecting' for a fraction of a second), we
+  // show nothing, since the app is silent when everything is working.
+  const wsState = useEventStreamStore((s) => s.state);
+  const showReconnecting = wsState === 'reconnecting';
   const [mobileNavValue, setMobileNavValue] = React.useState(
     PAGES.findIndex((page) => page.route === pathname)
   );
@@ -59,6 +65,28 @@ export default function Navbar() {
           zIndex: 1201,
         } }
       />
+      { /* Reconnecting indicator, only visible when the live event stream
+           is down. Sits below the iOS status bar via env(safe-area-inset-top). */ }
+      { showReconnecting && (
+        <Box
+          aria-live="polite"
+          sx={ {
+            position: 'fixed',
+            top: 'calc(env(safe-area-inset-top, 0px) + 6px)',
+            right: 12,
+            zIndex: 1202,
+            px: 1,
+            py: 0.25,
+            borderRadius: 1,
+            fontSize: '0.7rem',
+            color: theme.palette.warning.light,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            border: `1px solid ${theme.palette.warning.dark}`,
+          } }
+        >
+          Reconnecting…
+        </Box>
+      ) }
       { /* Desktop Navigation */ }
       <AppBar
         position="fixed"
