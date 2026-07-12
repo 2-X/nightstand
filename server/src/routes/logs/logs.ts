@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import readline from 'readline';
 import logger from '../../logger.js';
-import { isSafeLogFilename } from './logsHelpers.js';
+import { isLogFilename, isSafeLogFilename, linesFromAppendedChunk } from './logsHelpers.js';
 
 const router = express.Router();
 
@@ -38,7 +38,9 @@ router.get('/', async (req, res) => {
 
         const fileStats = await Promise.all(
           files.map(async (file): Promise<LogFile | null> => {
-            if (!file.endsWith('log')) {
+            // Was `endsWith('log')`, which also matched non-log files like
+            // "catalog" or "backlog" if they ever showed up in these dirs.
+            if (!isLogFilename(file)) {
               return null;
             }
 
@@ -103,34 +105,79 @@ router.get('/:filename', async (req, res) => {
     return res.end();
   }
 
-  let logBuffer = [];
+  let lastSize = 0;
 
   const fileStream = fs.createReadStream(logFilePath, { encoding: 'utf8' });
   const rl = readline.createInterface({ input: fileStream });
 
+  const logBuffer: string[] = [];
   for await (const line of rl) {
     logBuffer.push(line);
     if (logBuffer.length > 1000) logBuffer.shift(); // Keep last 1000 lines
   }
+  try {
+    lastSize = (await fsPromises.stat(logFilePath)).size;
+  } catch {
+    // File may have rotated out from under us between access() and stat();
+    // fs.watch below will still pick up the replacement.
+  }
 
   res.write(`data: ${JSON.stringify({ message: logBuffer.join('\n') })}\n\n`);
 
-  // @ts-ignore
-  const logStream = fs.watch(logFilePath, { interval: 1000 }, async () => {
-    const newFileStream = fs.createReadStream(logFilePath, { encoding: 'utf8' });
-    const newRl = readline.createInterface({ input: newFileStream });
+  // fs.watch's `interval` option only applies to fs.watchFile, not fs.watch;
+  // passing it here was silently ignored, so every raw write to a busy log
+  // (several times a second for the streaming log) re-read the whole file
+  // and re-sent up to 1000 lines over SSE. Two fixes: debounce watch events,
+  // and read only the bytes appended since the last read instead of the
+  // whole file.
+  let debounceTimer: NodeJS.Timeout | undefined;
+  let reading = false;
+  let pendingReread = false;
 
-    const newLogs = [];
-    for await (const line of newRl) newLogs.push(line);
-
-    if (newLogs.length > logBuffer.length) {
-      const newEntries = newLogs.slice(-1000);
-      logBuffer = newEntries;
-      res.write(`data: ${JSON.stringify({ message: newEntries.join('\n') })}\n\n`);
+  const readNewBytes = async () => {
+    if (reading) {
+      pendingReread = true;
+      return;
     }
+    reading = true;
+    try {
+      const stat = await fsPromises.stat(logFilePath as string);
+      if (stat.size < lastSize) {
+        // Log rotated (truncated or swapped), so reset to the new file's start.
+        lastSize = 0;
+      }
+      if (stat.size === lastSize) return;
+
+      const chunkStream = fs.createReadStream(logFilePath as string, {
+        encoding: 'utf8',
+        start: lastSize,
+      });
+      let appended = '';
+      for await (const chunk of chunkStream) appended += chunk;
+      lastSize = stat.size;
+
+      const newLines = linesFromAppendedChunk(appended);
+      if (newLines.length > 0) {
+        res.write(`data: ${JSON.stringify({ message: newLines.join('\n') })}\n\n`);
+      }
+    } catch (error) {
+      logger.debug(`Log tail read failed for ${logFilePath}: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      reading = false;
+      if (pendingReread) {
+        pendingReread = false;
+        void readNewBytes();
+      }
+    }
+  };
+
+  const logStream = fs.watch(logFilePath, () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => void readNewBytes(), 300);
   });
 
   req.on('close', () => {
+    clearTimeout(debounceTimer);
     logStream.close();
     res.end();
   });
