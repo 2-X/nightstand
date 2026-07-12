@@ -1,20 +1,42 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { baseURL } from '@api/api';
-import { Paper, Typography, Box, MenuItem, Select, FormControl, InputLabel } from '@mui/material';
+import {
+  Paper, Typography, Box, MenuItem, Select, FormControl, InputLabel,
+  TextField, IconButton, Tooltip, Chip,
+} from '@mui/material';
 import PageContainer from '../../PageContainer.tsx';
 import { useTheme } from '@mui/material/styles';
 import axios from 'axios';
 import Header from '../Header.tsx';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
+import DownloadIcon from '@mui/icons-material/Download';
+import ClearAllIcon from '@mui/icons-material/ClearAll';
+import PauseIcon from '@mui/icons-material/Pause';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import { getLogDescription, detectLogLevel } from './logsMeta.ts';
 
+
+const LEVEL_COLORS: Record<string, string> = {
+  error: '#ff6b6b',
+  warn: '#ffb84d',
+  debug: '#7a8290',
+  info: '#9fd3ff',
+};
 
 export default function LogsPage() {
   const [logs, setLogs] = useState<string[]>([]);
+  const [pendingLogs, setPendingLogs] = useState<string[]>([]);
   const [logFiles, setLogFiles] = useState<string[]>([]);
   const [selectedLog, setSelectedLog] = useState<string>('');
+  const [filterText, setFilterText] = useState('');
+  const [paused, setPaused] = useState(false);
   const logsContainerRef = useRef<HTMLDivElement | null>(null);
   const logsEndRef = useRef<HTMLDivElement | null>(null);
   const isUserAtBottom = useRef(true);
+  // The SSE subscription effect only re-runs when selectedLog changes, so its
+  // onmessage closure would otherwise see a stale `paused` from subscribe
+  // time, so read the live value through a ref instead.
+  const pausedRef = useRef(false);
   const theme = useTheme();
 
   // Fetch available log files
@@ -42,7 +64,12 @@ export default function LogsPage() {
 
     eventSource.onmessage = (event) => {
       const logData = JSON.parse(event.data);
-      setLogs((prevLogs) => [...prevLogs.slice(-999), logData.message]); // Keep last 1000 logs
+      const newLines: string[] = logData.message.split('\n');
+      if (pausedRef.current) {
+        setPendingLogs((prev) => [...prev, ...newLines]);
+      } else {
+        setLogs((prevLogs) => [...prevLogs.slice(-999), ...newLines].slice(-1000));
+      }
     };
 
     eventSource.onerror = () => {
@@ -52,7 +79,7 @@ export default function LogsPage() {
     return () => {
       eventSource.close();
     };
-  }, [selectedLog]); // Re-run when log file changes
+  }, [selectedLog]); // Re-run only when the log file changes; pause state is read live via pausedRef
 
   // Track if user is at the bottom
   const handleScroll = () => {
@@ -68,11 +95,40 @@ export default function LogsPage() {
     }
   }, [logs]);
 
+  const handleTogglePause = () => {
+    if (paused) {
+      // Resuming, so flush anything buffered while paused.
+      setLogs((prevLogs) => [...prevLogs, ...pendingLogs].slice(-1000));
+      setPendingLogs([]);
+    }
+    pausedRef.current = !paused;
+    setPaused((p) => !p);
+  };
+
+  const handleClear = () => {
+    setLogs([]);
+    setPendingLogs([]);
+  };
+
+  const handleDownload = () => {
+    const blob = new Blob([logs.join('\n')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = selectedLog || 'log.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const filteredLogs = useMemo(() => {
+    if (!filterText.trim()) return logs;
+    const needle = filterText.toLowerCase();
+    return logs.filter((line) => line.toLowerCase().includes(needle));
+  }, [logs, filterText]);
+
   return (
     <PageContainer
       sx={ {
-        // height: '100%',
-        // maxHeight: '100%',
         [theme.breakpoints.up('sm')]: {
           width: '95%',
           padding: 0,
@@ -88,10 +144,7 @@ export default function LogsPage() {
       <Paper
         elevation={ 3 }
         sx={ {
-          // height: '100%',
-          // maxHeight: '100%',
           p: 2,
-          // mt: 2,
           bgcolor: theme.palette.background.paper,
           color: '#fff',
           borderRadius: 2,
@@ -103,22 +156,66 @@ export default function LogsPage() {
           },
         } }
       >
-        <FormControl sx={ { minWidth: 200, mb: 1 } }>
-          <InputLabel sx={ { color: theme.palette.grey[100] } }>Log file</InputLabel>
-          <Select
-            value={ selectedLog }
-            onChange={ (e) => {
-              setLogs([]);
-              setSelectedLog(e.target.value);
-            } }
-          >
-            { logFiles.map((file) => (
-              <MenuItem key={ file } value={ file }>
-                { file }
-              </MenuItem>
-            )) }
-          </Select>
-        </FormControl>
+        <Box sx={ { display: 'flex', gap: 1.5, alignItems: 'flex-start', flexWrap: 'wrap', mb: 1 } }>
+          <FormControl sx={ { minWidth: 200 } }>
+            <InputLabel sx={ { color: theme.palette.grey[100] } }>Log file</InputLabel>
+            <Select
+              value={ selectedLog }
+              onChange={ (e) => {
+                setLogs([]);
+                setPendingLogs([]);
+                setSelectedLog(e.target.value);
+              } }
+            >
+              { logFiles.map((file) => (
+                <MenuItem key={ file } value={ file }>
+                  { file }
+                </MenuItem>
+              )) }
+            </Select>
+          </FormControl>
+
+          <TextField
+            size="small"
+            placeholder="Filter visible lines…"
+            value={ filterText }
+            onChange={ (e) => setFilterText(e.target.value) }
+            sx={ { minWidth: 220, flex: 1 } }
+          />
+
+          <Box sx={ { display: 'flex', gap: 0.5 } }>
+            <Tooltip title={ paused ? `Resume (${pendingLogs.length} new)` : 'Pause live updates' }>
+              <IconButton onClick={ handleTogglePause } size="small" sx={ { color: theme.palette.grey[100] } }>
+                { paused ? <PlayArrowIcon /> : <PauseIcon /> }
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Clear displayed lines">
+              <IconButton onClick={ handleClear } size="small" sx={ { color: theme.palette.grey[100] } }>
+                <ClearAllIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Download what's currently loaded">
+              <IconButton onClick={ handleDownload } size="small" sx={ { color: theme.palette.grey[100] } } disabled={ logs.length === 0 }>
+                <DownloadIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </Box>
+
+        { selectedLog && (
+          <Typography sx={ { color: theme.palette.grey[400], fontSize: '0.8rem', mb: 1.5 } }>
+            { getLogDescription(selectedLog) }
+          </Typography>
+        ) }
+
+        { paused && pendingLogs.length > 0 && (
+          <Chip
+            label={ `${pendingLogs.length} new line${pendingLogs.length === 1 ? '' : 's'} buffered (resume to see them)` }
+            size="small"
+            onClick={ handleTogglePause }
+            sx={ { mb: 1, alignSelf: 'flex-start', cursor: 'pointer' } }
+          />
+        ) }
 
         <Typography
           variant="h6"
@@ -133,7 +230,7 @@ export default function LogsPage() {
             paddingBottom: 1,
           } }
         >
-          Live Server Logs
+          { filterText ? `Filtered lines (${filteredLogs.length}/${logs.length})` : 'Live Server Logs' }
         </Typography>
 
         <Box
@@ -142,10 +239,8 @@ export default function LogsPage() {
           sx={ {
             flex: 1,
             overflowY: 'auto',
-            maxHeight: `${window.innerHeight - 300}px`,
+            maxHeight: `${window.innerHeight - 340}px`,
             fontFamily: 'monospace',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
             p: 1,
             '&::-webkit-scrollbar': {
               width: '10px',
@@ -163,9 +258,24 @@ export default function LogsPage() {
             },
           } }
         >
-          <Typography sx={ { fontFamily: 'monospace', color: theme.palette.grey[200], fontSize: '12px' } }>
-            { logs.join('\n') }
-          </Typography>
+          { filteredLogs.map((line, i) => {
+            const level = detectLogLevel(line);
+            return (
+              <Typography
+                key={ i }
+                component="div"
+                sx={ {
+                  fontFamily: 'monospace',
+                  color: level ? LEVEL_COLORS[level] : theme.palette.grey[200],
+                  fontSize: '12px',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                } }
+              >
+                { line }
+              </Typography>
+            );
+          }) }
           <div ref={ logsEndRef } />
         </Box>
       </Paper>
