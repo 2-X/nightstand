@@ -17,6 +17,36 @@ function getLocalIp() {
     }
     return 'localhost'; // Default to localhost if LAN IP isn't found
 }
+// With no auth on the API, CORS is the only thing stopping another host on a
+// shared/guest network from issuing state-changing requests, so trusting the
+// entire RFC1918 range (192.168.*/172.16.*/10.0.*) is too broad. Derive the
+// pod's actual subnet(s) from network interfaces instead.
+//
+// getLocalIp() alone isn't enough here: os.networkInterfaces() has no
+// LAN-vs-other preference, and a Tailscale interface (a supported optional
+// install) adds its own non-internal IPv4 address. If that happened to
+// enumerate first, getLocalIp() would return the Tailscale address and every
+// legitimate LAN origin would fail CORS. Collect every non-internal IPv4
+// interface's /24 instead of picking just one, so the actual LAN subnet is
+// always included regardless of interface ordering.
+export function getLocalSubnetPrefixes() {
+    const interfaces = os.networkInterfaces();
+    const prefixes = [];
+    for (const interfaceName in interfaces) {
+        const networkInterface = interfaces[interfaceName];
+        if (!networkInterface)
+            continue;
+        for (const network of networkInterface) {
+            if (network.family !== 'IPv4' || network.internal)
+                continue;
+            const parts = network.address.split('.');
+            if (parts.length !== 4)
+                continue;
+            prefixes.push(`${parts[0]}.${parts[1]}.${parts[2]}.`);
+        }
+    }
+    return prefixes;
+}
 /**
  * Check if the request origin is allowed, i.e., from localhost or LAN IP, or
  * matches the `ALLOWED_ORIGIN` environment variable. The function also allows
@@ -36,9 +66,7 @@ function isAllowedOrigin(origin) {
     }
     if (origin.startsWith(`http://${getLocalIp()}:`) ||
         origin.startsWith('http://localhost') ||
-        origin.startsWith('http://192.168.') ||
-        origin.startsWith('http://172.16.') ||
-        origin.startsWith('http://10.0.') ||
+        getLocalSubnetPrefixes().some(prefix => origin.startsWith(`http://${prefix}`)) ||
         (ALLOWED_ORIGIN && origin.startsWith(ALLOWED_ORIGIN))) {
         return true;
     }
