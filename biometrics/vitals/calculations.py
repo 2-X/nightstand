@@ -115,7 +115,6 @@ def _calculate(run_data: RunData, side: str):
         bpmmin=40,
         bpmmax=90,
         windowsize=run_data.window_size,
-        clean_rr_method='quotient-filter',
         calculate_breathing=True,
     )
     if run_data.is_valid(measurement):
