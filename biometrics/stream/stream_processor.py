@@ -52,7 +52,7 @@ class StreamProcessor:
         right2_signal=None,
     ):
         # Pass both piezos per side so detect_presence can use the max of
-        # head + foot piezo — improves coverage when a person isn't centred
+        # head + foot piezo, improves coverage when a person isn't centred
         # over a single sensor and gives the coordinator more signal to
         # distinguish real occupancy from asymmetric transmission.
         self.left_processor.detect_presence(left1_signal, left2_signal)
