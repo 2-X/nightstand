@@ -7,9 +7,6 @@ import config from '../config.js';
 
 
 const defaultData: Services = {
-  sentryLogging: {
-    enabled: false,
-  },
   biometrics: {
     enabled: false,
     jobs: {

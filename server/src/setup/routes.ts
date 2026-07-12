@@ -1,5 +1,3 @@
-import * as Sentry from '@sentry/node';
-
 import express, { Express, Request, Response, NextFunction } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -47,7 +45,6 @@ export default function (app: Express) {
     if (!err || err.type !== 'entity.parse.failed') return next(err);
     res.status(400).json({ error: { message: 'Invalid JSON' } });
   });
-  Sentry.setupExpressErrorHandler(app);
 
   // --- Central error handler (must be AFTER routes and special-case handlers)
   // eslint-disable-next-line no-unused-vars,@typescript-eslint/no-unused-vars
