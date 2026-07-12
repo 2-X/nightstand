@@ -157,6 +157,23 @@ else
     || say "WARNING: failed to add rollback sudoers rule; the Roll back button will not work until the next successful update"
 fi
 
+# --- revert-to-stock service ----------------------------------------------------
+say "Ensuring revert-to-stock service is installed"
+if chmod +x "$LIVE/scripts/revert-to-stock.sh" \
+  && cp "$LIVE/scripts/systemd/free-sleep-revert.service" /etc/systemd/system/ \
+  && systemctl daemon-reload; then
+  :
+else
+  say "WARNING: failed to install the revert-to-stock service; the Revert to stock control will not work until the next successful update"
+fi
+REVERT_SUDOERS_RULE="dac ALL=(root) NOPASSWD: /bin/systemctl start free-sleep-revert.service --no-block"
+if [ -f "$SUDOERS_FILE" ] && grep -Fxq "$REVERT_SUDOERS_RULE" "$SUDOERS_FILE" 2>/dev/null; then
+  :
+else
+  echo "$REVERT_SUDOERS_RULE" >> "$SUDOERS_FILE" && chmod 440 "$SUDOERS_FILE" \
+    || say "WARNING: failed to add revert-to-stock sudoers rule; the Revert to stock control will not work until the next successful update"
+fi
+
 # --- health check --------------------------------------------------------------
 say "Health check (up to 90s)"
 HEALTHY=no

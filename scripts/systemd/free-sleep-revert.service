@@ -1,0 +1,12 @@
+[Unit]
+Description=Nightstand Revert To Stock Upstream
+After=free-sleep.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /home/dac/free-sleep/scripts/revert-to-stock.sh
+User=root
+Group=root
+KillMode=process
+StandardOutput=append:/persistent/free-sleep-data/logs/free-sleep-revert.log
+StandardError=append:/persistent/free-sleep-data/logs/free-sleep-revert.log
