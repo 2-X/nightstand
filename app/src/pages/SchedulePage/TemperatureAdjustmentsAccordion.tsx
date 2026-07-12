@@ -18,14 +18,14 @@ import { useAppStore } from '@state/appStore.tsx';
 import { DailySchedule } from '@api/schedulesSchema.ts';
 import ThermostatIcon from '@mui/icons-material/Thermostat';
 
-import { formatTemperature } from '@lib/temperatureConversions.ts';
+import { formatTemperature, TemperatureFormat } from '@lib/temperatureConversions.ts';
 import AccessTime from '@mui/icons-material/AccessTime';
 import { useTheme } from '@mui/material/styles';
 
 const ACCORDION_NAME = 'temperatureAdjustments';
 const TEMPERATURES_LIST = _.range(55, 111); // Generates a range from 55 to 110 inclusive
 
-export default function TemperatureAdjustmentsAccordion({ displayCelsius }: { displayCelsius: boolean }) {
+export default function TemperatureAdjustmentsAccordion({ format }: { format: TemperatureFormat }) {
   const {
     accordionExpanded,
     selectedSchedule,
@@ -178,7 +178,7 @@ export default function TemperatureAdjustmentsAccordion({ displayCelsius }: { di
                   {
                     TEMPERATURES_LIST.map((temp) => (
                       <MenuItem key={ temp } value={ temp }>
-                        { formatTemperature(temp, displayCelsius) }
+                        { formatTemperature(temp, format) }
                       </MenuItem>
                     ))
                   }
