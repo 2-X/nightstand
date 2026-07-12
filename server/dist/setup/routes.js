@@ -15,6 +15,7 @@ import presence from '../routes/metrics/presence.js';
 import logs from '../routes/logs/logs.js';
 import serverStatus from '../routes/serverStatus/serverStatus.js';
 import update from '../routes/update/update.js';
+import metricsServer from '../routes/metricsServer/metricsServer.js';
 import logger from '../logger.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,6 +35,7 @@ export default function (app) {
     app.use('/api/logs', logs);
     app.use('/api/serverStatus', serverStatus);
     app.use('/api/update', update);
+    app.use('/api/', metricsServer);
     app.use('/api', (req, res) => {
         res.status(404).json({ error: { message: 'Not Found' } });
     });
