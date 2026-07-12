@@ -4,6 +4,8 @@ import { RollbackInfo } from './updateSchema.ts';
 
 export const postRollback = () => axios.post('/update/rollback');
 
+export const postRevertToStock = () => axios.post('/update/revert-to-stock');
+
 export const useRollbackInfo = () => useQuery<RollbackInfo>({
   queryKey: ['useRollbackInfo'],
   queryFn: async () => {
