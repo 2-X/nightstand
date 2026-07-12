@@ -16,7 +16,7 @@ export default function SideControl({ showTemp }: SideControlProps) {
   const { data: settings } = useSettings();
   const { data: deviceStatus } = useDeviceStatus();
 
-  const isCelsius = settings?.temperatureFormat === 'celsius';
+  const format = settings?.temperatureFormat ?? 'fahrenheit';
   return (
     <ToggleButtonGroup
       color="primary"
@@ -34,7 +34,7 @@ export default function SideControl({ showTemp }: SideControlProps) {
 
           deviceStatus?.left?.isOn ?
 
-            formatTemperature(deviceStatus?.left?.targetTemperatureF, isCelsius)
+            formatTemperature(deviceStatus?.left?.targetTemperatureF, format)
             : 'Off'
         ) }
       </ToggleButton>
@@ -43,7 +43,7 @@ export default function SideControl({ showTemp }: SideControlProps) {
         { showTemp && side === 'left' && (
 
           deviceStatus?.right?.isOn ?
-            formatTemperature(deviceStatus?.right?.targetTemperatureF, isCelsius) : 'Off'
+            formatTemperature(deviceStatus?.right?.targetTemperatureF, format) : 'Off'
 
         ) }
 

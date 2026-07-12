@@ -5,7 +5,7 @@ import moment from 'moment-timezone';
 import { useSchedules } from '@api/schedules.ts';
 import { useSettings } from '@api/settings.ts';
 import { useAppStore } from '@state/appStore.tsx';
-import { formatTemperature } from '@lib/temperatureConversions.ts';
+import { formatTemperature, TemperatureFormat } from '@lib/temperatureConversions.ts';
 
 
 type TemperatureLabelProps = {
@@ -14,7 +14,7 @@ type TemperatureLabelProps = {
   sliderColor: string;
   currentTargetTemp: number;
   currentTemperatureF: number;
-  displayCelsius: boolean;
+  format: TemperatureFormat;
 }
 
 
@@ -24,7 +24,7 @@ export default function TemperatureLabel({
   sliderColor,
   currentTargetTemp,
   currentTemperatureF,
-  displayCelsius
+  format
 }: TemperatureLabelProps) {
   const theme = useTheme();
   const { side } = useAppStore();
@@ -99,14 +99,14 @@ export default function TemperatureLabel({
               variant="h2"
               color={ sliderColor }
             >
-              { formatTemperature(currentTargetTemp !== sliderTemp ? sliderTemp : currentTargetTemp, displayCelsius) }
+              { formatTemperature(currentTargetTemp !== sliderTemp ? sliderTemp : currentTargetTemp, format) }
             </Typography>
             { /* Currently at label */ }
             <Typography
               sx={ { textWrap: 'nowrap', mb: 1 } }
               color={ theme.palette.grey[400] }
             >
-              { `Currently at ${formatTemperature(currentTemperatureF, displayCelsius)}` }
+              { `Currently at ${formatTemperature(currentTemperatureF, format)}` }
             </Typography>
             {
               power?.enabled && (

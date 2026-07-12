@@ -8,17 +8,17 @@ import { useControlTempStore } from './controlTempStore.tsx';
 import { useTheme } from '@mui/material/styles';
 import { useResizeDetector } from 'react-resize-detector';
 import { useSettings } from '@api/settings.ts';
-import { MAX_TEMP_F, MIN_TEMP_F, getTemperatureColor } from '@lib/temperatureConversions.ts';
+import { MAX_TEMP_F, MIN_TEMP_F, getTemperatureColor, TemperatureFormat } from '@lib/temperatureConversions.ts';
 
 type SliderProps = {
   isOn: boolean;
   currentTargetTemp: number;
   currentTemperatureF: number;
   refetch: any;
-  displayCelsius: boolean;
+  format: TemperatureFormat;
 }
 
-export default function Slider({ isOn, currentTargetTemp, refetch, currentTemperatureF, displayCelsius }: SliderProps) {
+export default function Slider({ isOn, currentTargetTemp, refetch, currentTemperatureF, format }: SliderProps) {
   const { deviceStatus, setDeviceStatus } = useControlTempStore();
   const { isUpdating, setIsUpdating, side } = useAppStore();
   const { data: settings } = useSettings();
@@ -105,7 +105,7 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
             sliderColor={ sliderColor }
             currentTargetTemp={ currentTargetTemp }
             currentTemperatureF={ currentTemperatureF }
-            displayCelsius={ displayCelsius }
+            format={ format }
           />
         </CircularSliderWithChildren>
       </div>

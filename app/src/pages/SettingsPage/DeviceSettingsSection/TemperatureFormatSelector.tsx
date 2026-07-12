@@ -1,49 +1,35 @@
-import Box from '@mui/material/Box';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import { ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import { DeepPartial } from 'ts-essentials';
 
 import { Settings } from '@api/settingsSchema.ts';
 import { useAppStore } from '@state/appStore.tsx';
-import { TEMPERATURES } from '@api/settingsSchema.ts';
 
 type TemperatureFormatSelectorProps = {
-  settings?: Settings
-  updateSettings: (settings: DeepPartial<Settings>) => void
+  settings?: Settings;
+  updateSettings: (settings: DeepPartial<Settings>) => void;
 }
 
-export default function TemperatureFormatSelector({
-  settings,
-  updateSettings,
-}: TemperatureFormatSelectorProps) {
+export default function TemperatureFormatSelector({ settings, updateSettings }: TemperatureFormatSelectorProps) {
   const { isUpdating } = useAppStore();
-
-  const handleChange = (
-    _: React.MouseEvent<HTMLElement>,
-    newFormat: string
-  ) => {
-    if (newFormat !== null) {
-      updateSettings({
-        temperatureFormat: newFormat as Settings['temperatureFormat'],
-      });
-    }
-  };
+  const format = settings?.temperatureFormat ?? 'fahrenheit';
 
   return (
-    <Box sx={ { minWidth: 120 } }>
+    <>
+      <Typography variant="body2">Temperature display</Typography>
       <ToggleButtonGroup
-        disabled={ isUpdating }
-        color='primary'
-        value={ settings?.temperatureFormat || 'farenheit' }
+        color="primary"
         exclusive
-        onChange={ handleChange }
+        size="small"
+        value={ format }
+        disabled={ isUpdating }
+        onChange={ (_event, next) => {
+          if (next) updateSettings({ temperatureFormat: next });
+        } }
       >
-        { TEMPERATURES.map((format) => (
-          <ToggleButton value={ format } key={ format }>
-            { format }
-          </ToggleButton>
-        )) }
+        <ToggleButton value="fahrenheit">Fahrenheit</ToggleButton>
+        <ToggleButton value="celsius">Celsius</ToggleButton>
+        <ToggleButton value="level">Level (-10 to +10)</ToggleButton>
       </ToggleButtonGroup>
-    </Box>
+    </>
   );
 }
