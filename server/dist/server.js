@@ -58,7 +58,12 @@ async function gracefulShutdown(signal) {
         await wsServer.close();
     }
     catch (err) {
-        logger.error(`Error closing WS server: ${err}`);
+        // Pass the Error object itself, not a template-string interpolation:
+        // `${err}` only calls Error.prototype.toString() (message only).
+        // Winston is configured with format.errors({stack: true}), which only
+        // extracts the stack when the Error is the logged value itself.
+        logger.error('Error closing WS server:');
+        logger.error(err instanceof Error ? err : new Error(String(err)));
     }
     try {
         if (server) {
@@ -74,7 +79,8 @@ async function gracefulShutdown(signal) {
         }
     }
     catch (err) {
-        logger.error(`Error during shutdown: ${err}`);
+        logger.error('Error during shutdown:');
+        logger.error(err instanceof Error ? err : new Error(String(err)));
     }
     finishedExiting = true;
     logger.debug('Exiting now...');
