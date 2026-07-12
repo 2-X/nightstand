@@ -8,17 +8,18 @@ const TEST_DURATION_SECONDS = 10;
 
 export default function AlarmTest() {
   const { side } = useAppStore();
-  const { selectedSchedule } = useScheduleStore();
+  const { selectedAlarmIndex, getEditedAlarms } = useScheduleStore();
+  const alarm = getEditedAlarms()[selectedAlarmIndex];
   const [isTesting, setIsTesting] = useState(false);
 
   const onTestAlarm = () => {
-    if (!selectedSchedule) return;
+    if (!alarm) return;
 
     postAlarm({
       side,
-      vibrationIntensity: selectedSchedule.alarm.vibrationIntensity,
+      vibrationIntensity: alarm.vibrationIntensity,
       duration: TEST_DURATION_SECONDS,
-      vibrationPattern: selectedSchedule.alarm.vibrationPattern,
+      vibrationPattern: alarm.vibrationPattern,
       force: true,
     })
       .then(() => {
