@@ -10,10 +10,8 @@ import { useScheduleStore } from '../scheduleStore.tsx';
 const PATTERNS = ['rise', 'double'];
 export default function AlarmPattern() {
   const { isUpdating } = useAppStore();
-  const {
-    selectedSchedule,
-    updateSelectedSchedule,
-  } = useScheduleStore();
+  const { selectedAlarmIndex, getEditedAlarms, updateSelectedAlarm } = useScheduleStore();
+  const alarm = getEditedAlarms()[selectedAlarmIndex];
 
   return (
     <Box sx={ { minWidth: 120 } }>
@@ -21,16 +19,10 @@ export default function AlarmPattern() {
         <InputLabel>Vibration pattern</InputLabel>
         <Select
           disabled={ isUpdating }
-          value={ selectedSchedule?.alarm.vibrationPattern }
+          value={ alarm?.vibrationPattern }
           variant='standard'
           onChange={ (event) => {
-            updateSelectedSchedule(
-              {
-                alarm: {
-                  vibrationPattern: event.target.value,
-                },
-              }
-            );
+            updateSelectedAlarm({ vibrationPattern: event.target.value as 'rise' | 'double' });
           } }
         >
           {

@@ -4,6 +4,10 @@ import logger from '../../logger.js';
 import schedulesDB from '../../db/schedules.js';
 import { SchedulesSchema, } from '../../db/schedulesSchema.js';
 const router = express.Router();
+const primaryAlarm = (alarms, fallback) => alarms[0] ?? {
+    ...fallback,
+    enabled: false,
+};
 router.get('/schedules', async (req, res) => {
     await schedulesDB.read();
     res.json(schedulesDB.data);
@@ -28,8 +32,14 @@ router.post('/schedules', async (req, res) => {
             }
             if (schedule.temperatures)
                 schedulesDB.data[side][day].temperatures = schedule.temperatures;
-            if (schedule.alarm)
+            if (schedule.alarms) {
+                schedulesDB.data[side][day].alarms = schedule.alarms;
+                schedulesDB.data[side][day].alarm = primaryAlarm(schedulesDB.data[side][day].alarms, schedulesDB.data[side][day].alarm);
+            }
+            else if (schedule.alarm) {
                 schedulesDB.data[side][day].alarm = schedule.alarm;
+                schedulesDB.data[side][day].alarms = schedule.alarm.enabled ? [schedule.alarm] : [];
+            }
         });
     });
     await schedulesDB.write();

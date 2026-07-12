@@ -5,24 +5,20 @@ import { useTheme } from '@mui/material/styles';
 
 export default function AlarmVibrationSlider() {
   const { isUpdating } = useAppStore();
-  const { selectedSchedule, updateSelectedSchedule } = useScheduleStore();
+  const { selectedAlarmIndex, getEditedAlarms, updateSelectedAlarm } = useScheduleStore();
+  const alarm = getEditedAlarms()[selectedAlarmIndex];
   const theme = useTheme();
 
   return (
     <Box sx={ { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, flex: 1, pr: 1 } }>
       <Typography sx={ { mb: 0, textAlign: 'center' } } variant="body2" color={ theme.palette.grey[200] }>
-        { `Vibration intensity ${selectedSchedule?.alarm?.vibrationIntensity}%` }
+        { `Vibration intensity ${alarm?.vibrationIntensity}%` }
       </Typography>
 
       <Slider
-        value={ selectedSchedule?.alarm?.vibrationIntensity || 50 }
+        value={ alarm?.vibrationIntensity || 50 }
         onChange={ (_, newValue) => {
-          updateSelectedSchedule({
-            alarm: {
-              // @ts-ignore
-              vibrationIntensity: newValue
-            }
-          });
+          updateSelectedAlarm({ vibrationIntensity: newValue as number });
         } }
         min={ 1 }
         max={ 100 }
