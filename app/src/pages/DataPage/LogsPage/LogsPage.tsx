@@ -14,6 +14,7 @@ import ClearAllIcon from '@mui/icons-material/ClearAll';
 import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { getLogDescription, detectLogLevel } from './logsMeta.ts';
+import { appendCapped } from './logsBuffer.ts';
 
 
 const LEVEL_COLORS: Record<string, string> = {
@@ -66,9 +67,11 @@ export default function LogsPage() {
       const logData = JSON.parse(event.data);
       const newLines: string[] = logData.message.split('\n');
       if (pausedRef.current) {
-        setPendingLogs((prev) => [...prev, ...newLines]);
+        // Capped the same way as `logs` below: otherwise a busy log file
+        // left streaming while paused grows this array without bound.
+        setPendingLogs((prev) => appendCapped(prev, newLines));
       } else {
-        setLogs((prevLogs) => [...prevLogs.slice(-999), ...newLines].slice(-1000));
+        setLogs((prevLogs) => appendCapped(prevLogs, newLines));
       }
     };
 
@@ -98,7 +101,7 @@ export default function LogsPage() {
   const handleTogglePause = () => {
     if (paused) {
       // Resuming, so flush anything buffered while paused.
-      setLogs((prevLogs) => [...prevLogs, ...pendingLogs].slice(-1000));
+      setLogs((prevLogs) => appendCapped(prevLogs, pendingLogs));
       setPendingLogs([]);
     }
     pausedRef.current = !paused;
