@@ -1,6 +1,3 @@
-
-!function(){try{var e="undefined"!=typeof window?window:"undefined"!=typeof global?global:"undefined"!=typeof globalThis?globalThis:"undefined"!=typeof self?self:{},n=(new e.Error).stack;n&&(e._sentryDebugIds=e._sentryDebugIds||{},e._sentryDebugIds[n]="ca07c08e-ac96-5992-9ca4-451a00415d21")}catch(e){}}();
-import * as Sentry from '@sentry/node';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -45,7 +42,6 @@ export default function (app) {
             return next(err);
         res.status(400).json({ error: { message: 'Invalid JSON' } });
     });
-    Sentry.setupExpressErrorHandler(app);
     // --- Central error handler (must be AFTER routes and special-case handlers)
     // eslint-disable-next-line no-unused-vars,@typescript-eslint/no-unused-vars
     app.use((err, _req, res, _next) => {
@@ -67,4 +63,3 @@ export default function (app) {
     logger.debug('Registered routes!');
 }
 //# sourceMappingURL=routes.js.map
-//# debugId=ca07c08e-ac96-5992-9ca4-451a00415d21

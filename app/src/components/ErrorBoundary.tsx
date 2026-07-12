@@ -1,17 +1,15 @@
-import { PropsWithChildren, useState } from 'react';
-import * as Sentry from '@sentry/react';
+import { Component, type ErrorInfo as ReactErrorInfo, type PropsWithChildren } from 'react';
 import { Alert, Typography } from '@mui/material';
 
 
-type ErrorInfo = {
+type CaughtError = {
   error: Error;
   componentStack: string;
-  eventId: string;
 }
 
 type ErrorMessageProps = {
   componentName: string;
-  errorInfo?: ErrorInfo;
+  errorInfo?: CaughtError;
 }
 
 
@@ -47,17 +45,29 @@ const ErrorMessage = ({ componentName, errorInfo }: ErrorMessageProps) => {
 
 type ErrorBoundaryProps = PropsWithChildren<Pick<ErrorMessageProps, 'componentName'>>;
 
-// eslint-disable-next-line react/no-multi-comp
-export default function ErrorBoundary({ children, componentName }: ErrorBoundaryProps) {
-  const [errorInfo, setErrorInfo] = useState<ErrorInfo | undefined>();
+type ErrorBoundaryState = {
+  errorInfo?: CaughtError;
+}
 
-  return (
-    <Sentry.ErrorBoundary
-      fallback={ <ErrorMessage componentName={ componentName } errorInfo={ errorInfo }/> }
-      // @ts-expect-error
-      onError={ (error, componentStack, eventId) => setErrorInfo({ error, componentStack, eventId }) }
-    >
-      { children }
-    </Sentry.ErrorBoundary>
-  );
+// Plain React error boundary (class component because React only exposes
+// componentDidCatch through the class API).
+// eslint-disable-next-line react/no-multi-comp
+export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = {};
+
+  componentDidCatch(error: Error, info: ReactErrorInfo) {
+    this.setState({ errorInfo: { error, componentStack: info.componentStack ?? '' } });
+  }
+
+  render() {
+    if (this.state.errorInfo) {
+      return (
+        <ErrorMessage
+          componentName={ this.props.componentName }
+          errorInfo={ this.state.errorInfo }
+        />
+      );
+    }
+    return this.props.children;
+  }
 }

@@ -6,8 +6,7 @@
   "main": "index.js",
   "scripts": {
     "start": "dotenv -e .env.pod -- node dist/server.js",
-    "build": "tsc && npm run sentry:sourcemaps",
-    "sentry:sourcemaps": "sentry-cli sourcemaps inject --org free-sleep --project server ./dist && sentry-cli sourcemaps upload --org free-sleep --project server ./dist",
+    "build": "tsc",
     "build:pr": "tsc",
     "dev": "MODE=dev dotenv -e .env.pod -- nodemon --watch src --ext ts --exec \"node --loader ts-node/esm\" src/server.ts",
     "dev:local": "dotenv -e .env.local -- nodemon --watch src --ext ts --exec \"node --loader ts-node/esm\" src/server.ts",
@@ -25,8 +24,6 @@
   },
   "dependencies": {
     "@prisma/client": "^6.4.0",
-    "@sentry/cli": "^2.57.0",
-    "@sentry/node": "^10.22.0",
     "binary-split": "^1.0.5",
     "bree": "^9.2.0",
     "cbor": "^9.0.0",
