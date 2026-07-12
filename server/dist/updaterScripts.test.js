@@ -40,5 +40,9 @@ describe('updater shell scripts', () => {
             assert.ok(mode & 0o111, `${script} must carry the exec bit`);
         });
     }
+    it('the update unit runs the script via bash (immune to lost exec bits)', () => {
+        const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
+        assert.match(src, /ExecStart=\/bin\/bash \/home\/dac\/free-sleep\/scripts\/update_service\.sh/);
+    });
 });
 //# sourceMappingURL=updaterScripts.test.js.map

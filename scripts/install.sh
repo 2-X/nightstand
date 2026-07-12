@@ -124,10 +124,10 @@ if [ -f "$BACKUP_PATH" ] && [ -f "$NEW_PATH" ]; then
   echo "New hash: $NEW_HASH"
 
   if [ "$BACKUP_HASH" != "$NEW_HASH" ]; then
-    echo "package-lock.json changed — running npm install..."
+    echo "package-lock.json changed, running npm install..."
     sudo -u "$USERNAME" bash -c "cd '$SERVER_DIR' && /home/$USERNAME/.volta/bin/npm install"
   else
-    echo "package-lock.json unchanged — restoring node_modules from backup..."
+    echo "package-lock.json unchanged, restoring node_modules from backup..."
     if [ -d "$NODE_MODULES_BACKUP" ]; then
       mv "$NODE_MODULES_BACKUP" "$NODE_MODULES_NEW"
       chown -R "$USERNAME:$USERNAME" "$NODE_MODULES_NEW" || true
@@ -243,7 +243,9 @@ After=free-sleep.service
 
 [Service]
 Type=oneshot
-ExecStart=/home/dac/free-sleep/scripts/update_service.sh
+# Run via bash so the updater still works if the script's exec bit is lost
+# (systemd fails with 203/EXEC before writing anything to the log otherwise).
+ExecStart=/bin/bash /home/dac/free-sleep/scripts/update_service.sh
 User=root
 Group=root
 KillMode=process
