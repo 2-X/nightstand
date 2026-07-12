@@ -8,6 +8,7 @@ import numpy as np
 sys.path.append(os.getcwd())
 from data_types import *
 from get_logger import get_logger
+from insufficient_data import InsufficientDataError
 
 logger = get_logger()
 
@@ -16,14 +17,37 @@ def _calculate_avg(arr: np.ndarray):
     return np.mean(arr)
 
 
-def load_piezo_df(data: Data, side: Side, lower_percentile=2, upper_percentile=98, expected_row_count=None) -> pd.DataFrame:
+def _calculate_p2p(arr: np.ndarray):
+    """Percentile-based within-second waveform range (p98 - p2).
+
+    Same quantity the live stream's presence detection uses
+    (stream/biometric_processor.py _range_p98_p2): robust to int32
+    sentinels/outliers, ~35-125k on an empty bed, 0.5M-8M whenever anyone
+    is in the bed (either side - mechanical crosstalk also crosses the
+    noise floor, which is why this metric alone cannot attribute
+    occupancy to a side).
+    """
+    s = arr.astype(np.int64, copy=False)
+    p2, p98 = np.percentile(s, [2, 98])
+    return float(p98 - p2)
+
+
+def load_piezo_df(data: Data, side: Side, lower_percentile=2, upper_percentile=98, expected_row_count=None, with_p2p=False) -> pd.DataFrame:
     logger.debug('Loading piezo df...')
     df = pd.DataFrame(data['piezo_dual'])
     df.sort_values(by='ts', inplace=True)
     df['ts'] = pd.to_datetime(df['ts'])
     df.set_index('ts', inplace=True)
 
+    if df.empty:
+        raise InsufficientDataError('No piezo rows found for the requested window (piezo_dual RAW data missing or not yet archived)')
+
     df[f'{side}1_avg'] = df[f'{side}1'].apply(_calculate_avg)
+    # Compute the within-second p98-p2 range BEFORE the raw array column is
+    # dropped below (the raw arrays are the memory-expensive part). The
+    # avg-percentile row-trim just after retains this column on the same rows.
+    if with_p2p:
+        df[f'{side}1_p2p'] = df[f'{side}1'].apply(_calculate_p2p)
 
     lower_bound = np.percentile(df[f'{side}1_avg'], lower_percentile)
     upper_bound = np.percentile(df[f'{side}1_avg'], upper_percentile)
@@ -90,6 +114,60 @@ def detect_presence_piezo(df: pd.DataFrame, side: Side, rolling_seconds=10, thre
                 f'{side}1_min',
                 f'{side}1_max',
                 f'{side}1_range',
+            ],
+            inplace=True
+        )
+    gc.collect()
+
+
+def detect_presence_piezo_p2p(df: pd.DataFrame, side: Side, rolling_seconds=10,
+                              threshold_percent=0.70, noise_threshold=150_000,
+                              clean=True):
+    """Detect presence from the per-second p98-p2 waveform range.
+
+    Thresholds `{side}1_p2p` (produced by load_piezo_df(with_p2p=True)) against
+    a fixed noise floor, then applies the same two-stage rolling-sum debounce as
+    detect_presence_piezo. This measures the within-second signal amplitude,
+    unlike detect_presence_piezo which thresholds second-to-second drift of the
+    per-second MEAN (a DC offset that false-fires on pump cycling with an empty
+    bed and carries no amplitude information).
+
+    noise_threshold defaults to 150_000, the live stream's production
+    NOISE_THRESHOLD (bumped 30k -> 100k -> 150k against observed empty-bed idle
+    reaching ~110k with pump spikes; see biometric_processor.py:64-73). It
+    answers "is anyone in the bed", NOT "is this side occupied": mechanical
+    crosstalk through the mattress frame keeps a vacated side above this floor
+    while the partner is still in bed, so when partners leave at different times
+    the earlier riser's exit is still reported near the later riser's exit. That
+    exit-attribution problem is out of scope here (phase 2).
+
+    Args:
+        df (pd.DataFrame): DatetimeIndex frame with a `{side}1_p2p` column.
+        rolling_seconds (int): Debounce window length in seconds.
+        threshold_percent (float): Fraction of `rolling_seconds` that must be
+            above noise_threshold to count as present.
+        noise_threshold (int): Empty-vs-occupied p2p cutoff.
+        clean (bool): If True, drops the `{side}1_p2p` and `{side}1_avg`
+            intermediate columns, matching detect_presence_piezo's output shape.
+    """
+    logger.debug('Detecting piezo presence (p2p)...')
+
+    df[f'piezo_{side}1_presence'] = (df[f'{side}1_p2p'] >= noise_threshold).astype(int)
+
+    threshold_count = math.ceil(threshold_percent * rolling_seconds)
+
+    df[f"piezo_{side}1_presence"] = (
+            df[f"piezo_{side}1_presence"]
+            .rolling(window=rolling_seconds, min_periods=1)
+            .sum()
+            >= threshold_count
+    ).astype(int)
+
+    if clean:
+        df.drop(
+            columns=[
+                f'{side}1_p2p',
+                f'{side}1_avg',
             ],
             inplace=True
         )

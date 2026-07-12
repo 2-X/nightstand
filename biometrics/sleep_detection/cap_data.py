@@ -22,6 +22,7 @@ import pandas as pd
 from datetime import datetime
 from data_types import *
 from get_logger import get_logger
+from insufficient_data import InsufficientDataError
 
 logger = get_logger()
 
@@ -31,7 +32,29 @@ pd.set_option('display.width', 300)
 pd.set_option('display.max_columns', 50)
 
 
-def create_cap_baseline_from_cap_df(merged_df: pd.DataFrame, start_time: datetime, end_time: datetime, side: Side, min_std: int = 5) -> CapBaseline:
+def create_cap_baseline_from_cap_df(merged_df: pd.DataFrame, start_time: datetime, end_time: datetime, side: Side, min_std: float = 1) -> CapBaseline:
+    # min_std floors the per-sensor std used later as a z-score denominator in
+    # detect_presence_cap, so a calibration window that happens to be
+    # unusually still doesn't produce a near-zero std and blow the presence
+    # math up. The floor needs to sit above the sensor's real noise ceiling
+    # but well below a genuine occupied-vs-empty delta, and that scale
+    # depends on hardware: Pod 5's capSense2 records get pair-averaged down
+    # to small values (out/cen/in typically land in the 9-25 range; see
+    # load_raw_files._normalize_cap_sense2), while older capSense hardware
+    # reports raw values in the hundreds to low thousands (see the
+    # CapSenseData example in data_types.py). A floor of 5 was tuned for the
+    # older, larger scale; against Pod 5 fixture data (2026-07-09 incident
+    # night, both sides) the real per-sensor std during a genuinely empty
+    # bed measured 0.03-0.85, so a floor of 5 dominated every sensor's z-score
+    # denominator by 2-3 orders of magnitude and suppressed real occupied-vs-
+    # empty deltas of several units down to z-sums that never crossed
+    # detect_presence_cap's occupancy_threshold: cap presence fired on 0.0-
+    # 0.1% of confirmed-occupied samples that night instead of ~90-99%.
+    # min_std=1 sits with margin above the measured empty-bed noise ceiling
+    # (~0.85) on this hardware while restoring real sensitivity; verified
+    # against that fixture in biometrics/__tests__/test_cap_presence.py.
+    # If this code ever runs against genuine legacy capSense hardware again,
+    # this default will need to be re-derived for that value scale.
     logger.debug(f'Creating baseline for capacitance sensors...')
     filtered_df = merged_df[start_time:end_time]
     logger.debug(f'filtered_df: \n{filtered_df.describe()}')
@@ -94,6 +117,9 @@ def load_cap_df(data: Data, side: Side, expected_row_count=None) -> pd.DataFrame
         row_count = df.shape[0]
         if row_count / expected_row_count < 0.80:
             logger.warning(f'Potentially missing cap rows! Expected: {expected_row_count:,} Loaded: {row_count:,} ({row_count / expected_row_count * 100:0.0f}%)')
+
+    if df.empty:
+        raise InsufficientDataError('No capacitance rows found for the requested window (cap_senses RAW data missing or not yet archived)')
 
     logger.debug(f'Loaded cap df time range: {df.index[0]} -> {df.index[-1]}')
     return df
