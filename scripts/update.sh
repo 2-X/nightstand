@@ -136,6 +136,27 @@ systemctl try-restart free-sleep-stream 2>/dev/null || true
 # the unit with 203/EXEC before it can log anything.
 chmod +x "$LIVE"/scripts/update.sh "$LIVE"/scripts/update_service.sh 2>/dev/null || true
 
+# --- instant-rollback service --------------------------------------------------
+# Installs that predate the instant-rollback feature never got
+# free-sleep-rollback.service or its sudoers rule, so the in-app "Roll back"
+# button would 404 against systemd. Idempotent, safe to re-run on every update.
+say "Ensuring instant-rollback service is installed"
+if chmod +x "$LIVE/scripts/rollback_pod.sh" \
+  && cp "$LIVE/scripts/systemd/free-sleep-rollback.service" /etc/systemd/system/ \
+  && systemctl daemon-reload; then
+  :
+else
+  say "WARNING: failed to install the instant-rollback service; the Roll back button will not work until the next successful update"
+fi
+ROLLBACK_SUDOERS_RULE="dac ALL=(root) NOPASSWD: /bin/systemctl start free-sleep-rollback.service --no-block"
+SUDOERS_FILE=/etc/sudoers.d/dac
+if [ -f "$SUDOERS_FILE" ] && grep -Fxq "$ROLLBACK_SUDOERS_RULE" "$SUDOERS_FILE" 2>/dev/null; then
+  :
+else
+  echo "$ROLLBACK_SUDOERS_RULE" >> "$SUDOERS_FILE" && chmod 440 "$SUDOERS_FILE" \
+    || say "WARNING: failed to add rollback sudoers rule; the Roll back button will not work until the next successful update"
+fi
+
 # --- health check --------------------------------------------------------------
 say "Health check (up to 90s)"
 HEALTHY=no
