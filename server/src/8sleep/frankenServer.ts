@@ -1,7 +1,7 @@
 import { Socket } from 'net';
 
 import { SequentialQueue } from './sequentialQueue.js';
-import { MessageReadTimeoutError, MessageStream } from './messageStream.js';
+import { MessageStream } from './messageStream.js';
 import { FrankenCommand, frankenCommands } from './deviceApi.js';
 
 import { UnixSocketServer } from './unixSocketServer.js';
@@ -10,10 +10,11 @@ import { DeviceStatus } from '../routes/deviceStatus/deviceStatusSchema.js';
 import { loadDeviceStatus } from './loadDeviceStatus.js';
 import config from '../config.js';
 import { toPromise, wait } from './promises.js';
+import { promiseWithTimeout } from './timeoutPromise.js';
+import metrics from '../metrics/metrics.js';
 
 const FRANKEN_CONNECTION_TIMEOUT_MS = 25_000;
-const FRANKEN_CONNECTION_MAX_ATTEMPTS = 10;
-const FRANKEN_RESPONSE_TIMEOUT_MS = 10_000;
+const FRANKEN_COMMAND_TIMEOUT_MS = Number(process.env.FRANKEN_COMMAND_TIMEOUT_MS) || 5_000;
 
 class FrankenConnectionTimeoutError extends Error {
   public constructor() {
@@ -22,13 +23,10 @@ class FrankenConnectionTimeoutError extends Error {
   }
 }
 
-class FrankenConnectionFailedError extends Error {
-  public constructor(
-    attempts: number,
-    public readonly lastError: unknown,
-  ) {
-    super(`Unable to connect to Franken hardware after ${attempts} attempts`);
-    this.name = 'FrankenConnectionFailedError';
+export class FrankenCommandTimeoutError extends Error {
+  public constructor(commandNumber: string, timeoutMs: number) {
+    super(`Franken command ${commandNumber} did not respond within ${timeoutMs}ms`);
+    this.name = 'FrankenCommandTimeoutError';
   }
 }
 
@@ -38,7 +36,7 @@ export class Franken {
   public constructor(
     private readonly socket: Socket,
     private readonly messageStream: MessageStream,
-    private readonly sequentialQueue: SequentialQueue,
+    public readonly sequentialQueue: SequentialQueue,
   ) {
   }
 
@@ -46,29 +44,52 @@ export class Franken {
 
   public async sendMessage(message: string) {
     logger.debug(`Sending message to sock | message: ${message}`);
-    let responseBytes: Buffer;
+    const commandNumber = message.split('\n', 1)[0] ?? '?';
+    const startedAt = Date.now();
+    let timedOut = false;
+
     try {
-      responseBytes = await this.sequentialQueue.exec(async () => {
+      const responseBytes = await this.sequentialQueue.exec(async () => {
         const requestBytes = Buffer.concat([Buffer.from(message), Franken.separator]);
         await this.write(requestBytes);
-        const resp = await this.messageStream.readMessage(FRANKEN_RESPONSE_TIMEOUT_MS);
+
+        // Race the read against a per-command timeout. If the timeout fires
+        // we abort the readMessage() listener (so it stops holding a slot in
+        // the message stream) and surface a typed error.
+        const abortController = new AbortController();
+        const resp = await promiseWithTimeout(
+          this.messageStream.readMessage({ signal: abortController.signal }),
+          FRANKEN_COMMAND_TIMEOUT_MS,
+          {
+            abortController,
+            onTimeout: () => new FrankenCommandTimeoutError(commandNumber, FRANKEN_COMMAND_TIMEOUT_MS),
+          },
+        );
 
         if (Franken.responseDelayMs > 0) {
           await wait(10);
         }
         return resp;
       });
+      metrics.recordFrankenCommand(Date.now() - startedAt, false);
+      const response = responseBytes.toString();
+      logger.debug(`Message sent successfully to sock | message: ${message}`);
+      return response;
     } catch (error) {
-      if (error instanceof MessageReadTimeoutError) {
-        logger.warn(`Timed out waiting for Franken response. Closing stale socket. message: ${message}`);
-        this.close();
+      if (error instanceof FrankenCommandTimeoutError) {
+        timedOut = true;
+        metrics.recordFrankenCommand(Date.now() - startedAt, true);
+        logger.warn(`${error.message}; tearing down dac.sock so the next call reconnects`);
+        // Fire-and-forget the reconnect so the rejected caller can handle the
+        // error promptly. The next caller will rebuild the connection.
+        // eslint-disable-next-line no-use-before-define
+        void disconnectFranken().catch(err => logger.error(`disconnect after timeout failed: ${err}`));
+      }
+      if (!timedOut) {
+        metrics.recordFrankenCommand(Date.now() - startedAt, false);
       }
       throw error;
     }
-    const response = responseBytes.toString();
-    logger.debug(`Message sent successfully to sock | message: ${message}`);
-
-    return response;
   }
 
   private tryStripNewlines(arg: string) {
@@ -96,10 +117,6 @@ export class Franken {
   public close() {
     const socket = this.socket;
     if (!socket.destroyed) socket.destroy();
-  }
-
-  public get isClosed() {
-    return this.socket.destroyed;
   }
 
   public static fromSocket(socket: Socket) {
@@ -135,25 +152,6 @@ class FrankenServer {
   }
 }
 
-function promiseWithTimeout<T>(promise: Promise<T>, onTimeout: () => Error) {
-  let timeout: NodeJS.Timeout | undefined;
-  return new Promise<T>((resolve, reject) => {
-    timeout = setTimeout(() => {
-      reject(onTimeout());
-    }, FRANKEN_CONNECTION_TIMEOUT_MS);
-
-    promise
-      .then(value => {
-        if (timeout) clearTimeout(timeout);
-        resolve(value);
-      })
-      .catch(error => {
-        if (timeout) clearTimeout(timeout);
-        reject(error);
-      });
-  });
-}
-
 
 let frankenServer: FrankenServer | undefined;
 let franken: Franken | undefined;
@@ -165,16 +163,25 @@ function waitForFrankenWithTimeout(server: FrankenServer) {
   }
 
   const timeoutMessage = `Restarting Franken after ${FRANKEN_CONNECTION_TIMEOUT_MS / 1_000}s timeout`;
-  return promiseWithTimeout(server.waitForFranken(), () => {
-    logger.warn(timeoutMessage);
-    return new FrankenConnectionTimeoutError();
+  return promiseWithTimeout(server.waitForFranken(), FRANKEN_CONNECTION_TIMEOUT_MS, {
+    onTimeout: () => {
+      logger.warn(timeoutMessage);
+      return new FrankenConnectionTimeoutError();
+    },
   });
 }
 
 
 async function shutdownFrankenServer() {
-  franken?.close();
-  franken = undefined;
+  if (franken) {
+    try {
+      await franken.sequentialQueue.drain();
+    } catch {
+      // ignored
+    }
+    franken.close();
+    franken = undefined;
+  }
   if (frankenServer) {
     await frankenServer.close();
     frankenServer = undefined;
@@ -182,39 +189,32 @@ async function shutdownFrankenServer() {
 }
 
 export async function connectFranken(): Promise<Franken> {
-  if (franken) {
-    if (!franken.isClosed) return franken;
-    franken = undefined;
-  }
+  if (franken) return franken;
   if (connectPromise) return connectPromise;
 
   connectPromise = (async () => {
-    for (let attempt = 1; attempt <= FRANKEN_CONNECTION_MAX_ATTEMPTS; attempt++) {
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
       if (!frankenServer) {
         frankenServer = await FrankenServer.start(config.dacSockPath);
         logger.debug('FrankenServer started');
       }
 
       try {
-        logger.debug(`Waiting for Franken hardware connection... attempt ${attempt}/${FRANKEN_CONNECTION_MAX_ATTEMPTS}`);
+        logger.debug('Waiting for Franken hardware connection...');
         franken = await waitForFrankenWithTimeout(frankenServer);
         logger.info('Franken socket connected');
         return franken;
       } catch (error) {
         if (error instanceof FrankenConnectionTimeoutError) {
+          logger.warn('Unable to connect to Franken within timeout, restarting socket server...');
           await shutdownFrankenServer();
-          if (attempt < FRANKEN_CONNECTION_MAX_ATTEMPTS) {
-            logger.warn('Unable to connect to Franken within timeout, restarting socket server...');
-            continue;
-          }
-          logger.error(`Unable to connect to Franken after ${FRANKEN_CONNECTION_MAX_ATTEMPTS} attempts`);
-          throw new FrankenConnectionFailedError(FRANKEN_CONNECTION_MAX_ATTEMPTS, error);
+          continue;
         }
         await shutdownFrankenServer();
         throw error;
       }
     }
-    throw new FrankenConnectionFailedError(FRANKEN_CONNECTION_MAX_ATTEMPTS, undefined);
   })();
 
   try {
@@ -227,4 +227,23 @@ export async function connectFranken(): Promise<Franken> {
 export async function disconnectFranken() {
   connectPromise = undefined;
   await shutdownFrankenServer();
+}
+
+export function getFrankenQueueDepth(): number {
+  return franken?.sequentialQueue.depth() ?? 0;
+}
+
+// Concurrent callers asking for device status share a single roundtrip while
+// one is in flight. Cache lifetime is the duration of the in-flight call only,
+// no stale reads, this is purely a "did N requests just arrive simultaneously"
+// optimisation. Failures (including timeouts) are not cached.
+let inFlightDeviceStatus: Promise<DeviceStatus> | undefined;
+
+export async function getDeviceStatusCoalesced(getGestures = false): Promise<DeviceStatus> {
+  if (inFlightDeviceStatus) return inFlightDeviceStatus;
+  const f = await connectFranken();
+  inFlightDeviceStatus = f.getDeviceStatus(getGestures).finally(() => {
+    inFlightDeviceStatus = undefined;
+  });
+  return inFlightDeviceStatus;
 }
