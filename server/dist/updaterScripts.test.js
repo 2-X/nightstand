@@ -18,10 +18,12 @@ describe('updater shell scripts', () => {
             assert.doesNotThrow(() => execFileSync('bash', ['-n', full]));
         });
     }
-    it('update.sh pulls from this fork and keeps its safety rails', () => {
+    it('update.sh pulls from this fork by default, overridable via env', () => {
         const src = readFileSync(path.join(repoRoot, 'scripts/update.sh'), 'utf8');
-        assert.match(src, /github\.com\/LTimothy\/nightstand\/archive\/refs\/heads\/main\.zip/);
-        assert.match(src, /raw\.githubusercontent\.com\/LTimothy\/nightstand\/main\/server\/src\/serverInfo\.json/);
+        assert.match(src, /NIGHTSTAND_REPO:-LTimothy\/nightstand/, 'must default to this fork');
+        assert.match(src, /NIGHTSTAND_BRANCH:-main/, 'must default to main');
+        assert.match(src, /ZIP_URL="https:\/\/github\.com\/\$\{NIGHTSTAND_REPO\}\/archive\/refs\/heads\/\$\{NIGHTSTAND_BRANCH\}\.zip"/);
+        assert.match(src, /INFO_URL="https:\/\/raw\.githubusercontent\.com\/\$\{NIGHTSTAND_REPO\}\/\$\{NIGHTSTAND_BRANCH\}\/server\/src\/serverInfo\.json"/);
         assert.match(src, /block_internet_access\.sh/, 'must re-block WAN');
         assert.match(src, /trap cleanup EXIT/, 'must re-block WAN even on failure');
         assert.match(src, /rolling back/i, 'must have a rollback path');
