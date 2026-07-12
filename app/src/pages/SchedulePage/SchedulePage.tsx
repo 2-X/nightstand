@@ -5,6 +5,7 @@ import { DeepPartial } from 'ts-essentials';
 import moment from 'moment-timezone';
 
 import AlarmAccordion from './AlarmSection/AlarmAccordion.tsx';
+import OneOffAlarmSection from './OneOffAlarmSection.tsx';
 import ApplyToOtherDaysAccordion from './ApplyToOtherDaysAccordion.tsx';
 import DayTabs from './DayTabs.tsx';
 import EnabledSwitch from './EnabledSwitch.tsx';
@@ -119,6 +120,7 @@ export default function SchedulePage() {
       </Box>
       <TemperatureAdjustmentsAccordion format={ format }/>
       <AlarmAccordion/>
+      <OneOffAlarmSection/>
       <ApplyToOtherDaysAccordion/>
 
     </PageContainer>
