@@ -10,10 +10,13 @@ export default function AlarmTime() {
   const { isUpdating } = useAppStore();
   const {
     selectedSchedule,
-    updateSelectedSchedule,
+    selectedAlarmIndex,
+    getEditedAlarms,
+    updateSelectedAlarm,
     validations,
     setValidations,
   } = useScheduleStore();
+  const alarm = getEditedAlarms()[selectedAlarmIndex];
   const theme = useTheme();
 
   const handleChange = (time: Time) => {
@@ -26,20 +29,14 @@ export default function AlarmTime() {
     // Adjust for the next day if the end time is earlier than the start time
     const isValid = powerOffMoment.isAfter(alarmMoment);
     setValidations({ alarmTimeIsValid: isValid });
-    updateSelectedSchedule(
-      {
-        alarm: {
-          time: time,
-        },
-      }
-    );
+    updateSelectedAlarm({ time });
   };
 
   return (
     <TextField
       label="Alarm time"
       type="time"
-      value={ selectedSchedule?.alarm.time || '09:00' }
+      value={ alarm?.time || '09:00' }
       onChange={ (e) => handleChange(e.target.value) }
       variant='standard'
       error={ !validations.alarmTimeIsValid }

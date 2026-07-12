@@ -5,20 +5,16 @@ import { useAppStore } from '@state/appStore.tsx';
 
 export default function AlarmEnabledSwitch() {
   const { isUpdating } = useAppStore();
-  const { selectedSchedule, updateSelectedSchedule } = useScheduleStore();
+  const { selectedAlarmIndex, getEditedAlarms, updateSelectedAlarm } = useScheduleStore();
+  const alarm = getEditedAlarms()[selectedAlarmIndex];
 
   return (
     <FormControlLabel
       control={
         <Switch
-          checked={ selectedSchedule?.alarm.enabled || false }
+          checked={ alarm?.enabled || false }
           onChange={ () => {
-            updateSelectedSchedule({
-              alarm: {
-                enabled: !selectedSchedule?.alarm.enabled
-              }
-            }
-            );
+            updateSelectedAlarm({ enabled: !alarm?.enabled });
           } }
           disabled={ isUpdating }
         />
