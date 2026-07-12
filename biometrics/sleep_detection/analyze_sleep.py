@@ -40,6 +40,7 @@ from sleep_detector import detect_sleep, detect_movement
 from resource_usage import get_memory_usage_unix, get_available_memory_mb
 from biometrics_helpers import validate_datetime_utc
 from service_health import update_health, is_biometrics_enabled
+from insufficient_data import outcome_for_exception
 
 
 
@@ -120,9 +121,16 @@ if __name__ == "__main__":
         logger.info('Keyboard interrupt signal received, exiting...')
         update_health(job_key, 'failed', 'Interrupted')
     except Exception as error:
-        logger.error(error)
-        stack = traceback.format_exc()
-        logger.error(stack)
-        logger.error('Error analyzing sleep, exiting...')
-        update_health(job_key, 'failed', repr(error))
+        # No full night archived yet (fresh install) reports the calm
+        # 'waiting_for_data' state instead of a failure; real errors stay
+        # 'failed', logged with their stack as before.
+        status, message = outcome_for_exception(error)
+        if status == 'failed':
+            logger.error(error)
+            stack = traceback.format_exc()
+            logger.error(stack)
+            logger.error('Error analyzing sleep, exiting...')
+        else:
+            logger.info(message)
+        update_health(job_key, status, message)
 

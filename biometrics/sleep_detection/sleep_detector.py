@@ -20,7 +20,7 @@ from db import insert_sleep_records, insert_movement_df
 from sleep_detection.cap_data import load_cap_df, load_baseline, detect_presence_cap
 from get_logger import get_logger
 from load_raw_files import load_raw_files
-from piezo_data import load_piezo_df, detect_presence_piezo
+from piezo_data import load_piezo_df, detect_presence_piezo_p2p
 
 logger = get_logger()
 
@@ -51,7 +51,23 @@ def _get_presence_intervals(df: pd.DataFrame, side: Side, presence_duration_thre
 
     # Iterate over DataFrame to find state changes
     for timestamp, row in df.iterrows():
-        status = row[occupancy_col] == 2  # Presence condition
+        # Presence = EITHER piezo OR cap fires. Requiring both (== 2) loses
+        # true occupancy: piezo misses still sleep (range below threshold
+        # when only breathing), and cap on its own is not trustworthy enough
+        # to require. (cap_data.py's
+        # min_std floor was tuned for an older, larger-scale capSense
+        # hardware and dominated Pod 5's much smaller capSense2 z-score
+        # denominators, so cap presence fired on ~0% of confirmed-occupied
+        # samples that night; fixed by lowering the floor to match this
+        # hardware's measured noise scale -- see cap_data.py -- which
+        # restored cap presence to ~90-99% of confirmed-occupied samples on
+        # the same recording. Keeping the OR here rather than switching to
+        # cap-only or AND, since piezo alone still misses still/breathing-
+        # only occupancy and one night of data is not enough to trust
+        # cap presence as a sole signal.) The 1-minute duration filter,
+        # 15-min merge, and 3-hour sleep-period minimum downstream still
+        # suppress short false positives.
+        status = row[occupancy_col] >= 1
 
         if current_status is None:
             current_status = status
@@ -97,23 +113,38 @@ def _total_duration_seconds(intervals) -> int:
     return int(total_time.total_seconds())
 
 
-def _identify_sleep_intervals(present_intervals: List[Tuple[datetime, datetime]], max_gap_in_minutes: int = 15):
+def _identify_sleep_intervals(
+    present_intervals: List[Tuple[datetime, datetime]],
+    max_gap_in_minutes: int = 15,
+    real_exit_min_minutes: int = 5,
+):
     """
     Identifies sleep periods by merging intervals with small gaps.
 
     Args:
-        present_intervals (list of tuples): List of (start_time, end_time) tuples representing presence periods.
-        max_gap_in_minutes (int, optional): Maximum allowed minutes between intervals before merging them. Defaults to 15.
+        present_intervals: List of (start_time, end_time) tuples representing presence periods.
+        max_gap_in_minutes: Maximum gap between intervals before they're treated as
+            separate sleep sessions. Defaults to 15.
+        real_exit_min_minutes: Minimum gap (within a merged session) to count as an
+            actual bed exit. Smaller gaps are treated as sensor blips (you rolled
+            over, sensor briefly didn't register), not real exits. Defaults to 5.
+            This dramatically reduces false "you woke up" events caused by
+            sub-minute presence-detection dropouts.
 
     Returns:
         list of dicts: A list of detected sleep periods, each containing:
             - 'entered_bed_at': Start time of the sleep period.
             - 'left_bed_at': End time of the sleep period.
-            - 'sleep_period': Total sleep duration.
-            - 'times_exited_bed': Number of times the person exited the bed.
+            - 'sleep_period_seconds': Total sleep duration.
+            - 'times_exited_bed': Number of times the person exited the bed
+              (only counts gaps >= real_exit_min_minutes).
     """
-    logger.debug(f'Identifying sleep intervals... | max_gap_in_minutes: {max_gap_in_minutes}')
+    logger.debug(
+        f'Identifying sleep intervals... | max_gap_in_minutes={max_gap_in_minutes} '
+        f'real_exit_min_minutes={real_exit_min_minutes}'
+    )
     max_gap = timedelta(minutes=max_gap_in_minutes)
+    real_exit_min = timedelta(minutes=real_exit_min_minutes)
     if not present_intervals:
         return []
 
@@ -130,7 +161,11 @@ def _identify_sleep_intervals(present_intervals: List[Tuple[datetime, datetime]]
             # Merge into the current sleep period
             current_end = next_end
             total_sleep_time += (next_end - next_start)
-            exit_count += 1
+            # Only count this as a real bed exit if the gap is non-trivial.
+            # Tiny gaps are sensor blips (presence detection briefly lost
+            # the user while they were still in bed), not actual exits.
+            if gap >= real_exit_min:
+                exit_count += 1
         else:
             # Only add sleep interval if it's greater than 3 hours
             if total_sleep_time > timedelta(hours=3):
@@ -205,19 +240,18 @@ def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_pa
 
     data = load_raw_files(folder_path, start_time, end_time, side, sensor_count=1, raw_data_types=['capSense', 'piezo-dual'])
 
-    piezo_df = load_piezo_df(data, side, expected_row_count=expected_row_count)
+    piezo_df = load_piezo_df(data, side, expected_row_count=expected_row_count, with_p2p=True)
     cap_df = load_cap_df(data, side, expected_row_count=expected_row_count)
     # Cleanup data
     del data
     gc.collect()
 
-    detect_presence_piezo(
+    detect_presence_piezo_p2p(
         piezo_df,
         side,
         rolling_seconds=10,
         threshold_percent=0.70,
-        range_threshold=20_000,
-        range_rolling_seconds=10,
+        noise_threshold=150_000,
         clean=True
     )
 
