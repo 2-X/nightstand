@@ -22,8 +22,8 @@ type TimeSeriesChartProps = {
 };
 
 /**
- * Time-series line chart styled to match the 8 Sleep app's nightly metric
- * charts (HR, HRV, breathing rate, etc.).
+ * Time-series line chart for nightly metrics (HR, HRV, breathing rate,
+ * etc.).
  *
  * Visual conventions:
  *   - White line + small white-stroked markers
@@ -54,19 +54,19 @@ export default function TimeSeriesChart({
   const padded = [yMin - ySpan * 0.1, yMax + ySpan * 0.1];
 
   return (
-    <Box ref={ ref } sx={ { width: '100%', position: 'relative' } }>
+    <Box ref={ ref } sx={ { width: '100%', position: 'relative', touchAction: 'pan-y' } }>
       { /* Translucent green target band, drawn behind the chart */ }
       { targetRange && (
         <Box
           sx={ {
             position: 'absolute',
-            // The chart has a left margin (~50px) and bottom margin (~40px) for
-            // axis labels, so this approximates the plot area position. Not
-            // pixel-perfect; the chart will overlay this box.
+            // The chart has a left margin (~38px) for axis labels and a bottom
+            // margin (~32px) for x-axis labels - approximate the plot area
+            // position here. Not pixel-perfect; the chart overlays this box.
             top: 12,
             bottom: 40,
-            left: 8,
-            right: 50,
+            left: 38,
+            right: 12,
             pointerEvents: 'none',
             // Vertical position within the plot area is computed by mapping
             // the target range to a percentage of [padded[0], padded[1]].
@@ -88,7 +88,13 @@ export default function TimeSeriesChart({
       <LineChart
         width={ width }
         height={ height }
-        margin={ { top: 12, bottom: 32, left: 8, right: 44 } }
+        // Left margin = room for y-axis labels (up to 3 digits like "100").
+        // Previous config put labels on the right with position:'right' and
+        // a 56px right margin, but MUI x-charts didn't honor that on every
+        // build of the lib - labels rendered at x=0 and got clipped to just
+        // the trailing digit (e.g. "60" → "0"). Putting them back on the
+        // left with explicit margin is the boring known-good config.
+        margin={ { top: 12, bottom: 32, left: 38, right: 12 } }
         colors={ [lineColor] }
         dataset={ data.map((p) => ({ ...p })) }
         xAxis={ [{
@@ -102,7 +108,7 @@ export default function TimeSeriesChart({
         yAxis={ [{
           min: padded[0],
           max: padded[1],
-          position: 'right',
+          position: 'left',
           valueFormatter: fmtY,
           tickLabelStyle: { fill: palette.text.tertiary, fontSize: 11 },
           stroke: 'transparent',
@@ -111,7 +117,10 @@ export default function TimeSeriesChart({
         grid={ { horizontal: true, vertical: true } }
         series={ [{
           dataKey: 'value',
-          showMark: ({ index }) => index % Math.max(1, Math.floor(data.length / 50)) === 0,
+          // Pre-aggregation upstream (VitalsLineChart.bucketAggregate) keeps
+          // `data` at a sensible density, so we don't need a second-stage
+          // every-Nth filter in here anymore. Show a marker per point.
+          showMark: true,
           curve: 'linear',
           valueFormatter: (v) => (v == null ? '' : fmtY(v)),
         }] }
@@ -127,9 +136,9 @@ export default function TimeSeriesChart({
           },
           '& .MuiMarkElement-root': {
             stroke: lineColor,
-            strokeWidth: 1.25,
+            strokeWidth: 1,
             fill: '#000',
-            r: 2.5,
+            r: 1.5,
           },
           '& .MuiChartsLegend-root': { display: 'none' },
         } }

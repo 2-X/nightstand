@@ -20,9 +20,9 @@ type MetricRowProps = {
   value: React.ReactNode;
   /** Small dim sub-label under the value, e.g. "Below avg (51)" */
   valueSubtext?: string;
-  /** Status indicator dot color (matches the 8 Sleep app pattern) */
+  /** Status indicator dot color */
   statusDot?: StatusDotColor;
-  /** Optional row click handler, adds hover state */
+  /** Optional row click handler - adds hover state */
   onClick?: () => void;
   /** Whether to render a top divider (use between rows in a list) */
   divider?: boolean;
