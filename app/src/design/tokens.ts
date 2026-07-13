@@ -1,5 +1,6 @@
-// Design tokens: single source of truth for the new visual language.
-// Inspired by Apple Home + the latest 8 Sleep app design (per shared screenshots).
+// Design tokens - single source of truth for the visual language:
+// near-black background, translucent "glass" cards, dim uppercase section
+// labels, and big high-contrast numerals.
 //
 // Use semantic names where possible so we can tweak the underlying palette
 // without grepping every component.
@@ -20,7 +21,7 @@ export const palette = {
     tertiary: 'rgba(255,255,255,0.45)',
     disabled: 'rgba(255,255,255,0.25)',
   },
-  // Apple system colors, proven to feel right on dark.
+  // Apple system colors - proven to feel right on dark.
   accent: {
     blue: '#0a84ff',
     green: '#30d158',
@@ -99,7 +100,7 @@ export const typography = {
   },
 };
 
-// Shared sx blocks: drop-in style snippets.
+// Shared sx blocks - drop-in style snippets.
 export const sx = {
   glassCard: {
     width: '100%',
@@ -113,6 +114,30 @@ export const sx = {
     WebkitBackdropFilter: 'blur(20px)',
     overflowWrap: 'break-word' as const,
     wordBreak: 'break-word' as const,
+  },
+  // Glass aesthetic for an MUI Accordion. Drops the default divider, rounds
+  // the corners, and applies the same gradient/border/shadow as a GlassCard
+  // so accordion sections on the Schedules page visually match the Sleep
+  // page's cards while keeping their collapse/expand behaviour.
+  glassAccordion: {
+    width: '100%',
+    borderRadius: `${radius.xl}px`,
+    background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
+    border: `1px solid ${palette.border.subtle}`,
+    boxShadow:
+      '0 1px 0 rgba(255,255,255,0.04) inset, 0 12px 24px -12px rgba(0,0,0,0.5)',
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
+    '&:before': { display: 'none' },
+    '&.Mui-expanded': { margin: 0 },
+    '& .MuiAccordionSummary-root': {
+      borderRadius: `${radius.xl}px`,
+      px: space.cardPadding,
+    },
+    '& .MuiAccordionDetails-root': {
+      px: space.cardPadding,
+      pb: space.cardPadding,
+    },
   },
   sectionLabel: {
     ...typography.sectionLabel,
