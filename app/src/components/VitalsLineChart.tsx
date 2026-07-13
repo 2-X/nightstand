@@ -1,143 +1,111 @@
-/* eslint-disable react/no-multi-comp */
 import { useMemo } from 'react';
-import Alert, { AlertProps } from '@mui/material/Alert';
-import Link from '@mui/material/Link';
-import InfoIcon from '@mui/icons-material/Info';
-import WarningIcon from '@mui/icons-material/Warning';
-import { LineChart } from '@mui/x-charts/LineChart';
-import { Card, Typography } from '@mui/material';
 import moment from 'moment-timezone';
-import { useTheme } from '@mui/material/styles';
 import { VitalsRecord } from '@api/vitals.ts';
-import { useResizeDetector } from 'react-resize-detector';
-
-type Metric = 'heart_rate' | 'hrv' | 'breathing_rate';
+import MetricChartCard from '@design/MetricChartCard';
+import TimeSeriesChart, { TimeSeriesPoint } from '@design/TimeSeriesChart';
+import { vitalsRecordsToPoints, VitalsMetric as Metric } from '@lib/vitalsPoints.ts';
 type VitalsLineChartProps = {
   vitalsRecords?: VitalsRecord[];
   metric: Metric;
+  /** Average of this metric over the 7 days leading up to the selected
+   *  night, computed from the vitals-summary endpoint by the parent. */
+  sevenDayAvg?: number;
 };
 
-
-function downsampleData<T>(data: readonly T[], factor: number): T[] {
-  if (!Number.isFinite(factor) || factor <= 1) return [...data];
-  return data.filter((_, i) => i % factor === 0);
-}
-type BannerProps = {
-  metric: Metric;
-  label: string;
-}
-
-type BannerMapping = {
-  icon: React.ReactElement;
-  severity: AlertProps['severity'];
-  text: string | React.ReactElement;
-}
-type BannerMap = Record<Metric, BannerMapping>;
-
-const Banner = ({ metric }: BannerProps) => {
-  const bannerMap: BannerMap = {
-    heart_rate: {
-      icon: <InfoIcon color='info'/>,
-      severity: 'info',
-      text: <Typography>Heart rate data has been validated with six participants, and accuracy may be limited.
-        You can help improve future accuracy by contributing your own data for validation or
-        by experimenting and improving the algorithm yourself.
-        See the <Link href='https://github.com/throwaway31265/free-sleep?tab=readme-ov-file#biometrics-'>documentation</Link>
-        &nbsp;for details on current measurement accuracy.
-      </Typography>,
-    },
-    breathing_rate: {
-      icon: <WarningIcon color='warning'/>,
-      severity: 'warning',
-      text: 'Breath rate accuracy has not been verified.',
-    },
-    hrv: {
-      icon: <WarningIcon color='warning'/>,
-      severity: 'warning',
-      text: 'HRV accuracy has not been verified.',
-    }
-  };
-  return (
-    <Alert icon={ bannerMap[metric].icon } severity={ bannerMap[metric].severity }>
-      { bannerMap[metric].text }
-    </Alert>
-  );
+// Display config per metric: section labels + units + healthy target band.
+// The target ranges below are general adult sleep references - used only as a
+// faint background band on the chart for visual context, not a medical claim.
+const METRIC_CONFIG: Record<
+  Metric,
+  {
+    title: string;
+    primaryLabel: string;
+    unit: string;
+    targetRange?: [number, number];
+  }
+> = {
+  heart_rate:    { title: 'HEART RATE', primaryLabel: 'AT REST', unit: 'bpm' },
+  hrv:           { title: 'HRV', primaryLabel: 'TONIGHT', unit: 'ms', targetRange: [50, 100] },
+  breathing_rate:{ title: 'BREATHING RATE', primaryLabel: 'TONIGHT', unit: 'brpm', targetRange: [12, 20] },
 };
 
-export default function VitalsLineChart({ vitalsRecords, metric }: VitalsLineChartProps) {
-  const { width = 300, ref } = useResizeDetector();
-  const theme = useTheme();
+// Bucket-aggregate timestamped points: split into ~maxPoints contiguous
+// buckets and emit the mean of each bucket (using the bucket's middle
+// timestamp). Smoother trend than naive every-Nth-point decimation, since
+// it averages out jitter rather than just dropping in-between samples.
+function bucketAggregate(arr: TimeSeriesPoint[], maxPoints: number): TimeSeriesPoint[] {
+  if (arr.length <= maxPoints) return arr;
+  const bucketSize = Math.ceil(arr.length / maxPoints);
+  const out: TimeSeriesPoint[] = [];
+  for (let i = 0; i < arr.length; i += bucketSize) {
+    const slice = arr.slice(i, i + bucketSize);
+    const meanValue = slice.reduce((s, p) => s + p.value, 0) / slice.length;
+    const midIdx = Math.floor(slice.length / 2);
+    out.push({ timestamp: slice[midIdx].timestamp, value: meanValue });
+  }
+  return out;
+}
 
-  const cleanedVitalsRecords = useMemo(() => {
-    if (!vitalsRecords) return [];
-    const pxPerPoint = 3;
-    const allowedPoints = width / pxPerPoint;
-    const downsampleTo = Math.ceil(vitalsRecords?.length / allowedPoints);
-    return downsampleData(vitalsRecords, downsampleTo)
-      .filter(
-        (record) =>
-          record.timestamp &&
-          !isNaN(new Date(record.timestamp).getTime()) &&
-          !isNaN(record[metric])
-      )
-      .map((record) => ({
-        ...record,
-        timestamp: new Date(record.timestamp),
-        [metric]: Number(record[metric]),
-      }));
-  }, [vitalsRecords]);
+export default function VitalsLineChart({ vitalsRecords, metric, sevenDayAvg }: VitalsLineChartProps) {
+  const cfg = METRIC_CONFIG[metric];
 
-  if (!vitalsRecords) return;
-
-  const vitalsMap = {
-    heart_rate: {
-      label: 'Heart rate',
-      color: theme.palette.error.main,
-    },
-    breathing_rate: {
-      label: 'Breathing rate',
-      color: theme.palette.primary.main,
-    },
-    hrv: {
-      label: 'HRV',
-      color: theme.palette.error.main,
+  const { points, primaryValue } = useMemo(() => {
+    if (!vitalsRecords || vitalsRecords.length === 0) {
+      return { points: [] as TimeSeriesPoint[], primaryValue: '\u2014' };
     }
-  };
-  const { label, color } = vitalsMap[metric];
+    const cleaned = vitalsRecordsToPoints(vitalsRecords, metric);
 
+    if (cleaned.length === 0) {
+      return { points: [] as TimeSeriesPoint[], primaryValue: '\u2014' };
+    }
+
+    // Was decimate-to-120 with another every-Nth filter inside the chart
+    // for visible markers. End result felt cluttered (60-80 dots packed on
+    // the line). Bucket-aggregate to ~50 points = roughly half the visible
+    // density of the previous version, with smoother trend lines.
+    const downsampled = bucketAggregate(cleaned, 50);
+    const values = cleaned.map((p) => p.value);
+
+    // For "AT REST" on heart rate, show the minimum (resting HR is typically
+    // the lowest sustained reading during sleep). For other metrics, show
+    // the average.
+    const primary =
+      metric === 'heart_rate'
+        ? Math.round(Math.min(...values))
+        : Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+
+    return {
+      points: downsampled,
+      primaryValue: `${primary} ${cfg.unit}`,
+    };
+  }, [vitalsRecords, metric, cfg.unit]);
+
+  const sevenDayValue =
+    sevenDayAvg && sevenDayAvg > 0 ? `${Math.round(sevenDayAvg)} ${cfg.unit}` : '\u2014';
+
+  if (points.length === 0) return null;
+
+  // A single night's data reads fine as bare times ("11 pm", "3 am"), but
+  // once the window covers more than one day, identical hour labels repeat
+  // ("7 am, 7 am, 7 am") with nothing to tell the days apart.
+  const spanMs =
+    points[points.length - 1].timestamp.getTime() - points[0].timestamp.getTime();
+  const timeFormat = spanMs > 24 * 60 * 60 * 1000 ? 'ddd h a' : 'h a';
 
   return (
-    <Card sx={ { pt: 1, mt: 2, pl: 2, pr: 2, pb: 2 } }>
-      <Typography variant="h6" gutterBottom>
-        { label }
-      </Typography>
-      <LineChart
-        ref={ ref }
-        height={ 300 }
-        colors={ [color] }
-        dataset={ cleanedVitalsRecords }
-        xAxis={ [
-          {
-            id: 'Years',
-            dataKey: 'timestamp',
-            scaleType: 'time',
-            valueFormatter: (periodStart) =>
-              moment(periodStart).format('HH:mm'),
-          },
-        ] }
-        legend={ { hidden: true } }
-        series={ [
-          {
-            id: label,
-            label: label,
-            dataKey: metric,
-            valueFormatter: (metric) => (metric !== null && !isNaN(metric) ? metric.toFixed(0) : 'Invalid'),
-            showMark: false,
-          },
-        ] }
+    <MetricChartCard
+      title={ cfg.title }
+      stats={ [
+        { label: cfg.primaryLabel, value: primaryValue },
+        { label: '7 DAY AVERAGE', value: sevenDayValue },
+      ] }
+    >
+      <TimeSeriesChart
+        data={ points }
+        targetRange={ cfg.targetRange }
+        xValueFormatter={ (d) => moment(d).format(timeFormat).toLowerCase() }
+        yValueFormatter={ (n) => Math.round(n).toString() }
       />
-      <Banner metric={ metric } label={ vitalsMap[metric].label } />
-
-    </Card>
+    </MetricChartCard>
   );
 }
