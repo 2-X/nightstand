@@ -330,6 +330,20 @@ const createServices = (): Services => ({
         message: 'Calibrated this morning',
         timestamp: new Date(now.getTime() - 3 * HOURS_TO_MS).toISOString(),
       },
+      pumpLeft: {
+        name: 'Pump health - left',
+        description: 'Watches for a stalled circulation pump while the heater/cooler is active',
+        status: 'healthy',
+        message: 'Circulating normally',
+        timestamp: now.toISOString(),
+      },
+      pumpRight: {
+        name: 'Pump health - right',
+        description: 'Watches for a stalled circulation pump while the heater/cooler is active',
+        status: 'healthy',
+        message: 'Circulating normally',
+        timestamp: now.toISOString(),
+      },
     },
   },
 });
