@@ -16,6 +16,7 @@ import sleepStages from '../routes/metrics/sleepStages.js';
 import presence from '../routes/metrics/presence.js';
 import logs from '../routes/logs/logs.js';
 import serverStatus from '../routes/serverStatus/serverStatus.js';
+import baseControl from '../routes/baseControl/baseControl.js';
 import update from '../routes/update/update.js';
 import metricsServer from '../routes/metricsServer/metricsServer.js';
 import logger from '../logger.js';
@@ -40,6 +41,7 @@ export default function (app: Express) {
   app.use('/api/metrics/', presence);
   app.use('/api/logs', logs);
   app.use('/api/serverStatus', serverStatus);
+  app.use('/api/', baseControl);
   app.use('/api/update', update);
   app.use('/api/', metricsServer);
   app.use('/api', (req: Request, res: Response) => {
