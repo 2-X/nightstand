@@ -72,6 +72,16 @@ export default function SchedulePage() {
     reloadScheduleData();
   }, [side]);
 
+  // Discard any in-progress edits when the page unmounts (user navigates to
+  // another tab). The store is a Zustand singleton that survives unmount, so
+  // without this the user would come back and see their unsaved changes
+  // still pending - which the user explicitly does not want here.
+  useEffect(() => {
+    return () => {
+      reloadScheduleData();
+    };
+  }, [reloadScheduleData]);
+
   const handleSave = async () => {
     setIsUpdating(true);
 
