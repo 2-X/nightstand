@@ -9,6 +9,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppStore } from '@state/appStore.tsx';
 import { useTheme } from '@mui/material/styles';
 import { useEventStreamStore } from '@api/eventStream.ts';
+import { useBaseConfigured } from '@api/baseControl.ts';
 import { PAGES } from './pages';
 import freeSleepIcon from '../../public/free-sleep-icon.svg';
 
@@ -22,8 +23,15 @@ export default function Navbar() {
   // show nothing, since the app is silent when everything is working.
   const wsState = useEventStreamStore((s) => s.state);
   const showReconnecting = wsState === 'reconnecting';
+  // Hide the Elevation tab entirely on pods with no adjustable base, since
+  // the page would just render dead controls.
+  const baseConfigured = useBaseConfigured();
+  const pages = React.useMemo(
+    () => PAGES.filter((page) => page.route !== '/elevation' || baseConfigured),
+    [baseConfigured]
+  );
   const [mobileNavValue, setMobileNavValue] = React.useState(
-    PAGES.findIndex((page) => page.route === pathname)
+    pages.findIndex((page) => page.route === pathname)
   );
 
   // Handle navigation for both desktop and mobile
@@ -36,7 +44,7 @@ export default function Navbar() {
     newValue: number
   ) => {
     setMobileNavValue(newValue);
-    handleNavigation(PAGES[newValue].route);
+    handleNavigation(pages[newValue].route);
   };
 
   const gradient = `linear-gradient(
@@ -107,7 +115,7 @@ export default function Navbar() {
             <img src={ freeSleepIcon } alt="Join our Discord" width={ 45 } height={ 45 } />
           </div>
           <Box sx={ { display: 'flex', gap: 2 } }>
-            { PAGES.map(({ title, route }) => (
+            { pages.map(({ title, route }) => (
               <Button
                 key={ route }
                 onClick={ () => handleNavigation(route) }
@@ -149,7 +157,7 @@ export default function Navbar() {
             },
           } }
         >
-          { PAGES.map(({ title, icon }, index) => (
+          { pages.map(({ title, icon }, index) => (
             <BottomNavigationAction
               key={ index }
               icon={ icon }
