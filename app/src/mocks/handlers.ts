@@ -1,6 +1,7 @@
 import { http, HttpResponse, delay } from 'msw';
 import type { SleepRecord } from '@api/sleepSchema.ts';
 import type { Jobs } from '@api/jobs.ts';
+import type { BasePosition } from '@api/baseControl.ts';
 import {
   getServices,
   updateServices,
@@ -11,10 +12,16 @@ import {
   getDeviceStatus,
   updateDeviceStatus,
   getServerStatus,
+  getBaseStatus,
+  setBasePosition,
+  setBasePreset,
+  stopBase,
   listSleepRecords,
   setSleepRecords,
   listMovementRecords,
   listVitalsRecords,
+  getSleepStages,
+  getSleepScore,
   filterByQuery,
   listLogs,
   getLogFiles,
@@ -86,6 +93,53 @@ export const handlers = [
   http.get('/api/serverStatus', async () => {
     await delay(150);
     return HttpResponse.json(deepClone(getServerStatus()));
+  }),
+  http.get('/api/base-control', async () => {
+    await delay(100);
+    return HttpResponse.json(deepClone(getBaseStatus()));
+  }),
+  http.post('/api/base-control', async ({ request }) => {
+    const body = (await request.json()) as BasePosition;
+    await delay(100);
+    return HttpResponse.json(deepClone(setBasePosition(body)));
+  }),
+  http.post('/api/base-control/preset', async ({ request }) => {
+    const body = (await request.json()) as { preset: string };
+    await delay(100);
+    return HttpResponse.json(deepClone(setBasePreset(body.preset)));
+  }),
+  http.post('/api/base-control/stop', async () => {
+    await delay(100);
+    return HttpResponse.json(deepClone(stopBase()));
+  }),
+  http.get('/api/metrics/sleep-stages', async ({ request }) => {
+    const { startTime, endTime } = toFilters(request);
+    await delay(150);
+    if (!startTime || !endTime) {
+      return HttpResponse.json({
+        epochs: [],
+        totals: { awake: 0, rem: 0, light: 0, deep: 0 },
+        percentages: { awake: 0, rem: 0, light: 0, deep: 0 },
+        totalSeconds: 0,
+      });
+    }
+    return HttpResponse.json(getSleepStages(startTime, endTime));
+  }),
+  http.get('/api/metrics/sleep-score', async ({ request }) => {
+    const { startTime, endTime } = toFilters(request);
+    await delay(150);
+    if (!startTime || !endTime) {
+      return HttpResponse.json({
+        score: 0,
+        components: {
+          duration: { score: 0, weight: 0.35, value: '', available: false },
+          continuity: { score: 0, weight: 0.25, value: '', available: false },
+          hrv: { score: 0, weight: 0.2, value: '', available: false },
+          restingHr: { score: 0, weight: 0.2, value: '', available: false },
+        },
+      });
+    }
+    return HttpResponse.json(getSleepScore(startTime, endTime));
   }),
   http.get('/api/metrics/sleep', async ({ request }) => {
     const filters = toFilters(request);

@@ -7,7 +7,10 @@ import type { MovementRecord } from '@api/movement.ts';
 import type { SleepRecord } from '@api/sleepSchema.ts';
 import type { VitalsRecord } from '@api/vitals.ts';
 import type { ServerStatus } from '@api/serverStatusSchema.ts';
+import type { BaseStatus, BasePosition } from '@api/baseControl.ts';
 import type { Jobs } from '@api/jobs.ts';
+import type { SleepStage, StageEpoch, SleepStagesResponse } from '@api/sleepStages.ts';
+import type { SleepScore } from '@api/sleepScore.ts';
 
 type Side = 'left' | 'right';
 
@@ -117,6 +120,61 @@ const createVitalsRecords = (): VitalsRecord[] => {
   return records;
 };
 
+// Repeating hypnogram pattern (roughly a 90-minute sleep cycle split into
+// 15-minute epochs): brief awake at sleep onset, then light, deep, light,
+// REM, cycling through the night.
+const STAGE_CYCLE: SleepStage[] = ['awake', 'light', 'deep', 'light', 'rem', 'light', 'deep', 'rem', 'light'];
+const STAGE_EPOCH_SECONDS = 15 * 60;
+
+const createSleepStages = (startTime: string, endTime: string): SleepStagesResponse => {
+  const startUnix = Math.floor(new Date(startTime).getTime() / 1000);
+  const endUnix = Math.floor(new Date(endTime).getTime() / 1000);
+  const epochs: StageEpoch[] = [];
+
+  let cursor = startUnix;
+  let i = 0;
+  while (cursor < endUnix) {
+    const stage = STAGE_CYCLE[i % STAGE_CYCLE.length];
+    const segEnd = Math.min(endUnix, cursor + STAGE_EPOCH_SECONDS);
+    epochs.push({ startUnix: cursor, endUnix: segEnd, stage });
+    cursor = segEnd;
+    i += 1;
+  }
+
+  const totals: Record<SleepStage, number> = { awake: 0, rem: 0, light: 0, deep: 0 };
+  epochs.forEach((epoch) => {
+    totals[epoch.stage] += epoch.endUnix - epoch.startUnix;
+  });
+  const totalSeconds = Math.max(0, endUnix - startUnix);
+  const percentages: Record<SleepStage, number> = { awake: 0, rem: 0, light: 0, deep: 0 };
+  (Object.keys(totals) as SleepStage[]).forEach((stage) => {
+    percentages[stage] = totalSeconds > 0 ? Math.round((totals[stage] / totalSeconds) * 100) : 0;
+  });
+
+  return { epochs, totals, percentages, totalSeconds };
+};
+
+const createSleepScore = (startTime: string, endTime: string): SleepScore => {
+  const durationHours = Math.max(0, (new Date(endTime).getTime() - new Date(startTime).getTime()) / HOURS_TO_MS);
+  const durationScore = clamp(Math.round(55 + durationHours * 5), 40, 100);
+  const continuityScore = 84;
+  const hrvScore = 76;
+  const restingHrScore = 88;
+  const score = Math.round(
+    durationScore * 0.35 + continuityScore * 0.25 + hrvScore * 0.2 + restingHrScore * 0.2
+  );
+
+  return {
+    score,
+    components: {
+      duration: { score: durationScore, weight: 0.35, value: `${durationHours.toFixed(1)}h`, available: true },
+      continuity: { score: continuityScore, weight: 0.25, value: '1 awakening', available: true },
+      hrv: { score: hrvScore, weight: 0.2, value: '63ms', available: true },
+      restingHr: { score: restingHrScore, weight: 0.2, value: '52bpm', available: true },
+    },
+  };
+};
+
 const createSchedules = (): Schedules => ({
   left: {
     sunday: {
@@ -182,25 +240,25 @@ const createSchedules = (): Schedules => ({
       alarms: [{ time: '06:30', vibrationIntensity: 3, vibrationPattern: 'double', duration: 8, enabled: true, alarmTemperature: 83 }],
     },
     wednesday: {
-      temperatures: { '05:00': 82, '6:00': 100 },
+      temperatures: { '05:00': 82, '06:00': 100 },
       power: { on: '21:15', off: '06:30', enabled: true, onTemperature: 60 },
       alarm: { time: '06:30', vibrationIntensity: 2, vibrationPattern: 'double', duration: 8, enabled: true, alarmTemperature: 83 },
       alarms: [{ time: '06:30', vibrationIntensity: 2, vibrationPattern: 'double', duration: 8, enabled: true, alarmTemperature: 83 }],
     },
     thursday: {
-      temperatures: { '05:00': 82, '6:00': 100 },
+      temperatures: { '05:00': 82, '06:00': 100 },
       power: { on: '21:15', off: '06:30', enabled: true, onTemperature: 60 },
       alarm: { time: '06:30', vibrationIntensity: 2, vibrationPattern: 'double', duration: 8, enabled: true, alarmTemperature: 83 },
       alarms: [{ time: '06:30', vibrationIntensity: 2, vibrationPattern: 'double', duration: 8, enabled: true, alarmTemperature: 83 }],
     },
     friday: {
-      temperatures: { '05:00': 82, '6:00': 100 },
+      temperatures: { '05:00': 82, '06:00': 100 },
       power: { on: '22:00', off: '07:30', enabled: true, onTemperature: 60 },
       alarm: { time: '07:30', vibrationIntensity: 3, vibrationPattern: 'rise', duration: 12, enabled: true, alarmTemperature: 85 },
       alarms: [{ time: '07:30', vibrationIntensity: 3, vibrationPattern: 'rise', duration: 12, enabled: true, alarmTemperature: 85 }],
     },
     saturday: {
-      temperatures: { '05:00': 82, '6:00': 100 },
+      temperatures: { '05:00': 82, '06:00': 100 },
       power: { on: '22:30', off: '08:30', enabled: true, onTemperature: 60 },
       alarm: { time: '08:30', vibrationIntensity: 2, vibrationPattern: 'rise', duration: 12, enabled: true, alarmTemperature: 86 },
       alarms: [{ time: '08:30', vibrationIntensity: 2, vibrationPattern: 'rise', duration: 12, enabled: true, alarmTemperature: 86 }],
@@ -376,7 +434,7 @@ const createDeviceStatus = (): DeviceStatus => ({
   coverVersion: 'Pod 5',
   hubVersion: 'Pod 5',
   freeSleep: {
-    version: '1.2.0',
+    version: '2.1.5',
     branch: 'main',
   },
   wifiStrength: 82,
@@ -508,9 +566,54 @@ const createServerStatus = (): ServerStatus => ({
   },
 });
 
+// Demo pods have no real adjustable base hardware, but the Elevation tab is
+// worth showing off, isConfigured: true unlocks it (see useBaseConfigured).
+const BASE_PRESETS: Record<string, { head: number; feet: number }> = {
+  flat: { head: 0, feet: 0 },
+  sleep: { head: 1, feet: 5 },
+  relax: { head: 30, feet: 15 },
+  read: { head: 40, feet: 0 },
+};
+
+const createBaseStatus = (): BaseStatus => ({
+  head: 0,
+  feet: 0,
+  isMoving: false,
+  lastUpdate: now.toISOString(),
+  isConfigured: true,
+});
+
+let baseStatus = createBaseStatus();
+let baseMoveTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Simulates gradual movement: flips isMoving on immediately (so the UI's
+// "Base is moving..." state has something to poll), then lands on the
+// target position after a beat, roughly how the real BLE-driven base
+// reports itself over a couple of useBaseStatus polls.
+const simulateBaseMove = (target: { head: number; feet: number }) => {
+  baseStatus = { ...baseStatus, isMoving: true, lastUpdate: new Date().toISOString() };
+  if (baseMoveTimer) clearTimeout(baseMoveTimer);
+  baseMoveTimer = setTimeout(() => {
+    baseStatus = { ...baseStatus, ...target, isMoving: false, lastUpdate: new Date().toISOString() };
+  }, 2500);
+  return baseStatus;
+};
+
+export const getBaseStatus = () => baseStatus;
+
+export const setBasePosition = (position: BasePosition) => simulateBaseMove(position);
+
+export const setBasePreset = (preset: string) => simulateBaseMove(BASE_PRESETS[preset] ?? BASE_PRESETS.flat);
+
+export const stopBase = () => {
+  if (baseMoveTimer) clearTimeout(baseMoveTimer);
+  baseStatus = { ...baseStatus, isMoving: false, lastUpdate: new Date().toISOString() };
+  return baseStatus;
+};
+
 const createLogs = (): LogStore => ({
   'free-sleep.log': [
-    `[${new Date(now.getTime() - 3 * MINUTES_TO_MS).toISOString()}] INFO Starting Free Sleep demo mode`,
+    `[${new Date(now.getTime() - 3 * MINUTES_TO_MS).toISOString()}] INFO Starting Nightstand demo mode`,
     `[${new Date(now.getTime() - 2 * MINUTES_TO_MS).toISOString()}] INFO Schedules loaded successfully`,
     `[${new Date(now.getTime() - 90 * 1000).toISOString()}] INFO Biometrics stream connected`,
     `[${new Date(now.getTime() - 30 * 1000).toISOString()}] INFO Demo data refreshed`,
@@ -600,6 +703,9 @@ export const setSleepRecords = (records: SleepRecord[]) => {
   sleepRecords = records;
   return sleepRecords;
 };
+
+export const getSleepStages = createSleepStages;
+export const getSleepScore = createSleepScore;
 
 export const listMovementRecords = () => movementRecords;
 
