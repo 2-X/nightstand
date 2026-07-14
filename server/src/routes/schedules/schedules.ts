@@ -6,6 +6,7 @@ import DeepPartial = partialUtil.DeepPartial;
 import { Schedules } from '../../db/schedulesSchema.js';
 import logger from '../../logger.js';
 import schedulesDB from '../../db/schedules.js';
+import { sanitizeScheduleBody } from './sanitizeScheduleBody.js';
 
 
 import {
@@ -30,17 +31,7 @@ router.get('/schedules', async (req: Request, res: Response) => {
 });
 
 router.post('/schedules', async (req: Request, res: Response) => {
-  // Strip any stale/unknown day-level keys (e.g. `elevations` left over from
-  // older versions) before validating. The strict schema would otherwise 400
-  // on a round-trip of existing schedulesDB.json data, and the merge below only
-  // ever uses power/temperatures/alarm anyway.
-  const body = _.mapValues(
-    (req.body ?? {}) as Record<string, Record<string, unknown>>,
-    (sideSchedule) => _.mapValues(
-      (sideSchedule ?? {}) as Record<string, unknown>,
-      (daySchedule) => _.pick(daySchedule, ['temperatures', 'power', 'alarm']),
-    ),
-  );
+  const body = sanitizeScheduleBody(req.body);
   const validationResult = SchedulesSchema.deepPartial().safeParse(body);
   if (!validationResult.success) {
     logger.error('Invalid schedules update:', validationResult.error);
