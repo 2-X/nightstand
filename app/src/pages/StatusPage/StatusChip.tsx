@@ -4,6 +4,7 @@ import ReplayRoundedIcon from '@mui/icons-material/ReplayRounded';
 import AutorenewRoundedIcon from '@mui/icons-material/AutorenewRounded';
 import HourglassEmptyRoundedIcon from '@mui/icons-material/HourglassEmptyRounded';
 import InfoRoundedIcon from '@mui/icons-material/InfoRounded';
+import SensorsRoundedIcon from '@mui/icons-material/SensorsRounded';
 import { Chip } from '@mui/material';
 import { StatusInfo, Status } from '@api/serverStatusSchema.ts';
 
@@ -21,6 +22,11 @@ const statusMeta: Record<
     color: 'info',
     icon: <InfoRoundedIcon fontSize="small" />,
     label: 'Started',
+  },
+  waiting_for_data: {
+    color: 'info',
+    icon: <SensorsRoundedIcon fontSize="small" />,
+    label: 'Collecting data',
   },
   restarting: {
     color: 'warning',
