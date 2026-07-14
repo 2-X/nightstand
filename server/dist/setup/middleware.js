@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import logger from '../logger.js';
+import { attachRequestCompletionLogging } from './requestLogging.js';
 import os from 'os';
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN;
 function getLocalIp() {
@@ -74,12 +75,7 @@ function isAllowedOrigin(origin) {
 }
 export default function (app) {
     app.use((req, res, next) => {
-        const startTime = Date.now();
-        // Hook into the response `finish` event to log after the response is sent
-        res.on('finish', () => {
-            const duration = Date.now() - startTime;
-            logger.info(`${req.method} ${req.originalUrl} - ${res.statusCode} - ${duration}ms`);
-        });
+        attachRequestCompletionLogging(req, res, logger);
         next();
     });
     app.use(express.json());
