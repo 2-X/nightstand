@@ -8,8 +8,9 @@ Adapted from throwaway31265/free-sleep PRs #46 (seanpasino) and #50
 (alexuser); this fork keeps a single copy of the parser in
 ``load_raw_files.py`` and imports it from ``stream.py``.
 
-Run locally (needs cbor2, numpy, pytest, not part of the node CI):
-    python3 -m pytest biometrics/__tests__/test_raw_record_parser.py -v
+Run locally (needs cbor2, numpy):
+    python3 -m unittest biometrics.__tests__.test_raw_record_parser -v
+(also runs under plain unittest discover, or pytest where available)
 
 Key areas tested:
 1. Normal records with varying ``data`` sizes (boundary, large, sequential)
@@ -20,7 +21,7 @@ Key areas tested:
 5. Sequential reading correctness -- file offset advances exactly by the
    CBOR record length
 """
-import pytest
+import unittest
 from io import BytesIO
 
 import cbor2
@@ -63,15 +64,15 @@ def outer_record(seq: int, data: bytes) -> bytes:
 # 1. Normal records
 # ---------------------------------------------------------------------------
 
-class TestNormalRecords:
+class TestNormalRecords(unittest.TestCase):
     def test_simple_record(self):
         inner = {"type": "piezo-dual", "ts": 42.0, "left1": b"\x00\x01"}
         raw = outer_record(seq=1, data=cbor2.dumps(inner))
         handle = BytesIO(raw)
         result = _read_raw_record(handle)
         out = cbor2.loads(result)
-        assert out == inner
-        assert handle.tell() == len(raw)
+        self.assertEqual(out, inner)
+        self.assertEqual(handle.tell(), len(raw))
 
     def test_larger_than_4k(self):
         """Record > 4k ensures we are not relying on 4k buffer alignment."""
@@ -80,19 +81,19 @@ class TestNormalRecords:
         handle = BytesIO(raw)
         result = _read_raw_record(handle)
         out = cbor2.loads(result)
-        assert out["value"] == payload["value"]
-        assert handle.tell() == len(raw)
+        self.assertEqual(out["value"], payload["value"])
+        self.assertEqual(handle.tell(), len(raw))
 
     def test_exact_boundary_4096(self):
         """Record size exactly 4096 bytes (the buggy chunk size)."""
         inner = {"pad": "y" * 4074}
         raw = outer_record(seq=1, data=cbor2.dumps(inner))
-        assert len(raw) == 4096
+        self.assertEqual(len(raw), 4096)
         handle = BytesIO(raw)
         result = _read_raw_record(handle)
         out = cbor2.loads(result)
-        assert "pad" in out
-        assert handle.tell() == len(raw)
+        self.assertIn("pad", out)
+        self.assertEqual(handle.tell(), len(raw))
 
     def test_two_records_sequential(self):
         """Two records in a single stream: both should parse and file offset
@@ -108,10 +109,10 @@ class TestNormalRecords:
         r2 = _read_raw_record(handle)
         pos_after_2 = handle.tell()
 
-        assert cbor2.loads(r1) == inner1
-        assert cbor2.loads(r2) == inner2
-        assert pos_after_2 == len(raw)
-        assert pos_after_1 < pos_after_2
+        self.assertEqual(cbor2.loads(r1), inner1)
+        self.assertEqual(cbor2.loads(r2), inner2)
+        self.assertEqual(pos_after_2, len(raw))
+        self.assertLess(pos_after_1, pos_after_2)
 
     def test_wide_seq_encodings(self):
         """Seq numbers that force 1/2/4/8-byte uint encodings all parse.
@@ -121,21 +122,21 @@ class TestNormalRecords:
             raw = outer_record(seq, cbor2.dumps(inner))
             handle = BytesIO(raw)
             result = _read_raw_record(handle)
-            assert cbor2.loads(result) == inner
-            assert handle.tell() == len(raw)
+            self.assertEqual(cbor2.loads(result), inner)
+            self.assertEqual(handle.tell(), len(raw))
 
 
 # ---------------------------------------------------------------------------
 # 2. Placeholder records
 # ---------------------------------------------------------------------------
 
-class TestPlaceholderRecords:
+class TestPlaceholderRecords(unittest.TestCase):
     def test_standard_empty_placeholder(self):
         """Empty placeholder with standard CBOR ``bytes(0)`` representation."""
         raw = outer_record(seq=5, data=b"")
         handle = BytesIO(raw)
         result = _read_raw_record(handle)
-        assert result is None
+        self.assertIsNone(result)
 
     def test_placeholder_followed_by_real(self):
         """Placeholder then real record: real record must still be readable."""
@@ -146,8 +147,8 @@ class TestPlaceholderRecords:
         handle = BytesIO(raw)
         _read_raw_record(handle)          # placeholder -> None
         result = _read_raw_record(handle)  # real record
-        assert cbor2.loads(result) == inner
-        assert handle.tell() == len(raw)
+        self.assertEqual(cbor2.loads(result), inner)
+        self.assertEqual(handle.tell(), len(raw))
 
     def test_nul_padding_between_records(self):
         """NUL padding bytes between records are skipped silently."""
@@ -159,16 +160,16 @@ class TestPlaceholderRecords:
             + outer_record(2, cbor2.dumps(inner2))
         )
         handle = BytesIO(raw)
-        assert cbor2.loads(_read_raw_record(handle)) == inner1
-        assert cbor2.loads(_read_raw_record(handle)) == inner2
-        assert handle.tell() == len(raw)
+        self.assertEqual(cbor2.loads(_read_raw_record(handle)), inner1)
+        self.assertEqual(cbor2.loads(_read_raw_record(handle)), inner2)
+        self.assertEqual(handle.tell(), len(raw))
 
     def test_trailing_nul_padding_raises_eof(self):
         """A file ending in NUL padding raises EOFError, not ValueError."""
         raw = outer_record(1, cbor2.dumps({"ts": 1.0})) + b"\x00" * 32
         handle = BytesIO(raw)
         _read_raw_record(handle)
-        with pytest.raises(EOFError):
+        with self.assertRaises(EOFError):
             _read_raw_record(handle)
 
 
@@ -176,17 +177,17 @@ class TestPlaceholderRecords:
 # 3. Truncated / malformed input
 # ---------------------------------------------------------------------------
 
-class TestMalformedInput:
+class TestMalformedInput(unittest.TestCase):
     def test_bad_first_byte(self):
         """Anything other than ``0xa2`` (CBOR map of 2 items) or NUL padding
         is an immediate error."""
         handle = BytesIO(b"\x01")
-        with pytest.raises(ValueError, match="0x01"):
+        with self.assertRaisesRegex(ValueError, "0x01"):
             _read_raw_record(handle)
 
     def test_truncated_after_map_header(self):
         handle = BytesIO(b"\xa2\x63seq")
-        with pytest.raises(EOFError):
+        with self.assertRaises(EOFError):
             _read_raw_record(handle)
 
     def test_truncated_data_length(self):
@@ -195,14 +196,14 @@ class TestMalformedInput:
         # uint8 length = 10, only 5 bytes follow
         raw = head + b'\x18\x0a' + b'\x00' * 5
         handle = BytesIO(raw)
-        with pytest.raises(EOFError):
+        with self.assertRaises(EOFError):
             _read_raw_record(handle)
 
     def test_garbage_data_key(self):
         """Wrong key after seq."""
         raw = b'\xa2\x63seq\x18\x01\x64foo\x40'
         handle = BytesIO(raw)
-        with pytest.raises(ValueError, match="data key"):
+        with self.assertRaisesRegex(ValueError, "data key"):
             _read_raw_record(handle)
 
     def test_unsupported_length_ai(self):
@@ -211,7 +212,7 @@ class TestMalformedInput:
         # map(2), "seq", 1-byte uint, "data", bytes with 8-byte length header
         raw = b'\xa2\x63seq\x18\x01\x64data\x5b' + b'\x00' * 8
         handle = BytesIO(raw)
-        with pytest.raises(ValueError, match="Unsupported length"):
+        with self.assertRaisesRegex(ValueError, "Unsupported length"):
             _read_raw_record(handle)
 
 
@@ -219,21 +220,21 @@ class TestMalformedInput:
 # 4. EOF propagation
 # ---------------------------------------------------------------------------
 
-class TestEOFPropagation:
+class TestEOFPropagation(unittest.TestCase):
     def test_empty_stream(self):
         handle = BytesIO(b"")
-        with pytest.raises(EOFError):
+        with self.assertRaises(EOFError):
             _read_raw_record(handle)
 
     def test_partial_header_eof(self):
         """Stream ends after the first byte which is ``0xa2``."""
         handle = BytesIO(b"\xa2")
-        with pytest.raises(ValueError, match="Expected seq key"):
+        with self.assertRaisesRegex(ValueError, "Expected seq key"):
             _read_raw_record(handle)
 
     def test_eof_after_seq(self):
         handle = BytesIO(b'\xa2\x63seq\x18\x01\x64data')
-        with pytest.raises(EOFError):
+        with self.assertRaises(EOFError):
             _read_raw_record(handle)
 
 
@@ -241,7 +242,7 @@ class TestEOFPropagation:
 # 5. Existing helpers still work
 # ---------------------------------------------------------------------------
 
-class TestExistingHelpers:
+class TestExistingHelpers(unittest.TestCase):
     def test_decode_piezo_data(self):
         raw = np.array([1, 2, 3], dtype=np.int32).tobytes()
         arr = _decode_piezo_data(raw)
@@ -254,7 +255,7 @@ class TestExistingHelpers:
             "right1": np.array([3, 4], dtype=np.int32).tobytes(),
         }
         load_piezo_row(payload, "left")
-        assert isinstance(payload["left1"], np.ndarray)
+        self.assertIsInstance(payload["left1"], np.ndarray)
         np.testing.assert_array_equal(payload["left1"], [1, 2])
 
     def test_delete_other_side(self):
@@ -266,11 +267,11 @@ class TestExistingHelpers:
             "right2": 4,
         }
         _delete_other_side(payload, "left", sensor_count=2)
-        assert "right1" not in payload
-        assert "right2" not in payload
-        assert "left1" in payload
-        assert "left2" in payload
+        self.assertNotIn("right1", payload)
+        self.assertNotIn("right2", payload)
+        self.assertIn("left1", payload)
+        self.assertIn("left2", payload)
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    unittest.main()
