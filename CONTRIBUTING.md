@@ -1,77 +1,120 @@
 # Contributing
 
-#### **Please Read Before Making Changes❗❗**
+This is a personal fork, maintained for one Pod and one household. You're
+welcome to open issues and PRs, and useful fixes will get merged, but there's
+no roadmap, no SLA, and no promise that a feature request goes anywhere. If
+you want changes for the broader project, take them to
+[throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep)
+(coordinate on their Discord first, per their CONTRIBUTING.md) or to
+[jmew/free-sleep](https://github.com/jmew/free-sleep), which this fork is
+based on.
 
-Contributions are welcome and appreciated. Free Sleep is open source, but it is maintainer-led and prioritizes stability for real users on real hardware over rapid experimentation.
+## AI-assisted contributions
 
+Welcome, and treated no differently from any other kind. [AGENTS.md](AGENTS.md)
+is kept current as the entry point for coding agents (layout, commands,
+hardware cautions), so point your tool there first. Whatever wrote the code,
+you own the PR: you have read it, tested it, and you are the one accountable
+for review feedback and for any issues it causes. Nothing else in this
+document changes based on how the code was produced.
 
-## RULE #1 — COORDINATE BEFORE YOU START ❗
-- Send a message in the Discord server and tag @free_sleep before starting any new feature 
-  - Small bug fixes or changes under ~100 lines are welcome without prior discussion.
-- Do not expect changes to be merged without **explicit prior approval**.
-- This helps avoid duplicate work and misaligned expectations.
-- Work started without coordination may be declined regardless of effort.
+## Commit style
 
-## 🚫 Core Project Policies 🚫
+Conventional Commits, matching the history already here:
 
-To keep Free Sleep stable, predictable, and easy for everyone to work on, there are a few core parts of the project that should not be changed without explicit discussion first:
+```
+type(scope): subject
+```
 
-## 1. Project Direction & Ownership
-- Free Sleep is not a shared-ownership or consensus-driven project.
-- Final decisions on scope, architecture, and merges rest with the maintainer.
-- Open source means the code is public and contributions are welcome — it does not mean all changes will be merged.
+- Types: `feat`, `fix`, `ui`, `docs`, `build`, `ops`, `refactor`, `chore`.
+- Scope is optional; existing ones include `biometrics`, `schedule`, `server`,
+  `base`, `versioning`.
+- Subject is lowercase and imperative, with no trailing period.
+- Plain messages with no trailers; the body explains why, not just what.
 
-**If you strongly disagree with the project’s direction, forking is the intended and encouraged path.**
+## Versioning
 
+Semver, `MAJOR.MINOR.PATCH`, always all three parts. One source of truth:
+`server/src/serverInfo.json`.
 
-## 2. UI rewrites
-- You’re welcome to suggest UI changes or provide mockups.
-- Suggestions or mockups do not guarantee approval or implementation.
-- UI is subjective, and repeated redesigns create churn and instability.
+- PATCH: bug fix or internal change, no new behavior.
+- MINOR: new user-facing feature, backward compatible.
+- MAJOR: breaking change to data schemas, the API, or on-pod config that
+  needs manual attention when deploying.
 
-If you want to explore an alternative UI direction, please do so in a fork or separate branch.
+Nightstand's stream started at 3.0.0 at the hard fork from jmew's fork (which
+was at 2.1.4, tracking the original project's 2.x line). `upstreamBase` in the
+same file records the last original-project release whose changes were
+reviewed; bump it whenever you finish a cherry-pick review, even if nothing
+was taken.
 
-## 3. Don’t switch core tooling
-Tools like:
-- Volta (for Node version management)
-- npm (for package management)
-- TypeScript
-- Prettier / ESLint configuration
+Every release is also recorded in `releases.json` (repo root) with a channel
+of `stable` or `beta`, and tagged in git as `v<version>` (e.g. `v3.2.0`).
 
-These are intentionally chosen and should not be replaced with alternatives like Bun, Yarn, or other system-wide changes.
+## Release cadence and promotion
 
-If you think a tool could be upgraded or swapped, please discuss it first in Discord. The Pod has a finicky environment and stability is important.
+Cut a release when a coherent, user-facing bundle of work is ready, not once
+per change. Work accumulates on `main` under a `## [Unreleased]` heading in
+`CHANGELOG.md`; when there's enough to justify a version, that heading becomes
+the release. A steady trickle of one-commit releases makes the changelog noise
+and the version number meaningless, so resist it.
 
+Every release is born on `beta`. Promotion to `stable` is part of the ritual,
+not an afterthought: at each release, sweep the existing betas and promote any
+that have soaked at least **seven nights** on real hardware with no regressions.
+Use `scripts/promote_release.sh <version>` to flip a single entry's channel in
+`releases.json` (it prints the matching `gh release edit` command to run). Two
+rules keep the channels honest:
 
-## 4. Avoid editing shell scripts unless necessary
-- The scripts in scripts/*.sh handle installation, updates, and automation across many Pods in real homes.
-- Small changes can break installs or updates for users, so:
-  - Don’t modify shell scripts unless absolutely needed.
-  - Open an issue or discuss changes on Discord before making a PR.
+- **Stable floor.** The newest `stable` release must never lag behind a beta
+  that has already cleared its seven-night soak. Betas are for soaking, not for
+  parking finished work indefinitely.
+- Trivial or doc-only releases can be born `stable` directly.
 
+Downgrades and rollbacks never reverse a Prisma migration: the older server
+just runs against the newer schema. This works because migrations are
+additive, and that's a standing rule: a new migration must never drop or
+rename a column/table that an older, still-installable release reads.
 
-## 5. Code Style & Quality
-- Run `npm run lint` & `npm run build` in both server/ and app/ before opening a PR.
-- Keep changes clean, consistent, and focused on a single purpose.
+## Release ritual
 
+1. Bump the version in `server/src/serverInfo.json`.
+2. Add the new release to the top of `releases.json` (channel `beta` unless
+   there's a reason to ship straight to `stable`).
+3. Add a matching entry at the top of `CHANGELOG.md`.
+4. Rebuild both halves (`npm run build:pr` in `server/` and `app/`) and commit
+   the output.
+5. Commit everything together, then tag: `git tag -a v<version> -m "..."`.
+6. Push with tags: `git push origin main --tags`.
+7. Create the GitHub Release: `gh release create v<version> --title
+   "v<version>" --notes-file <path>` with that version's `CHANGELOG.md`
+   section as the notes, `-R LTimothy/nightstand` if `gh`'s default-repo
+   detection picks the wrong remote (this repo has several forks configured
+   as remotes for cherry-picking). Pass `--prerelease` for a `beta`-channel
+   release; when a release is later promoted to `stable` in `releases.json`,
+   also run `gh release edit v<version> --prerelease=false` (and
+   `--latest` if it's the newest stable one) to match.
 
-## 6. Git & Pull Requests
-- Your branch must be conflict-free with main before submitting.
-- I don’t have bandwidth to resolve merge conflicts for contributors.
-- Write clear commit messages so others can understand your changes.
-- Test your changes on an actual Pod if possible, or clearly describe what environment you used.
+## Tests
 
+New code comes with tests. The inherited tree is mostly untested and gets
+backfilled incrementally as things are touched, but anything added now should
+land with coverage for its logic. The server uses `node:test` with test files
+next to the code they cover (`src/**/*.test.ts`); when the interesting part
+of a change is hard to test directly (shell scripts, UI wiring), extract the
+logic into a plain module and test that, or at minimum gate the invariants
+that would break silently (see `src/updaterScripts.test.ts` for the pattern).
 
-## 7. TypeScript Only
-- All contributions must be in TypeScript — no JavaScript or mixed-language files.
+## Before a PR
 
+Lint and typecheck both halves, and run the server test suite.
 
-## 8. Keep PRs Small
-- Smaller, focused PRs are much easier to review and merge quickly.
-- Large “kitchen sink” PRs will be delayed or rejected.
-- Test your changes.
+```
+cd server && npx tsc --noEmit && npm run lint && npm test
+cd app && npx tsc -b && npm run lint
+```
 
-
-## 9. Be Respectful of Stability
-- Free Sleep runs on real hardware that people depend on every night.
-- **Please avoid** risky changes without testing or discussion first.
+The pod runs prebuilt code, so `server/dist/` and `server/public/` (the app's
+build output) are committed. If your change touches source, rebuild
+(`npm run build:pr` in both `server/` and `app/`) and commit the output,
+otherwise the deploy ships stale code.
