@@ -1,0 +1,49 @@
+# Publishes the demo build (mocked data, no Pod required) to GitHub Pages so
+# people can try the app in a browser before installing anything.
+name: Deploy demo to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            app/package-lock.json
+            server/package-lock.json
+      # The app's typecheck imports zod schemas from server/src, so both
+      # packages need their dependencies installed.
+      - run: npm ci --prefix server
+      - run: npm ci --prefix app
+      - run: npm run build:demo --prefix app -- --base=/nightstand/
+      # Single-page app: serve index.html for deep links like /schedules.
+      - run: cp app/dist/index.html app/dist/404.html
+      - uses: actions/configure-pages@v5
+        with:
+          # Creates the Pages site on first run so no manual setup is needed.
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
