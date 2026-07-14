@@ -128,6 +128,8 @@ class ServerStatus {
             this.status.analyzeSleepRight = servicesDB.data.biometrics.jobs.analyzeSleepRight;
             this.status.biometricsCalibrationLeft = servicesDB.data.biometrics.jobs.calibrateLeft;
             this.status.biometricsCalibrationRight = servicesDB.data.biometrics.jobs.calibrateRight;
+            this.status.pumpHealthLeft = servicesDB.data.biometrics.jobs.pumpLeft;
+            this.status.pumpHealthRight = servicesDB.data.biometrics.jobs.pumpRight;
             const time = moment(servicesDB.data.biometrics.jobs.stream.timestamp);
             if (moment().diff(time, 'minutes') >= 5) {
                 servicesDB.data.biometrics.jobs.stream.status = 'failed';
@@ -143,6 +145,8 @@ class ServerStatus {
             delete this.status.biometricsCalibrationLeft;
             delete this.status.biometricsCalibrationRight;
             delete this.status.biometricsStream;
+            delete this.status.pumpHealthLeft;
+            delete this.status.pumpHealthRight;
         }
     }
     async toJSON() {
