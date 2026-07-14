@@ -492,6 +492,20 @@ const createServerStatus = (): ServerStatus => ({
     description: 'Right side calibration',
     message: '',
   },
+  pumpHealthLeft: {
+    name: 'Pump health - left',
+    status: 'healthy',
+    description: 'Watches for a stalled circulation pump while the heater/cooler is active',
+    message: '',
+    timestamp: new Date(now.getTime() - 2 * MINUTES_TO_MS).toISOString(),
+  },
+  pumpHealthRight: {
+    name: 'Pump health - right',
+    status: 'healthy',
+    description: 'Watches for a stalled circulation pump while the heater/cooler is active',
+    message: '',
+    timestamp: new Date(now.getTime() - 2 * MINUTES_TO_MS).toISOString(),
+  },
 });
 
 const createLogs = (): LogStore => ({
