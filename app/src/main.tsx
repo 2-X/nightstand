@@ -7,6 +7,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import { theme } from './theme';
 
 import ControlTempPage from './pages/ControlTempPage/ControlTempPage';
+import BaseControlPage from './pages/BaseControlPage/BaseControlPage';
 import SettingsPage from './pages/SettingsPage/SettingsPage';
 import Layout from './components/Layout';
 import { AppStoreProvider } from '@state/appStore.tsx';
@@ -53,6 +54,7 @@ const App = () => {
                   <Route path="left" element={ <ControlTempPage/> }/>
                   <Route path="right" element={ <ControlTempPage/> }/>
                   <Route path="status" element={ <StatusPage /> } />
+                  <Route path="elevation" element={ <BaseControlPage/> }/>
 
                   <Route path="data" element={ <DataPage /> }>
                     <Route path="sleep" element={ <SleepPage/> }/>
