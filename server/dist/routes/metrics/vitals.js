@@ -10,10 +10,14 @@ router.get('/vitals', async (req, res) => {
     if (side)
         query.side = side;
     query.timestamp = {};
-    if (startTime)
+    if (startTime) {
+        // @ts-ignore
         query.timestamp.gte = moment(startTime).unix();
-    if (endTime)
+    }
+    if (endTime) {
+        // @ts-ignore
         query.timestamp.lte = moment(endTime).unix();
+    }
     // Use Prisma's generated type for the records
     const vitals = await prisma.vitals.findMany({
         where: query,
@@ -29,10 +33,14 @@ router.get('/vitals/summary', async (req, res) => {
     if (side)
         query.side = side;
     query.timestamp = {};
-    if (startTime)
+    if (startTime) {
+        // @ts-ignore
         query.timestamp.gte = moment(startTime).unix();
-    if (endTime)
+    }
+    if (endTime) {
+        // @ts-ignore
         query.timestamp.lte = moment(endTime).unix();
+    }
     // Query: Min & Max Heart Rate
     const heartRateSummary = await prisma.vitals.aggregate({
         where: query,

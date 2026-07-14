@@ -2,6 +2,7 @@ import _ from 'lodash';
 import express from 'express';
 import logger from '../../logger.js';
 import schedulesDB from '../../db/schedules.js';
+import { sanitizeScheduleBody } from './sanitizeScheduleBody.js';
 import { SchedulesSchema, } from '../../db/schedulesSchema.js';
 const router = express.Router();
 const primaryAlarm = (alarms, fallback) => alarms[0] ?? {
@@ -13,7 +14,7 @@ router.get('/schedules', async (req, res) => {
     res.json(schedulesDB.data);
 });
 router.post('/schedules', async (req, res) => {
-    const body = req.body;
+    const body = sanitizeScheduleBody(req.body);
     const validationResult = SchedulesSchema.deepPartial().safeParse(body);
     if (!validationResult.success) {
         logger.error('Invalid schedules update:', validationResult.error);
