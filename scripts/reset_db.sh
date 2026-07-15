@@ -5,7 +5,7 @@ print_yellow() {
 }
 
 
-print_yellow "WARNING: This will permanently delete all Free Sleep biometric data!"
+print_yellow "WARNING: This will permanently delete all Nightstand biometric data!"
 print_yellow "After deleting, this will recreate the DB"
 read -p "Are you sure you want to continue? (y/N): " confirm
 
