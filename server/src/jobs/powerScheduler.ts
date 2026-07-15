@@ -52,7 +52,7 @@ export const schedulePowerOn = (settingsData: Settings, side: Side, day: DayOfWe
 
 // Sleep analysis runs daily per side, decoupled from the power schedule.
 // Previously it was scheduled inside schedulePowerOffAndSleepAnalysis and
-// only fired if `power.enabled` was true — which meant a partner who used
+// only fired if `power.enabled` was true, which meant a partner who used
 // the bed but had no temperature schedule (e.g. wife on the right side
 // without an active heating schedule) never had sleep records generated
 // for them, even though the biometrics stream was collecting their data.
