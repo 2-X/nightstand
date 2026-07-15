@@ -9,7 +9,15 @@ import { fileURLToPath } from 'node:url';
 // high-signal invariants: the scripts parse, they point at this fork, and
 // the safety rails (rollback, WAN re-block) are present.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const SCRIPTS = ['scripts/update.sh', 'scripts/update_service.sh'];
+const SCRIPTS = [
+    'scripts/update.sh',
+    'scripts/update_service.sh',
+    'scripts/install.sh',
+    'scripts/enable_biometrics.sh',
+    'scripts/disable_biometrics.sh',
+    'ops/deploy.sh',
+    'ops/rollback.sh',
+];
 describe('updater shell scripts', () => {
     for (const script of SCRIPTS) {
         it(`${script} exists and parses (bash -n)`, () => {
@@ -45,6 +53,33 @@ describe('updater shell scripts', () => {
     it('the update unit runs the script via bash (immune to lost exec bits)', () => {
         const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
         assert.match(src, /ExecStart=\/bin\/bash \/home\/dac\/free-sleep\/scripts\/update_service\.sh/);
+    });
+    // install.sh intentionally still downloads from the stock upstream
+    // archive, not this fork: it is the from-scratch bootstrap a brand-new
+    // pod runs before this fork's own history exists at its published URL,
+    // unlike update.sh below, which only ever runs on a pod already on this
+    // fork and self-updates from it.
+    it('install.sh installs from the stock upstream archive', () => {
+        const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
+        assert.match(src, /REPO_URL="https:\/\/github\.com\/throwaway31265\/free-sleep\/archive\/refs\/heads\/main\.zip"/);
+    });
+    // Regression coverage: disable_biometrics.sh existed but was never granted
+    // a sudoers rule or invoked, so flipping the Settings biometrics toggle off
+    // never stopped free-sleep-stream.service. Gate both halves of the fix:
+    // fresh installs get the rule, and existing pods self-heal it on their
+    // next update (mirroring the instant-rollback sudoers self-heal below).
+    it('install.sh grants a NOPASSWD sudoers rule for disable_biometrics.sh', () => {
+        const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
+        assert.match(src, /ALL=\(ALL\) NOPASSWD: \/bin\/sh \/home\/dac\/free-sleep\/scripts\/disable_biometrics\.sh/);
+    });
+    it('update.sh self-heals the disable_biometrics.sh sudoers rule on existing pods', () => {
+        const src = readFileSync(path.join(repoRoot, 'scripts/update.sh'), 'utf8');
+        assert.match(src, /ALL=\(ALL\) NOPASSWD: \/bin\/sh \/home\/dac\/free-sleep\/scripts\/disable_biometrics\.sh/);
+    });
+    it('disable_biometrics.sh actually stops and disables the stream service', () => {
+        const src = readFileSync(path.join(repoRoot, 'scripts/disable_biometrics.sh'), 'utf8');
+        assert.match(src, /systemctl stop free-sleep-stream/);
+        assert.match(src, /systemctl disable free-sleep-stream/);
     });
     // Target-version protocol: the server writes update-target.json before
     // starting the service; a syntax slip here would either silently ignore a

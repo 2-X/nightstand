@@ -200,7 +200,7 @@ export class TriMixBaseControl {
         // error-logging on a 30s retry loop forever. (Adding a base later needs a
         // service restart to pick up.)
         if (!(await this.isConfigured())) {
-            logger.info(`No adjustable base configured (${BASE_CONFIG_PATH} not found) \u2014 base control disabled.`);
+            logger.info(`No adjustable base configured (${BASE_CONFIG_PATH} not found), base control disabled.`);
             return;
         }
         const configLoaded = await this.loadConfiguration();
