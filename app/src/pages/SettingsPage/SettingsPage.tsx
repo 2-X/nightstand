@@ -3,6 +3,7 @@ import { Typography, Box } from '@mui/material';
 import InfoIcon from '@mui/icons-material/Info';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
+import HistoryIcon from '@mui/icons-material/History';
 import { useNavigate } from 'react-router-dom';
 
 import SideSettings from './SideSettings.tsx';
@@ -105,6 +106,30 @@ export default function SettingsPage() {
               <TextSnippetIcon sx={ { color: palette.text.secondary } }/>
               <Typography sx={ { fontSize: '1rem', color: palette.text.primary } }>
                 Logs
+              </Typography>
+            </Box>
+            <ChevronRightIcon sx={ { color: palette.text.tertiary } }/>
+          </Box>
+          <Box sx={ { height: 1, backgroundColor: palette.border.subtle, my: 1 } }/>
+          <Box
+            onClick={ () => navigate('/changelog') }
+            sx={ {
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              cursor: 'pointer',
+              mx: -2.5,
+              px: 2.5,
+              py: 1.5,
+              my: -1.5,
+              borderRadius: 1,
+              '&:hover': { backgroundColor: palette.bg.hover },
+            } }
+          >
+            <Box sx={ { display: 'flex', alignItems: 'center', gap: 1.5 } }>
+              <HistoryIcon sx={ { color: palette.text.secondary } }/>
+              <Typography sx={ { fontSize: '1rem', color: palette.text.primary } }>
+                Changelog
               </Typography>
             </Box>
             <ChevronRightIcon sx={ { color: palette.text.tertiary } }/>
