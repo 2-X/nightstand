@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import { useTheme } from '@mui/material/styles';
 import { Button, Box } from '@mui/material';
 import { Add, Remove } from '@mui/icons-material';
@@ -13,13 +13,17 @@ type TemperatureButtonsProps = {
   currentTargetTemp: number;
 }
 
-const DEBOUNCE_MS = 2000;
+const DEBOUNCE_MS = 400;
 export default function TemperatureButtons({ refetch, currentTargetTemp }: TemperatureButtonsProps) {
   const { side, setIsUpdating, isUpdating } = useAppStore();
-  const { deviceStatus, setDeviceStatus } = useControlTempStore();
+  const { deviceStatus, setDeviceStatus, beginEdit, endEdit } = useControlTempStore();
   const { data: settings } = useSettings();
   const theme = useTheme();
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks whether the current debounced burst has incremented the edit
+  // counter. We open the gate on the first tap of a burst and close it once
+  // the POST settles, so server pushes can't clobber the optimistic value.
+  const editOpenRef = useRef(false);
 
   const postUpdate = useCallback(async () => {
     setIsUpdating(true);
@@ -28,19 +32,40 @@ export default function TemperatureButtons({ refetch, currentTargetTemp }: Tempe
         [side]: { targetTemperatureF: deviceStatus?.[side]?.targetTemperatureF },
       });
       await new Promise(r => setTimeout(r, 1_500));
+      // Drop the edit gate before refetch so the canonical server response
+      // (which now reflects our write) is allowed into the cache.
+      if (editOpenRef.current) {
+        editOpenRef.current = false;
+        endEdit();
+      }
       await refetch?.();
     } catch (err) {
+      if (editOpenRef.current) {
+        editOpenRef.current = false;
+        endEdit();
+      }
       console.error(err);
     } finally {
       setIsUpdating(false);
     }
-  }, [deviceStatus, side, refetch, setIsUpdating]);
+  }, [deviceStatus, side, refetch, setIsUpdating, endEdit]);
 
   const scheduleUpdate = useCallback(() => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(postUpdate, DEBOUNCE_MS);
   }, [postUpdate]);
 
+  // If the user navigates away mid-burst, release the edit gate so the
+  // counter doesn't leak.
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      if (editOpenRef.current) {
+        editOpenRef.current = false;
+        endEdit();
+      }
+    };
+  }, [endEdit]);
 
   const isInAwayMode = settings?.[side].awayMode;
   if (isInAwayMode) return null;
@@ -52,6 +77,10 @@ export default function TemperatureButtons({ refetch, currentTargetTemp }: Tempe
   const handleClick = (change: number) => {
     if (!deviceStatus) return;
     if (deviceStatus === undefined) return;
+    if (!editOpenRef.current) {
+      editOpenRef.current = true;
+      beginEdit();
+    }
     setDeviceStatus({
       [side]: {
         targetTemperatureF: deviceStatus[side].targetTemperatureF + change,
