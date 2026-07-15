@@ -41,8 +41,13 @@ export default function WeeklyScheduleBars() {
 
   // Pull sleep records for the past 7 nights + today (we look back enough
   // days to anchor the Mon-Today week and pick the right record per day).
-  const startTime = moment().subtract(8, 'days').toISOString();
-  const endTime = moment().add(1, 'day').toISOString();
+  // Computed once per mount, not on every render: useSleepRecords keys its
+  // query on this params object, so recomputing "now" on every render would
+  // generate a new query key (and a new network request) every render.
+  const { startTime, endTime } = useMemo(() => ({
+    startTime: moment().subtract(8, 'days').toISOString(),
+    endTime: moment().add(1, 'day').toISOString(),
+  }), []);
   const { data: records } = useSleepRecords({ side, startTime, endTime });
 
   const { dayBars, latest } = useMemo(() => {

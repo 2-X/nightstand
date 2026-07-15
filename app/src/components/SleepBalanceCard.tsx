@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import moment from 'moment-timezone';
 import { Box, Typography, Card } from '@mui/material';
 
@@ -38,8 +39,13 @@ function formatHM(seconds: number): string {
 
 export default function SleepBalanceCard() {
   const { side } = useAppStore();
-  const startTime = moment().subtract(WINDOW_DAYS, 'days').toISOString();
-  const endTime = moment().toISOString();
+  // Computed once per mount, not on every render: useSleepRecords keys its
+  // query on this params object, so recomputing "now" on every render would
+  // generate a new query key (and a new network request) every render.
+  const { startTime, endTime } = useMemo(() => ({
+    startTime: moment().subtract(WINDOW_DAYS, 'days').toISOString(),
+    endTime: moment().toISOString(),
+  }), []);
   const { data: records } = useSleepRecords({ side, startTime, endTime });
 
   if (!records || records.length === 0) return null;
