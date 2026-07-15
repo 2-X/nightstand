@@ -54,4 +54,53 @@ describe('updater shell scripts', () => {
     const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
     assert.match(src, /ExecStart=\/bin\/bash \/home\/dac\/free-sleep\/scripts\/update_service\.sh/);
   });
+
+  // Target-version protocol: the server writes update-target.json before
+  // starting the service; a syntax slip here would either silently ignore a
+  // requested version+downgrade (surprising) or brick every plain update
+  // (catastrophic), so gate both the presence and the ordering of the safety
+  // checks.
+  describe('update.sh target-version protocol', () => {
+    const src = readFileSync(path.join(repoRoot, 'scripts/update.sh'), 'utf8');
+
+    it('reads and consumes update-target.json exactly once', () => {
+      assert.match(src, /TARGET_FILE=\/persistent\/free-sleep-data\/update-target\.json/);
+      assert.match(src, /rm -f "\$TARGET_FILE"/, 'must delete the target file so it cannot redirect a future plain update');
+      // Consume-once ordering: the file is read into a variable before it's
+      // removed, and removed before the requested version is ever acted on.
+      const readIdx = src.indexOf('TARGET_JSON=$(cat "$TARGET_FILE")');
+      const rmIdx = src.indexOf('rm -f "$TARGET_FILE"');
+      const useIdx = src.indexOf('TARGET_VERSION=$(printf');
+      assert.ok(readIdx > -1 && rmIdx > -1 && useIdx > -1, 'expected read -> consume -> use sequence to be present');
+      assert.ok(readIdx < rmIdx && rmIdx < useIdx, 'must delete the target file before using its contents');
+    });
+
+    it('has a floor version below which targeted installs are refused', () => {
+      assert.match(src, /FLOOR_VERSION="\d+\.\d+\.\d+"/);
+      assert.match(src, /is below the floor/);
+    });
+
+    it('refuses a downgrade unless allowDowngrade was requested', () => {
+      assert.match(src, /ALLOW_DOWNGRADE/);
+      assert.match(src, /IS_DOWNGRADE/);
+      assert.match(src, /is older than the running.*refusing without allowDowngrade/);
+    });
+
+    it('skips prisma migrate on a downgrade', () => {
+      assert.match(src, /IS_DOWNGRADE.*=.*yes.*\n.*skipping prisma migrate/);
+    });
+
+    it('resolves a tagged release via the GitHub tag-archive URL, not just the branch zip', () => {
+      assert.match(src, /TAG_ZIP_URL_PREFIX="https:\/\/github\.com\/\$\{NIGHTSTAND_REPO\}\/archive\/refs\/tags\/v"/);
+    });
+
+    it('verifies releases.json before installing a requested version', () => {
+      assert.match(src, /RELEASES_URL="https:\/\/raw\.githubusercontent\.com\/\$\{NIGHTSTAND_REPO\}\/\$\{NIGHTSTAND_BRANCH\}\/releases\.json"/);
+      assert.match(src, /is not a known release/);
+    });
+
+    it('refuses a staged tree whose version does not match what was requested', () => {
+      assert.match(src, /staged tree reports v\$STAGED_VERSION but v\$TARGET_VERSION was requested/);
+    });
+  });
 });
