@@ -35,7 +35,8 @@ Local control of the Pod exists because of that original project, and presence
 detection, sleep stages, adjustable base support, and the WebSocket UI came
 from jmew's work. Nightstand keeps free-sleep's on-disk layout so it stays
 compatible with the other forks' tooling, and the credits below record what
-came from where.
+came from where. If you're moving from another free-sleep fork, see
+**[Coming from free-sleep](docs/COMING_FROM_FREE_SLEEP.md)**.
 
 ## About Nightstand
 
@@ -63,7 +64,7 @@ the Settings page shows an Update button; pressing it has the Pod pull the
 build from GitHub, back itself up, install, and check its own health, rolling
 back automatically if anything fails.
 
-If there's no adjustable base connected, the base-control page stays
+If there's no adjustable base connected, the base-control page simply stays
 hidden instead of logging retry errors indefinitely.
 
 ## [Installation instructions](./INSTALLATION.md)
@@ -92,7 +93,9 @@ Yes. You can firmware reset the Pod and go back to the official Eight Sleep app.
 ### Will I brick my pod?
 No cases have been reported on Pod 3 **without** the SD card, Pod 4, or
 Pod 5, and a firmware reset restores the stock software if an install goes
-wrong. As with any unofficial software, you install it at your own risk.
+wrong. Follow the directions and read [ops/ANTIBRICK.md](ops/ANTIBRICK.md)
+before deploying anything custom. As with any unofficial software, you
+install it at your own risk.
 
 ### Will it void my warranty?
 Nightstand is not supported by Eight Sleep, so it could affect your warranty.
@@ -122,6 +125,9 @@ state at any time. There is no permanent modification to the hardware.
   request, with automatic backup and rollback
 - Settings customization: timezones, away mode, LED brightness
 - Works on desktop and mobile (PWA-installable)
+- Optional remote access from outside your home network via
+  [Tailscale](https://tailscale.com), encrypted and with no public exposure of
+  the pod. See [INSTALLATION.md step 20](INSTALLATION.md) for setup.
 
 ### Biometrics 📈
 - **The only biometrics data that has been validated is heart rate.** HRV and
@@ -150,7 +156,16 @@ state at any time. There is no permanent modification to the hardware.
 The normal path is the app itself: when a newer build is published to this
 repo's `main` branch, the Settings page shows an Update button. The Pod
 downloads the build, backs up its code and data, installs, health-checks, and
-rolls back automatically if anything fails.
+rolls back automatically if anything fails. `fs-update` over SSH runs the same
+script.
+
+For development there are two more paths:
+
+- `ops/deploy.sh` ships the committed HEAD of your local clone over the LAN,
+  with the same backup and rollback safety. See [ops/ANTIBRICK.md](ops/ANTIBRICK.md).
+- `scripts/deploy-dev.sh` is the fast iteration loop: it builds locally and
+  copies only the files that changed since the last deploy. Usage notes are in
+  the script header.
 
 ---
 
