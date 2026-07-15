@@ -29,25 +29,31 @@ export default function ApplyToOtherDaysAccordion() {
   } = useScheduleStore();
   const { isUpdating } = useAppStore();
 
+  // Only turn a day ON if it isn't already selected, so these buttons are
+  // idempotent: clicking "Weekdays" twice, or after manually checking one
+  // weekday, always ends with every weekday selected instead of flipping
+  // already-checked days back off.
   const setWeekdays = () => {
-    daysOfWeek.slice(0, 5).map(day => {
-      // @ts-expect-error
-      toggleSelectedDay(day.toLowerCase());
+    // daysOfWeek is Sunday-first, so Monday-Friday is indices 1 through 5.
+    daysOfWeek.slice(1, 6).map(day => {
+      const lowerCaseDay = day.toLowerCase() as DayOfWeek;
+      if (!selectedDays[lowerCaseDay]) toggleSelectedDay(lowerCaseDay);
     });
   };
 
   const setEveryday = () => {
     daysOfWeek.map(day => {
-      // @ts-expect-error
-      toggleSelectedDay(day.toLowerCase());
+      const lowerCaseDay = day.toLowerCase() as DayOfWeek;
+      if (!selectedDays[lowerCaseDay]) toggleSelectedDay(lowerCaseDay);
     });
   };
 
   const setWeekends= () => {
-    // @ts-expect-error
-    toggleSelectedDay(daysOfWeek[5].toLowerCase());
-    // @ts-expect-error
-    toggleSelectedDay(daysOfWeek[6].toLowerCase());
+    // daysOfWeek is Sunday-first: Sunday is index 0, Saturday is index 6.
+    const sunday = daysOfWeek[0].toLowerCase() as DayOfWeek;
+    const saturday = daysOfWeek[6].toLowerCase() as DayOfWeek;
+    if (!selectedDays[saturday]) toggleSelectedDay(saturday);
+    if (!selectedDays[sunday]) toggleSelectedDay(sunday);
   };
 
   return (

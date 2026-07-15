@@ -11,16 +11,22 @@ export default function Clock() {
     // Tick on the browser's own clock, not the pod's: this is the device in
     // the user's hand/nightstand, so a glance here is a quick sanity check
     // against pod clock drift (the failure mode that motivated adding this).
-    // Aligning to the next minute boundary keeps the displayed minute from
-    // visibly lagging by up to a full interval.
-    const msIntoMinute = now.getSeconds() * 1000 + now.getMilliseconds();
-    const alignTimeout = setTimeout(() => setNow(new Date()), 60_000 - msIntoMinute);
-    const interval = setInterval(() => setNow(new Date()), 60_000);
+    // Align once to the next minute boundary, then tick every minute. Keying
+    // this effect on `now` (as it once was) rebuilt both timers every tick and
+    // left two of them firing at the boundary, so this runs once with an
+    // empty dep array instead.
+    let interval: ReturnType<typeof setInterval> | undefined;
+    const start = new Date();
+    const msIntoMinute = start.getSeconds() * 1000 + start.getMilliseconds();
+    const alignTimeout = setTimeout(() => {
+      setNow(new Date());
+      interval = setInterval(() => setNow(new Date()), 60_000);
+    }, 60_000 - msIntoMinute);
     return () => {
       clearTimeout(alignTimeout);
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
     };
-  }, [now]);
+  }, []);
 
   return (
     <Typography
