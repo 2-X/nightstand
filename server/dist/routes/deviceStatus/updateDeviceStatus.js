@@ -36,7 +36,7 @@ const updateSide = async (side, sideStatus) => {
         if (updateRight)
             await executeFunction('RIGHT_TEMP_DURATION', onDuration);
     }
-    if (targetTemperatureF) {
+    if (targetTemperatureF !== undefined) {
         const level = calculateLevelFromF(targetTemperatureF);
         if (updateLeft)
             await executeFunction('TEMP_LEVEL_LEFT', level);
@@ -67,8 +67,10 @@ const updateSettings = async (settings) => {
 };
 export const updateDeviceStatus = async (deviceStatus) => {
     logger.info(`Updating device status..`);
-    if (deviceStatus.isPriming)
+    if (deviceStatus.isPriming === true)
         await executeFunction('PRIME');
+    else if (deviceStatus.isPriming === false)
+        await executeFunction('STOP_PRIME');
     if (deviceStatus?.left)
         await updateSide('left', deviceStatus.left);
     if (deviceStatus?.right)

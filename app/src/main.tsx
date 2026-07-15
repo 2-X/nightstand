@@ -2,27 +2,32 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { createRoot } from 'react-dom/client';
 import { CssBaseline } from '@mui/material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { StrictMode } from 'react';
+import { lazy, StrictMode, Suspense } from 'react';
 import { ThemeProvider } from '@mui/material/styles';
 import { theme } from './theme';
 
-import ControlTempPage from './pages/ControlTempPage/ControlTempPage';
-import BaseControlPage from './pages/BaseControlPage/BaseControlPage';
-import SettingsPage from './pages/SettingsPage/SettingsPage';
 import Layout from './components/Layout';
 import { AppStoreProvider } from '@state/appStore.tsx';
-import SchedulePage from './pages/SchedulePage/SchedulePage.tsx';
 import ErrorBoundary from './components/ErrorBoundary.tsx';
+import RouteFallback from './components/RouteFallback.tsx';
 import { GlobalStyles } from '@mui/material';
-import SleepPage from './pages/DataPage/SleepPage/SleepPage.tsx';
-import DataPage from './pages/DataPage/DataPage.tsx';
-import VitalsPage from './pages/DataPage/VitalsPage/VitalsPage.tsx';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
-import LogsPage from './pages/DataPage/LogsPage/LogsPage.tsx';
-import ChangelogPage from './pages/DataPage/ChangelogPage/ChangelogPage.tsx';
-import VersionsPage from './pages/SettingsPage/VersionsPage/VersionsPage.tsx';
-import StatusPage from './pages/StatusPage/StatusPage.tsx';
+
+// Pages are lazy-loaded so each route ships only what it needs. The shell
+// (Layout, AppStoreProvider, theme, query client) stays in the entry chunk so
+// the first paint doesn't wait on a route-specific download.
+const ControlTempPage = lazy(() => import('./pages/ControlTempPage/ControlTempPage'));
+const BaseControlPage = lazy(() => import('./pages/BaseControlPage/BaseControlPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage/SettingsPage'));
+const SchedulePage = lazy(() => import('./pages/SchedulePage/SchedulePage.tsx'));
+const SleepPage = lazy(() => import('./pages/DataPage/SleepPage/SleepPage.tsx'));
+const DataPage = lazy(() => import('./pages/DataPage/DataPage.tsx'));
+const VitalsPage = lazy(() => import('./pages/DataPage/VitalsPage/VitalsPage.tsx'));
+const LogsPage = lazy(() => import('./pages/DataPage/LogsPage/LogsPage.tsx'));
+const ChangelogPage = lazy(() => import('./pages/DataPage/ChangelogPage/ChangelogPage.tsx'));
+const VersionsPage = lazy(() => import('./pages/SettingsPage/VersionsPage/VersionsPage.tsx'));
+const StatusPage = lazy(() => import('./pages/StatusPage/StatusPage.tsx'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -54,35 +59,39 @@ const App = () => {
                 },
               } }
             />
-            <BrowserRouter basename="/">
-              <Routes>
-                <Route path="/" element={ <Layout/> }>
-                  <Route index element={ <ControlTempPage/> }/>
-                  <Route path="temperature" element={ <ControlTempPage/> }/>
-                  <Route path="left" element={ <ControlTempPage/> }/>
-                  <Route path="right" element={ <ControlTempPage/> }/>
-                  <Route path="status" element={ <StatusPage /> } />
-                  <Route path="elevation" element={ <BaseControlPage/> }/>
+            { /* BASE_URL is '/' in normal builds; the hosted demo is served
+                 from a subpath (GitHub Pages), where Vite sets it via --base. */ }
+            <BrowserRouter basename={ import.meta.env.BASE_URL }>
+              <Suspense fallback={ <RouteFallback /> }>
+                <Routes>
+                  <Route path="/" element={ <Layout/> }>
+                    <Route index element={ <ControlTempPage/> }/>
+                    <Route path="temperature" element={ <ControlTempPage/> }/>
+                    <Route path="left" element={ <ControlTempPage/> }/>
+                    <Route path="right" element={ <ControlTempPage/> }/>
+                    <Route path="status" element={ <StatusPage /> } />
+                    <Route path="elevation" element={ <BaseControlPage/> }/>
 
-                  <Route path="data" element={ <DataPage /> }>
-                    <Route path="sleep" element={ <SleepPage/> }/>
-                    <Route path="logs" element={ <LogsPage/> }/>
-                    <Route path="vitals" element={ <VitalsPage/> }/>
+                    <Route path="data" element={ <DataPage /> }>
+                      <Route path="sleep" element={ <SleepPage/> }/>
+                      <Route path="logs" element={ <LogsPage/> }/>
+                      <Route path="vitals" element={ <VitalsPage/> }/>
+                    </Route>
+
+                    <Route path="changelog" element={ <ChangelogPage/> }/>
+
+                    { /* Not yet linked from Settings: the channel picker and
+                         per-release install need a real releases.json history,
+                         which this tree does not have with only one release
+                         published so far. Reachable by URL so the code
+                         stays real and tested rather than a stub. */ }
+                    <Route path="settings/versions" element={ <VersionsPage/> }/>
+
+                    <Route path="settings" element={ <SettingsPage/> }/>
+                    <Route path="schedules" element={ <SchedulePage/> }/>
                   </Route>
-
-                  <Route path="changelog" element={ <ChangelogPage/> }/>
-
-                  { /* Not yet linked from Settings: the channel picker and
-                       per-release install need a real releases.json history,
-                       which this tree does not have with only one release
-                       published so far. Reachable by URL so the code
-                       stays real and tested rather than a stub. */ }
-                  <Route path="settings/versions" element={ <VersionsPage/> }/>
-
-                  <Route path="settings" element={ <SettingsPage/> }/>
-                  <Route path="schedules" element={ <SchedulePage/> }/>
-                </Route>
-              </Routes>
+                </Routes>
+              </Suspense>
             </BrowserRouter>
           </AppStoreProvider>
         </LocalizationProvider>
@@ -103,7 +112,11 @@ async function enableMocking() {
 
   // `worker.start()` returns a Promise that resolves
   // once the Service Worker is up and ready to intercept requests.
-  return worker.start();
+  // The worker script lives at the app's base path, which is only '/'
+  // when the demo isn't hosted under a subpath.
+  return worker.start({
+    serviceWorker: { url: `${import.meta.env.BASE_URL}mockServiceWorker.js` },
+  });
 }
 
 enableMocking().then(() => {
