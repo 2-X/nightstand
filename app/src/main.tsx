@@ -21,6 +21,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import LogsPage from './pages/DataPage/LogsPage/LogsPage.tsx';
 import ChangelogPage from './pages/DataPage/ChangelogPage/ChangelogPage.tsx';
+import VersionsPage from './pages/SettingsPage/VersionsPage/VersionsPage.tsx';
 import StatusPage from './pages/StatusPage/StatusPage.tsx';
 
 const queryClient = new QueryClient({
@@ -64,6 +65,13 @@ const App = () => {
                   </Route>
 
                   <Route path="changelog" element={ <ChangelogPage/> }/>
+
+                  { /* Not yet linked from Settings: the channel picker and
+                       per-release install need a real releases.json history,
+                       which this tree does not have before cutover assigns
+                       its first real version. Reachable by URL so the code
+                       stays real and tested rather than a stub. */ }
+                  <Route path="settings/versions" element={ <VersionsPage/> }/>
 
                   <Route path="settings" element={ <SettingsPage/> }/>
                   <Route path="schedules" element={ <SchedulePage/> }/>

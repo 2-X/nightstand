@@ -6,6 +6,7 @@ import {
 import RestorePageIcon from '@mui/icons-material/RestorePage';
 import { postRollback } from '@api/update.ts';
 import { useUpdateProgress } from '@api/useUpdateProgress.ts';
+import { palette } from '@design/tokens';
 
 type Props = {
   runningVersion: string | undefined;
@@ -30,10 +31,11 @@ export default function RollbackRow({ runningVersion, rollbackVersion }: Props) 
         px: 2.5,
         py: 1.5,
         borderRadius: 1,
+        '&:hover': { backgroundColor: palette.bg.hover },
       } }
     >
-      <RestorePageIcon sx={ { color: 'text.secondary' } }/>
-      <Typography sx={ { fontSize: '1rem' } }>
+      <RestorePageIcon sx={ { color: palette.text.secondary } }/>
+      <Typography sx={ { fontSize: '1rem', color: palette.text.primary } }>
         Roll back to v{ rollbackVersion } (instant, no download)
       </Typography>
 
