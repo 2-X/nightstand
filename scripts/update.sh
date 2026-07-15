@@ -223,6 +223,16 @@ systemctl try-restart free-sleep-stream 2>/dev/null || true
 # the unit with 203/EXEC before it can log anything.
 chmod +x "$LIVE"/scripts/update.sh "$LIVE"/scripts/update_service.sh 2>/dev/null || true
 
+say "Ensuring RAW-archive retention timer is installed"
+if chmod +x "$LIVE/scripts/archive-raw.sh" \
+  && cp "$LIVE/scripts/systemd/free-sleep-archive-raw.service" "$LIVE/scripts/systemd/free-sleep-archive-raw.timer" /etc/systemd/system/ \
+  && systemctl daemon-reload \
+  && systemctl enable --now free-sleep-archive-raw.timer; then
+  :
+else
+  say "WARNING: failed to install RAW-archive retention timer; calibration/analyze jobs may fail on stale data windows"
+fi
+
 # --- instant-rollback service --------------------------------------------------
 # Installs that predate the instant-rollback feature never got
 # free-sleep-rollback.service or its sudoers rule, so the in-app "Roll back"

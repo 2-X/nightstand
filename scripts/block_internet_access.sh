@@ -6,13 +6,24 @@ echo "Blocking internet access..."
 echo "Configuring IPv4 rules..."
 
 # -----------------------------------------------------------------------------------------------------
+# Allow return traffic for connections this pod initiates (DNS answers,
+# TCP 443 responses). The outbound allows further down only open the forward
+# direction; without these conntrack rules the INPUT DROP at the end would
+# eat the responses. Unconditional: this is core firewall plumbing, not
+# specific to any one allowed destination below.
+iptables -C INPUT  -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \
+iptables -I INPUT  -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -C OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \
+iptables -I OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+
+# -----------------------------------------------------------------------------------------------------
 # Allow traffic to Sentry servers for error logging
 
 # https://docs.sentry.io/security-legal-pii/security/ip-ranges/#event-ingestion
 
 # Check if ALLOW_SENTRY is true
 if [ "$ALLOW_SENTRY" = "false" ]; then
-  echo "ALLOW_SENTRY is not true — skipping Sentry firewall configuration."
+  echo "ALLOW_SENTRY is not true, skipping Sentry firewall configuration."
 
 else
   echo -e "\e[33mIP rules were setup to allow error logs to be sent to Sentry servers\e[0m"
@@ -20,11 +31,6 @@ else
   echo -e "\e[33mIf you'd like to block Sentry servers, run: 'ALLOW_SENTRY=false sh scripts/block_internet_access.sh'\e[0m"
   echo -e "\e[33m\e[0m"
   # --- US IPs ---
-  iptables -C INPUT  -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \
-  iptables -I INPUT  -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-  iptables -C OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \
-  iptables -I OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-
   iptables -A OUTPUT -d 35.186.247.156 -j ACCEPT
   iptables -A OUTPUT -d 34.120.195.249 -j ACCEPT
   iptables -A OUTPUT -d 34.36.122.224  -j ACCEPT
@@ -70,6 +76,32 @@ systemctl restart systemd-timesyncd
 # Allow localhost (loopback) traffic so local apps can talk to each other
 iptables -A INPUT  -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
+
+# -----------------------------------------------------------------------------------------------------
+# Allow Tailscale (https://tailscale.com/kb/1082/firewall-ports)
+#
+# Tailscale gives us remote access to the pod from outside the LAN without
+# exposing it to the public internet. Without these rules, the OUTPUT DROP
+# below would block tailscaled from reaching its control plane and DERP relays.
+#
+# (1) Anything on the tailscale interface: the VPN payload between the user's
+#     devices and this pod (e.g., phone browser -> https://eight-pod).
+iptables -A INPUT  -i tailscale0 -j ACCEPT
+iptables -A OUTPUT -o tailscale0 -j ACCEPT
+
+# (2) tailscaled needs outbound to talk to peers + Tailscale's control plane:
+#       - UDP everywhere: direct WireGuard peer connections + STUN
+#       - TCP/443: control plane (controlplane.tailscale.com) + DERP relays
+#       - DNS: to resolve controlplane.tailscale.com / derp*.tailscale.com
+#     Note: this allows the pod to reach any HTTPS host, not only Tailscale.
+#     Eight Sleep's OTA updates are blocked at the systemd level (services
+#     masked per INSTALLATION.md), that's the real mechanism preventing
+#     forced firmware updates; this firewall is a second layer.
+iptables -A OUTPUT -p udp -j ACCEPT
+iptables -A OUTPUT -p tcp --dport 443 -j ACCEPT
+iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
+iptables -A OUTPUT -p tcp --dport 53 -j ACCEPT
+# -----------------------------------------------------------------------------------------------------
 
 # Block everything else
 iptables -A INPUT -j DROP
