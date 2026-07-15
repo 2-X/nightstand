@@ -4,7 +4,6 @@ import { DailySchedule, DayOfWeek, Side } from '../db/schedulesSchema.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import { getDayIndexForSchedule, getDayOfWeekIndex, logJob } from './utils.js';
 import { executeAnalyzeSleep } from './analyzeSleep.js';
-import { TimeZone } from '../db/timeZones.js';
 import moment from 'moment-timezone';
 import serverStatus from '../serverStatus.js';
 import logger from '../logger.js';
