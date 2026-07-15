@@ -19,6 +19,9 @@ import serverStatus from '../routes/serverStatus/serverStatus.js';
 import baseControl from '../routes/baseControl/baseControl.js';
 import update from '../routes/update/update.js';
 import metricsServer from '../routes/metricsServer/metricsServer.js';
+import storage from '../routes/storage/storage.js';
+import memory from '../routes/memory/memory.js';
+import changelog from '../routes/changelog/changelog.js';
 import logger from '../logger.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,6 +45,9 @@ export default function (app) {
     app.use('/api/', baseControl);
     app.use('/api/update', update);
     app.use('/api/', metricsServer);
+    app.use('/api/storage', storage);
+    app.use('/api/memory', memory);
+    app.use('/api/changelog', changelog);
     app.use('/api', (req, res) => {
         res.status(404).json({ error: { message: 'Not Found' } });
     });
