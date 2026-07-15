@@ -274,6 +274,7 @@ const createSettings = (): Settings => ({
   timeZone: 'America/Los_Angeles',
   temperatureFormat: 'level',
   rebootDaily: true,
+  updateChannel: 'stable',
   left: {
     name: 'Left side',
     awayMode: false,

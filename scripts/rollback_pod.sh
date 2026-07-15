@@ -50,6 +50,7 @@ mv "$TMP" "$PREV"
 fix_shared_node_modules
 
 systemctl start free-sleep
+systemctl try-restart free-sleep-stream 2>/dev/null || true
 
 # --- health check (same shape as update.sh) -----------------------------------
 say "Health check (up to 90s)"
