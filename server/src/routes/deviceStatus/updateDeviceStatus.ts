@@ -42,7 +42,7 @@ const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideSt
     if (updateRight) await executeFunction('RIGHT_TEMP_DURATION', onDuration);
   }
 
-  if (targetTemperatureF) {
+  if (targetTemperatureF !== undefined) {
     const level = calculateLevelFromF(targetTemperatureF);
     if (updateLeft) await executeFunction('TEMP_LEVEL_LEFT', level);
     if (updateRight) await executeFunction('TEMP_LEVEL_RIGHT', level);
@@ -74,7 +74,8 @@ const updateSettings = async (settings: Partial<DeviceStatus['settings']>) => {
 export const updateDeviceStatus = async (deviceStatus: DeepPartial<DeviceStatus>) => {
   logger.info(`Updating device status..`);
 
-  if (deviceStatus.isPriming) await executeFunction('PRIME');
+  if (deviceStatus.isPriming === true) await executeFunction('PRIME');
+  else if (deviceStatus.isPriming === false) await executeFunction('STOP_PRIME');
   if (deviceStatus?.left) await updateSide('left', deviceStatus.left);
   if (deviceStatus?.right) await updateSide('right', deviceStatus.right);
   if (deviceStatus?.settings) await updateSettings(deviceStatus.settings);
