@@ -49,6 +49,7 @@ const defaultData = {
     timeZone: 'UTC',
     temperatureFormat: 'fahrenheit',
     rebootDaily: true,
+    updateChannel: 'stable',
     left: {
         ..._.cloneDeep(defaultSideSettings),
         name: 'Left',
