@@ -66,7 +66,7 @@ check_free_sleep_install() {
     return 1
   fi
 
-  print_green "  - Free Sleep installation looks valid. ✅"
+  print_green "  - Nightstand installation looks valid. ✅"
 }
 
 print_json_if_exists() {
@@ -155,7 +155,7 @@ check_service_status "capybara"
 check_service_status "frank"
 check_service_status "systemd-timesyncd"
 
-printf "\n\nFree Sleep Status\n"
+printf "\n\nNightstand Status\n"
 print_json_if_exists "/home/dac/free-sleep/server/src/serverInfo.json" "Server info"
 check_free_sleep_install
 check_local_server
