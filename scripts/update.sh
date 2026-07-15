@@ -11,12 +11,31 @@
 #   FS_UPDATE_FORCE=1   install even if the published version isn't newer
 #   NIGHTSTAND_REPO     GitHub repo to pull from (default: LTimothy/nightstand)
 #   NIGHTSTAND_BRANCH   branch to pull from (default: main)
+#
+# Target-version protocol: if the server wrote
+# /persistent/free-sleep-data/update-target.json before starting this
+# service, that file requests a specific version (and whether a downgrade is
+# allowed) instead of "latest branch". See the "consume the target-version
+# request file" block below.
 set -uo pipefail
 
 NIGHTSTAND_REPO="${NIGHTSTAND_REPO:-LTimothy/nightstand}"
 NIGHTSTAND_BRANCH="${NIGHTSTAND_BRANCH:-main}"
 INFO_URL="https://raw.githubusercontent.com/${NIGHTSTAND_REPO}/${NIGHTSTAND_BRANCH}/server/src/serverInfo.json"
 ZIP_URL="https://github.com/${NIGHTSTAND_REPO}/archive/refs/heads/${NIGHTSTAND_BRANCH}.zip"
+RELEASES_URL="https://raw.githubusercontent.com/${NIGHTSTAND_REPO}/${NIGHTSTAND_BRANCH}/releases.json"
+TAG_ZIP_URL_PREFIX="https://github.com/${NIGHTSTAND_REPO}/archive/refs/tags/v"
+
+# update-target.json protocol: written by POST /api/update before starting
+# this service. Consumed once (deleted immediately after reading) so a stale
+# file can never redirect a future plain update. FLOOR_VERSION is the first
+# release that ships this protocol; versions below it predate the target
+# protocol, the rollback service, and possibly current lockfile/node_modules
+# compatibility, so the picker can't reach them. era/refound has no version
+# of its own yet, so this stays a marker for the first real release rather
+# than a currently reachable floor.
+TARGET_FILE=/persistent/free-sleep-data/update-target.json
+FLOOR_VERSION="3.2.0"
 
 LIVE=/home/dac/free-sleep
 PREV=/home/dac/free-sleep-prev
@@ -54,27 +73,86 @@ PERS_FREE=$(df -m /persistent | awk 'NR==2{print $4}')
 [ "$ROOT_FREE" -gt 1500 ] || fail "low disk on / (${ROOT_FREE}M free)"
 [ "$PERS_FREE" -gt 2000 ] || fail "low disk on /persistent (${PERS_FREE}M free)"
 
+# --- consume the target-version request file, if any -------------------------
+TARGET_VERSION=""
+ALLOW_DOWNGRADE=no
+if [ -f "$TARGET_FILE" ]; then
+  TARGET_JSON=$(cat "$TARGET_FILE")
+  rm -f "$TARGET_FILE"
+  TARGET_VERSION=$(printf '%s' "$TARGET_JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("version",""))' 2>/dev/null) || TARGET_VERSION=""
+  ALLOW_DOWNGRADE_RAW=$(printf '%s' "$TARGET_JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("allowDowngrade",False))' 2>/dev/null) || ALLOW_DOWNGRADE_RAW=False
+  [ "$ALLOW_DOWNGRADE_RAW" = True ] && ALLOW_DOWNGRADE=yes
+  [ -n "$TARGET_VERSION" ] && say "Target-version request: v$TARGET_VERSION (allowDowngrade=$ALLOW_DOWNGRADE)"
+fi
+
+if [ -n "$TARGET_VERSION" ]; then
+  FLOOR_OK=$(python3 -c '
+import sys
+def parts(v): return [int(x) for x in v.split(".")]
+print("yes" if parts(sys.argv[1]) >= parts(sys.argv[2]) else "no")' "$TARGET_VERSION" "$FLOOR_VERSION")
+  [ "$FLOOR_OK" = yes ] || fail "target v$TARGET_VERSION is below the floor (v$FLOOR_VERSION) the version picker supports"
+fi
+
 # --- resolve what to install --------------------------------------------------
 open_wan
-say "Current version: v$CUR_VERSION. Checking GitHub for the latest build..."
-REMOTE_VERSION=$(curl -fsSL --max-time 20 "$INFO_URL" | python3 -c 'import json,sys;print(json.load(sys.stdin)["version"])') \
-  || fail "could not fetch the published version (check internet access and DNS)"
+say "Current version: v$CUR_VERSION."
+IS_DOWNGRADE=no
+if [ -n "$TARGET_VERSION" ]; then
+  say "Resolving requested v$TARGET_VERSION against releases.json..."
+  RELEASES_JSON=$(curl -fsSL --max-time 20 "$RELEASES_URL") \
+    || fail "could not fetch releases.json (check internet access and DNS)"
+  MANIFEST_CHECK=$(printf '%s' "$RELEASES_JSON" | python3 -c "
+import json, sys
+target = '$TARGET_VERSION'
+data = json.load(sys.stdin)
+versions = [r['version'] for r in data['releases']]
+if target not in versions:
+    print('missing')
+elif data['releases'][0]['version'] == target:
+    print('head')
+else:
+    print('tagged')
+" 2>/dev/null) || fail "could not parse releases.json"
+  [ "$MANIFEST_CHECK" = missing ] && fail "v$TARGET_VERSION is not a known release (checked releases.json)"
 
-NEWER=$(python3 -c '
+  IS_DOWNGRADE=$(python3 -c '
+import sys
+def parts(v): return [int(x) for x in v.split(".")]
+print("yes" if parts(sys.argv[1]) < parts(sys.argv[2]) else "no")' "$TARGET_VERSION" "$CUR_VERSION")
+  if [ "$IS_DOWNGRADE" = yes ] && [ "$ALLOW_DOWNGRADE" != yes ]; then
+    fail "v$TARGET_VERSION is older than the running v$CUR_VERSION; refusing without allowDowngrade"
+  fi
+
+  if [ "$MANIFEST_CHECK" = head ]; then
+    say "Requested version is the manifest head; using the branch zip"
+    RESOLVED_ZIP_URL="$ZIP_URL"
+  else
+    say "Requested version is an older tagged release; using the v$TARGET_VERSION tag archive"
+    RESOLVED_ZIP_URL="${TAG_ZIP_URL_PREFIX}${TARGET_VERSION}.zip"
+  fi
+  EXPECTED_VERSION="$TARGET_VERSION"
+else
+  say "Checking GitHub for the latest build..."
+  REMOTE_VERSION=$(curl -fsSL --max-time 20 "$INFO_URL" | python3 -c 'import json,sys;print(json.load(sys.stdin)["version"])') \
+    || fail "could not fetch the published version (check internet access and DNS)"
+
+  NEWER=$(python3 -c '
 import sys
 cur = [int(x) for x in sys.argv[1].split(".")]
 pub = [int(x) for x in sys.argv[2].split(".")]
 print("yes" if pub > cur else "no")' "$CUR_VERSION" "$REMOTE_VERSION")
 
-if [ "$NEWER" = no ] && [ "${FS_UPDATE_FORCE:-0}" != 1 ]; then
-  say "Already up to date (published: v$REMOTE_VERSION). Nothing to do."
-  exit 0
+  if [ "$NEWER" = no ] && [ "${FS_UPDATE_FORCE:-0}" != 1 ]; then
+    say "Already up to date (published: v$REMOTE_VERSION). Nothing to do."
+    exit 0
+  fi
+  RESOLVED_ZIP_URL="$ZIP_URL"
+  EXPECTED_VERSION="$REMOTE_VERSION"
 fi
-EXPECTED_VERSION="$REMOTE_VERSION"
 
 # --- download + stage --------------------------------------------------------
 say "Downloading v$EXPECTED_VERSION..."
-curl -fL --max-time 300 -o "$ZIP" "$ZIP_URL" || fail "download failed"
+curl -fL --max-time 300 -o "$ZIP" "$RESOLVED_ZIP_URL" || fail "download failed"
 rm -rf "$STAGE" "$STAGE.unzip"
 unzip -q "$ZIP" -d "$STAGE.unzip" || fail "unzip failed"
 # GitHub names the archive's top dir after the repo and ref (repo-name + "-" +
@@ -90,6 +168,9 @@ chown -R dac:dac "$STAGE"
 [ -f "$STAGE/server/public/index.html" ] || fail "staged tree is missing server/public/index.html"
 STAGED_VERSION=$(python3 -c 'import json;print(json.load(open("'"$STAGE"'/server/src/serverInfo.json"))["version"])') \
   || fail "staged tree has no readable serverInfo.json"
+if [ -n "$TARGET_VERSION" ] && [ "$STAGED_VERSION" != "$TARGET_VERSION" ]; then
+  fail "staged tree reports v$STAGED_VERSION but v$TARGET_VERSION was requested; refusing a mislabeled release"
+fi
 
 # --- dependencies (old server still running) ---------------------------------
 LOCK_SAME=no
@@ -126,7 +207,9 @@ if [ "$LOCK_SAME" = yes ]; then
   MOVED_MODULES=yes
 fi
 
-if ! cmp -s "$PREV/server/prisma/schema.prisma" "$LIVE/server/prisma/schema.prisma"; then
+if [ "$IS_DOWNGRADE" = yes ]; then
+  say "Downgrade: skipping prisma migrate (schema stays newer; migrations are additive by standing rule)"
+elif ! cmp -s "$PREV/server/prisma/schema.prisma" "$LIVE/server/prisma/schema.prisma"; then
   say "Prisma schema changed: migrate deploy + generate"
   sudo -u dac bash -c "cd '$LIVE/server' && '$NPX' dotenv -e .env.pod -- npx prisma migrate deploy && '$NPX' dotenv -e .env.pod -- npx prisma generate" \
     || say "WARNING: prisma step failed; health check will decide"

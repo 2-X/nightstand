@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import axios from './api';
-import { RollbackInfo } from './updateSchema.ts';
+import { RollbackInfo, UpdateRequest } from './updateSchema.ts';
+
+export const postUpdate = (body: UpdateRequest = {}) => axios.post('/update', body);
 
 export const postRollback = () => axios.post('/update/rollback');
 
