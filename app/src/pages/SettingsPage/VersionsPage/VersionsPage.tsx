@@ -28,9 +28,9 @@ import currentServerInfo from '../../../../../server/src/serverInfo.json';
 // ignores the file and always installs the branch tip instead, which is
 // harmless but means the picker and rollback wouldn't do what they say.
 // Reads deviceStatus (the live running version), not the served bundle, so
-// a stale cached page can't show a picker that won't work. era/refound has
-// no version of its own yet (still the stock marker), so this floor is not
-// reachable until cutover assigns a real one.
+// a stale cached page can't show a picker that won't work. This tree has no
+// version of its own yet (still the stock marker), so this floor is not
+// reachable until a real one is assigned.
 const CAPABLE_FLOOR = '3.2.0';
 
 export default function VersionsPage() {
