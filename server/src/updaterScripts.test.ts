@@ -63,9 +63,14 @@ describe('updater shell scripts', () => {
     assert.match(src, /ExecStart=\/bin\/bash \/home\/dac\/free-sleep\/scripts\/update_service\.sh/);
   });
 
-  it('install.sh installs from this fork', () => {
+  // install.sh intentionally still downloads from the stock upstream
+  // archive, not this fork: it is the from-scratch bootstrap a brand-new
+  // pod runs before this fork's own history exists at its published URL,
+  // unlike update.sh below, which only ever runs on a pod already on this
+  // fork and self-updates from it.
+  it('install.sh installs from the stock upstream archive', () => {
     const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
-    assert.match(src, /github\.com\/LTimothy\/nightstand\/archive\/refs\/heads\/main\.zip/);
+    assert.match(src, /REPO_URL="https:\/\/github\.com\/throwaway31265\/free-sleep\/archive\/refs\/heads\/main\.zip"/);
   });
 
   // Regression coverage: disable_biometrics.sh existed but was never granted
