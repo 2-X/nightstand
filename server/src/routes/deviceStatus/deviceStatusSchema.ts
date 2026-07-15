@@ -19,6 +19,15 @@ const SideStatusSchema = z.object({
 }).strict();
 
 
+const SensorTempsResponseSchema = z.object({
+  ambientC: z.number().nullable(),
+  ambientF: z.number().nullable(),
+  heatsinkC: z.number().nullable(),
+  leftC: z.number().nullable(),
+  rightC: z.number().nullable(),
+  lastUpdated: z.string().nullable(),
+}).nullable();
+
 export const DeviceStatusSchema = z.object({
   left: SideStatusSchema,
   right: SideStatusSchema,
@@ -37,6 +46,7 @@ export const DeviceStatusSchema = z.object({
     branch: z.string(),
   }),
   wifiStrength: z.number(),
+  sensorTemps: SensorTempsResponseSchema,
 }).strict();
 
 export type SideStatus = z.infer<typeof SideStatusSchema>;

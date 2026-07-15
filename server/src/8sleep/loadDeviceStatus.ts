@@ -7,6 +7,7 @@ import { access, readFile } from 'fs/promises';
 import { constants } from 'fs';
 import _ from 'lodash';
 import serverInfo from '../serverInfo.json' with { type: 'json' };
+import servicesDB from '../db/services.js';
 import { WIFI_SIGNAL_STRENGTH } from './wifiSignalStrength.js';
 import { GestureSchema } from '../db/settingsSchema.js';
 
@@ -184,7 +185,31 @@ export async function loadDeviceStatus(response: string, getGestures: boolean): 
     isPriming: rawDeviceData.priming === 'true',
     settings: decodeSettings(rawDeviceData.settings),
     wifiStrength: WIFI_SIGNAL_STRENGTH,
+    sensorTemps: null,
   };
+
+  // Load sensor temps from biometrics service if available
+  try {
+    await servicesDB.read();
+    const rawTemps = servicesDB.data?.biometrics?.sensorTemps;
+    if (rawTemps && rawTemps.ambient !== null) {
+      // Convert from raw units (centi-degrees C) to C and F
+      const toC = (raw: number | null): number | null => raw !== null ? Math.round((raw / 100) * 10) / 10 : null;
+      const toF = (c: number | null): number | null => c !== null ? Math.round(c * 9 / 5 + 32) : null;
+
+      const ambientC = toC(rawTemps.ambient);
+      deviceStatus.sensorTemps = {
+        ambientC,
+        ambientF: toF(ambientC),
+        heatsinkC: toC(rawTemps.heatsink),
+        leftC: toC(rawTemps.left),
+        rightC: toC(rawTemps.right),
+        lastUpdated: rawTemps.lastUpdated,
+      };
+    }
+  } catch (e) {
+    logger.debug('Sensor temps not available from biometrics');
+  }
   if (getGestures) {
     try {
       // @ts-expect-error - fields get populated below
