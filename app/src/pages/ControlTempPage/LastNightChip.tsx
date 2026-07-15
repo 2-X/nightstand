@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import moment from 'moment-timezone';
 import { Chip, Box } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
@@ -19,9 +20,14 @@ export default function LastNightChip() {
   const { side } = useAppStore();
   const navigate = useNavigate();
 
-  // Fetch the most recent sleep record from the last 36 hours.
-  const startTime = moment().subtract(36, 'hours').toISOString();
-  const endTime = moment().toISOString();
+  // Fetch the most recent sleep record from the last 36 hours. Computed once
+  // per mount, not on every render: useSleepRecords keys its query on this
+  // params object, so recomputing "now" on every render would generate a
+  // new query key (and a new network request) every single render.
+  const { startTime, endTime } = useMemo(() => ({
+    startTime: moment().subtract(36, 'hours').toISOString(),
+    endTime: moment().toISOString(),
+  }), []);
   const { data: records } = useSleepRecords({ side, startTime, endTime });
   const last = records?.[records.length - 1];
 
