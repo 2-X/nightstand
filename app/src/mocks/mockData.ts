@@ -7,6 +7,8 @@ import type { MovementRecord } from '@api/movement.ts';
 import type { SleepRecord } from '@api/sleepSchema.ts';
 import type { VitalsRecord } from '@api/vitals.ts';
 import type { ServerStatus } from '@api/serverStatusSchema.ts';
+import type { StorageInfo } from '@api/storageSchema.ts';
+import type { MemoryInfo } from '@api/memorySchema.ts';
 import type { BaseStatus, BasePosition } from '@api/baseControl.ts';
 import type { Jobs } from '@api/jobs.ts';
 import type { SleepStage, StageEpoch, SleepStagesResponse } from '@api/sleepStages.ts';
@@ -566,6 +568,26 @@ const createServerStatus = (): ServerStatus => ({
   },
 });
 
+const createStorageInfo = (): StorageInfo => ({
+  mountPath: '/persistent/free-sleep-data',
+  totalBytes: 15_375_304 * 1024,
+  usedBytes: 1_719_180 * 1024,
+  availableBytes: 12_853_308 * 1024,
+  usedPercent: 11.2,
+  breakdown: {
+    logsBytes: 10 * 1024 * 1024,
+    biometricsArchiveBytes: 351 * 1024 * 1024,
+    databaseBytes: 220 * 1024,
+  },
+});
+
+const createMemoryInfo = (): MemoryInfo => ({
+  totalBytes: 2_014_796 * 1024,
+  usedBytes: (2_014_796 - 1_486_852) * 1024,
+  availableBytes: 1_486_852 * 1024,
+  usedPercent: 26.2,
+});
+
 // Demo pods have no real adjustable base hardware, but the Elevation tab is
 // worth showing off, isConfigured: true unlocks it (see useBaseConfigured).
 const BASE_PRESETS: Record<string, { head: number; feet: number }> = {
@@ -644,6 +666,8 @@ let settings = createSettings();
 let services = createServices();
 let deviceStatus = createDeviceStatus();
 let serverStatus = createServerStatus();
+let storageInfo = createStorageInfo();
+let memoryInfo = createMemoryInfo();
 let logsStore = createLogs();
 
 export const mergeDeep = (target: unknown, source: unknown): unknown => {
@@ -696,6 +720,18 @@ export const getServerStatus = () => serverStatus;
 export const setServerStatus = (next: ServerStatus) => {
   serverStatus = clone(next);
   return serverStatus;
+};
+
+export const getStorageInfo = () => storageInfo;
+export const setStorageInfo = (next: StorageInfo) => {
+  storageInfo = clone(next);
+  return storageInfo;
+};
+
+export const getMemoryInfo = () => memoryInfo;
+export const setMemoryInfo = (next: MemoryInfo) => {
+  memoryInfo = clone(next);
+  return memoryInfo;
 };
 
 export const listSleepRecords = () => sleepRecords;

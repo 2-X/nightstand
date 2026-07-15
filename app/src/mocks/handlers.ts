@@ -12,6 +12,8 @@ import {
   getDeviceStatus,
   updateDeviceStatus,
   getServerStatus,
+  getStorageInfo,
+  getMemoryInfo,
   getBaseStatus,
   setBasePosition,
   setBasePreset,
@@ -93,6 +95,14 @@ export const handlers = [
   http.get('/api/serverStatus', async () => {
     await delay(150);
     return HttpResponse.json(deepClone(getServerStatus()));
+  }),
+  http.get('/api/storage', async () => {
+    await delay(150);
+    return HttpResponse.json(deepClone(getStorageInfo()));
+  }),
+  http.get('/api/memory', async () => {
+    await delay(150);
+    return HttpResponse.json(deepClone(getMemoryInfo()));
   }),
   http.get('/api/base-control', async () => {
     await delay(100);
