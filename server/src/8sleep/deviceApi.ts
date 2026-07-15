@@ -20,8 +20,16 @@ export const frankenCommands = {
   PRIME: '13',
   DEVICE_STATUS: '14',
   ALARM_CLEAR: '16',
-  // ALARM_SOLO: "17",
-  // STOP_PRIME: "18",
+  // Documented by the 8rp reverse-engineering project
+  // (https://github.com/Schluggi/8rp/blob/main/docs/commands.md) as
+  // STOP_PRIME. Tested live against a pod: sent with the default 'empty'
+  // arg both before and after priming was confirmed active, isPriming
+  // stayed true for 5+ minutes afterward, it did not visibly interrupt an
+  // active priming cycle. Kept mapped since it's still useful to have the
+  // command name on record and it may need a different arg or only apply
+  // in some other context; the UI no longer exposes a Cancel action built
+  // on it. See docs/EIGHT_SLEEP_PROTOCOL.md.
+  STOP_PRIME: '17',
 } as const;
 
 
