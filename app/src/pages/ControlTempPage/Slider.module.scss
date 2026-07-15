@@ -4,6 +4,10 @@
       cursor: pointer;
     }
     color: #87868b;
+    pointer-events: none;
+    path, circle {
+      pointer-events: auto;
+    }
   }
 
   &.Disabled {

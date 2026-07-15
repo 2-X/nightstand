@@ -18,7 +18,10 @@ export const useControlTempStore = create<ControlTempStore>((set, get) => ({
   pendingEdits: 0,
   setDeviceStatus: (newDeviceStatus) => {
     const { deviceStatus } = get();
-    const updatedDeviceStatus = _.merge(deviceStatus, newDeviceStatus);
+    // Merge into a fresh object: mutating `deviceStatus` in place would store
+    // the same reference back, entangling optimistic and server state and
+    // defeating referential change detection.
+    const updatedDeviceStatus = _.merge({}, deviceStatus, newDeviceStatus);
     set({ deviceStatus: updatedDeviceStatus });
   },
   beginEdit: () => set((s) => ({ pendingEdits: s.pendingEdits + 1 })),
