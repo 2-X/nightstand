@@ -1,0 +1,2 @@
+import{v as c,w as d,r as C,x as u,j as p,z as f,F as m,G as x,W as y}from"./index.js";function v(s){return c("MuiCard",s)}d("MuiCard",["root"]);const w=s=>{const{classes:t}=s;return m({root:["root"]},v,t)},M=x(y,{name:"MuiCard",slot:"Root"})({overflow:"hidden"}),U=C.forwardRef(function(t,o){const a=u({props:t,name:"MuiCard"}),{className:n,raised:e=!1,...l}=a,r={...a,raised:e},i=w(r);return p.jsx(M,{className:f(i.root,n),elevation:e?8:void 0,ref:o,ownerState:r,...l})});export{U as C};
+//# sourceMappingURL=Card-CizfM21Q.js.map

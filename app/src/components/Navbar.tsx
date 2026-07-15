@@ -1,5 +1,6 @@
 import React from 'react';
 import AppBar from '@mui/material/AppBar';
+import Badge from '@mui/material/Badge';
 import Box from '@mui/material/Box';
 import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
@@ -8,10 +9,17 @@ import Button from '@mui/material/Button';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppStore } from '@state/appStore.tsx';
 import { useTheme } from '@mui/material/styles';
+import { useServerStatus } from '@api/serverStatus.ts';
+import { Status } from '@api/serverStatusSchema.ts';
 import { useEventStreamStore } from '@api/eventStream.ts';
 import { useBaseConfigured } from '@api/baseControl.ts';
 import { PAGES } from './pages';
 import freeSleepIcon from '../../public/free-sleep-icon.svg';
+
+// A "check" is unhealthy when its status indicates an active failure or
+// recovery, not merely "running" / "idle". This matches the chips on the
+// Status page (warning + error variants).
+const UNHEALTHY_STATUSES: ReadonlySet<Status> = new Set(['failed', 'restarting', 'retrying']);
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -33,6 +41,16 @@ export default function Navbar() {
   const [mobileNavValue, setMobileNavValue] = React.useState(
     pages.findIndex((page) => page.route === pathname)
   );
+
+  // Poll server status so the Status tab can show a red dot when any check
+  // is unhealthy. 30s is plenty for a passive indicator.
+  const { data: serverStatus } = useServerStatus(30_000);
+  const hasUnhealthyStatus = React.useMemo(() => {
+    if (!serverStatus) return false;
+    return Object.values(serverStatus).some(
+      (info) => info && UNHEALTHY_STATUSES.has(info.status),
+    );
+  }, [serverStatus]);
 
   // Handle navigation for both desktop and mobile
   const handleNavigation = (route: string) => {
@@ -115,16 +133,27 @@ export default function Navbar() {
             <img src={ freeSleepIcon } alt="Join our Discord" width={ 45 } height={ 45 } />
           </div>
           <Box sx={ { display: 'flex', gap: 2 } }>
-            { pages.map(({ title, route }) => (
-              <Button
-                key={ route }
-                onClick={ () => handleNavigation(route) }
-                sx={ { color: 'white' } }
-                variant={ pathname === route ? 'outlined' : 'text' }
-              >
-                { title }
-              </Button>
-            )) }
+            { pages.map(({ title, route }) => {
+              const showStatusDot = route === '/status' && hasUnhealthyStatus;
+              return (
+                <Button
+                  key={ route }
+                  onClick={ () => handleNavigation(route) }
+                  sx={ { color: 'white' } }
+                  variant={ pathname === route ? 'outlined' : 'text' }
+                >
+                  <Badge
+                    color="error"
+                    variant="dot"
+                    invisible={ !showStatusDot }
+                    overlap="rectangular"
+                    sx={ { '& .MuiBadge-badge': { right: -6, top: 4 } } }
+                  >
+                    { title }
+                  </Badge>
+                </Button>
+              );
+            }) }
           </Box>
         </Toolbar>
       </AppBar>
@@ -157,18 +186,33 @@ export default function Navbar() {
             },
           } }
         >
-          { pages.map(({ title, icon }, index) => (
-            <BottomNavigationAction
-              key={ index }
-              icon={ icon }
-              aria-label={ title }
-              sx={ {
-                '&.Mui-selected': {
-                  color: theme.palette.grey[100],
-                },
-              } }
-            />
-          )) }
+          { pages.map(({ title, icon, route }, index) => {
+            const showStatusDot = route === '/status' && hasUnhealthyStatus;
+            const decoratedIcon = showStatusDot ? (
+              <Badge
+                color="error"
+                variant="dot"
+                overlap="circular"
+                anchorOrigin={ { vertical: 'top', horizontal: 'right' } }
+              >
+                { icon }
+              </Badge>
+            ) : (
+              icon
+            );
+            return (
+              <BottomNavigationAction
+                key={ index }
+                icon={ decoratedIcon }
+                aria-label={ title }
+                sx={ {
+                  '&.Mui-selected': {
+                    color: theme.palette.grey[100],
+                  },
+                } }
+              />
+            );
+          }) }
         </BottomNavigation>
       </Box>
       <style>
