@@ -442,6 +442,14 @@ const createDeviceStatus = (): DeviceStatus => ({
     branch: 'main',
   },
   wifiStrength: 82,
+  sensorTemps: {
+    ambientC: 21.5,
+    ambientF: 71,
+    heatsinkC: 31.0,
+    leftC: 28.5,
+    rightC: 29.0,
+    lastUpdated: now.toISOString(),
+  },
 });
 
 const createServerStatus = (): ServerStatus => ({
