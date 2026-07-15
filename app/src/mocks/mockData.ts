@@ -13,6 +13,7 @@ import type { BaseStatus, BasePosition } from '@api/baseControl.ts';
 import type { Jobs } from '@api/jobs.ts';
 import type { SleepStage, StageEpoch, SleepStagesResponse } from '@api/sleepStages.ts';
 import type { SleepScore } from '@api/sleepScore.ts';
+import type { ChangelogEntry } from '@api/changelogSchema.ts';
 
 type Side = 'left' | 'right';
 
@@ -733,6 +734,27 @@ export const setMemoryInfo = (next: MemoryInfo) => {
   memoryInfo = clone(next);
   return memoryInfo;
 };
+
+const changelogEntries: ChangelogEntry[] = [
+  {
+    version: '3.2.0',
+    date: '2026-07-09',
+    body: '### Added\n- **In-app changelog.** See what changed right from the update alert, '
+      + 'or browse\n  full history on the new Changelog page in Settings.',
+  },
+  {
+    version: '3.1.0',
+    date: '2026-07-10',
+    body: '### Fixed\n- Reverted a Cancel-priming button that didn\'t actually stop priming.',
+  },
+  {
+    version: '3.1.0',
+    date: '2026-07-10',
+    body: '### Added\n- Pump-stall detection, surfaced on the Status page.\n- Cancel priming from Settings.',
+  },
+];
+
+export const getChangelog = () => changelogEntries;
 
 export const listSleepRecords = () => sleepRecords;
 export const setSleepRecords = (records: SleepRecord[]) => {

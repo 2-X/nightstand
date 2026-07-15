@@ -20,6 +20,7 @@ import VitalsPage from './pages/DataPage/VitalsPage/VitalsPage.tsx';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import LogsPage from './pages/DataPage/LogsPage/LogsPage.tsx';
+import ChangelogPage from './pages/DataPage/ChangelogPage/ChangelogPage.tsx';
 import StatusPage from './pages/StatusPage/StatusPage.tsx';
 
 const queryClient = new QueryClient({
@@ -61,6 +62,8 @@ const App = () => {
                     <Route path="logs" element={ <LogsPage/> }/>
                     <Route path="vitals" element={ <VitalsPage/> }/>
                   </Route>
+
+                  <Route path="changelog" element={ <ChangelogPage/> }/>
 
                   <Route path="settings" element={ <SettingsPage/> }/>
                   <Route path="schedules" element={ <SchedulePage/> }/>
