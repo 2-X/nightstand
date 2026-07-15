@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { connectFranken } from '../../8sleep/frankenServer.js';
+import { FrankenCommandTimeoutError, getDeviceStatusCoalesced, isFrankenConnected } from '../../8sleep/frankenServer.js';
 import { DeviceStatus, DeviceStatusSchema } from './deviceStatusSchema.js';
 import logger from '../../logger.js';
 import { updateDeviceStatus } from './updateDeviceStatus.js';
@@ -9,9 +9,34 @@ import { DeepPartial } from 'ts-essentials';
 const router = express.Router();
 
 router.get('/deviceStatus', async (req: Request, res: Response) => {
-  const franken = await connectFranken();
-  const resp = await franken.getDeviceStatus();
-  res.json(resp);
+  // Franken's initial hardware handshake can take ~25-30s (one connection
+  // timeout-and-retry cycle is normal on cold start). Without this check,
+  // every request that lands during that window blocks for the full
+  // duration instead of failing fast, and any client with a shorter
+  // timeout (a 5s health-check curl, a browser) gives up before it ever
+  // resolves, showing up as a self-inflicted health-check failure on
+  // every fresh restart, since almost no request's client is still
+  // listening by the time the blocked call finally settles.
+  if (!isFrankenConnected()) {
+    res.status(503).json({
+      error: { message: 'Pod is still starting up, hardware connecting' },
+    });
+    return;
+  }
+
+  try {
+    const resp = await getDeviceStatusCoalesced();
+    res.json(resp);
+  } catch (error) {
+    if (error instanceof FrankenCommandTimeoutError) {
+      logger.warn(`/deviceStatus timed out: ${error.message}`);
+      res.status(503).json({
+        error: { message: 'Pod did not respond in time, retrying connection' },
+      });
+      return;
+    }
+    throw error;
+  }
 });
 
 
