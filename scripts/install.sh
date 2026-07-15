@@ -203,7 +203,7 @@ echo "Creating systemd service file at $SERVICE_FILE..."
 
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
-Description=Free Sleep Server
+Description=Nightstand Server
 After=network.target
 
 [Service]
@@ -231,6 +231,22 @@ systemctl status free-sleep.service --no-pager || true
 echo ""
 
 # -----------------------------------------------------------------------------------------------------
+# Install the RAW-archive retention timer
+#
+# Without this, frankenfirmware truncates piezo/capacitance RAW files after
+# ~75 min, so calibration/analyze jobs asking for multi-hour windows find
+# almost no data and crash (empty-dataframe IndexError). See
+# server/README_SERVER.md for the mechanism. Idempotent: safe to re-run.
+
+echo "Installing RAW-archive retention timer..."
+chmod +x "$REPO_DIR/scripts/archive-raw.sh"
+cp "$REPO_DIR/scripts/systemd/free-sleep-archive-raw.service" /etc/systemd/system/
+cp "$REPO_DIR/scripts/systemd/free-sleep-archive-raw.timer" /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now free-sleep-archive-raw.timer
+echo ""
+
+# -----------------------------------------------------------------------------------------------------
 # Create systemd service for updating
 
 UPDATE_SERVICE_FILE="/etc/systemd/system/free-sleep-update.service"
@@ -238,7 +254,7 @@ echo "Creating systemd service file at $UPDATE_SERVICE_FILE..."
 
 cat > "$UPDATE_SERVICE_FILE" <<EOF
 [Unit]
-Description=Free Sleep Updater
+Description=Nightstand Updater
 After=free-sleep.service
 
 [Service]
@@ -362,7 +378,7 @@ sh /home/dac/free-sleep/scripts/add_shortcuts.sh
 echo "This is your dac.sock path (if it doesn't end in dac.sock, contact support):"
 cat /persistent/free-sleep-data/dac_sock_path.txt 2>/dev/null || echo "No dac.sock path found."
 
-echo -e "\033[0;32mInstallation complete! The Free Sleep server is running and will start automatically on boot.\033[0m"
+echo -e "\033[0;32mInstallation complete! The Nightstand server is running and will start automatically on boot.\033[0m"
 echo -e "\033[0;32mSee logs with: journalctl -u free-sleep --no-pager --output=cat\033[0m"
 
 if [ "$migration_failed" = "true" ]; then
