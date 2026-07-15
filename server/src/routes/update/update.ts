@@ -1,9 +1,10 @@
 import express from 'express';
 import fs from 'fs';
 import logger from '../../logger.js';
+import { triggerUpdateService } from '../../jobs/update.js';
 import { triggerRollbackService } from '../../jobs/rollback.js';
 import { triggerRevertToStockService } from '../../jobs/revertToStock.js';
-import { RollbackInfo } from './updateSchema.js';
+import { UpdateRequestSchema, RollbackInfo } from './updateSchema.js';
 
 const router = express.Router();
 
@@ -11,6 +12,34 @@ const router = express.Router();
 // scripts/update.sh): reading its serverInfo.json is how we know whether an
 // instant rollback is available and what it would roll back to.
 const PREV_SERVER_INFO_PATH = '/home/dac/free-sleep-prev/server/src/serverInfo.json';
+
+// Consumed once by scripts/update.sh (deleted immediately after reading), so
+// a stale file can never redirect a future plain update.
+const TARGET_FILE = '/persistent/free-sleep-data/update-target.json';
+
+router.post('/', async (req, res) => {
+  const parsed = UpdateRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logger.error('Invalid update request:', parsed.error);
+    res.status(400).json({ error: 'Invalid request data', details: parsed.error.errors });
+    return;
+  }
+
+  const { targetVersion, allowDowngrade } = parsed.data;
+  try {
+    if (targetVersion) {
+      await fs.promises.writeFile(
+        TARGET_FILE,
+        JSON.stringify({ version: targetVersion, allowDowngrade: !!allowDowngrade })
+      );
+    }
+    triggerUpdateService();
+    res.status(204).end();
+  } catch (error) {
+    logger.error('Failed to start update', error);
+    res.status(500).json({ message: 'Unable to start update' });
+  }
+});
 
 router.get('/rollback-info', async (_req, res) => {
   try {

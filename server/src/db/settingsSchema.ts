@@ -63,6 +63,12 @@ const SideSettingsSchema = z.object({
   })
 }).strict();
 
+// Which release channel the update alert/version picker treats as "latest".
+// 'beta' sees every release; 'stable' only sees releases promoted to stable
+// in releases.json.
+export const UPDATE_CHANNELS = ['stable', 'beta'] as const;
+const UpdateChannel = z.enum(UPDATE_CHANNELS);
+
 export const SettingsSchema = z.object({
   id: z.string(),
   timeZone: z.enum(TIME_ZONES),
@@ -74,8 +80,10 @@ export const SettingsSchema = z.object({
   }),
   temperatureFormat: Temperatures,
   rebootDaily: z.boolean(),
+  updateChannel: UpdateChannel,
 }).strict();
 
 export type SideSettings = z.infer<typeof SideSettingsSchema>;
 export type Settings = z.infer<typeof SettingsSchema>;
 export type Gesture = z.infer<typeof GestureSchema>
+export type UpdateChannelType = z.infer<typeof UpdateChannel>
