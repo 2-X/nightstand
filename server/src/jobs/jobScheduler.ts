@@ -121,7 +121,10 @@ function waitForValidDateAndSetupJobs() {
 chokidar.watch(config.lowDbFolder).on('change', (changedPath) => {
   const fileName = path.basename(changedPath);
   if (isServicesDbChange(fileName)) {
-    logger.info(`Skipping restarting jobs for DB change: ${fileName}`);
+    // servicesDB.json changes constantly (job status pings, sensor temps) and
+    // never needs a reschedule, logging this no-op at info drowned out the
+    // rare, actually-interesting reschedules in the production log.
+    logger.debug(`Skipping restarting jobs for DB change: ${fileName}`);
     return;
   } else {
     logger.info(`Detected DB change, reloading... ${fileName}`);
