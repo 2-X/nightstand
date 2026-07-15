@@ -27,6 +27,7 @@ import {
   filterByQuery,
   listLogs,
   getLogFiles,
+  getChangelog,
   handleJobs,
 } from './mockData';
 
@@ -103,6 +104,10 @@ export const handlers = [
   http.get('/api/memory', async () => {
     await delay(150);
     return HttpResponse.json(deepClone(getMemoryInfo()));
+  }),
+  http.get('/api/changelog', async () => {
+    await delay(150);
+    return HttpResponse.json({ entries: deepClone(getChangelog()) });
   }),
   http.get('/api/base-control', async () => {
     await delay(100);
