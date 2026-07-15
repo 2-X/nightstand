@@ -2,7 +2,7 @@ import express from 'express';
 import schedule from 'node-schedule';
 import { Server } from 'http';
 import logger from './logger.js';
-import { connectFranken, disconnectFranken } from './8sleep/frankenServer.js';
+import { connectFranken, disconnectFranken, getFrankenQueueDepth } from './8sleep/frankenServer.js';
 import { FrankenMonitor } from './8sleep/frankenMonitor.js';
 import { startPresenceAutoOff, stopPresenceAutoOff } from './8sleep/presenceAutoOffMonitor.js';
 import './jobs/jobScheduler.js';
@@ -15,6 +15,7 @@ import config from './config.js';
 import serverStatus from './serverStatus.js';
 import { prisma } from './db/prisma.js';
 import { loadWifiSignalStrength } from './8sleep/wifiSignalStrength.js';
+import metrics from './metrics/metrics.js';
 import { wsServer } from './ws/wsServer.js';
 
 const port = 3000;
@@ -121,6 +122,7 @@ const initFrankenMonitor = () => {
 
 // Main startup function
 async function startServer() {
+  metrics.registerFrankenQueueDepth(getFrankenQueueDepth);
   setupMiddleware(app);
   setupRoutes(app);
   // Listen on desired port
