@@ -1,10 +1,12 @@
 import { useEffect } from 'react';
 import Button from '@mui/material/Button';
-import { Box, CircularProgress } from '@mui/material';
+import { Box, CircularProgress, Typography } from '@mui/material';
+import { palette } from '@design/tokens';
 
 import AlarmDismissal from './AlarmDismissal.tsx';
 import AlarmNotification from './AlarmNotification.tsx';
 import AwayNotification from './AwayNotification.tsx';
+import Clock from '@components/Clock.tsx';
 import ErrorBoundary from '@components/ErrorBoundary.tsx';
 import LastNightChip from './LastNightChip.tsx';
 import PageContainer from '../PageContainer.tsx';
@@ -49,6 +51,31 @@ export default function ControlTempPage() {
         },
       } }
     >
+      <Box
+        sx={ {
+          display: 'flex',
+          alignItems: 'baseline',
+          justifyContent: 'space-between',
+          width: '100%',
+          px: 0.5,
+          mt: 1,
+        } }
+      >
+        <Typography
+          sx={ {
+            fontSize: '2rem',
+            fontWeight: 600,
+            letterSpacing: '-0.02em',
+            color: palette.text.primary,
+          } }
+        >
+          Temperature
+        </Typography>
+        <ErrorBoundary componentName='Clock'>
+          <Clock/>
+        </ErrorBoundary>
+      </Box>
+
       <Slider
         isOn={ isOn }
         currentTargetTemp={ sideStatus?.targetTemperatureF || 55 }
