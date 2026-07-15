@@ -54,6 +54,11 @@ const SideSettingsSchema = z.object({
         quadTap: TapConfig,
     })
 }).strict();
+// Which release channel the update alert/version picker treats as "latest".
+// 'beta' sees every release; 'stable' only sees releases promoted to stable
+// in releases.json.
+export const UPDATE_CHANNELS = ['stable', 'beta'];
+const UpdateChannel = z.enum(UPDATE_CHANNELS);
 export const SettingsSchema = z.object({
     id: z.string(),
     timeZone: z.enum(TIME_ZONES),
@@ -65,5 +70,6 @@ export const SettingsSchema = z.object({
     }),
     temperatureFormat: Temperatures,
     rebootDaily: z.boolean(),
+    updateChannel: UpdateChannel,
 }).strict();
 //# sourceMappingURL=settingsSchema.js.map
