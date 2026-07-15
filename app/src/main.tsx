@@ -43,8 +43,14 @@ const App = () => {
             <CssBaseline/>
             <GlobalStyles
               styles={ {
-                'html, body': {
-                  overscrollBehavior: 'none', // Prevent rubber-banding
+                // Split html / body styles deliberately. Applying
+                // overscroll-behavior:none to BOTH made Android Chrome create
+                // two nested scroll containers: single-finger drag would
+                // scroll one and require two fingers for the other. body is
+                // the single scroll container that gets the rubber-banding
+                // fix; html stays untouched.
+                'body': {
+                  overscrollBehavior: 'none',
                 },
               } }
             />
