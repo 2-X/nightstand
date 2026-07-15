@@ -7,6 +7,7 @@ import { DeviceStatus, Version } from '../routes/deviceStatus/deviceStatusSchema
 import { Side } from '../db/schedulesSchema.js';
 import { Gesture, GestureSchema } from '../db/settingsSchema.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
+import { markManualTempChange } from '../jobs/scheduleOverride.js';
 import { DeepPartial } from 'ts-essentials';
 import serverStatus from '../serverStatus.js';
 
@@ -53,7 +54,10 @@ export class FrankenMonitor {
         newTemperatureTargetF = currentTemperatureTarget + (-1 * change);
       }
       logger.debug(`Processing gesture temperature change for ${side}. ${currentTemperatureTarget} -> ${newTemperatureTargetF}`);
-      return await updateDeviceStatus({ [side]: { targetTemperatureF: newTemperatureTargetF } } as DeepPartial<DeviceStatus>);
+      await updateDeviceStatus({ [side]: { targetTemperatureF: newTemperatureTargetF } } as DeepPartial<DeviceStatus>);
+      // Tap counts as a manual change for schedule-override purposes.
+      await markManualTempChange(side);
+      return;
     } else if (behavior.type) {
       // TODO: Add alarm handling
       logger.warn('Skipping gesture...');
