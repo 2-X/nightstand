@@ -8,6 +8,8 @@ import { useSettings } from '@api/settings.ts';
 import { useState } from 'react';
 import { useServices } from '@api/services.ts';
 import { Job, postJobs } from '@api/jobs.ts';
+import { useSchedules } from '@api/schedules.ts';
+import { getScheduledTargetTemperature } from '@lib/scheduleTemperature.ts';
 import AnalyzeSleepNotification from './AnalyzeSleepNotification.tsx';
 import { useControlTempStore } from './controlTempStore.tsx';
 
@@ -21,6 +23,7 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
   const { isUpdating, setIsUpdating, side } = useAppStore();
   const { data: settings } = useSettings();
   const { data: services } = useServices();
+  const { data: schedules } = useSchedules();
   const setDeviceStatus = useControlTempStore(state => state.setDeviceStatus);
   const beginEdit = useControlTempStore(state => state.beginEdit);
   const endEdit = useControlTempStore(state => state.endEdit);
@@ -30,9 +33,16 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
   const [showAnalyzeNotification, setShowAnalyzeNotification] = useState(false);
 
   const handleOnClick = (powerOn: boolean) => {
+    // Powering on manually starts at the temperature the schedule would have
+    // the side at right now (or its upcoming power-on temperature), instead
+    // of whatever target was left over from the last session.
+    const scheduledTargetTemperature = powerOn
+      ? getScheduledTargetTemperature(schedules?.[side], settings?.timeZone ?? undefined)
+      : undefined;
     const deviceStatus: DeepPartial<DeviceStatus> = {
       [side]: {
-        isOn: powerOn
+        isOn: powerOn,
+        ...(scheduledTargetTemperature === undefined ? {} : { targetTemperatureF: scheduledTargetTemperature }),
       }
     };
     if (powerOn) {
