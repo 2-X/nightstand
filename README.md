@@ -54,10 +54,9 @@ again as soon as the download finishes.
 
 Versions follow their own semver stream starting at 3.0.0 (see
 [CONTRIBUTING.md](CONTRIBUTING.md)). `serverInfo.json` tracks `upstreamBase`,
-the last release of the original project reviewed for changes worth
-cherry-picking. When the original project ships something newer, the app
-shows a small note about it, but nothing merges automatically; changes get
-reviewed and pulled in deliberately.
+the release of the original project this build was made from. Nothing merges
+automatically; changes from the original project get reviewed and pulled in
+deliberately.
 
 Updating happens through the app itself. Once a new build lands on `main`,
 the Settings page shows an Update button; pressing it has the Pod pull the

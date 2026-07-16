@@ -26,7 +26,7 @@ Conventional Commits, matching the history already here:
 type(scope): subject
 ```
 
-- Types: `feat`, `fix`, `ui`, `docs`, `build`, `ops`, `refactor`, `chore`.
+- Types: `feat`, `fix`, `ui`, `docs`, `build`, `ops`, `refactor`, `chore`, `test`.
 - Scope is optional; existing ones include `biometrics`, `schedule`, `server`,
   `base`, `versioning`.
 - Subject is lowercase and imperative, with no trailing period.
@@ -44,12 +44,12 @@ Semver, `MAJOR.MINOR.PATCH`, always all three parts. One source of truth:
 
 Nightstand's stream started at 3.0.0 at the hard fork from jmew's fork (which
 was at 2.1.4, tracking the original project's 2.x line). `upstreamBase` in the
-same file records the last original-project release whose changes were
-reviewed; bump it whenever you finish a cherry-pick review, even if nothing
-was taken.
+same file records the original-project release this build was made from;
+update it when a build moves to a newer base, not after every review.
 
 Every release is also recorded in `releases.json` (repo root) with a channel
-of `stable` or `beta`, and tagged in git as `v<version>` (e.g. `v3.2.0`).
+of `stable` or `beta`, a `kind` of `agent` or `bundle`, and tagged in git as
+`v<version>` (e.g. `v3.2.0`).
 
 ## Release cadence and promotion
 
@@ -79,8 +79,11 @@ rename a column/table that an older, still-installable release reads.
 ## Release ritual
 
 1. Bump the version in `server/src/serverInfo.json`.
-2. Add the new release to the top of `releases.json` (channel `beta` unless
-   there's a reason to ship straight to `stable`).
+2. Add the new release to the top of `releases.json`, copying the shape of the
+   entry below it: `kind` (`agent` or `bundle`), `version`, `date`, and channel
+   (`beta` unless there's a reason to ship straight to `stable`). A bundle also
+   carries its own `upstreamBase`, the release it was built from, and its
+   `features` list.
 3. Add a matching entry at the top of `CHANGELOG.md`.
 4. Rebuild both halves (`npm run build:pr` in `server/` and `app/`) and commit
    the output.
