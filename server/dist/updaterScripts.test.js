@@ -9,14 +9,16 @@ import { fileURLToPath } from 'node:url';
 // high-signal invariants: the scripts parse, they point at this fork, and
 // the safety rails (rollback, WAN re-block) are present.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+// This file ships inside the agent overlay (see agentManifest.ts), so it may
+// only assert about files the overlay carries. Limited to the agent's own
+// scripts; ops/deploy.sh, ops/rollback.sh (this repo's dev/deploy tooling,
+// never shipped) and scripts/enable_biometrics.sh, scripts/disable_biometrics.sh
+// (stock's own files, which the agent does not touch) live in
+// opsScripts.test.ts instead.
 const SCRIPTS = [
     'scripts/update.sh',
     'scripts/update_service.sh',
     'scripts/install.sh',
-    'scripts/enable_biometrics.sh',
-    'scripts/disable_biometrics.sh',
-    'ops/deploy.sh',
-    'ops/rollback.sh',
 ];
 describe('updater shell scripts', () => {
     for (const script of SCRIPTS) {
@@ -86,11 +88,6 @@ describe('updater shell scripts', () => {
     it('update.sh self-heals the disable_biometrics.sh sudoers rule on existing pods', () => {
         const src = readFileSync(path.join(repoRoot, 'scripts/update.sh'), 'utf8');
         assert.match(src, /ALL=\(ALL\) NOPASSWD: \/bin\/sh \/home\/dac\/free-sleep\/scripts\/disable_biometrics\.sh/);
-    });
-    it('disable_biometrics.sh actually stops and disables the stream service', () => {
-        const src = readFileSync(path.join(repoRoot, 'scripts/disable_biometrics.sh'), 'utf8');
-        assert.match(src, /systemctl stop free-sleep-stream/);
-        assert.match(src, /systemctl disable free-sleep-stream/);
     });
     // Target-version protocol: the server writes update-target.json before
     // starting the service; a syntax slip here would either silently ignore a
