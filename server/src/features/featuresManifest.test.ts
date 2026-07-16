@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { FEATURES_MANIFEST } from './featuresManifest.js';
 import { defaultFeatures } from '../db/settingsSchema.js';
 
@@ -10,6 +13,11 @@ const REQUIRED_FIELDS = [
 
 const isFeaturesSchemaKey = (flag: unknown): flag is keyof typeof defaultFeatures =>
   typeof flag === 'string' && flag in defaultFeatures;
+
+// featuresManifest.ts is the catalog releases.json names features from, so a
+// typo in either would otherwise only surface at install time.
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const releasesManifest = JSON.parse(readFileSync(path.join(repoRoot, 'releases.json'), 'utf8'));
 
 describe('FEATURES_MANIFEST', () => {
   it('has every required field, non-empty where it is a string', () => {
@@ -50,6 +58,18 @@ describe('FEATURES_MANIFEST', () => {
         defaultFeatures[entry.flag],
         `${entry.id}'s manifest default does not match settingsSchema.ts's defaultFeatures.${entry.flag}`,
       );
+    }
+  });
+
+  // No bundle releases exist yet, so this passes vacuously today. It is the
+  // guard that arms the moment the first one lands.
+  it('has every feature id named by a bundle release', () => {
+    const ids = new Set(FEATURES_MANIFEST.map((entry) => entry.id));
+    for (const release of releasesManifest.releases) {
+      if (release.kind !== 'bundle') continue;
+      for (const feature of release.features) {
+        assert.ok(ids.has(feature), `releases.json bundle v${release.version} names unknown feature "${feature}"`);
+      }
     }
   });
 });
