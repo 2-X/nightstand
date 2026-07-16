@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import { AGENT_MANIFEST, AGENT_BASE, STOCK_CONTRACT, NODE_BUILTINS_BARE } from './agentManifest.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -18,6 +19,10 @@ const ALIASES: Record<string, string> = {
 const agentPaths = new Set(AGENT_MANIFEST.map((entry) => entry.path));
 const contractPaths = new Set(STOCK_CONTRACT.paths);
 
+const packageOf = (specifier: string): string => (
+  specifier.startsWith('@') ? specifier.split('/').slice(0, 2).join('/') : specifier.split('/')[0]
+);
+
 // node:-prefixed builtins are always allowed; this is the resolution rule,
 // the actual bare-form allowlist lives in agentManifest.ts as
 // NODE_BUILTINS_BARE. A bare subpath specifier (e.g. 'fs/promises') is
@@ -30,29 +35,27 @@ const isNodeBuiltin = (specifier: string) => (
 // have none, and JSON imports nothing.
 const isSource = (p: string) => /\.(ts|tsx)$/.test(p);
 
-const importsOf = (source: string): string[] => {
-  const specifiers: string[] = [];
-  // Static form: `import ... from '...'` and `export ... from '...'`
-  // (including bare `import '...'` for side effects and `export * from`).
-  const staticRe = /^\s*(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/gm;
-  // Dynamic form: `import('...')`, anywhere in an expression.
-  const dynamicRe = /\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
-  for (const re of [staticRe, dynamicRe]) {
-    let match = re.exec(source);
-    while (match !== null) {
-      specifiers.push(match[1]);
-      match = re.exec(source);
-    }
-  }
-  return specifiers;
-};
+// TypeScript's own pre-processor extracts every import form (static, export
+// ... from, dynamic import(), any whitespace or line layout) instead of a
+// hand-rolled regex trying to keep up with all of them.
+const importsOf = (source: string): string[] => (
+  ts.preProcessFile(source, true, true).importedFiles.map((f) => f.fileName)
+);
 
 // Returns a repo-relative path for a repo-local import, or null for a bare
 // package specifier.
 const resolveSpecifier = (fromPath: string, specifier: string): string | null => {
   for (const [alias, target] of Object.entries(ALIASES)) {
     if (specifier.startsWith(alias)) {
-      return path.posix.normalize(target + specifier.slice(alias.length));
+      const resolved = path.posix.normalize(target + specifier.slice(alias.length));
+      // Alias imports are extensionless too, e.g. '@api/jobs'. Try the same
+      // TypeScript extensions the relative-path fallback below tries.
+      if (!path.posix.extname(resolved) && !existsSync(path.join(repoRoot, resolved))) {
+        for (const ext of ['.ts', '.tsx']) {
+          if (existsSync(path.join(repoRoot, resolved + ext))) return resolved + ext;
+        }
+      }
+      return resolved;
     }
   }
   if (!specifier.startsWith('.')) return null;
@@ -70,10 +73,6 @@ const resolveSpecifier = (fromPath: string, specifier: string): string | null =>
   }
   return resolved;
 };
-
-const packageOf = (specifier: string): string => (
-  specifier.startsWith('@') ? specifier.split('/').slice(0, 2).join('/') : specifier.split('/')[0]
-);
 
 describe('the agent manifest', () => {
   it('names only paths that exist in this repo', () => {

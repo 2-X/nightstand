@@ -72,7 +72,11 @@ export const AGENT_MANIFEST: AgentEntry[] = [
   { path: 'app/src/components/VersionStatus.tsx', mode: 'copy', why: 'hosts the update prompt and the rollback and revert rows' },
   { path: 'app/src/pages/SettingsPage/DeviceSettingsSection/UpdateFreeSleepButton.tsx', mode: 'copy', why: 'triggers the pod self-updater' },
   { path: 'app/src/pages/SettingsPage/VersionsPage/RollbackRow.tsx', mode: 'add', why: 'instant offline rollback to the previous tree' },
-  { path: 'app/src/pages/SettingsPage/VersionsPage/RevertToStockRow.tsx', mode: 'add', why: 'the reversibility claim: return the pod to plain upstream' },
+  {
+    path: 'app/src/pages/SettingsPage/VersionsPage/RevertToStockRow.tsx',
+    mode: 'add',
+    why: 'the reversibility claim: return the pod to plain upstream',
+  },
 
   // Pod-side machinery.
   { path: 'scripts/install.sh', mode: 'copy', why: 'installs this fork and wires the agent units' },
@@ -90,7 +94,11 @@ export const AGENT_MANIFEST: AgentEntry[] = [
   { path: 'server/src/routes/update/update.ts', mode: 'add', why: 'POST /api/update and the rollback availability read' },
   { path: 'server/src/routes/update/updateSchema.ts', mode: 'add', why: 'validates the update target' },
   { path: 'server/src/serverInfo.json', mode: 'copy', why: 'identifies the build: version, branch, fork, upstream base' },
-  { path: 'server/package.json', mode: 'patch', why: 'needs the test script added, since stock has no test runner entry; a copy would drag in every dependency of this tree' },
+  {
+    path: 'server/package.json',
+    mode: 'patch',
+    why: 'needs the test script added, since stock has no test runner entry; a copy would drag in every dependency of this tree',
+  },
   { path: 'server/src/setup/routes.ts', mode: 'patch', why: 'aggregates every route in the tree, so a copy imports routes stock does not have' },
 
   // Tests travel with the code they cover.
