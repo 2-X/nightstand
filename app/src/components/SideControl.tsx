@@ -1,3 +1,6 @@
+// The helper component below is private to this file and used only by its
+// default export, so it stays next to its only consumer.
+/* eslint-disable react/no-multi-comp */
 import { useEffect, useState } from 'react';
 import moment from 'moment-timezone';
 import {

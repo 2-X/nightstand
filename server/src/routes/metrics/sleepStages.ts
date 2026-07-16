@@ -17,8 +17,8 @@ interface SleepStagesQuery {
 export type SleepStage = 'awake' | 'rem' | 'light' | 'deep';
 
 type Epoch = {
-  startUnix: number;       // epoch start (UTC seconds)
-  endUnix: number;         // epoch end (UTC seconds)
+  startUnix: number; // epoch start (UTC seconds)
+  endUnix: number; // epoch end (UTC seconds)
   stage: SleepStage;
 };
 
@@ -51,7 +51,7 @@ type Epoch = {
 
 const BUCKET_SECONDS = 300;
 const SLEEP_HR_DELTA_BPM = 5;
-const ONSET_REQUIRED_CALM_BUCKETS = 3;  // 15 min of sustained calm = real sleep
+const ONSET_REQUIRED_CALM_BUCKETS = 3; // 15 min of sustained calm = real sleep
 
 function classifyStages(
   vitals: Array<{ timestamp: number; heart_rate: number | null; hrv: number | null; breathing_rate: number | null }>,
@@ -211,7 +211,7 @@ function classifyStages(
   // non-awake epochs (= 50 min of continuous classified sleep). The end
   // of that block is the real wake time. Brief 4-5-epoch bursts during
   // phone-in-bed are filtered out because they don't sustain long enough.
-  const OFFSET_REQUIRED_SLEEP_BUCKETS = 10;  // 50 min of continuous sleep
+  const OFFSET_REQUIRED_SLEEP_BUCKETS = 10; // 50 min of continuous sleep
   let offsetIdx = working.length;
   let sleepRun = 0;
   for (let i = working.length - 1; i >= 0; i--) {
@@ -310,9 +310,9 @@ router.get(
     const totalSeconds = Object.values(totals).reduce((a, b) => a + b, 0) || 1;
     const percentages: Record<SleepStage, number> = {
       awake: Math.round((totals.awake / totalSeconds) * 100),
-      rem:   Math.round((totals.rem   / totalSeconds) * 100),
+      rem:   Math.round((totals.rem / totalSeconds) * 100),
       light: Math.round((totals.light / totalSeconds) * 100),
-      deep:  Math.round((totals.deep  / totalSeconds) * 100),
+      deep:  Math.round((totals.deep / totalSeconds) * 100),
     };
 
     return res.json({ active: true, epochs, totals, percentages, totalSeconds });

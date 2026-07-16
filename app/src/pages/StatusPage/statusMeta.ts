@@ -87,7 +87,8 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
   },
   pumpHealthLeft: {
     group: 'biometrics',
-    blurb: "Watches for a stalled water pump while the heater/cooler is running, left side. A stalled pump can make the sensor read a false runaway temperature.",
+    blurb: 'Watches for a stalled water pump while the heater/cooler is running, left side. '
+      + 'A stalled pump can make the sensor read a false runaway temperature.',
     meaning: {
       healthy: 'Circulating normally.',
       failed: 'Pump stall suspected: the displayed temperature on this side may not be accurate.',
@@ -95,7 +96,8 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
   },
   pumpHealthRight: {
     group: 'biometrics',
-    blurb: "Watches for a stalled water pump while the heater/cooler is running, right side. A stalled pump can make the sensor read a false runaway temperature.",
+    blurb: 'Watches for a stalled water pump while the heater/cooler is running, right side. '
+      + 'A stalled pump can make the sensor read a false runaway temperature.',
     meaning: {
       healthy: 'Circulating normally.',
       failed: 'Pump stall suspected: the displayed temperature on this side may not be accurate.',

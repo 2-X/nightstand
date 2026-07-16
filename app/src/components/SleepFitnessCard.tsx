@@ -1,3 +1,6 @@
+// The helper components below are private to this file and used only by its
+// default export, so they stay next to their only consumer.
+/* eslint-disable react/no-multi-comp */
 import { useMemo } from 'react';
 import moment from 'moment-timezone';
 import {

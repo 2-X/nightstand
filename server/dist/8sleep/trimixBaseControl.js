@@ -302,13 +302,15 @@ export class TriMixBaseControl {
         // Process each line separately to extract hex data
         const lines = output.split('\n');
         for (const line of lines) {
-            // Strip ANSI escape codes and other control characters from the line
+            // Strip ANSI escape codes and other control characters from the line.
+            // The control characters are the point: bluetoothctl wraps its output in
+            // them, so the disables below are the rule not fitting, not a smell.
             const cleanLine = line
-                // biome-ignore lint/suspicious/noControlCharactersInRegex: <explanation>
+                // eslint-disable-next-line no-control-regex
                 .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '') // Remove ANSI escape sequences
-                // biome-ignore lint/suspicious/noControlCharactersInRegex: <explanation>
+                // eslint-disable-next-line no-control-regex
                 .replace(/\u0001\x1b\[.*?\u0001\x1b\[.*?\u0002/g, '') // Remove specific color codes
-                // biome-ignore lint/suspicious/noControlCharactersInRegex: <explanation>
+                // eslint-disable-next-line no-control-regex
                 .replace(/\u0001.*?\u0002/g, '') // Remove other control sequences
                 .replace(/\r/g, '') // Remove carriage returns
                 .replace(/[[^\\\]]*]/g, ''); // Remove any remaining bracket sequences

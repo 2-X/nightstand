@@ -1,3 +1,6 @@
+// The helper components below are private to this file and used only by its
+// default export, so they stay next to their only consumer.
+/* eslint-disable react/no-multi-comp */
 import { useMemo } from 'react';
 import moment from 'moment-timezone';
 import { Box, Typography } from '@mui/material';
@@ -246,7 +249,6 @@ function StagesChart({ epochs, periodStart, periodEnd }: {
   );
 }
 
-// eslint-disable-next-line react/no-multi-comp
 export default function SleepStagesCard({ startTime, endTime }: Props) {
   const { side } = useAppStore();
   const sleepScoreEnabled = useSleepScoreEnabled();
@@ -357,7 +359,9 @@ export default function SleepStagesCard({ startTime, endTime }: Props) {
                 />
               </Box>
               <Typography sx={ { fontSize: '0.8rem', color: palette.text.tertiary, mt: 0.25 } }>
-                { inRange ? `In range (${TARGET_HOURS[0]}\u2013${TARGET_HOURS[1]})` : `Out of range (${TARGET_HOURS[0]}\u2013${TARGET_HOURS[1]})` }
+                { inRange
+                  ? `In range (${TARGET_HOURS[0]}\u2013${TARGET_HOURS[1]})`
+                  : `Out of range (${TARGET_HOURS[0]}\u2013${TARGET_HOURS[1]})` }
               </Typography>
             </Box>
           </Box>

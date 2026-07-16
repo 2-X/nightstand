@@ -15,9 +15,9 @@ interface SleepScoreQuery {
 }
 
 type Component = {
-  score: number;     // 0-100
-  weight: number;    // sum of present component weights = 1
-  value: string;     // human-readable original value
+  score: number; // 0-100
+  weight: number; // sum of present component weights = 1
+  value: string; // human-readable original value
   available: boolean;
 };
 
