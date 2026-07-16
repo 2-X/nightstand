@@ -67,8 +67,11 @@ export const latestForChannel = (
 export const podUpstreamBase = (): string => currentServerInfo.upstreamBase;
 
 // A bundle swaps the whole tree, so installing one built against a different
-// upstream release silently changes the upstream code underneath while the
-// stock snapshot still restores the original. Surface that; do not block it.
+// upstream release silently changes the upstream code underneath. Surface
+// that; do not block it. Note reverting to stock does not undo it: there is
+// no snapshot of the tree a pod started from, only a download of whatever
+// upstream main is that day, so the base a pod lands back on is not
+// guaranteed to be the one it left.
 export const baseMismatch = (release: Release, installedBase: string | undefined): boolean => {
   if (release.kind !== 'bundle') return false;
   if (installedBase === undefined) return false;

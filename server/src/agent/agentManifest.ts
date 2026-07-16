@@ -2,6 +2,13 @@
 // that turns a stock upstream install into one that can update itself, roll
 // back, and revert to stock, with no other behavior change.
 //
+// Day zero, only self-update is live. The rollback and revert units listed
+// below are files in the tree; nothing has installed them to
+// /etc/systemd/system or written their sudoers rules until install.sh or
+// update.sh has run once, and jobs/rollback.ts and jobs/revertToStock.ts
+// just start those units. So a freshly overlaid pod can update itself, and
+// the other two light up once it has.
+//
 // This is a server-side tooling artifact, not client code, and is not
 // imported by the app bundle. ops/build-agent.sh reads it to generate the
 // overlay; agentManifest.test.ts gates it.
@@ -39,6 +46,13 @@ export const AGENT_BASE = {
 // in their own list rather than STOCK_CONTRACT.packages. Keeping this short
 // is what keeps the agent small, and agentManifest.test.ts fails if any
 // agent file imports outside it.
+//
+// Scope, so this is not read as more than it is: that gate walks TypeScript
+// imports, so it covers the 19 .ts/.tsx entries below. The shell scripts and
+// systemd units are not checked for what they reach for, and install.sh and
+// update.sh do call sibling scripts that the overlay does not carry. Those
+// resolve because both run against a full fork tree, not against the overlay
+// alone.
 export const STOCK_CONTRACT = {
   paths: [
     'app/src/api/api.ts',
@@ -83,7 +97,10 @@ export const AGENT_MANIFEST: AgentEntry[] = [
   { path: 'scripts/update.sh', mode: 'copy', why: 'download, back up, swap, health check, auto rollback' },
   { path: 'scripts/update_service.sh', mode: 'copy', why: 'systemd entry point for the updater' },
   { path: 'scripts/rollback_pod.sh', mode: 'add', why: 'swaps the live and previous trees offline' },
-  { path: 'scripts/revert-to-stock.sh', mode: 'add', why: 'restores the stock install snapshotted at bootstrap' },
+  // No snapshot exists to restore. Upstream ships no tags, so this downloads
+  // whatever main is that day, which is not pinned to AGENT_BASE.sha and need
+  // not equal the tree the pod started from.
+  { path: 'scripts/revert-to-stock.sh', mode: 'add', why: 'the reversibility claim: downloads and installs plain upstream main' },
   { path: 'scripts/systemd/free-sleep-rollback.service', mode: 'add', why: 'stock has no systemd directory; it writes its unit inline' },
   { path: 'scripts/systemd/free-sleep-revert.service', mode: 'add', why: 'stock has no systemd directory; it writes its unit inline' },
 
