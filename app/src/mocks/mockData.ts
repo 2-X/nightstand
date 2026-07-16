@@ -1,7 +1,7 @@
 import moment from 'moment-timezone';
 import type { Services } from '@api/services.ts';
 import type { Schedules } from '@api/schedulesSchema.ts';
-import type { Settings } from '@api/settingsSchema.ts';
+import { defaultFeatures, type Settings } from '@api/settingsSchema.ts';
 import type { DeviceStatus } from '@api/deviceStatusSchema';
 import type { MovementRecord } from '@api/movement.ts';
 import type { SleepRecord } from '@api/sleepSchema.ts';
@@ -275,6 +275,7 @@ const createSettings = (): Settings => ({
   temperatureFormat: 'level',
   rebootDaily: true,
   updateChannel: 'stable',
+  features: { ...defaultFeatures },
   left: {
     name: 'Left side',
     awayMode: false,
