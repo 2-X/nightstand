@@ -1,4 +1,5 @@
 {
   "version": "3.0.0",
-  "branch": "main"
+  "branch": "main",
+  "upstreamBase": "2.1.5"
 }

@@ -1,6 +1,11 @@
 {
   "channels": ["stable", "beta"],
   "releases": [
-    { "version": "3.0.0", "channel": "stable", "date": "2026-07-16" }
+    {
+      "kind": "agent",
+      "version": "3.0.0",
+      "channel": "stable",
+      "date": "2026-07-16"
+    }
   ]
 }

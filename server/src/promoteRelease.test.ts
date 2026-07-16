@@ -17,9 +17,9 @@ const script = path.join(repoRoot, 'scripts/promote_release.sh');
 const MANIFEST = {
   channels: ['stable', 'beta'],
   releases: [
-    { version: '3.3.0', channel: 'beta', date: '2026-07-10' },
-    { version: '3.2.0', channel: 'stable', date: '2026-07-10' },
-    { version: '3.1.0', channel: 'stable', date: '2026-07-09' },
+    { kind: 'bundle', version: '3.3.0', channel: 'beta', date: '2026-07-10', upstreamBase: '2.1.5', features: ['logs-viewer'] },
+    { kind: 'bundle', version: '3.2.0', channel: 'stable', date: '2026-07-10', upstreamBase: '2.1.5', features: ['logs-viewer'] },
+    { kind: 'agent', version: '3.1.0', channel: 'stable', date: '2026-07-09' },
   ],
 };
 
