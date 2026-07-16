@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -32,4 +32,10 @@ describe('this repo\'s own tooling (not part of the agent overlay)', () => {
       assert.ok(mode & 0o111, `${script} must carry the exec bit`);
     });
   }
+
+  it('disable_biometrics.sh actually stops and disables the stream service', () => {
+    const src = readFileSync(path.join(repoRoot, 'scripts/disable_biometrics.sh'), 'utf8');
+    assert.match(src, /systemctl stop free-sleep-stream/);
+    assert.match(src, /systemctl disable free-sleep-stream/);
+  });
 });

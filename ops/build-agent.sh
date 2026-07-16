@@ -15,6 +15,9 @@ REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 OUT="/tmp/nightstand-agent-build/tree"
 VALIDATE=yes
 
+say() { echo "[build-agent] $*"; }
+fail() { echo "" >&2; echo "FAILED: $*" >&2; exit 1; }
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --out) OUT="$2"; shift 2 ;;
@@ -23,8 +26,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-say() { echo "[build-agent] $*"; }
-fail() { echo "" >&2; echo "FAILED: $*" >&2; exit 1; }
+[ -n "$OUT" ] || fail "--out must not be empty"
+[ "$OUT" != "/" ] || fail "--out must not be /"
 
 # Read the manifest through node so the shell never carries a second copy of
 # the file list. A drifting duplicate is worse than no list at all.
@@ -32,9 +35,10 @@ read_manifest() {
   node --experimental-strip-types -e "
     import('$REPO_ROOT/server/src/agent/agentManifest.ts').then((m) => {
       if (process.argv[1] === 'base') { console.log(m.AGENT_BASE.sha); return; }
+      if (process.argv[1] === 'count') { console.log(m.AGENT_MANIFEST.length); return; }
       for (const e of m.AGENT_MANIFEST) console.log(e.mode + ' ' + e.path);
     });
-  " -- "$1" 2>/dev/null
+  " -- "$1"
 }
 
 BASE_SHA=$(read_manifest base)
@@ -50,6 +54,10 @@ rm -rf "$OUT"
 mkdir -p "$OUT"
 git -C "$REPO_ROOT" archive "$BASE_SHA" | tar -x -C "$OUT"
 say "exported stock into $OUT"
+
+MANIFEST_ENTRIES=$(read_manifest entries)
+MANIFEST_LEN=$(read_manifest count)
+[ -n "$MANIFEST_LEN" ] || fail "could not read AGENT_MANIFEST.length from the manifest"
 
 ADDED=0; COPIED=0; PATCHED=0
 while read -r MODE REL; do
@@ -80,9 +88,12 @@ while read -r MODE REL; do
       ;;
     *) fail "unknown mode '$MODE' for $REL" ;;
   esac
-done < <(read_manifest entries)
+done <<< "$MANIFEST_ENTRIES"
 
-say "added $ADDED, copied $COPIED, patching $PATCHED"
+TOTAL_ENTRIES=$((ADDED + COPIED + PATCHED))
+[ "$TOTAL_ENTRIES" -eq "$MANIFEST_LEN" ] \
+  || fail "processed $TOTAL_ENTRIES manifest entries but AGENT_MANIFEST declares $MANIFEST_LEN; some entries were skipped"
+say "added $ADDED, copied $COPIED, patching $PATCHED (of $MANIFEST_LEN manifest entries)"
 
 # Patch 1: register the update route. Stock's routes.ts aggregates every route
 # in the tree, so this repo's copy imports a dozen routes stock does not have.
@@ -124,25 +135,37 @@ say "patched package.json"
 # STOCK_CONTRACT names what agent files may import from stock; nothing has ever
 # confirmed those paths are really there, because until now no stock tree was
 # on disk to look at. Confirm it here, where one is.
-while read -r REL; do
-  [ -n "$REL" ] || continue
-  [ -e "$OUT/$REL" ] || fail "STOCK_CONTRACT names $REL, but stock at this base does not have it"
-done < <(node --experimental-strip-types -e "
+STOCK_CONTRACT_PATHS=$(node --experimental-strip-types -e "
   import('$REPO_ROOT/server/src/agent/agentManifest.ts').then((m) => {
     for (const p of m.STOCK_CONTRACT.paths) console.log(p);
   });
-" 2>/dev/null)
-say "stock contract paths all present in stock"
+")
+STOCK_CONTRACT_COUNT=$(node --experimental-strip-types -e "
+  import('$REPO_ROOT/server/src/agent/agentManifest.ts').then((m) => {
+    console.log(m.STOCK_CONTRACT.paths.length);
+  });
+")
+[ -n "$STOCK_CONTRACT_PATHS" ] || fail "STOCK_CONTRACT.paths came back empty; the manifest import failed or the list is empty"
+FOUND_COUNT=$(printf '%s\n' "$STOCK_CONTRACT_PATHS" | grep -c .)
+[ "$FOUND_COUNT" -eq "$STOCK_CONTRACT_COUNT" ] \
+  || fail "read $FOUND_COUNT STOCK_CONTRACT paths but the manifest declares $STOCK_CONTRACT_COUNT; the node call likely failed partway"
+while read -r REL; do
+  [ -n "$REL" ] || continue
+  [ -e "$OUT/$REL" ] || fail "STOCK_CONTRACT names $REL, but stock at this base does not have it"
+done <<< "$STOCK_CONTRACT_PATHS"
+say "stock contract: all $STOCK_CONTRACT_COUNT paths present in stock"
 
 # serverInfo.json is mode 'copy': the agent overwrites stock's wholesale, and
 # stock's own code reads that file, so the overlay owes stock's readers the keys
 # they expect. Adding keys is safe; dropping one is not. Read stock's version
 # from git rather than from the tree, which the copy has already replaced.
-git -C "$REPO_ROOT" show "$BASE_SHA:server/src/serverInfo.json" > /tmp/stock-serverinfo.json \
+STOCK_SERVERINFO=$(mktemp)
+trap 'rm -f "$STOCK_SERVERINFO"' EXIT
+git -C "$REPO_ROOT" show "$BASE_SHA:server/src/serverInfo.json" > "$STOCK_SERVERINFO" \
   || fail "could not read stock's serverInfo.json at this base"
 node -e "
   const fs = require('fs');
-  const stock = JSON.parse(fs.readFileSync('/tmp/stock-serverinfo.json', 'utf8'));
+  const stock = JSON.parse(fs.readFileSync('$STOCK_SERVERINFO', 'utf8'));
   const agent = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
   const dropped = Object.keys(stock).filter((k) => !(k in agent));
   if (dropped.length) {
@@ -151,7 +174,6 @@ node -e "
   }
   console.log('[build-agent] serverInfo.json keeps every key stock readers expect');
 " "$REPO_ROOT/server/src/serverInfo.json" || fail "the agent's serverInfo.json is not compatible with stock's readers"
-rm -f /tmp/stock-serverinfo.json
 
 say "generated tree written to $OUT"
 
@@ -178,5 +200,22 @@ say "validating: app build (the real check that agent files compile on stock)"
 
 say "validating: server typecheck and the agent's own tests"
 ( cd "$OUT/server" && npx tsc --noEmit ) || fail "server typecheck failed on the generated tree"
-( cd "$OUT/server" && npm test ) || fail "the agent's own tests do not pass on the generated tree"
-say "OK: app builds on stock, server typechecks, the agent's own tests pass"
+
+# npm test exits 0 when the glob matches zero files, so a passing exit code
+# alone proves nothing. Pull the pass/fail counts out of the test runner's own
+# summary line instead; the reporter differs by Node version (TAP's "# pass N"
+# vs the spec reporter's "info pass N"), so match on the trailing "pass N" /
+# "fail N" tokens rather than a fixed prefix.
+TEST_OUTPUT=$(cd "$OUT/server" && npm test 2>&1) \
+  || { printf '%s\n' "$TEST_OUTPUT" >&2; fail "the agent's own tests do not pass on the generated tree"; }
+PASS_LINE=$(printf '%s\n' "$TEST_OUTPUT" | grep -E '(^|[^[:alpha:]])pass [0-9]+$' | tail -1)
+FAIL_LINE=$(printf '%s\n' "$TEST_OUTPUT" | grep -E '(^|[^[:alpha:]])fail [0-9]+$' | tail -1)
+if [ -z "$PASS_LINE" ] || [ -z "$FAIL_LINE" ]; then
+  printf '%s\n' "$TEST_OUTPUT" >&2
+  fail "could not find a pass/fail test count in npm test's output; the reporter format may have changed"
+fi
+PASS_COUNT=$(printf '%s' "$PASS_LINE" | grep -Eo '[0-9]+$')
+FAIL_COUNT=$(printf '%s' "$FAIL_LINE" | grep -Eo '[0-9]+$')
+[ "$PASS_COUNT" -gt 0 ] || fail "npm test reported 0 passing tests; the agent's test files may be missing from the manifest or the glob matched nothing"
+[ "$FAIL_COUNT" -eq 0 ] || { printf '%s\n' "$TEST_OUTPUT" >&2; fail "npm test reported $FAIL_COUNT failing tests"; }
+say "OK: app builds on stock, server typechecks, $PASS_COUNT agent tests pass"

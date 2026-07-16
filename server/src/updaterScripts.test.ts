@@ -109,12 +109,6 @@ describe('updater shell scripts', () => {
     );
   });
 
-  it('disable_biometrics.sh actually stops and disables the stream service', () => {
-    const src = readFileSync(path.join(repoRoot, 'scripts/disable_biometrics.sh'), 'utf8');
-    assert.match(src, /systemctl stop free-sleep-stream/);
-    assert.match(src, /systemctl disable free-sleep-stream/);
-  });
-
   // Target-version protocol: the server writes update-target.json before
   // starting the service; a syntax slip here would either silently ignore a
   // requested version+downgrade (surprising) or brick every plain update
