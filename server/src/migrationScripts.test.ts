@@ -320,3 +320,31 @@ describe('fork-switch tool scripts', () => {
     });
   });
 });
+
+// pod-installer.sh refuses to overwrite a stranger's install unless the staged
+// tree's own serverInfo.json names this fork. That makes the script and the
+// file a contract, and nothing else reads the field, so if the tree stops
+// carrying it the only symptom is that every migration aborts. The failure
+// also reports "no readable serverInfo.json", which points at the wrong cause.
+describe('pod-installer.sh and serverInfo.json agree about the fork field', () => {
+  const src = readScript('scripts/migrate/pod-installer.sh');
+  const serverInfo = JSON.parse(readScript('server/src/serverInfo.json'));
+
+  it('has the fork field the installer reads out of a staged tree', () => {
+    assert.match(src, /serverInfo\.json"\)\)\["fork"\]/);
+    assert.ok(
+      Object.hasOwn(serverInfo, 'fork'),
+      'pod-installer.sh reads serverInfo.json["fork"], so a tree without that field aborts every migration at the staged-tree check',
+    );
+  });
+
+  it('carries the exact fork value the installer accepts', () => {
+    const expected = /\[ "\$STAGED_FORK" = "([^"]+)" \]/.exec(src)?.[1];
+    assert.ok(expected, 'could not find the fork comparison in pod-installer.sh');
+    assert.equal(
+      serverInfo.fork,
+      expected,
+      `pod-installer.sh accepts a staged tree only when its fork field is "${expected}"`,
+    );
+  });
+});
