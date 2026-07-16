@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { baseURL } from '@api/api';
 import {
   Paper, Typography, Box, MenuItem, Select, FormControl, InputLabel,
-  TextField, IconButton, Tooltip, Chip,
+  TextField, IconButton, Tooltip, Chip, CircularProgress,
 } from '@mui/material';
 import PageContainer from '../../PageContainer.tsx';
 import { useTheme } from '@mui/material/styles';
@@ -13,6 +13,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import ClearAllIcon from '@mui/icons-material/ClearAll';
 import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import { useSettings } from '@api/settings.ts';
 import { getLogDescription, detectLogLevel } from './logsMeta.ts';
 import { appendCapped } from './logsBuffer.ts';
 
@@ -25,6 +26,8 @@ const LEVEL_COLORS: Record<string, string> = {
 };
 
 export default function LogsPage() {
+  const { data: settings, isLoading: settingsLoading } = useSettings();
+  const logsViewerEnabled = !!settings?.features.logsViewer;
   const [logs, setLogs] = useState<string[]>([]);
   const [pendingLogs, setPendingLogs] = useState<string[]>([]);
   const [logFiles, setLogFiles] = useState<string[]>([]);
@@ -40,8 +43,11 @@ export default function LogsPage() {
   const pausedRef = useRef(false);
   const theme = useTheme();
 
-  // Fetch available log files
+  // Fetch available log files. Skipped entirely while the feature is off,
+  // the server 403s the same request anyway.
   useEffect(() => {
+    if (!logsViewerEnabled) return;
+
     const fetchLogFiles = async () => {
       try {
         const response = await axios.get<{ logs: string[] }>(`${baseURL}/api/logs`);
@@ -55,11 +61,11 @@ export default function LogsPage() {
     };
 
     fetchLogFiles();
-  }, []);
+  }, [logsViewerEnabled]);
 
   // Subscribe to log updates for the selected file
   useEffect(() => {
-    if (!selectedLog) return;
+    if (!logsViewerEnabled || !selectedLog) return;
 
     const eventSource = new EventSource(`${baseURL}/api/logs/${selectedLog}`);
 
@@ -82,7 +88,7 @@ export default function LogsPage() {
     return () => {
       eventSource.close();
     };
-  }, [selectedLog]); // Re-run only when the log file changes; pause state is read live via pausedRef
+  }, [selectedLog, logsViewerEnabled]); // Re-run when the log file changes, or the feature flag flips; pause state is read live via pausedRef
 
   // Track if user is at the bottom
   const handleScroll = () => {
@@ -128,6 +134,26 @@ export default function LogsPage() {
     const needle = filterText.toLowerCase();
     return logs.filter((line) => line.toLowerCase().includes(needle));
   }, [logs, filterText]);
+
+  if (settingsLoading) {
+    return (
+      <PageContainer>
+        <Header title="Logs" icon={ <TextSnippetIcon /> }/>
+        <CircularProgress sx={ { display: 'block', mx: 'auto', mt: 4 } }/>
+      </PageContainer>
+    );
+  }
+
+  if (!logsViewerEnabled) {
+    return (
+      <PageContainer>
+        <Header title="Logs" icon={ <TextSnippetIcon /> }/>
+        <Typography sx={ { color: 'text.secondary', mt: 2 } }>
+          The logs viewer is turned off in Settings &gt; Features.
+        </Typography>
+      </PageContainer>
+    );
+  }
 
   return (
     <PageContainer

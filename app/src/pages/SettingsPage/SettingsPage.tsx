@@ -86,30 +86,34 @@ export default function SettingsPage() {
         <Section>
           <StorageIndicator/>
           <MemoryIndicator/>
-          <Box sx={ { height: 1, backgroundColor: palette.border.subtle, my: 1 } }/>
-          <Box
-            onClick={ () => navigate('/data/logs') }
-            sx={ {
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              cursor: 'pointer',
-              mx: -2.5,
-              px: 2.5,
-              py: 1.5,
-              my: -1.5,
-              borderRadius: 1,
-              '&:hover': { backgroundColor: palette.bg.hover },
-            } }
-          >
-            <Box sx={ { display: 'flex', alignItems: 'center', gap: 1.5 } }>
-              <TextSnippetIcon sx={ { color: palette.text.secondary } }/>
-              <Typography sx={ { fontSize: '1rem', color: palette.text.primary } }>
-                Logs
-              </Typography>
-            </Box>
-            <ChevronRightIcon sx={ { color: palette.text.tertiary } }/>
-          </Box>
+          { settings?.features.logsViewer && (
+            <>
+              <Box sx={ { height: 1, backgroundColor: palette.border.subtle, my: 1 } }/>
+              <Box
+                onClick={ () => navigate('/data/logs') }
+                sx={ {
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  cursor: 'pointer',
+                  mx: -2.5,
+                  px: 2.5,
+                  py: 1.5,
+                  my: -1.5,
+                  borderRadius: 1,
+                  '&:hover': { backgroundColor: palette.bg.hover },
+                } }
+              >
+                <Box sx={ { display: 'flex', alignItems: 'center', gap: 1.5 } }>
+                  <TextSnippetIcon sx={ { color: palette.text.secondary } }/>
+                  <Typography sx={ { fontSize: '1rem', color: palette.text.primary } }>
+                    Logs
+                  </Typography>
+                </Box>
+                <ChevronRightIcon sx={ { color: palette.text.tertiary } }/>
+              </Box>
+            </>
+          ) }
           <Box sx={ { height: 1, backgroundColor: palette.border.subtle, my: 1 } }/>
           <Box
             onClick={ () => navigate('/changelog') }
