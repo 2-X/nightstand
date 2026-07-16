@@ -67,6 +67,13 @@ export default function FeaturesSection() {
           ? 'Needs Biometrics turned on above.'
           : 'The Sleep Fitness Score and the sleep-stages chart on the Sleep page.' }
       />
+      <FeatureToggleRow
+        label='Level temperature display'
+        disabled={ isUpdating }
+        checked={ settings.features.levelTemps }
+        onChange={ (next) => updateFeature({ levelTemps: next }) }
+        description='The -10 to +10 level option in the temperature display picker above.'
+      />
     </Section>
   );
 }
