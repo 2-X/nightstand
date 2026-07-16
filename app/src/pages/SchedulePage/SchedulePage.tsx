@@ -130,7 +130,7 @@ export default function SchedulePage() {
       </Box>
       <TemperatureAdjustmentsAccordion format={ format }/>
       <AlarmAccordion/>
-      <OneOffAlarmSection/>
+      { settings?.features.oneOffAlarms && <OneOffAlarmSection/> }
       <ApplyToOtherDaysAccordion/>
 
     </PageContainer>

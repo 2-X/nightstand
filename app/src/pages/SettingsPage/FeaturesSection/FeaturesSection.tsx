@@ -74,6 +74,13 @@ export default function FeaturesSection() {
         onChange={ (next) => updateFeature({ levelTemps: next }) }
         description='The -10 to +10 level option in the temperature display picker above.'
       />
+      <FeatureToggleRow
+        label='One-off alarms'
+        disabled={ isUpdating }
+        checked={ settings.features.oneOffAlarms }
+        onChange={ (next) => updateFeature({ oneOffAlarms: next }) }
+        description='The single-fire alarm section on the Schedules page, separate from the recurring per-day alarm.'
+      />
     </Section>
   );
 }
