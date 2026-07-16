@@ -20,24 +20,29 @@ export default function RollbackRow({ runningVersion, rollbackVersion }: Props) 
   const rollback = () => start(() => postRollback());
 
   return (
-    <Box
-      onClick={ () => setOpen(true) }
-      sx={ {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1.5,
-        cursor: 'pointer',
-        mx: -2.5,
-        px: 2.5,
-        py: 1.5,
-        borderRadius: 1,
-        '&:hover': { backgroundColor: palette.bg.hover },
-      } }
-    >
-      <RestorePageIcon sx={ { color: palette.text.secondary } }/>
-      <Typography sx={ { fontSize: '1rem', color: palette.text.primary } }>
-        Roll back to v{ rollbackVersion } (instant, no download)
-      </Typography>
+    // The dialog is a sibling of the row, not a child of it. A portalled
+    // dialog still bubbles its clicks up the React tree, so nesting it inside
+    // the row would feed every click back into the row's own open handler.
+    <>
+      <Box
+        onClick={ () => setOpen(true) }
+        sx={ {
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+          cursor: 'pointer',
+          mx: -2.5,
+          px: 2.5,
+          py: 1.5,
+          borderRadius: 1,
+          '&:hover': { backgroundColor: palette.bg.hover },
+        } }
+      >
+        <RestorePageIcon sx={ { color: palette.text.secondary } }/>
+        <Typography sx={ { fontSize: '1rem', color: palette.text.primary } }>
+          Roll back to v{ rollbackVersion } (instant, no download)
+        </Typography>
+      </Box>
 
       <Dialog open={ open } onClose={ () => phase !== 'updating' && setOpen(false) }>
         <DialogTitle>
@@ -82,6 +87,6 @@ export default function RollbackRow({ runningVersion, rollbackVersion }: Props) 
           ) }
         </DialogActions>
       </Dialog>
-    </Box>
+    </>
   );
 }

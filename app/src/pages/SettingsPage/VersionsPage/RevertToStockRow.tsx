@@ -18,23 +18,28 @@ export default function RevertToStockRow({ runningVersion }: Props) {
   const revert = () => start(() => postRevertToStock());
 
   return (
-    <Box
-      onClick={ () => setOpen(true) }
-      sx={ {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1.5,
-        cursor: 'pointer',
-        mx: -2.5,
-        px: 2.5,
-        py: 1.5,
-        borderRadius: 1,
-      } }
-    >
-      <WarningAmberIcon sx={ { color: 'text.secondary' } }/>
-      <Typography sx={ { fontSize: '1rem' } }>
-        Revert to stock upstream free-sleep
-      </Typography>
+    // The dialog is a sibling of the row, not a child of it. A portalled
+    // dialog still bubbles its clicks up the React tree, so nesting it inside
+    // the row would feed every click back into the row's own open handler.
+    <>
+      <Box
+        onClick={ () => setOpen(true) }
+        sx={ {
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+          cursor: 'pointer',
+          mx: -2.5,
+          px: 2.5,
+          py: 1.5,
+          borderRadius: 1,
+        } }
+      >
+        <WarningAmberIcon sx={ { color: 'text.secondary' } }/>
+        <Typography sx={ { fontSize: '1rem' } }>
+          Revert to stock upstream free-sleep
+        </Typography>
+      </Box>
 
       <Dialog open={ open } onClose={ () => phase !== 'updating' && setOpen(false) }>
         <DialogTitle>
@@ -89,6 +94,6 @@ export default function RevertToStockRow({ runningVersion }: Props) {
           ) }
         </DialogActions>
       </Dialog>
-    </Box>
+    </>
   );
 }
