@@ -14,9 +14,12 @@ type LatestVersion = {
   branch: string;
 }
 
+// The newest build published on this fork's main, which is what the pod's
+// updater installs. Fetched raw from GitHub, same reasoning as releases.ts:
+// the pod has no WAN, so this only ever resolves from the browser.
 export const getLatestVersion = async () => {
   return axios.get<LatestVersion>(
-    'https://raw.githubusercontent.com/throwaway31265/free-sleep/main/server/src/serverInfo.json'
+    'https://raw.githubusercontent.com/LTimothy/nightstand/main/server/src/serverInfo.json'
   );
 };
 

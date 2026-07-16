@@ -89,3 +89,22 @@ describe('serverInfo.json', () => {
     assert.match(serverInfo.upstreamBase ?? '', SEMVER);
   });
 });
+
+// The Versions page (channel picker, release history, per-release install) is
+// real code and routed, but deliberately not linked from the Settings nav.
+// With one release there is no history to page through, and its rollback and
+// revert rows already sit under Settings > Device info, so linking it would
+// give the same two actions a second home. That reasoning expires the moment a
+// second release exists, and a reason that expires quietly is how a deferral
+// turns into a bug. This arms itself instead.
+describe('the Versions page stays deferred only while it has nothing to show', () => {
+  it('is linked from the Settings nav once there is more than one release', () => {
+    if (releases.length < 2) return;
+    const settings = readFileSync(path.join(repoRoot, 'app/src/pages/SettingsPage/SettingsPage.tsx'), 'utf8');
+    assert.ok(
+      settings.includes('settings/versions'),
+      'releases.json now carries a real release history, so the reason for leaving the Versions page '
+      + 'unlinked is gone: link it from Settings, or write down a new reason',
+    );
+  });
+});

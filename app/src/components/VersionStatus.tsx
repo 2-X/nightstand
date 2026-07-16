@@ -20,7 +20,7 @@ export default function VersionStatus() {
           <>
             <Alert severity="info">
               <AlertTitle>
-                Free-sleep update available!
+                Nightstand update available!
               </AlertTitle>
               <Typography variant="body2">
                 Latest version: { serverInfo.version }

@@ -126,7 +126,10 @@ function StatBlock({
         >
           { duration }
         </Typography>
+        { /* Both are spans: this Typography holds the dot, and a Typography
+             defaults to a <p>, which cannot legally contain a <div>. */ }
         <Typography
+          component="span"
           sx={ {
             fontSize: { xs: '0.9rem', sm: '1.1rem' },
             color: palette.text.primary,
@@ -141,7 +144,7 @@ function StatBlock({
           } }
         >
           { pct }
-          <Box sx={ { width: 5, height: 5, borderRadius: '50%', backgroundColor: dotColor } }/>
+          <Box component="span" sx={ { width: 5, height: 5, borderRadius: '50%', backgroundColor: dotColor } }/>
         </Typography>
       </Box>
     </Box>

@@ -47,14 +47,14 @@ export default function RevertToStockRow({ runningVersion }: Props) {
             <DialogContentText component="div">
               <Typography variant="body2" sx={ { mb: 1.5 } }>
                 This backs up the current install and replaces it with plain
-                throwaway31265/free-sleep, the project this fork is built on. Every
-                fork-specific feature goes away: the update system, presence-detection
+                throwaway31265/free-sleep, the project Nightstand is built on. Every
+                Nightstand feature goes away: the update system, presence-detection
                 fixes, the design, all of it. Your settings, schedules, and data are
                 preserved and not rewritten.
               </Typography>
               <Typography variant="body2" sx={ { mb: 1.5 } }>
                 The pod verifies stock is healthy afterward; if that check fails, it swaps
-                back and this fork keeps running.
+                back and Nightstand keeps running.
               </Typography>
               <Typography variant="body2" fontWeight={ 600 }>
                 There is no button to come back. Once stock is running, getting back

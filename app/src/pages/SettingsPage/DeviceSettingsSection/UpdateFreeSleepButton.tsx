@@ -53,7 +53,7 @@ export default function UpdateFreeSleepButton({ runningVersion }: { runningVersi
         <DialogContent>
           { phase === 'idle' && (
             <DialogContentText>
-              The pod will download the latest build of this fork from GitHub,
+              The pod will download the latest build of Nightstand from GitHub,
               back itself up, install, and verify its own health. If the new
               build fails, it rolls back to v{ runningVersion } automatically.
               Temperature control keeps running; the app will be unreachable
