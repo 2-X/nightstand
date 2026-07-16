@@ -31,10 +31,14 @@ export const AGENT_BASE = {
   sha: 'dc0c710f2800a7b6c0e3356abd5c5c166e0a36e1',
 };
 
-// What agent files may reach for outside the agent itself. Every one of these
-// is verified present in stock at AGENT_BASE.sha. This is the agent's contract
-// with stock: keeping it short is what keeps the agent small, and
-// agentManifest.test.ts fails if any agent file imports outside it.
+// What agent files may reach for outside the agent itself: other agent
+// files, the paths and packages declared below, and Node builtins (bare
+// forms from NODE_BUILTINS_BARE, or anything node:-prefixed). Every path and
+// package below is verified present in stock at AGENT_BASE.sha; Node
+// builtins are not stock's to grant, since Node ships itself, so they live
+// in their own list rather than STOCK_CONTRACT.packages. Keeping this short
+// is what keeps the agent small, and agentManifest.test.ts fails if any
+// agent file imports outside it.
 export const STOCK_CONTRACT = {
   paths: [
     'app/src/api/api.ts',
@@ -52,6 +56,11 @@ export const STOCK_CONTRACT = {
     'zod',
   ],
 };
+
+// Node builtins agent files bare-import, e.g. `import fs from 'fs'`.
+// node:-prefixed forms (e.g. `node:fs`) are always allowed too; that rule is
+// a resolver detail and lives in agentManifest.test.ts, not here.
+export const NODE_BUILTINS_BARE = ['fs', 'child_process'];
 
 export const AGENT_MANIFEST: AgentEntry[] = [
   // The update path. Stock already has an updater; the agent replaces it with

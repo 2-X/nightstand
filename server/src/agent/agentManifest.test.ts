@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AGENT_MANIFEST, AGENT_BASE, STOCK_CONTRACT } from './agentManifest.js';
+import { AGENT_MANIFEST, AGENT_BASE, STOCK_CONTRACT, NODE_BUILTINS_BARE } from './agentManifest.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -18,12 +18,12 @@ const ALIASES: Record<string, string> = {
 const agentPaths = new Set(AGENT_MANIFEST.map((entry) => entry.path));
 const contractPaths = new Set(STOCK_CONTRACT.paths);
 
-// Node builtins are supplied by the runtime, not shipped by stock, so they
-// are not a stock dependency and do not belong in STOCK_CONTRACT.packages.
-// The bare (unprefixed) forms actually used by agent files and their tests.
-const NODE_BUILTINS_BARE = ['fs', 'path', 'url', 'child_process'];
+// node:-prefixed builtins are always allowed; this is the resolution rule,
+// the actual bare-form allowlist lives in agentManifest.ts as
+// NODE_BUILTINS_BARE. A bare subpath specifier (e.g. 'fs/promises') is
+// checked by its base module, same as a bare package specifier.
 const isNodeBuiltin = (specifier: string) => (
-  specifier.startsWith('node:') || NODE_BUILTINS_BARE.includes(specifier)
+  specifier.startsWith('node:') || NODE_BUILTINS_BARE.includes(packageOf(specifier))
 );
 
 // Only files with an import graph to read. Shell scripts and systemd units
@@ -32,11 +32,17 @@ const isSource = (p: string) => /\.(ts|tsx)$/.test(p);
 
 const importsOf = (source: string): string[] => {
   const specifiers: string[] = [];
-  const re = /^\s*import\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/gm;
-  let match = re.exec(source);
-  while (match !== null) {
-    specifiers.push(match[1]);
-    match = re.exec(source);
+  // Static form: `import ... from '...'` and `export ... from '...'`
+  // (including bare `import '...'` for side effects and `export * from`).
+  const staticRe = /^\s*(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/gm;
+  // Dynamic form: `import('...')`, anywhere in an expression.
+  const dynamicRe = /\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
+  for (const re of [staticRe, dynamicRe]) {
+    let match = re.exec(source);
+    while (match !== null) {
+      specifiers.push(match[1]);
+      match = re.exec(source);
+    }
   }
   return specifiers;
 };
@@ -97,6 +103,16 @@ describe('the agent manifest', () => {
     assert.deepEqual(patched, ['server/package.json', 'server/src/setup/routes.ts']);
   });
 
+  // routes.ts is skipped by the closure walk below because its content in
+  // this repo is not what ships (see that walk's comment). This is the one
+  // check available on it now: the patch this repo carries adds the update
+  // route import, and that import resolves to an agent path.
+  it('patches routes.ts to import the update route, and that route is an agent path', () => {
+    const source = readFileSync(path.join(repoRoot, 'server/src/setup/routes.ts'), 'utf8');
+    assert.match(source, /^\s*import update from '\.\.\/routes\/update\/update\.js';\s*$/m);
+    assert.ok(agentPaths.has('server/src/routes/update/update.ts'));
+  });
+
   it('never lists a stock-contract path as an agent file', () => {
     for (const contractPath of STOCK_CONTRACT.paths) {
       assert.ok(
@@ -121,9 +137,11 @@ describe('the agent import closure', () => {
       // A patch-mode file's content in this repo is not what ships in the
       // overlay: the generator applies a small patch to stock's own copy
       // instead of copying this tree's version wholesale. Walking this
-      // repo's version would check imports that never reach the overlay.
-      // The generator asserts the patch applied and the only import it adds
-      // is an agent file, so the boundary is still enforced, just elsewhere.
+      // repo's version would check imports that never reach the overlay, so
+      // this file's imports are NOT covered by this walk. The one thing
+      // pinned instead is the invariant just below: the patch this repo
+      // carries for server/src/setup/routes.ts imports the update route,
+      // and that import resolves to an agent path.
       if (entry.mode === 'patch') continue;
       const source = readFileSync(path.join(repoRoot, entry.path), 'utf8');
 
