@@ -6,7 +6,7 @@ import BedIcon from '@mui/icons-material/Bed';
 
 import { useAppStore } from '@state/appStore.tsx';
 import { useSleepRecords } from '@api/sleep.ts';
-import { useSleepScore } from '@api/sleepScore.ts';
+import { useSleepScore, useSleepScoreEnabled } from '@api/sleepScore.ts';
 
 function scoreColor(score: number): string {
   if (score >= 85) return '#22c55e';
@@ -19,6 +19,7 @@ function scoreColor(score: number): string {
 export default function LastNightChip() {
   const { side } = useAppStore();
   const navigate = useNavigate();
+  const sleepScoreEnabled = useSleepScoreEnabled();
 
   // Fetch the most recent sleep record from the last 36 hours. Computed once
   // per mount, not on every render: useSleepRecords keys its query on this
@@ -37,10 +38,10 @@ export default function LastNightChip() {
       startTime: last?.entered_bed_at,
       endTime: last?.left_bed_at,
     },
-    !!last,
+    sleepScoreEnabled && !!last,
   );
 
-  if (!last || !score) return null;
+  if (!sleepScoreEnabled || !last || !score?.active || score.score === null) return null;
 
   return (
     <Box display="flex" justifyContent="center" sx={ { width: '100%' } }>

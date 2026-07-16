@@ -2,12 +2,15 @@ import { CircularProgress, Typography } from '@mui/material';
 import Section from '../Section.tsx';
 import FeatureToggleRow from './FeatureToggleRow.tsx';
 import { Services, useServices, postServices } from '@api/services.ts';
+import { useSettings, postSettings } from '@api/settings.ts';
+import { Settings } from '@api/settingsSchema.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { DeepPartial } from 'ts-essentials';
 import { palette } from '@design/tokens';
 
 export default function FeaturesSection() {
-  const { data: services, refetch, isLoading } = useServices();
+  const { data: services, refetch: refetchServices, isLoading: servicesLoading } = useServices();
+  const { data: settings, refetch: refetchSettings, isLoading: settingsLoading } = useSettings();
   const setIsUpdating = useAppStore(state => state.setIsUpdating);
   const isUpdating = useAppStore(state => state.isUpdating);
 
@@ -15,14 +18,25 @@ export default function FeaturesSection() {
     setIsUpdating(true);
 
     postServices(services)
-      .then(() => refetch())
+      .then(() => refetchServices())
       .catch(error => {
         console.error(error);
       })
       .finally(() => setIsUpdating(false));
   };
 
-  if (isLoading || !services) return <CircularProgress />;
+  const updateFeature = (features: DeepPartial<Settings['features']>) => {
+    setIsUpdating(true);
+
+    postSettings({ features })
+      .then(() => refetchSettings())
+      .catch(error => {
+        console.error(error);
+      })
+      .finally(() => setIsUpdating(false));
+  };
+
+  if (servicesLoading || settingsLoading || !services || !settings) return <CircularProgress />;
 
   return (
     <Section title='Features'>
@@ -43,6 +57,15 @@ export default function FeaturesSection() {
             </Typography>
           </>
         }
+      />
+      <FeatureToggleRow
+        label='Sleep score and stages'
+        disabled={ isUpdating || !services.biometrics.enabled }
+        checked={ settings.features.sleepScore }
+        onChange={ (next) => updateFeature({ sleepScore: next }) }
+        description={ !services.biometrics.enabled
+          ? 'Needs Biometrics turned on above.'
+          : 'The Sleep Fitness Score and the sleep-stages chart on the Sleep page.' }
       />
     </Section>
   );

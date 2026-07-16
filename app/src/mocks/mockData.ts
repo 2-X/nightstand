@@ -154,7 +154,7 @@ const createSleepStages = (startTime: string, endTime: string): SleepStagesRespo
     percentages[stage] = totalSeconds > 0 ? Math.round((totals[stage] / totalSeconds) * 100) : 0;
   });
 
-  return { epochs, totals, percentages, totalSeconds };
+  return { active: true, epochs, totals, percentages, totalSeconds };
 };
 
 const createSleepScore = (startTime: string, endTime: string): SleepScore => {
@@ -168,6 +168,7 @@ const createSleepScore = (startTime: string, endTime: string): SleepScore => {
   );
 
   return {
+    active: true,
     score,
     components: {
       duration: { score: durationScore, weight: 0.35, value: `${durationHours.toFixed(1)}h`, available: true },

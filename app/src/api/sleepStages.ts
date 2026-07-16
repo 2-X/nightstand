@@ -10,6 +10,10 @@ export type StageEpoch = {
 };
 
 export type SleepStagesResponse = {
+  // false when features.sleepScore is off or biometrics itself is off; in
+  // that case every field below is an empty/zeroed placeholder rather than
+  // a real classification.
+  active: boolean;
   epochs: StageEpoch[];
   totals: Record<SleepStage, number>; // seconds per stage
   percentages: Record<SleepStage, number>; // 0..100

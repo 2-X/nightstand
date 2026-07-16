@@ -5,6 +5,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 
 import { useAppStore } from '@state/appStore.tsx';
 import { useSleepStages, SleepStage, StageEpoch } from '@api/sleepStages.ts';
+import { useSleepScoreEnabled } from '@api/sleepScore.ts';
 import GlassCard from '@design/GlassCard';
 import { palette, typography } from '@design/tokens';
 
@@ -248,7 +249,8 @@ function StagesChart({ epochs, periodStart, periodEnd }: {
 // eslint-disable-next-line react/no-multi-comp
 export default function SleepStagesCard({ startTime, endTime }: Props) {
   const { side } = useAppStore();
-  const { data, isFetching } = useSleepStages({ side, startTime, endTime });
+  const sleepScoreEnabled = useSleepScoreEnabled();
+  const { data, isFetching } = useSleepStages({ side, startTime, endTime }, sleepScoreEnabled);
 
   const periodStart = moment(startTime).unix();
   const periodEnd = moment(endTime).unix();
@@ -263,6 +265,8 @@ export default function SleepStagesCard({ startTime, endTime }: Props) {
     const awake = data.totals.awake || 0;
     return Math.max(0, period - awake);
   }, [data, periodEnd, periodStart]);
+
+  if (!sleepScoreEnabled) return null;
   const totalDuration = formatHM(totalDurationSeconds);
   const totalHours = totalDurationSeconds / 3600;
   const inRange = totalHours >= TARGET_HOURS[0] && totalHours <= TARGET_HOURS[1];

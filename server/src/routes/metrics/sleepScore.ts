@@ -2,6 +2,9 @@ import express, { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import moment from 'moment-timezone';
 import { prisma } from '../../db/prisma.js';
+import settingsDB from '../../db/settings.js';
+import servicesDB from '../../db/services.js';
+import { isSleepScoreActive } from './sleepScoreGuard.js';
 
 const router = express.Router();
 
@@ -64,6 +67,12 @@ router.get(
       return res.status(400).json({
         error: 'side, startTime, and endTime query params are required',
       });
+    }
+
+    await settingsDB.read();
+    await servicesDB.read();
+    if (!isSleepScoreActive(settingsDB.data, servicesDB.data)) {
+      return res.json({ active: false, score: null, components: {} });
     }
 
     const startUnix = moment(startTime).unix();
@@ -139,7 +148,7 @@ router.get(
 
     const score = Math.round(weightedSum);
 
-    return res.json({ score, components });
+    return res.json({ active: true, score, components });
   },
 );
 

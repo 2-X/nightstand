@@ -8,7 +8,7 @@ import {
 
 import { SleepRecord } from '../../../server/src/db/sleepRecordsSchema.ts';
 import { useAppStore } from '@state/appStore.tsx';
-import { useSleepScore } from '@api/sleepScore.ts';
+import { useSleepScore, useSleepScoreEnabled } from '@api/sleepScore.ts';
 import { useSleepStages } from '@api/sleepStages.ts';
 import GlassCard from '@design/GlassCard';
 import { palette, typography } from '@design/tokens';
@@ -138,11 +138,12 @@ function StatCol({ label, value, dotColor }: { label: string; value: string; dot
 
 export default function SleepFitnessCard({ sleepRecord }: Props) {
   const { side } = useAppStore();
+  const sleepScoreEnabled = useSleepScoreEnabled();
   const { data: sleepScore, isFetching } = useSleepScore({
     side,
     startTime: sleepRecord.entered_bed_at,
     endTime: sleepRecord.left_bed_at,
-  });
+  }, sleepScoreEnabled);
   // Pull stages so we can show the actual sleep window (onset → offset),
   // not the bed-entry / bed-exit window. The previous version showed
   // "Bedtime 9:46pm / Wake time 9:50am / Duration 12h 4m" for a night
@@ -153,7 +154,7 @@ export default function SleepFitnessCard({ sleepRecord }: Props) {
     side,
     startTime: sleepRecord.entered_bed_at,
     endTime: sleepRecord.left_bed_at,
-  });
+  }, sleepScoreEnabled);
 
   const detectedSleepWindow = useMemo(() => {
     if (!stagesData || stagesData.epochs.length === 0) return null;
@@ -173,6 +174,8 @@ export default function SleepFitnessCard({ sleepRecord }: Props) {
       sleptSeconds,
     };
   }, [stagesData]);
+
+  if (!sleepScoreEnabled) return null;
 
   const score = sleepScore?.score ?? 0;
   const color = scoreColor(score);

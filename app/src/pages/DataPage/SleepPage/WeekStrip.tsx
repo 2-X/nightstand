@@ -3,7 +3,7 @@ import moment from 'moment-timezone';
 
 import { useAppStore } from '@state/appStore.tsx';
 import { useSleepRecords } from '@api/sleep.ts';
-import { useSleepScore } from '@api/sleepScore.ts';
+import { useSleepScore, useSleepScoreEnabled } from '@api/sleepScore.ts';
 import { SleepRecord } from '../../../../../server/src/db/sleepRecordsSchema.ts';
 
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']; // Mon-first (ISO week)
@@ -38,16 +38,20 @@ type DayDotProps = {
 
 function DayDot({ day, letter, isActive, isFuture, record, onClick }: DayDotProps) {
   const { side } = useAppStore();
+  const sleepScoreEnabled = useSleepScoreEnabled();
   const { data: score } = useSleepScore(
     {
       side,
       startTime: record?.entered_bed_at,
       endTime: record?.left_bed_at,
     },
-    !!record,
+    sleepScoreEnabled && !!record,
   );
-  const color = scoreColor(score?.score);
-  const hasData = !!record && !!score;
+  // WeekStrip is also the only day picker on the Sleep page, so it stays
+  // rendered and clickable even when the score feature is off; only the
+  // colored score dot degrades to the plain "no data" placeholder.
+  const color = scoreColor(sleepScoreEnabled ? score?.score ?? undefined : undefined);
+  const hasData = sleepScoreEnabled && !!record && !!score?.active && score.score !== null;
   const isToday = day.isSame(moment(), 'day');
 
   return (
