@@ -10,14 +10,16 @@ import { fileURLToPath } from 'node:url';
 // high-signal invariants: the scripts parse, they point at this fork, and
 // the safety rails (rollback, WAN re-block) are present.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+// This file ships inside the agent overlay (see agentManifest.ts), so it may
+// only assert about files the overlay carries. Limited to the agent's own
+// scripts; ops/deploy.sh, ops/rollback.sh (this repo's dev/deploy tooling,
+// never shipped) and scripts/enable_biometrics.sh, scripts/disable_biometrics.sh
+// (stock's own files, which the agent does not touch) live in
+// opsScripts.test.ts instead.
 const SCRIPTS = [
   'scripts/update.sh',
   'scripts/update_service.sh',
   'scripts/install.sh',
-  'scripts/enable_biometrics.sh',
-  'scripts/disable_biometrics.sh',
-  'ops/deploy.sh',
-  'ops/rollback.sh',
 ];
 
 describe('updater shell scripts', () => {
