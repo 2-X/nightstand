@@ -40,7 +40,6 @@ export const STOCK_CONTRACT = {
     'app/src/api/api.ts',
     'app/src/api/jobs.ts',
     'server/src/logger.ts',
-    'server/src/serverInfo.json',
   ],
   packages: [
     'react',
@@ -49,7 +48,6 @@ export const STOCK_CONTRACT = {
     '@mui/material',
     '@mui/icons-material',
     '@tanstack/react-query',
-    'child_process',
     'express',
     'zod',
   ],

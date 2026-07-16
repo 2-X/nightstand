@@ -18,6 +18,14 @@ const ALIASES: Record<string, string> = {
 const agentPaths = new Set(AGENT_MANIFEST.map((entry) => entry.path));
 const contractPaths = new Set(STOCK_CONTRACT.paths);
 
+// Node builtins are supplied by the runtime, not shipped by stock, so they
+// are not a stock dependency and do not belong in STOCK_CONTRACT.packages.
+// The bare (unprefixed) forms actually used by agent files and their tests.
+const NODE_BUILTINS_BARE = ['fs', 'path', 'url', 'child_process'];
+const isNodeBuiltin = (specifier: string) => (
+  specifier.startsWith('node:') || NODE_BUILTINS_BARE.includes(specifier)
+);
+
 // Only files with an import graph to read. Shell scripts and systemd units
 // have none, and JSON imports nothing.
 const isSource = (p: string) => /\.(ts|tsx)$/.test(p);
@@ -46,6 +54,13 @@ const resolveSpecifier = (fromPath: string, specifier: string): string | null =>
   // Server source is ESM: it imports './x.js' but the file on disk is './x.ts'.
   if (resolved.endsWith('.js') && !existsSync(path.join(repoRoot, resolved))) {
     return resolved.replace(/\.js$/, '.ts');
+  }
+  // App source imports extensionless, e.g. './api'. Try the TypeScript
+  // extensions the resolver would actually find on disk.
+  if (!path.posix.extname(resolved) && !existsSync(path.join(repoRoot, resolved))) {
+    for (const ext of ['.ts', '.tsx']) {
+      if (existsSync(path.join(repoRoot, resolved + ext))) return resolved + ext;
+    }
   }
   return resolved;
 };
@@ -103,13 +118,20 @@ describe('the agent import closure', () => {
 
     for (const entry of AGENT_MANIFEST) {
       if (!isSource(entry.path)) continue;
+      // A patch-mode file's content in this repo is not what ships in the
+      // overlay: the generator applies a small patch to stock's own copy
+      // instead of copying this tree's version wholesale. Walking this
+      // repo's version would check imports that never reach the overlay.
+      // The generator asserts the patch applied and the only import it adds
+      // is an agent file, so the boundary is still enforced, just elsewhere.
+      if (entry.mode === 'patch') continue;
       const source = readFileSync(path.join(repoRoot, entry.path), 'utf8');
 
       for (const specifier of importsOf(source)) {
         const resolved = resolveSpecifier(entry.path, specifier);
 
         if (resolved === null) {
-          if (!STOCK_CONTRACT.packages.includes(packageOf(specifier))) {
+          if (!isNodeBuiltin(specifier) && !STOCK_CONTRACT.packages.includes(packageOf(specifier))) {
             escapes.push(`${entry.path} imports package "${specifier}", which is not in the stock contract`);
           }
           continue;
