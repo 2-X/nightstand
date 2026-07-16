@@ -54,14 +54,25 @@ describe('updater shell scripts', () => {
         const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
         assert.match(src, /ExecStart=\/bin\/bash \/home\/dac\/free-sleep\/scripts\/update_service\.sh/);
     });
-    // install.sh intentionally still downloads from the stock upstream
-    // archive, not this fork: it is the from-scratch bootstrap a brand-new
-    // pod runs before this fork's own history exists at its published URL,
-    // unlike update.sh below, which only ever runs on a pod already on this
-    // fork and self-updates from it.
-    it('install.sh installs from the stock upstream archive', () => {
+    // install.sh is the from-scratch bootstrap, and it installs this fork. The
+    // units and sudoers rules it goes on to wire up (rollback, revert to stock)
+    // name scripts that exist only here, so pointing it at the stock upstream
+    // archive would install a tree those rules do not match.
+    it('install.sh installs from this fork, whose scripts it wires up', () => {
         const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
-        assert.match(src, /REPO_URL="https:\/\/github\.com\/throwaway31265\/free-sleep\/archive\/refs\/heads\/main\.zip"/);
+        assert.match(src, /REPO_URL="https:\/\/github\.com\/LTimothy\/nightstand\/archive\/refs\/heads\/main\.zip"/);
+    });
+    // GitHub names an archive's top directory after the repo, so this fork's zip
+    // unpacks to nightstand-main rather than free-sleep-main. Hardcoding either
+    // name silently breaks the install the moment the repo is renamed.
+    it('install.sh resolves the unpacked archive directory instead of hardcoding it', () => {
+        const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
+        assert.match(src, /find \. -mindepth 1 -maxdepth 1 -type d -name '\*-main'/);
+        assert.doesNotMatch(src, /mv free-sleep-main/);
+    });
+    it('install.sh bootstraps node through the shared ensure-node.sh', () => {
+        const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
+        assert.match(src, /bash "\$REPO_DIR\/scripts\/ensure-node\.sh" "\$USERNAME"/);
     });
     // Regression coverage: disable_biometrics.sh existed but was never granted
     // a sudoers rule or invoked, so flipping the Settings biometrics toggle off

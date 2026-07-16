@@ -4,7 +4,7 @@ set -euo pipefail
 
 # --------------------------------------------------------------------------------
 # Variables
-REPO_URL="https://github.com/throwaway31265/free-sleep/archive/refs/heads/main.zip"
+REPO_URL="https://github.com/LTimothy/nightstand/archive/refs/heads/main.zip"
 ZIP_FILE="free-sleep.zip"
 REPO_DIR="/home/dac/free-sleep"
 SERVER_DIR="$REPO_DIR/server"
@@ -24,34 +24,19 @@ rm -f "$ZIP_FILE"
 # Clean up existing directory and move new code into place
 echo "Setting up the installation directory..."
 rm -rf "$REPO_DIR"
-mv free-sleep-main "$REPO_DIR"
+# GitHub names the archive's top dir after the repo and ref (repo-name + "-main"),
+# so resolve it dynamically rather than hardcoding it.
+SRC_DIR=$(find . -mindepth 1 -maxdepth 1 -type d -name '*-main' | head -n1)
+[ -d "$SRC_DIR" ] || { echo "unexpected zip layout"; exit 1; }
+mv "$SRC_DIR" "$REPO_DIR"
 
 
 chown -R "$USERNAME":"$USERNAME" "$REPO_DIR"
 
 # --------------------------------------------------------------------------------
-# Install or update Volta
-# - We check once. If it’s not installed, install it.
-echo "Checking if Volta is installed for user '$USERNAME'..."
-if [ -d "/home/$USERNAME/.volta" ]; then
-  echo "Volta is already installed for user '$USERNAME'."
-else
-  echo "Volta is not installed. Installing for user '$USERNAME'..."
-  sudo -u "$USERNAME" bash -c 'curl https://get.volta.sh | bash'
-  # Ensure Volta environment variables are in the DAC user’s profile:
-  if ! grep -q 'export VOLTA_HOME=' "/home/$USERNAME/.profile"; then
-    echo -e '\nexport VOLTA_HOME="/home/dac/.volta"\nexport PATH="$VOLTA_HOME/bin:$PATH"\n' \
-      >> "/home/$USERNAME/.profile"
-  fi
-  echo "Finished installing Volta"
-  echo ""
-fi
-
-
-# --------------------------------------------------------------------------------
-# Install (or update) Node via Volta
-echo "Installing/ensuring Node 24.11.0 via Volta..."
-sudo -u "$USERNAME" bash -c "source /home/$USERNAME/.profile && volta install node@24.11.0"
+# Install or update Volta + Node (shared with the fork-switch tool's
+# pod-installer.sh, see scripts/ensure-node.sh)
+bash "$REPO_DIR/scripts/ensure-node.sh" "$USERNAME"
 
 # --------------------------------------------------------------------------------
 # Setup /persistent/free-sleep-data (migrate old configs, logs, etc.)
