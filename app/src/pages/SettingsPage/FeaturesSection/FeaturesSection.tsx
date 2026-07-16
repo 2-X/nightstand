@@ -1,6 +1,6 @@
-import InfoIcon from '@mui/icons-material/Info';
-import { Box, CircularProgress, Typography, Switch } from '@mui/material';
+import { CircularProgress, Typography } from '@mui/material';
 import Section from '../Section.tsx';
+import FeatureToggleRow from './FeatureToggleRow.tsx';
 import { Services, useServices, postServices } from '@api/services.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { DeepPartial } from 'ts-essentials';
@@ -26,27 +26,24 @@ export default function FeaturesSection() {
 
   return (
     <Section title='Features'>
-      <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.5 } }>
-        <Typography sx={ { fontSize: '1rem', color: palette.text.primary } }>Biometrics</Typography>
-        <Switch
-          disabled={ isUpdating || services?.biometrics.jobs.installation.status !== 'healthy' }
-          checked={ services.biometrics.enabled }
-          onChange={ (event) => updateServices({ biometrics: { enabled: event.target.checked } }) }
-        />
-      </Box>
-      <Box display='flex' gap={ 1 } alignItems='flex-start' sx={ { mt: 1 } }>
-        <InfoIcon sx={ { color: palette.text.tertiary, fontSize: 18, mt: '2px' } }/>
-        <Typography sx={ { color: palette.text.tertiary, fontSize: '0.85rem', lineHeight: 1.5 } }>
-          Calculate biometrics for the pod.
-          Requires you to run this command on your pod. Once installation completes successfully, you can toggle this on/off.
-          <Typography
-            component='span'
-            sx={ { display: 'block', mt: 0.5, fontFamily: 'monospace', fontSize: '0.8rem', color: palette.text.tertiary } }
-          >
-            sh /home/dac/free-sleep/scripts/enable_biometrics.sh
-          </Typography>
-        </Typography>
-      </Box>
+      <FeatureToggleRow
+        label='Biometrics'
+        disabled={ isUpdating || services?.biometrics.jobs.installation.status !== 'healthy' }
+        checked={ services.biometrics.enabled }
+        onChange={ (next) => updateServices({ biometrics: { enabled: next } }) }
+        description={
+          <>
+            Calculate biometrics for the pod.
+            Requires you to run this command on your pod. Once installation completes successfully, you can toggle this on/off.
+            <Typography
+              component='span'
+              sx={ { display: 'block', mt: 0.5, fontFamily: 'monospace', fontSize: '0.8rem', color: palette.text.tertiary } }
+            >
+              sh /home/dac/free-sleep/scripts/enable_biometrics.sh
+            </Typography>
+          </>
+        }
+      />
     </Section>
   );
 }
