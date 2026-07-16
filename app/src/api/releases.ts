@@ -1,16 +1,31 @@
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { z } from 'zod';
+import currentServerInfo from '../../../server/src/serverInfo.json';
 import { UPDATE_CHANNELS, UpdateChannelType } from './settingsSchema.ts';
 
-const ReleaseSchema = z.object({
+const releaseFields = {
   version: z.string(),
   channel: z.enum(UPDATE_CHANNELS),
   date: z.string(),
   artifacts: z.record(z.string(), z.string()).optional(),
+};
+
+// The agent overlays whatever stock a pod already runs and replaces no
+// upstream code, so it has no base of its own. A bundle is the full tree
+// built against exactly one upstream release, so it names that base and the
+// features it carries.
+const AgentReleaseSchema = z.object({ kind: z.literal('agent'), ...releaseFields });
+const BundleReleaseSchema = z.object({
+  kind: z.literal('bundle'),
+  ...releaseFields,
+  upstreamBase: z.string(),
+  features: z.array(z.string()),
 });
 
-const ReleasesManifestSchema = z.object({
+const ReleaseSchema = z.discriminatedUnion('kind', [AgentReleaseSchema, BundleReleaseSchema]);
+
+export const ReleasesManifestSchema = z.object({
   channels: z.array(z.string()),
   releases: z.array(ReleaseSchema),
 });
@@ -46,4 +61,16 @@ export const latestForChannel = (
   if (!manifest) return undefined;
   const rank = CHANNEL_RANK[channel];
   return manifest.releases.find(release => CHANNEL_RANK[release.channel] <= rank);
+};
+
+// The upstream release this install sits on, baked in at build time.
+export const podUpstreamBase = (): string => currentServerInfo.upstreamBase;
+
+// A bundle swaps the whole tree, so installing one built against a different
+// upstream release silently changes the upstream code underneath while the
+// stock snapshot still restores the original. Surface that; do not block it.
+export const baseMismatch = (release: Release, podBase: string | undefined): boolean => {
+  if (release.kind !== 'bundle') return false;
+  if (podBase === undefined) return false;
+  return release.upstreamBase !== podBase;
 };
