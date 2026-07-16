@@ -34,6 +34,11 @@ describe('ReleasesManifestSchema', () => {
     expect(() => ReleasesManifestSchema.parse(bad)).toThrow();
   });
 
+  it('rejects a bundle with no features, since a bundle must declare what it carries', () => {
+    const bad = { channels: ['stable'], releases: [{ ...bundle, features: undefined }] };
+    expect(() => ReleasesManifestSchema.parse(bad)).toThrow();
+  });
+
   it('rejects an unknown kind', () => {
     const bad = { channels: ['stable'], releases: [{ ...agent, kind: 'overlay' }] };
     expect(() => ReleasesManifestSchema.parse(bad)).toThrow();
@@ -61,7 +66,7 @@ describe('baseMismatch', () => {
     expect(baseMismatch(agent, '2.0.1')).toBe(false);
   });
 
-  it('does not flag a bundle built on the base this pod already runs', () => {
+  it('does not flag a bundle built on the same base as the installed build', () => {
     expect(baseMismatch(bundle, '2.1.5')).toBe(false);
   });
 
@@ -69,7 +74,7 @@ describe('baseMismatch', () => {
     expect(baseMismatch(bundle, '2.0.1')).toBe(true);
   });
 
-  it('does not flag anything when the pod base is unknown, rather than warning on a guess', () => {
+  it('does not flag anything when the installed base is unknown, rather than warning on a guess', () => {
     expect(baseMismatch(bundle, undefined)).toBe(false);
   });
 });

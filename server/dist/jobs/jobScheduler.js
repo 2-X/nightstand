@@ -36,8 +36,10 @@ async function setupJobs() {
         logger.info('Scheduling jobs...');
         scheduleAlarmOverride(settingsData, 'left');
         scheduleAlarmOverride(settingsData, 'right');
-        scheduleOneOffAlarm(settingsData, 'left');
-        scheduleOneOffAlarm(settingsData, 'right');
+        if (settingsData.features.oneOffAlarms) {
+            scheduleOneOffAlarm(settingsData, 'left');
+            scheduleOneOffAlarm(settingsData, 'right');
+        }
         // Sleep analysis runs daily per side, decoupled from power schedule:
         // a side that's being measured (biometrics on, person actually using
         // it) gets sleep records even when no temperature schedule is enabled

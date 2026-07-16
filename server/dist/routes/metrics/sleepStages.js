@@ -1,6 +1,9 @@
 import express from 'express';
 import moment from 'moment-timezone';
 import { prisma } from '../../db/prisma.js';
+import settingsDB from '../../db/settings.js';
+import servicesDB from '../../db/services.js';
+import { isSleepScoreActive } from './sleepScoreGuard.js';
 const router = express.Router();
 // Heuristic sleep-stage classifier with three improvements over the original
 // per-epoch version:
@@ -203,6 +206,17 @@ router.get('/sleep-stages', async (req, res) => {
     if (!side || !startTime || !endTime) {
         return res.status(400).json({ error: 'side, startTime, endTime required' });
     }
+    await settingsDB.read();
+    await servicesDB.read();
+    if (!isSleepScoreActive(settingsDB.data, servicesDB.data)) {
+        return res.json({
+            active: false,
+            epochs: [],
+            totals: { awake: 0, rem: 0, light: 0, deep: 0 },
+            percentages: { awake: 0, rem: 0, light: 0, deep: 0 },
+            totalSeconds: 0,
+        });
+    }
     const startUnix = moment(startTime).unix();
     const endUnix = moment(endTime).unix();
     const vitalsQuery = {
@@ -246,7 +260,7 @@ router.get('/sleep-stages', async (req, res) => {
         light: Math.round((totals.light / totalSeconds) * 100),
         deep: Math.round((totals.deep / totalSeconds) * 100),
     };
-    return res.json({ epochs, totals, percentages, totalSeconds });
+    return res.json({ active: true, epochs, totals, percentages, totalSeconds });
 });
 export default router;
 //# sourceMappingURL=sleepStages.js.map

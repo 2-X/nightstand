@@ -3,10 +3,24 @@ import path from 'path';
 import fs from 'fs';
 import readline from 'readline';
 import logger from '../../logger.js';
+import settingsDB from '../../db/settings.js';
 import { isLogFilename, isSafeLogFilename, linesFromAppendedChunk } from './logsHelpers.js';
 const router = express.Router();
 const LOGS_DIRS = ['/persistent/free-sleep-data/logs', '/var/log'];
 const { promises: fsPromises } = fs;
+// Full enforcement when the flag is off, not just hiding the Settings link:
+// the API itself refuses so a direct request can't read logs an operator
+// chose to turn viewing off for. Exported so the 403 branch is directly
+// testable without spinning up the router.
+export async function requireLogsViewerEnabled(req, res, next) {
+    await settingsDB.read();
+    if (!settingsDB.data.features.logsViewer) {
+        res.status(403).json({ error: 'Logs viewer is disabled' });
+        return;
+    }
+    next();
+}
+router.use(requireLogsViewerEnabled);
 // Endpoint to list all log files as clickable links
 router.get('/', async (req, res) => {
     try {

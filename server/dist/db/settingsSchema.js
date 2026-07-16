@@ -64,6 +64,24 @@ const SideSettingsSchema = z.object({
 // in releases.json.
 export const UPDATE_CHANNELS = ['stable', 'beta'];
 const UpdateChannel = z.enum(UPDATE_CHANNELS);
+// Runtime feature flags. Biometrics has its own toggle in ServicesSchema
+// (install precondition, systemd side effect) and stays there rather than
+// joining this list. nightstandTheme has no code reading it yet, it is a
+// placeholder for a future dual-theme pass.
+export const defaultFeatures = {
+    sleepScore: true,
+    levelTemps: true,
+    oneOffAlarms: true,
+    logsViewer: true,
+    nightstandTheme: true,
+};
+const FeaturesSchema = z.object({
+    sleepScore: z.boolean(),
+    levelTemps: z.boolean(),
+    oneOffAlarms: z.boolean(),
+    logsViewer: z.boolean(),
+    nightstandTheme: z.boolean(),
+}).strict();
 export const SettingsSchema = z.object({
     id: z.string(),
     timeZone: z.enum(TIME_ZONES),
@@ -76,5 +94,6 @@ export const SettingsSchema = z.object({
     temperatureFormat: Temperatures,
     rebootDaily: z.boolean(),
     updateChannel: UpdateChannel,
+    features: FeaturesSchema,
 }).strict();
 //# sourceMappingURL=settingsSchema.js.map

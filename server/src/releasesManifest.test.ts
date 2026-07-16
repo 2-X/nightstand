@@ -85,7 +85,7 @@ describe('releases.json', () => {
 });
 
 describe('serverInfo.json', () => {
-  it('records the upstream release this install sits on', () => {
+  it('records the upstream release this build was made from', () => {
     assert.match(serverInfo.upstreamBase ?? '', SEMVER);
   });
 });

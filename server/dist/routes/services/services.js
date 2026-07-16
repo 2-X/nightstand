@@ -26,7 +26,11 @@ router.post('/services', async (req, res) => {
     if (shouldDisableBiometrics(validationResult.data)) {
         triggerBiometricsDisable();
     }
-    const data = await updateServices(body);
+    // Merge the validated/stripped result, not the raw body: StatusInfoSchema
+    // (nested under biometrics.jobs.*) isn't `.strict()`, so extra properties
+    // on a job status object would otherwise pass validation and get written
+    // verbatim. Same bug class settings.ts's POST route was already fixed for.
+    const data = await updateServices(validationResult.data);
     res.status(200).json(data);
 });
 export default router;

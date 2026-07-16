@@ -56,5 +56,24 @@ describe('updateServices', () => {
         await servicesDB.read();
         assert.equal(servicesDB.data.biometrics.jobs.calibrateRight.status, 'waiting_for_data');
     });
+    // Regression test for the raw-body-merge bug the POST /services route was
+    // fixed for: StatusInfoSchema (nested under biometrics.jobs.*) isn't
+    // `.strict()`, so an extra property on a job status object passes
+    // deepPartial().safeParse() (silently stripped from the validated
+    // result) but would have been written to servicesDB.json verbatim if the
+    // route still merged the raw body instead of validationResult.data.
+    it('does not persist an unknown property that the validated result already stripped', async () => {
+        const raw = {
+            biometrics: { jobs: { calibrateLeft: { status: 'healthy', message: '', timestamp: '', extraField: 'should not persist' } } },
+        };
+        const parsed = ServicesSchema.deepPartial().safeParse(raw);
+        assert.equal(parsed.success, true);
+        if (!parsed.success)
+            return;
+        assert.ok(!('extraField' in (parsed.data.biometrics?.jobs?.calibrateLeft ?? {})));
+        await updateServices(parsed.data);
+        await servicesDB.read();
+        assert.equal('extraField' in servicesDB.data.biometrics.jobs.calibrateLeft, false);
+    });
 });
 //# sourceMappingURL=services.test.js.map

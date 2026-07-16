@@ -1,6 +1,9 @@
 import express from 'express';
 import moment from 'moment-timezone';
 import { prisma } from '../../db/prisma.js';
+import settingsDB from '../../db/settings.js';
+import servicesDB from '../../db/services.js';
+import { isSleepScoreActive } from './sleepScoreGuard.js';
 const router = express.Router();
 // --- Component scorers (each returns 0-100) ---
 function scoreDuration(seconds) {
@@ -48,6 +51,11 @@ router.get('/sleep-score', async (req, res) => {
         return res.status(400).json({
             error: 'side, startTime, and endTime query params are required',
         });
+    }
+    await settingsDB.read();
+    await servicesDB.read();
+    if (!isSleepScoreActive(settingsDB.data, servicesDB.data)) {
+        return res.json({ active: false, score: null, components: {} });
     }
     const startUnix = moment(startTime).unix();
     const endUnix = moment(endTime).unix();
@@ -115,7 +123,7 @@ router.get('/sleep-score', async (req, res) => {
         weightedSum += c.score * adjustedWeight;
     }
     const score = Math.round(weightedSum);
-    return res.json({ score, components });
+    return res.json({ active: true, score, components });
 });
 export default router;
 //# sourceMappingURL=sleepScore.js.map

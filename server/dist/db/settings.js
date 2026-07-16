@@ -2,6 +2,7 @@
 import _ from 'lodash';
 import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
+import { defaultFeatures } from './settingsSchema.js';
 import config from '../config.js';
 const defaultSideSettings = {
     name: 'Side',
@@ -60,6 +61,7 @@ const defaultData = {
         enabled: false,
         time: '14:00',
     },
+    features: { ...defaultFeatures },
 };
 const file = new JSONFile(`${config.lowDbFolder}settingsDB.json`);
 const settingsDB = new Low(file, defaultData);
