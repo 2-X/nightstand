@@ -13,11 +13,9 @@ import ListItemText from '@mui/material/ListItemText';
 import Typography from '@mui/material/Typography';
 import { List, ListItem } from '@mui/material';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
-import { useSettings } from '@api/settings.ts';
 
 const SettingsList = () => {
   const navigate = useNavigate();
-  const { data: settings } = useSettings();
 
   return (
     <List sx={ { width: '100%', maxWidth: 360, bgcolor: 'background.paper', borderRadius: 2, boxShadow: 2 } }>
@@ -36,15 +34,13 @@ const SettingsList = () => {
         <ListItemText primary="Sleep"/>
         <ArrowForwardIosIcon fontSize="small" sx={ { color: 'gray' } }/>
       </ListItem>
-      { settings?.features.logsViewer && (
-        <ListItem onClick={ () => navigate('/data/logs') }>
-          <ListItemIcon>
-            <TextSnippetIcon/>
-          </ListItemIcon>
-          <ListItemText primary="Logs"/>
-          <ArrowForwardIosIcon fontSize="small" sx={ { color: 'gray' } }/>
-        </ListItem>
-      ) }
+      <ListItem onClick={ () => navigate('/data/logs') }>
+        <ListItemIcon>
+          <TextSnippetIcon/>
+        </ListItemIcon>
+        <ListItemText primary="Logs"/>
+        <ArrowForwardIosIcon fontSize="small" sx={ { color: 'gray' } }/>
+      </ListItem>
       { /*<ListItem onClick={ () => navigate('/data/vitals') }>*/ }
       { /*  <ListItemIcon>*/ }
       { /*    <FavoriteIcon/>*/ }

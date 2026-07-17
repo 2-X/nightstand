@@ -221,16 +221,19 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     description: 'The Logs page and its live-tail API.',
     category: 'platform',
     version: '3.1.0',
-    flag: 'logsViewer',
-    default: true,
+    flag: null,
+    default: 'n/a',
     touchpoints: ['app/src/pages/DataPage/LogsPage/LogsPage.tsx', 'server/src/routes/logs/logs.ts'],
     depends_on: ['agent'],
-    reversible: true,
-    tests: ['server/src/routes/logs/logs.test.ts'],
+    reversible: false,
+    tests: ['server/src/routes/logs/logsHelpers.test.ts'],
     upstream_offer: false,
-    rationale: 'Full enforcement, not just a hidden link: off means the log API itself '
-      + 'refuses a direct request, since logs are exactly the kind of thing an operator '
-      + 'might deliberately want unreadable, unlike the other UI-only flags in this set.',
+    rationale: 'Baseline, not a toggle. This shipped as a flag that also had the log API '
+      + 'refuse a direct request, on the reasoning that an operator might want logs '
+      + 'unreadable. That reasoning does not hold here: there is one operator, who is '
+      + 'the owner, and logs are how this pod gets diagnosed when something breaks. A '
+      + 'switch whose only effect is to hide the evidence from the person debugging is '
+      + 'not a feature. Retired 2026-07-16.',
   },
   {
     id: 'base-control',

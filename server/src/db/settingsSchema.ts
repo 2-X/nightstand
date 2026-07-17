@@ -83,14 +83,12 @@ export const defaultFeatures = {
   sleepScore: true,
   levelTemps: true,
   oneOffAlarms: true,
-  logsViewer: true,
   nightstandTheme: true,
 } as const;
 const FeaturesSchema = z.object({
   sleepScore: z.boolean(),
   levelTemps: z.boolean(),
   oneOffAlarms: z.boolean(),
-  logsViewer: z.boolean(),
   nightstandTheme: z.boolean(),
 }).strict();
 

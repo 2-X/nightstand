@@ -73,6 +73,11 @@ await settingsDB.read();
 // Allows us to add default values to the settings if users have existing settingsDB.json data
 settingsDB.data = _.merge({}, defaultData, settingsDB.data);
 
+// Migration: drop the retired logsViewer flag. Logs are baseline now, so the
+// key means nothing, and the merge above would otherwise keep a stored copy
+// alive forever against a schema that no longer has it.
+delete (settingsDB.data.features as Record<string, unknown>).logsViewer;
+
 // Migration: bump temperature tap amount from old default of 1 to 2.
 for (const sideKey of ['left', 'right'] as const) {
   for (const gesture of ['doubleTap', 'tripleTap'] as const) {

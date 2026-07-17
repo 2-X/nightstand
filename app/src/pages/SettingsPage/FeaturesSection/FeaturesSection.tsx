@@ -81,13 +81,6 @@ export default function FeaturesSection() {
         onChange={ (next) => updateFeature({ oneOffAlarms: next }) }
         description='The single-fire alarm section on the Schedules page, separate from the recurring per-day alarm.'
       />
-      <FeatureToggleRow
-        label='Logs viewer'
-        disabled={ isUpdating }
-        checked={ settings.features.logsViewer }
-        onChange={ (next) => updateFeature({ logsViewer: next }) }
-        description='The Logs row above and the /logs page. Off means the log API refuses requests too, not just a hidden link.'
-      />
     </Section>
   );
 }
