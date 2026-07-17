@@ -40,10 +40,19 @@ SSH_OPTS=(-o IdentitiesOnly=yes
           -o ControlPath="$SSH_CTL"
           -o ControlPersist=120
           -p "$POD_PORT")
+# When this host and the pod are both Wi-Fi stations on one subnet, the access
+# point has to receive every frame and resend it on the same radio, so an
+# upload between them collapses well below line rate and the path wedges
+# instead of slowing down. Pacing the transfer keeps it under that cliff. This
+# mostly ships small changed-file deltas that would stay under it anyway, but a
+# dependency sync or the biometrics tarball would not. Same knob as
+# ops/deploy.sh, which explains the measurements; raise it on a wired link.
+SHIP_RATE_KBIT="${SHIP_RATE_KBIT:-24000}"
 SCP_OPTS=(-o IdentitiesOnly=yes
           -o ControlMaster=auto
           -o ControlPath="$SSH_CTL"
           -o ControlPersist=120
+          -l "$SHIP_RATE_KBIT"
           -P "$POD_PORT")
 SSH_TARGET="${POD_USER}@${POD_HOST}"
 
