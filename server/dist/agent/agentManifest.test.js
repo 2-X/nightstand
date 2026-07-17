@@ -21,8 +21,13 @@ const packageOf = (specifier) => (specifier.startsWith('@') ? specifier.split('/
 // NODE_BUILTINS_BARE. A bare subpath specifier (e.g. 'fs/promises') is
 // checked by its base module, same as a bare package specifier.
 const isNodeBuiltin = (specifier) => (specifier.startsWith('node:') || NODE_BUILTINS_BARE.includes(packageOf(specifier)));
-// Only files with an import graph to read. Shell scripts and systemd units
-// have none, and JSON imports nothing.
+// This walk reads TypeScript imports, so it covers the .ts/.tsx entries and
+// nothing else. Shell scripts and systemd units have no TypeScript import
+// graph, and JSON imports nothing, so they are skipped. Note that skipping is
+// not the same as clearing them: the shell scripts do reference sibling
+// scripts the overlay does not carry, and no gate here checks that. Those
+// resolve at runtime only because install.sh and update.sh both run against a
+// full fork tree rather than against the overlay alone.
 const isSource = (p) => /\.(ts|tsx)$/.test(p);
 // TypeScript's own pre-processor extracts every import form (static, export
 // ... from, dynamic import(), any whitespace or line layout) instead of a
