@@ -33,13 +33,19 @@ say() { printf '\033[1;36m==> %s\033[0m\n' "$*"; }
 die() { printf '\033[1;31mFATAL: %s\033[0m\n' "$*" >&2; exit 1; }
 
 # --- ssh helper -------------------------------------------------------------
+# SSH_SHIP is SSH plus its own stall detection, for the one call that streams
+# the whole tree. The options have to sit before the destination: ssh treats
+# anything after it as the remote command.
+SHIP_OPTS=(-o ServerAliveInterval=10 -o ServerAliveCountMax=3)
 if ssh -o BatchMode=yes -o ConnectTimeout=5 "$POD" true 2>/dev/null; then
   SSH() { ssh "$POD" "$@"; }
+  SSH_SHIP() { ssh "${SHIP_OPTS[@]}" "$POD" "$@"; }
 else
   PASS="${POD_PASSWORD:-$(cat "$HOME/.config/free-sleep/pod.pass" 2>/dev/null || true)}"
   [ -n "$PASS" ] || die "no key auth and no password: set POD_PASSWORD or ~/.config/free-sleep/pod.pass"
   command -v sshpass >/dev/null || die "sshpass not installed (brew install sshpass)"
   SSH() { sshpass -p "$PASS" ssh "$POD" "$@"; }
+  SSH_SHIP() { sshpass -p "$PASS" ssh "${SHIP_OPTS[@]}" "$POD" "$@"; }
 fi
 
 # --- preflight: local -------------------------------------------------------
@@ -90,9 +96,40 @@ SSH "set -e
 " || die "backup failed - aborting, nothing changed"
 
 # --- ship HEAD to staging ---------------------------------------------------
+# The pod's inbound TCP path stalls now and then under a sustained upload. When
+# it does, the client's sshd keepalive replies queue up behind the stalled bulk
+# data (same direction), so the pod sees no reply and hangs up on its own
+# ClientAliveInterval 15 x ClientAliveCountMax 4, roughly 75 seconds in, with
+# "Connection closed by remote host". Nothing is wrong with the pod or the
+# tree: a fresh attempt almost always goes through at full speed. Shipping the
+# whole tree as a single unresumable stream with no retry turned that
+# occasional stall into a failed deploy.
+#
+# So: give the ship its own stall detection (fail in ~30s rather than waiting
+# out the pod's 75s), retry, and check the staged tree actually arrived whole,
+# because a truncated transfer must never reach the swap.
+SHIP_ATTEMPTS=4
+ship_to_stage() {
+  attempt=1
+  while [ "$attempt" -le "$SHIP_ATTEMPTS" ]; do
+    SSH "rm -rf $STAGE && mkdir -p $STAGE" || { attempt=$((attempt+1)); continue; }
+    if git archive HEAD | SSH_SHIP "tar -x -C $STAGE"; then
+      if SSH "[ -s $STAGE/server/dist/server.js ] && [ -s $STAGE/server/public/index.html ]"; then
+        [ "$attempt" -gt 1 ] && say "staging ship succeeded on attempt $attempt"
+        return 0
+      fi
+      say "staging ship attempt $attempt arrived incomplete"
+    else
+      say "staging ship attempt $attempt stalled (the pod's inbound path, not the tree)"
+    fi
+    attempt=$((attempt+1))
+    [ "$attempt" -le "$SHIP_ATTEMPTS" ] && sleep 3
+  done
+  return 1
+}
+
 say "Shipping git HEAD to staging"
-SSH "rm -rf $STAGE && mkdir -p $STAGE"
-git archive HEAD | SSH "tar -x -C $STAGE"
+ship_to_stage || die "staging ship failed after $SHIP_ATTEMPTS attempts; nothing was changed on the pod"
 SSH "chown -R dac:dac $STAGE"
 
 # --- dependencies (while old server still runs) ------------------------------
