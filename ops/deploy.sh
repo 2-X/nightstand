@@ -33,19 +33,21 @@ say() { printf '\033[1;36m==> %s\033[0m\n' "$*"; }
 die() { printf '\033[1;31mFATAL: %s\033[0m\n' "$*" >&2; exit 1; }
 
 # --- ssh helper -------------------------------------------------------------
-# SSH_SHIP is SSH plus its own stall detection, for the one call that streams
-# the whole tree. The options have to sit before the destination: ssh treats
-# anything after it as the remote command.
+# SCP_SHIP carries the one big transfer: it adds its own stall detection, so a
+# wedged attempt fails in ~30s instead of waiting out the pod's ~75s, and a
+# rate limit (see "ship HEAD to staging" below for why). Options have to sit
+# before the destination, which ssh otherwise reads as the remote command.
 SHIP_OPTS=(-o ServerAliveInterval=10 -o ServerAliveCountMax=3)
+SHIP_RATE_KBIT="${SHIP_RATE_KBIT:-24000}"
 if ssh -o BatchMode=yes -o ConnectTimeout=5 "$POD" true 2>/dev/null; then
   SSH() { ssh "$POD" "$@"; }
-  SSH_SHIP() { ssh "${SHIP_OPTS[@]}" "$POD" "$@"; }
+  SCP_SHIP() { scp "${SHIP_OPTS[@]}" -l "$SHIP_RATE_KBIT" "$1" "$POD:$2"; }
 else
   PASS="${POD_PASSWORD:-$(cat "$HOME/.config/free-sleep/pod.pass" 2>/dev/null || true)}"
   [ -n "$PASS" ] || die "no key auth and no password: set POD_PASSWORD or ~/.config/free-sleep/pod.pass"
   command -v sshpass >/dev/null || die "sshpass not installed (brew install sshpass)"
   SSH() { sshpass -p "$PASS" ssh "$POD" "$@"; }
-  SSH_SHIP() { sshpass -p "$PASS" ssh "${SHIP_OPTS[@]}" "$POD" "$@"; }
+  SCP_SHIP() { sshpass -p "$PASS" scp "${SHIP_OPTS[@]}" -l "$SHIP_RATE_KBIT" "$1" "$POD:$2"; }
 fi
 
 # --- preflight: local -------------------------------------------------------
@@ -96,31 +98,40 @@ SSH "set -e
 " || die "backup failed - aborting, nothing changed"
 
 # --- ship HEAD to staging ---------------------------------------------------
-# The pod's inbound TCP path stalls now and then under a sustained upload. When
-# it does, the client's sshd keepalive replies queue up behind the stalled bulk
-# data (same direction), so the pod sees no reply and hangs up on its own
-# ClientAliveInterval 15 x ClientAliveCountMax 4, roughly 75 seconds in, with
-# "Connection closed by remote host". Nothing is wrong with the pod or the
-# tree: a fresh attempt almost always goes through at full speed. Shipping the
-# whole tree as a single unresumable stream with no retry turned that
-# occasional stall into a failed deploy.
+# When the deploy host and the pod are both Wi-Fi stations on the same subnet,
+# they never talk directly: the access point receives each frame on its radio
+# and resends it on that same radio. A sustained upload between two stations
+# therefore burns twice the airtime an ordinary download does, and the relay
+# gives out well below line rate. Past that point the path wedges rather than
+# slowing down, and the transfer eventually dies with "Connection closed by
+# remote host" once the pod's sshd has waited out ClientAliveInterval 15 x
+# ClientAliveCountMax 4. Measured on one such link: 36 MB lands in 8.7s at
+# 4 MB/s, while 6 MB/s and up hang every time. Plain scp and an unrelated HTTP
+# pull fail identically, and the pod pulls the same 36 MB from the internet at
+# 16 MB/s, so neither the pod, ssh, nor the tree is at fault. Only the relayed
+# station-to-station leg is.
 #
-# So: give the ship its own stall detection (fail in ~30s rather than waiting
-# out the pod's 75s), retry, and check the staged tree actually arrived whole,
-# because a truncated transfer must never reach the swap.
+# So: pace the upload under the cliff instead of letting TCP discover it, keep
+# each attempt's own stall detection (fail in ~30s, not the pod's ~75s), retry,
+# and confirm the staged tree arrived whole, because a truncated transfer must
+# never reach the swap. Raise SHIP_RATE_KBIT on a wired link, where none of
+# this applies.
 SHIP_ATTEMPTS=4
+REMOTE_TAR=/tmp/nightstand-ship.tar
 ship_to_stage() {
+  local tarball="$1"
   attempt=1
   while [ "$attempt" -le "$SHIP_ATTEMPTS" ]; do
-    SSH "rm -rf $STAGE && mkdir -p $STAGE" || { attempt=$((attempt+1)); continue; }
-    if git archive HEAD | SSH_SHIP "tar -x -C $STAGE"; then
-      if SSH "[ -s $STAGE/server/dist/server.js ] && [ -s $STAGE/server/public/index.html ]"; then
+    SSH "rm -rf $STAGE $REMOTE_TAR && mkdir -p $STAGE" || { attempt=$((attempt+1)); continue; }
+    if SCP_SHIP "$tarball" "$REMOTE_TAR"; then
+      if SSH "tar -x -C $STAGE -f $REMOTE_TAR && rm -f $REMOTE_TAR \
+              && [ -s $STAGE/server/dist/server.js ] && [ -s $STAGE/server/public/index.html ]"; then
         [ "$attempt" -gt 1 ] && say "staging ship succeeded on attempt $attempt"
         return 0
       fi
       say "staging ship attempt $attempt arrived incomplete"
     else
-      say "staging ship attempt $attempt stalled (the pod's inbound path, not the tree)"
+      say "staging ship attempt $attempt stalled (the link to the pod, not the tree)"
     fi
     attempt=$((attempt+1))
     [ "$attempt" -le "$SHIP_ATTEMPTS" ] && sleep 3
@@ -128,8 +139,12 @@ ship_to_stage() {
   return 1
 }
 
-say "Shipping git HEAD to staging"
-ship_to_stage || die "staging ship failed after $SHIP_ATTEMPTS attempts; nothing was changed on the pod"
+say "Shipping git HEAD to staging (paced at ${SHIP_RATE_KBIT} Kbit/s)"
+SHIP_TAR=$(mktemp -t nightstand-ship)
+trap 'rm -f "$SHIP_TAR"' EXIT
+git archive HEAD -o "$SHIP_TAR"
+ship_to_stage "$SHIP_TAR" || die "staging ship failed after $SHIP_ATTEMPTS attempts; nothing was changed on the pod"
+rm -f "$SHIP_TAR"; trap - EXIT
 SSH "chown -R dac:dac $STAGE"
 
 # --- dependencies (while old server still runs) ------------------------------

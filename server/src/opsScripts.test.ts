@@ -40,13 +40,18 @@ describe('this repo\'s own tooling (not part of the agent overlay)', () => {
   });
 });
 
-// The pod's inbound TCP path stalls now and then under a sustained upload.
-// When it does, the pod's sshd sees no keepalive reply (the client's replies
-// are queued behind the stalled bulk data, same direction) and hangs up after
-// ClientAliveInterval 15 x ClientAliveCountMax 4, about 75 seconds in. That is
-// a property of the link, not of the tree being shipped, and a fresh attempt
-// almost always works. Shipping the whole tree as one unresumable stream with
-// no retry therefore turned an occasional stall into a failed deploy.
+// A deploy host and a pod that are both Wi-Fi stations on one subnet do not
+// talk to each other directly: the access point receives every frame on its
+// radio and retransmits it on that same radio, so a sustained upload between
+// them costs double the airtime of an ordinary download and collapses at a
+// far lower rate. Past that rate the path wedges instead of degrading, and
+// the transfer dies once the pod's sshd stops seeing keepalive replies,
+// around ClientAliveInterval 15 x ClientAliveCountMax 4. Measured on one such
+// link: 36 MB lands in 8.7s throttled to 4 MB/s, while 6 MB/s and anything
+// above it hang outright. Plain scp and an unrelated HTTP pull stall exactly
+// the same way, so the cliff belongs to the path, not to ssh or tar. The ship
+// therefore paces itself under the cliff rather than letting TCP find it, and
+// still retries, because one stall must not end a deploy.
 describe('deploy.sh survives a stalled upload', () => {
   const src = readFileSync(path.join(repoRoot, 'ops/deploy.sh'), 'utf8');
 
@@ -74,5 +79,21 @@ describe('deploy.sh survives a stalled upload', () => {
 
   it('still aborts the deploy if every attempt stalls', () => {
     assert.match(src, /die "staging ship failed/, 'exhausting the retries must abort, never swap a partial tree');
+  });
+
+  it('paces the ship with a rate limit rather than letting TCP find the cliff', () => {
+    assert.match(src, /SHIP_RATE_KBIT=/, 'deploy.sh must define a ship rate limit');
+    assert.match(src, /-l "\$SHIP_RATE_KBIT"/, 'the limit must be applied to the transfer, not just declared');
+  });
+
+  it('defaults that rate below where a relayed wireless upload collapses', () => {
+    const match = src.match(/SHIP_RATE_KBIT="\$\{SHIP_RATE_KBIT:-(\d+)\}"/);
+    assert.ok(match, 'SHIP_RATE_KBIT must carry an overridable default');
+    // 4 MB/s = 32000 Kbit/s was the fastest rate observed to land the whole
+    // tree; 6 MB/s hung. Anything above this ships a deploy that cannot finish.
+    assert.ok(
+      Number(match[1]) <= 32000,
+      `default ${match[1]} Kbit/s is at or above the rate where the upload wedges`,
+    );
   });
 });
