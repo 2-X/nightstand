@@ -8,6 +8,9 @@
 set -euo pipefail
 
 POD="${POD_HOST:-eight-pod}"
+# Prefer an explicit POD_IP; otherwise resolve $POD's HostName from the ssh
+# config so the HTTP health check targets the same machine we roll back.
+POD_IP="${POD_IP:-$(ssh -G "$POD" 2>/dev/null | awk '/^hostname /{print $2; exit}')}"
 POD_IP="${POD_IP:-192.168.1.100}"
 LIVE=/home/dac/free-sleep
 PREV=/home/dac/free-sleep-prev

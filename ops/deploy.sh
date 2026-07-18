@@ -10,7 +10,12 @@
 # $POD_PASSWORD or ~/.config/free-sleep/pod.pass (never committed).
 set -euo pipefail
 
-POD="${POD_HOST:-eight-pod}"          # ssh alias -> root@<pod-ip>:8822
+POD="${POD_HOST:-eight-pod}"          # ssh alias/host -> root@<pod-ip>:8822
+# Health checks below use HTTP, not ssh, so they need a routable host. Prefer an
+# explicit POD_IP; otherwise resolve $POD's HostName from the ssh config so the
+# check targets the same machine we deploy to. Falls through to the static
+# default only if ssh can't resolve it.
+POD_IP="${POD_IP:-$(ssh -G "$POD" 2>/dev/null | awk '/^hostname /{print $2; exit}')}"
 POD_IP="${POD_IP:-192.168.1.100}"
 LIVE=/home/dac/free-sleep
 PREV=/home/dac/free-sleep-prev
