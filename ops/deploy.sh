@@ -10,13 +10,17 @@
 # $POD_PASSWORD or ~/.config/free-sleep/pod.pass (never committed).
 set -euo pipefail
 
-POD="${POD_HOST:-eight-pod}"          # ssh alias/host -> root@<pod-ip>:8822
-# Health checks below use HTTP, not ssh, so they need a routable host. Prefer an
-# explicit POD_IP; otherwise resolve $POD's HostName from the ssh config so the
-# check targets the same machine we deploy to. Falls through to the static
-# default only if ssh can't resolve it.
-POD_IP="${POD_IP:-$(ssh -G "$POD" 2>/dev/null | awk '/^hostname /{print $2; exit}')}"
-POD_IP="${POD_IP:-192.168.1.100}"
+POD="${POD_HOST:-eight-pod}"          # ssh target (alias, or root@host)
+# Health checks below use HTTP, not ssh, so they need a routable host. Resolve
+# one without hardcoding a LAN IP, in order: an explicit POD_IP; the ssh config's
+# HostName for $POD (covers a user-defined alias); the pod's mDNS name, which the
+# stock firmware advertises on the LAN and works with no setup.
+if [ -z "${POD_IP:-}" ]; then
+  POD_IP=$(ssh -G "$POD" 2>/dev/null | awk '/^hostname /{print $2; exit}')
+  # ssh -G echoes the input back when no Host block matches it, which isn't a
+  # routable address; fall back to the mDNS name in that case.
+  case "${POD_IP:-}" in ""|"$POD") POD_IP="eight-pod.local" ;; esac
+fi
 LIVE=/home/dac/free-sleep
 PREV=/home/dac/free-sleep-prev
 STAGE=/home/dac/free-sleep-staging
