@@ -28,8 +28,13 @@ export default function TemperatureButtons({ refetch, currentTargetTemp }: Tempe
   const postUpdate = useCallback(async () => {
     setIsUpdating(true);
     try {
+      // Read the latest value from the store, not the render-time closure:
+      // this runs on a debounced timer scheduled during the click, before the
+      // optimistic setDeviceStatus has re-rendered, so the closed-over snapshot
+      // lags one tap behind and would POST (then refetch) the pre-click temp.
+      const latestTargetF = useControlTempStore.getState().deviceStatus?.[side]?.targetTemperatureF;
       await postDeviceStatus({
-        [side]: { targetTemperatureF: deviceStatus?.[side]?.targetTemperatureF },
+        [side]: { targetTemperatureF: latestTargetF },
       });
       await new Promise(r => setTimeout(r, 1_500));
       // Drop the edit gate before refetch so the canonical server response
@@ -48,7 +53,7 @@ export default function TemperatureButtons({ refetch, currentTargetTemp }: Tempe
     } finally {
       setIsUpdating(false);
     }
-  }, [deviceStatus, side, refetch, setIsUpdating, endEdit]);
+  }, [side, refetch, setIsUpdating, endEdit]);
 
   const scheduleUpdate = useCallback(() => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
