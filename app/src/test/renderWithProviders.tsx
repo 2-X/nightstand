@@ -8,6 +8,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import { theme } from '../theme';
 import { AppStoreProvider } from '@state/appStore.tsx';
+import AppRoutes from '../AppRoutes';
 
 type Options = { initialRoute?: string };
 
@@ -36,4 +37,10 @@ export function renderWithProviders(
     </QueryClientProvider>,
   );
   return { ...result, user: userEvent.setup(), queryClient };
+}
+
+// Renders the real navigable app at a starting route, for cross-page and
+// conditional-navigation tests.
+export function renderApp(initialRoute = '/') {
+  return renderWithProviders(<AppRoutes />, { initialRoute });
 }
