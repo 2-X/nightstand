@@ -108,13 +108,19 @@ of a change is hard to test directly (shell scripts, UI wiring), extract the
 logic into a plain module and test that, or at minimum gate the invariants
 that would break silently (see `src/updaterScripts.test.ts` for the pattern).
 
+The app has a jsdom plus Testing Library plus MSW harness. A change that
+touches an app component or page lands with a colocated `*.test.tsx` that
+renders it against the mock data, using `renderWithProviders` or `renderApp`,
+the same way server logic lands with a `node:test` file. See
+`app/src/test/README.md` for how the harness works.
+
 ## Before a PR
 
 Lint and typecheck both halves, and run the server test suite.
 
 ```
 cd server && npx tsc --noEmit && npm run lint && npm test
-cd app && npx tsc -b && npm run lint
+cd app && npx tsc -b && npm run lint && npm test
 ```
 
 The pod runs prebuilt code, so `server/dist/` and `server/public/` (the app's
