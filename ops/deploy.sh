@@ -10,15 +10,32 @@
 # $POD_PASSWORD or ~/.config/free-sleep/pod.pass (never committed).
 set -euo pipefail
 
-POD="${POD_HOST:-eight-pod}"          # ssh target (alias, or root@host)
-# Health checks below use HTTP, not ssh, so they need a routable host. Resolve
-# one without hardcoding a LAN IP, in order: an explicit POD_IP; the ssh config's
-# HostName for $POD (covers a user-defined alias); the pod's mDNS name, which the
-# stock firmware advertises on the LAN and works with no setup.
+# Pod connection. By default, reach the pod at its stock mDNS name
+# (eight-pod.local, advertised on the LAN by the firmware's avahi) over the known
+# ssh user/port, so a fresh clone deploys with no configuration. Set POD_HOST to
+# your own ssh target (an alias, or user@host) to override; it then carries its
+# own user/port and POD_USER/POD_PORT are ignored.
+POD_USER="${POD_USER:-root}"
+POD_PORT="${POD_PORT:-8822}"
+if [ -n "${POD_HOST:-}" ]; then
+  # User-provided ssh target: it carries its own user/port/known_hosts config.
+  POD="$POD_HOST"; SSH_CONN=""; SCP_CONN=""
+else
+  # Zero-config default: the stock mDNS name with the known user/port. accept-new
+  # records the pod's host key on first contact but still rejects a changed key.
+  POD="${POD_USER}@eight-pod.local"
+  SSH_CONN="-p $POD_PORT -o StrictHostKeyChecking=accept-new"
+  SCP_CONN="-P $POD_PORT -o StrictHostKeyChecking=accept-new"
+fi
+# $SSH_CONN/$SCP_CONN are used unquoted so an empty value expands to nothing
+# (bash 3.2 has no clean empty-array expansion under set -u).
+POD_SSH_HINT="ssh${SSH_CONN:+ $SSH_CONN} $POD"
+
+# Health checks use HTTP, not ssh, so they need a routable host. Prefer an
+# explicit POD_IP; else the ssh config's HostName for $POD (covers a user alias);
+# else the pod's mDNS name.
 if [ -z "${POD_IP:-}" ]; then
   POD_IP=$(ssh -G "$POD" 2>/dev/null | awk '/^hostname /{print $2; exit}')
-  # ssh -G echoes the input back when no Host block matches it, which isn't a
-  # routable address; fall back to the mDNS name in that case.
   case "${POD_IP:-}" in ""|"$POD") POD_IP="eight-pod.local" ;; esac
 fi
 LIVE=/home/dac/free-sleep
@@ -48,15 +65,15 @@ die() { printf '\033[1;31mFATAL: %s\033[0m\n' "$*" >&2; exit 1; }
 # before the destination, which ssh otherwise reads as the remote command.
 SHIP_OPTS=(-o ServerAliveInterval=10 -o ServerAliveCountMax=3)
 SHIP_RATE_KBIT="${SHIP_RATE_KBIT:-24000}"
-if ssh -o BatchMode=yes -o ConnectTimeout=5 "$POD" true 2>/dev/null; then
-  SSH() { ssh "$POD" "$@"; }
-  SCP_SHIP() { scp "${SHIP_OPTS[@]}" -l "$SHIP_RATE_KBIT" "$1" "$POD:$2"; }
+if ssh -o BatchMode=yes -o ConnectTimeout=5 $SSH_CONN "$POD" true 2>/dev/null; then
+  SSH() { ssh $SSH_CONN "$POD" "$@"; }
+  SCP_SHIP() { scp "${SHIP_OPTS[@]}" $SCP_CONN -l "$SHIP_RATE_KBIT" "$1" "$POD:$2"; }
 else
   PASS="${POD_PASSWORD:-$(cat "$HOME/.config/free-sleep/pod.pass" 2>/dev/null || true)}"
   [ -n "$PASS" ] || die "no key auth and no password: set POD_PASSWORD or ~/.config/free-sleep/pod.pass"
   command -v sshpass >/dev/null || die "sshpass not installed (brew install sshpass)"
-  SSH() { sshpass -p "$PASS" ssh "$POD" "$@"; }
-  SCP_SHIP() { sshpass -p "$PASS" scp "${SHIP_OPTS[@]}" -l "$SHIP_RATE_KBIT" "$1" "$POD:$2"; }
+  SSH() { sshpass -p "$PASS" ssh $SSH_CONN "$POD" "$@"; }
+  SCP_SHIP() { sshpass -p "$PASS" scp "${SHIP_OPTS[@]}" $SCP_CONN -l "$SHIP_RATE_KBIT" "$1" "$POD:$2"; }
 fi
 
 # --- preflight: local -------------------------------------------------------
@@ -179,7 +196,7 @@ SSH "set -e
   rm -rf $PREV
   mv $LIVE $PREV
   mv $STAGE $LIVE
-" || die "swap failed - pod may need manual attention: ssh $POD, check $LIVE/$PREV/$STAGE"
+" || die "swap failed - pod may need manual attention: $POD_SSH_HINT, check $LIVE/$PREV/$STAGE"
 if [ "$LOCK_SAME" = "yes" ]; then
   SSH "mv $PREV/server/node_modules $LIVE/server/node_modules && chown -R dac:dac $LIVE/server/node_modules"
   MOVED_MODULES=yes
@@ -245,7 +262,7 @@ SSH "set -e
 "
 sleep 8
 if curl -sf --max-time 5 "http://$POD_IP:3000/api/deviceStatus" >/dev/null; then
-  die "deploy failed but ROLLBACK OK (pod back on v$POD_VERSION). Failed tree kept at /home/dac/free-sleep-failed; logs: ssh $POD journalctl -u free-sleep -n 100"
+  die "deploy failed but ROLLBACK OK (pod back on v$POD_VERSION). Failed tree kept at /home/dac/free-sleep-failed; logs: $POD_SSH_HINT journalctl -u free-sleep -n 100"
 else
   die "deploy failed AND rollback health check failed. SSH in: journalctl -u free-sleep -n 100. Backup tarball: $BK. Bed hardware itself keeps running regardless."
 fi

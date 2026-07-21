@@ -7,9 +7,22 @@
 #        ops/rollback.sh --from <backup-dir-name>   # restore from tarball
 set -euo pipefail
 
-POD="${POD_HOST:-eight-pod}"
-# Resolve an HTTP host for the health check without hardcoding a LAN IP: explicit
-# POD_IP; the ssh config's HostName for $POD; then the pod's stock mDNS name.
+# Pod connection: same defaults as deploy.sh. By default reach the pod at its
+# stock mDNS name (eight-pod.local) over the known ssh user/port; set POD_HOST to
+# your own ssh target (alias or user@host) to override.
+POD_USER="${POD_USER:-root}"
+POD_PORT="${POD_PORT:-8822}"
+if [ -n "${POD_HOST:-}" ]; then
+  POD="$POD_HOST"; SSH_CONN=""
+else
+  POD="${POD_USER}@eight-pod.local"
+  SSH_CONN="-p $POD_PORT -o StrictHostKeyChecking=accept-new"
+fi
+# $SSH_CONN is used unquoted so an empty value expands to nothing (bash 3.2).
+POD_SSH_HINT="ssh${SSH_CONN:+ $SSH_CONN} $POD"
+
+# Health check talks HTTP: prefer explicit POD_IP; else $POD's ssh HostName; else
+# the pod's mDNS name.
 if [ -z "${POD_IP:-}" ]; then
   POD_IP=$(ssh -G "$POD" 2>/dev/null | awk '/^hostname /{print $2; exit}')
   case "${POD_IP:-}" in ""|"$POD") POD_IP="eight-pod.local" ;; esac
@@ -18,12 +31,12 @@ LIVE=/home/dac/free-sleep
 PREV=/home/dac/free-sleep-prev
 BACKUPS=/persistent/free-sleep-backups
 
-if ssh -o BatchMode=yes -o ConnectTimeout=5 "$POD" true 2>/dev/null; then
-  SSH() { ssh "$POD" "$@"; }
+if ssh -o BatchMode=yes -o ConnectTimeout=5 $SSH_CONN "$POD" true 2>/dev/null; then
+  SSH() { ssh $SSH_CONN "$POD" "$@"; }
 else
   PASS="${POD_PASSWORD:-$(cat "$HOME/.config/free-sleep/pod.pass" 2>/dev/null || true)}"
   [ -n "$PASS" ] || { echo "no key auth and no password available" >&2; exit 1; }
-  SSH() { sshpass -p "$PASS" ssh "$POD" "$@"; }
+  SSH() { sshpass -p "$PASS" ssh $SSH_CONN "$POD" "$@"; }
 fi
 
 if [ "${1:-}" = "--list" ]; then
@@ -65,6 +78,6 @@ sleep 8
 if curl -sf --max-time 5 "http://$POD_IP:3000/api/deviceStatus" >/dev/null; then
   echo "==> Rollback complete and server is healthy"
 else
-  echo "==> Rollback applied but server not answering yet - check: ssh $POD journalctl -u free-sleep -n 100" >&2
+  echo "==> Rollback applied but server not answering yet - check: $POD_SSH_HINT journalctl -u free-sleep -n 100" >&2
   exit 1
 fi
