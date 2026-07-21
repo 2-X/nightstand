@@ -22,17 +22,33 @@ To override one endpoint for a single test, import `server` from
 `@test/setup` and call `server.use(http.get(...))`; the override is cleared
 automatically after the test.
 
-Colocate tests as `*.test.tsx` next to the component they cover. Example:
+Colocate tests as `*.test.tsx` next to the component they cover. Example,
+adapted from `RevertToStockRow.test.tsx`:
 
 ```tsx
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
+import RevertToStockRow from './RevertToStockRow';
 
-it('shows an error state when the request fails', async () => {
-  server.use(http.get('/api/settings', () => HttpResponse.error()));
-  renderWithProviders(<SettingsPanel />);
-  expect(await screen.findByText(/failed to load/i)).toBeInTheDocument();
+it('closes the confirm dialog on Cancel and fires no request', async () => {
+  let reverted = false;
+  server.use(
+    http.post('*/update/revert-to-stock', () => {
+      reverted = true;
+      return HttpResponse.json({});
+    }),
+  );
+
+  const { user } = renderWithProviders(<RevertToStockRow runningVersion="3.0.0" />);
+
+  await user.click(screen.getByText('Revert to stock upstream free-sleep'));
+  expect(await screen.findByRole('dialog')).toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(reverted).toBe(false);
 });
 ```
