@@ -871,3 +871,10 @@ export const remoteChangelogMarkdown = [
 // Mock of the pod's rollback availability.
 export const rollbackInfo = { available: true, version: '2.9.0' };
 
+// Mock presence for both sides (no zod schema; the hook consumes a plain
+// PresenceData shape).
+export const presence = {
+  left: { present: false },
+  right: { present: false },
+};
+

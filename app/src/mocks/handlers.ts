@@ -33,6 +33,7 @@ import {
   remoteServerInfo,
   remoteChangelogMarkdown,
   rollbackInfo,
+  presence,
 } from './mockData';
 
 type Side = 'left' | 'right';
@@ -209,6 +210,7 @@ export const handlers = [
     await delay(120);
     return HttpResponse.json(records);
   }),
+  http.get('/api/metrics/presence', () => HttpResponse.json(presence)),
   http.get('/api/metrics/vitals/summary', async () => {
     await delay(120);
     return HttpResponse.json({
