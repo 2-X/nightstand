@@ -18,7 +18,8 @@ export default defineConfig({
     // Full-app renders (renderApp) mount the lazy route tree, providers, and
     // MUI in jsdom; that cold-start cost can exceed the 5s default on a loaded
     // 2-core CI runner. A generous timeout keeps those integration tests from
-    // flaking without hiding a real hang, which still fails at this bound.
-    testTimeout: 15000,
+    // flaking without hiding a real hang, which still fails at this bound. It
+    // must also clear the in-test findAllByText waits (up to 15s each).
+    testTimeout: 20000,
   },
 });
