@@ -29,6 +29,10 @@ import {
   getLogFiles,
   getChangelog,
   handleJobs,
+  releasesManifest,
+  remoteServerInfo,
+  remoteChangelogMarkdown,
+  rollbackInfo,
 } from './mockData';
 
 type Side = 'left' | 'right';
@@ -109,6 +113,8 @@ export const handlers = [
     await delay(150);
     return HttpResponse.json({ entries: deepClone(getChangelog()) });
   }),
+  http.get('/api/update/rollback-info', () => HttpResponse.json(rollbackInfo)),
+  http.post('/api/update', () => new HttpResponse(null, { status: 204 })),
   http.get('/api/base-control', async () => {
     await delay(100);
     return HttpResponse.json(deepClone(getBaseStatus()));
@@ -264,5 +270,14 @@ export const handlers = [
       },
     });
   }),
+
+  // The pod has no WAN, so these three files only ever resolve in the browser;
+  // mocking them keeps the demo and the tests offline and deterministic.
+  http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json', () =>
+    HttpResponse.json(releasesManifest)),
+  http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/server/src/serverInfo.json', () =>
+    HttpResponse.json(remoteServerInfo)),
+  http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/CHANGELOG.md', () =>
+    HttpResponse.text(remoteChangelogMarkdown)),
 ];
 

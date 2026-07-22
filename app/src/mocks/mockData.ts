@@ -827,3 +827,47 @@ export const handleJobs = (jobs: Jobs) => {
   });
 };
 
+// Mock of the release manifest the app fetches raw from GitHub. Newest first,
+// matching ReleasesManifestSchema (bundle releases name their upstream base).
+export const releasesManifest = {
+  channels: ['stable', 'beta'],
+  releases: [
+    {
+      kind: 'bundle',
+      version: '3.1.0',
+      channel: 'beta',
+      date: '2026-07-15',
+      upstreamBase: '2.1.5',
+      features: ['presence-detection', 'sleep-score'],
+    },
+    {
+      kind: 'bundle',
+      version: '3.0.0',
+      channel: 'stable',
+      date: '2026-07-10',
+      upstreamBase: '2.1.5',
+      features: ['presence-detection'],
+    },
+  ],
+};
+
+// Mock of the newest published build, fetched raw from GitHub. The hook reads
+// version and branch only.
+export const remoteServerInfo = { version: '3.1.0', branch: 'main' };
+
+// Mock of CHANGELOG.md fetched raw from GitHub, in the "## [x.y.z] - date"
+// format parseChangelog expects.
+export const remoteChangelogMarkdown = [
+  '# Changelog',
+  '',
+  '## [3.1.0] - 2026-07-15',
+  'Beta build with presence detection and sleep score.',
+  '',
+  '## [3.0.0] - 2026-07-10',
+  'First Nightstand release.',
+  '',
+].join('\n');
+
+// Mock of the pod's rollback availability.
+export const rollbackInfo = { available: true, version: '2.9.0' };
+
