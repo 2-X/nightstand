@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import { useAppStore } from '@state/appStore.tsx';
+import { useScheduleStore } from './scheduleStore';
 import SchedulePage from './SchedulePage';
 
 describe('SchedulePage', () => {
@@ -60,14 +61,16 @@ describe('SchedulePage discard on unmount', () => {
     const enabled = await screen.findByRole('switch', { name: 'Enabled' }) as HTMLInputElement;
     await waitFor(() => expect(enabled.checked).toBe(true));
     await user.click(enabled);
-    // Save appears only while there are unsaved changes.
+    // The edit is now pending: the store flags unsaved changes and Save shows.
     expect(await screen.findByRole('button', { name: 'Save' })).toBeInTheDocument();
+    expect(useScheduleStore.getState().changesPresent).toBe(true);
 
     unmount();
 
-    // Re-render: the unmount cleanup discarded the edit, so no Save button.
-    renderWithProviders(<SchedulePage />, { initialRoute: '/schedules' });
-    await screen.findByText('Power on');
-    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    // The page's unmount cleanup calls reloadScheduleData, dropping the pending
+    // edit. Assert the store directly, without remounting: a fresh mount would
+    // reset changesPresent on its own, so only a post-unmount check actually
+    // proves the cleanup ran (this fails if that cleanup effect is removed).
+    expect(useScheduleStore.getState().changesPresent).toBe(false);
   });
 });
