@@ -17,11 +17,7 @@ describe('FeaturesSection', () => {
 
     const { user } = renderWithProviders(<FeaturesSection />);
 
-    const label = await screen.findByText('One-off alarms');
-    const row = label.closest('div');
-    if (!row) throw new Error('one-off alarms row not found');
-    const toggle = row.querySelector('input[type="checkbox"]');
-    if (!toggle) throw new Error('one-off alarms switch input not found');
+    const toggle = await screen.findByRole('switch', { name: 'One-off alarms' });
     await user.click(toggle);
 
     // Default mock oneOffAlarms is true, so the first click posts false.

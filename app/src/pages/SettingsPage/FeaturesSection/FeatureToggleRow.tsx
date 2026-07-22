@@ -24,6 +24,7 @@ export default function FeatureToggleRow({ label, checked, onChange, disabled, d
           disabled={ disabled }
           checked={ checked }
           onChange={ (event) => onChange(event.target.checked) }
+          slotProps={ { input: { 'aria-label': label } } }
         />
       </Box>
       { description && (
