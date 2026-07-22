@@ -141,3 +141,41 @@ jobs:
 
       - name: Test
         run: python -m pytest biometrics/__tests__/ -v
+
+  e2e:
+    name: E2E
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+          cache-dependency-path: |
+            ./app/package-lock.json
+            ./server/package-lock.json
+
+      - name: Install dependencies (app)
+        working-directory: app
+        run: npm ci
+
+      # The demo build's tsc step imports server zod schemas.
+      - name: Install dependencies (server)
+        working-directory: server
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: app
+        run: npx playwright install --with-deps chromium
+
+      - name: Build the demo
+        working-directory: app
+        run: npm run build:demo
+
+      - name: Run E2E
+        working-directory: app
+        run: npx playwright test
