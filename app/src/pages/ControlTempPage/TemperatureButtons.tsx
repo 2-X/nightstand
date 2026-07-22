@@ -88,9 +88,16 @@ export default function TemperatureButtons({ refetch, currentTargetTemp }: Tempe
   const handleClick = (direction: 1 | -1) => {
     if (!deviceStatus) return;
     const currentF = deviceStatus[side].targetTemperatureF;
-    const nextF = isLevel
+    const rawNextF = isLevel
       ? levelToFahrenheit(fahrenheitToLevel(currentF) + direction)
       : currentF + direction;
+    // Clamp to the supported range. The +/- disable guards read the server
+    // value, which lags the optimistic display by the debounce plus settle, so
+    // a fast tap burst would otherwise push the displayed value past the bounds
+    // and POST an out-of-range temperature. Clamping here keeps it in range no
+    // matter how fast the taps land.
+    const nextF = Math.min(MAX_TEMP_F, Math.max(MIN_TEMP_F, rawNextF));
+    if (nextF === currentF) return;
     if (!editOpenRef.current) {
       editOpenRef.current = true;
       beginEdit();
