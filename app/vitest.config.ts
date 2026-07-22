@@ -15,5 +15,10 @@ export default defineConfig({
     // src/api/eventStream.ts), so the harness runs on the React Query polling
     // path the mocks feed, with no socket to stub.
     env: { VITE_ENV: 'demo' },
+    // Full-app renders (renderApp) mount the lazy route tree, providers, and
+    // MUI in jsdom; that cold-start cost can exceed the 5s default on a loaded
+    // 2-core CI runner. A generous timeout keeps those integration tests from
+    // flaking without hiding a real hang, which still fails at this bound.
+    testTimeout: 15000,
   },
 });
