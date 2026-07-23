@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogActions,
@@ -33,9 +33,18 @@ export default function AlarmDismissal({ refetch }: AlarmDismissalProps) {
   const deviceStatus = useControlTempStore(state => state.deviceStatus);
 
   const [dismissed, setDismissed] = useState(false);
+  const isAlarmVibrating = deviceStatus?.[side]?.isAlarmVibrating || false;
 
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
+
+  // Clear the one-shot dismiss latch once the pod confirms the alarm has
+  // stopped, so the next alarm re-opens the dialog. Without this, `dismissed`
+  // stays true for the life of the mounted page and every alarm after the
+  // first vibrates with no dismissal UI.
+  useEffect(() => {
+    if (!isAlarmVibrating) setDismissed(false);
+  }, [isAlarmVibrating]);
 
 
   const handleDismiss = () => {
@@ -66,7 +75,7 @@ export default function AlarmDismissal({ refetch }: AlarmDismissalProps) {
 
   return (
     <Dialog
-      open={ dismissed ? false : deviceStatus?.[side]?.isAlarmVibrating || false }
+      open={ dismissed ? false : isAlarmVibrating }
       fullScreen={ isSmallScreen }
       PaperProps={ {
         sx: isSmallScreen

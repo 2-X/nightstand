@@ -120,7 +120,20 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
     const { selectedDay, selectedSchedule, originalSchedules, selectedDays } = get();
     if (!originalSchedules) return;
     const { side } = useAppStore.getState();
-    const changesPresent = !_.isEqual(originalSchedules[side][selectedDay], selectedSchedule) || _.some(selectedDays, value => value === true);
+    // Editing an alarm rewrites a legacy day's empty `alarms: []` into
+    // `[alarm]`, so a raw comparison would flag a phantom change (and could
+    // never clear). Compare the effective alarm list on both sides instead.
+    const normalizeAlarms = (schedule: DailySchedule | undefined) => {
+      if (!schedule) return schedule;
+      const alarms = (schedule.alarms ?? []).length > 0
+        ? schedule.alarms
+        : (schedule.alarm ? [schedule.alarm] : []);
+      return { ...schedule, alarms, alarm: alarms[0] };
+    };
+    const changesPresent = !_.isEqual(
+      normalizeAlarms(originalSchedules[side][selectedDay]),
+      normalizeAlarms(selectedSchedule),
+    ) || _.some(selectedDays, value => value === true);
 
     set({ changesPresent });
   },

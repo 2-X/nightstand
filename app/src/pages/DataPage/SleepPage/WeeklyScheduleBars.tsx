@@ -24,7 +24,16 @@ function hourToFraction(m: moment.Moment): number {
   return Math.max(0, Math.min(1, (adjusted - VIEW_START_HOUR) / VIEW_HOURS));
 }
 
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Today'];
+// Render a decimal 24-hour value (e.g. 22.5) as a 12-hour clock label
+// ("10:30pm"). The stored constants are 24h, but the labels are shown to the
+// user in 12-hour form.
+function formatClockLabel(hour24: number): string {
+  const h = Math.floor(hour24);
+  const minutes = String(Math.round((hour24 % 1) * 60)).padStart(2, '0');
+  const suffix = h >= 12 ? 'pm' : 'am';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${minutes}${suffix}`;
+}
 
 const TARGET_GREEN = '#22c55e';
 const OUT_OF_TARGET_WHITE = 'rgba(255,255,255,0.85)';
@@ -130,7 +139,7 @@ export default function WeeklyScheduleBars() {
             color: palette.text.tertiary,
           } }
         >
-          { Math.floor(TARGET_BEDTIME_HOUR) }:{ String(Math.round((TARGET_BEDTIME_HOUR % 1) * 60)).padStart(2, '0') }pm
+          { formatClockLabel(TARGET_BEDTIME_HOUR) }
         </Typography>
         <Typography
           sx={ {
@@ -142,7 +151,7 @@ export default function WeeklyScheduleBars() {
             color: palette.text.tertiary,
           } }
         >
-          { Math.floor(TARGET_WAKE_HOUR) }:{ String(Math.round((TARGET_WAKE_HOUR % 1) * 60)).padStart(2, '0') }am
+          { formatClockLabel(TARGET_WAKE_HOUR) }
         </Typography>
 
         { /* Day bars */ }
@@ -201,8 +210,12 @@ export default function WeeklyScheduleBars() {
 
       { /* Day labels under the bars */ }
       <Box sx={ { display: 'flex', justifyContent: 'space-around', paddingRight: '36px', mt: 0.5 } }>
-        { DAY_LABELS.map((label, i) => {
-          const isToday = i === DAY_LABELS.length - 1;
+        { dayBars.map((bar, i) => {
+          const isToday = i === dayBars.length - 1;
+          // The bars are a trailing 7-day window ending today, so each label
+          // must come from that slot's actual date. A fixed Mon..Sun list
+          // only lines up when today happens to be Sunday.
+          const label = isToday ? 'Today' : bar.day.format('ddd');
           return (
             <Typography
               key={ i }
