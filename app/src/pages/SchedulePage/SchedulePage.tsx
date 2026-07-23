@@ -25,9 +25,11 @@ import TemperatureScheduleChart from './ScheduleChart.tsx';
 import ErrorBoundary from '@components/ErrorBoundary.tsx';
 
 
-const getAdjustedDayOfWeek = (): DayOfWeek => {
-  // Get the current moment in the specified timezone
-  const now = moment();
+const getAdjustedDayOfWeek = (timeZone?: string): DayOfWeek => {
+  // Use the pod's configured timezone (where the schedule actually runs) rather
+  // than the browser's, so the preselected day matches the pod for a user in a
+  // different timezone. Falls back to local time until settings have loaded.
+  const now = timeZone ? moment.tz(timeZone) : moment();
   // Extract the hour of the day in 24-hour format
   const currentHour = now.hour();
 
@@ -56,17 +58,17 @@ export default function SchedulePage() {
   // TODO: Add changes lost notification using changesPresent when user tries to switch tab before saving
 
   useEffect(() => {
-    const day = getAdjustedDayOfWeek();
+    const day = getAdjustedDayOfWeek(settings?.timeZone);
     selectDay(LOWERCASE_DAYS.indexOf(day));
-  }, []);
+  }, [settings?.timeZone]);
 
   useEffect(() => {
     if (!schedules) return;
     setOriginalSchedules(schedules);
-    const day = getAdjustedDayOfWeek();
+    const day = getAdjustedDayOfWeek(settings?.timeZone);
     selectDay(LOWERCASE_DAYS.indexOf(day));
     reloadScheduleData();
-  }, [schedules]);
+  }, [schedules, settings?.timeZone]);
 
   useEffect(() => {
     reloadScheduleData();

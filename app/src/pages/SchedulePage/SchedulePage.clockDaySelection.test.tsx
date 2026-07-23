@@ -1,23 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
-import moment from 'moment-timezone';
 import { renderWithProviders } from '@test/renderWithProviders';
 import SchedulePage from './SchedulePage';
 import { useScheduleStore } from './scheduleStore';
 
-// getAdjustedDayOfWeek reads moment(), whose zone follows the process default.
-// A CI runner is UTC while a dev machine may not be, so pin moment's default
-// zone here and freeze the clock to a fixed UTC instant: that makes the local
-// hour the app sees identical on any runner. 2026-07-22 is a Wednesday.
+// The day selection uses the pod's configured timezone (the mock settings
+// timeZone is America/Los_Angeles), NOT the runner's. Freezing the clock to a
+// fixed UTC instant that reads as morning/afternoon in Los Angeles must give
+// the same day on any runner (UTC CI or a local machine); if it did not, the
+// app would be reading the browser timezone. 2026-07-22 is a Wednesday.
 describe('SchedulePage initial day selection under a controlled clock', () => {
   beforeEach(() => {
-    moment.tz.setDefault('America/Los_Angeles');
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    moment.tz.setDefault();
   });
 
   it('before local noon selects yesterday', async () => {
