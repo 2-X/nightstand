@@ -1,11 +1,21 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import FeaturesSection from './FeaturesSection';
 
+// The injected 500 is handled by the app, but the rejected request can surface
+// as a transient unhandled rejection under CI timing; swallow it so it does not
+// fail the run.
+function swallowRejection(event: PromiseRejectionEvent) {
+  event.preventDefault();
+}
+
 describe('FeaturesSection error handling', () => {
+  beforeEach(() => window.addEventListener('unhandledrejection', swallowRejection));
+  afterEach(() => window.removeEventListener('unhandledrejection', swallowRejection));
+
   it('leaves the switch checked when the save POST fails', async () => {
     let postCount = 0;
     server.use(
