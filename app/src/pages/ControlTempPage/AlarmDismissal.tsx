@@ -50,12 +50,17 @@ export default function AlarmDismissal({ refetch }: AlarmDismissalProps) {
         return new Promise((resolve) => setTimeout(resolve, 1_000));
       })
       .then(() => refetch())
+      .then(() => {
+        // Only hide the dialog once the dismiss actually succeeded. Marking it
+        // dismissed unconditionally would close it on a failed dismiss while
+        // the pod may still be vibrating.
+        setDismissed(true);
+      })
       .catch(error => {
         console.error(error);
       })
       .finally(() => {
         setIsUpdating(false);
-        setDismissed(true);
       });
   };
 
