@@ -73,11 +73,15 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
         return refetch();
       })
       .catch(error => {
+        console.error(error);
+        // The write failed, so the optimistic store value is now a lie. Revert
+        // it to the last known server value. A plain refetch is not enough: the
+        // server value did not change, so it would not re-sync into the store.
+        setDeviceStatus({ [side]: { targetTemperatureF: currentTargetTemp } });
         if (dragOpenRef.current) {
           dragOpenRef.current = false;
           endEdit();
         }
-        console.error(error);
       })
       .finally(() => {
         setIsUpdating(false);

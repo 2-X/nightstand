@@ -45,15 +45,19 @@ export default function TemperatureButtons({ refetch, currentTargetTemp }: Tempe
       }
       await refetch?.();
     } catch (err) {
+      console.error(err);
+      // The write failed, so the optimistic store value is now a lie. Revert
+      // it to the last known server value. A plain refetch is not enough here:
+      // the server value did not change, so it would not re-sync into the store.
+      setDeviceStatus({ [side]: { targetTemperatureF: currentTargetTemp } });
       if (editOpenRef.current) {
         editOpenRef.current = false;
         endEdit();
       }
-      console.error(err);
     } finally {
       setIsUpdating(false);
     }
-  }, [side, refetch, setIsUpdating, endEdit]);
+  }, [side, refetch, setIsUpdating, endEdit, setDeviceStatus, currentTargetTemp]);
 
   const scheduleUpdate = useCallback(() => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
