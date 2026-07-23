@@ -73,8 +73,8 @@ describe('multi-alarm edit targeting', () => {
     useScheduleStore.getState().updateSelectedAlarm({ time: '05:15' });
 
     const alarms = useScheduleStore.getState().getEditedAlarms();
-    expect(alarms[1].time).toBe('05:15');       // target updated
-    expect(alarms[0].time).toBe('00:00');        // sibling untouched
+    expect(alarms[1].time).toBe('05:15'); // target updated
+    expect(alarms[0].time).toBe('00:00'); // sibling untouched
   });
 });
 
@@ -103,7 +103,7 @@ describe('day switch resets the buffer', () => {
     const s = useScheduleStore.getState();
     s.setOriginalSchedules(mkSchedules());
     s.selectDay(0); // sunday
-    useScheduleStore.getState().addAlarm();             // 2 alarms, index 1
+    useScheduleStore.getState().addAlarm(); // 2 alarms, index 1
     useScheduleStore.getState().updateSelectedAlarm({ time: '05:15' });
     expect(useScheduleStore.getState().changesPresent).toBe(true);
 
@@ -111,8 +111,8 @@ describe('day switch resets the buffer', () => {
 
     const st = useScheduleStore.getState();
     expect(st.selectedAlarmIndex).toBe(0);
-    expect(st.getEditedAlarms().length).toBe(1);         // monday has 1 alarm
-    expect(st.getEditedAlarms()[0].time).toBe('01:00');  // monday's saved time, not sunday's edit
+    expect(st.getEditedAlarms().length).toBe(1); // monday has 1 alarm
+    expect(st.getEditedAlarms()[0].time).toBe('01:00'); // monday's saved time, not sunday's edit
     expect(st.changesPresent).toBe(false);
   });
 });
