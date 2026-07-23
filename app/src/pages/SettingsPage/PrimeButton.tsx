@@ -21,6 +21,11 @@ export default function PrimeButton({ refetch }: PrimeButtonProps) {
       .then(() => refetch())
       .catch(error => {
         console.error(error);
+      })
+      .finally(() => {
+        // Without this, isUpdating never clears and every control that disables
+        // on it (power, temperature, prime) stays frozen until a reload.
+        setIsUpdating(false);
       });
   };
 

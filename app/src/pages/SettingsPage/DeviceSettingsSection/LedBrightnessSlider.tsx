@@ -32,6 +32,9 @@ export default function LedBrightnessSlider() {
       .then(() => refetch())
       .catch(error => {
         console.error(error);
+        // The write failed, so the optimistic settingsCopy is now a lie. Revert
+        // it to the server value; a refetch alone would not re-sync unchanged data.
+        setSettingsCopy(deviceStatus?.settings);
       })
       .finally(() => {
         setIsUpdating(false);
