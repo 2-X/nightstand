@@ -5,12 +5,14 @@ import { Low, Memory } from 'lowdb';
 const defaultMemoryDB = {
     left: {
         isAlarmVibrating: false,
+        lastAlarmFiredAt: undefined,
         analyzeSleep: {
             lastRan: undefined,
         }
     },
     right: {
         isAlarmVibrating: false,
+        lastAlarmFiredAt: undefined,
         analyzeSleep: {
             lastRan: undefined,
         }

@@ -48,18 +48,33 @@ async function setupJobs() {
         // schedules.
         scheduleSleepAnalysis(settingsData, 'left');
         scheduleSleepAnalysis(settingsData, 'right');
+        // Schedule each day independently. Old jobs are already cancelled by the
+        // time we get here, so letting one malformed day throw would leave the pod
+        // with no power, temperature or alarm jobs at all until something else
+        // triggers a reschedule. Skip the bad day and keep the rest.
+        let failedDays = 0;
         Object.entries(schedulesData).forEach(([side, sideSchedule]) => {
             Object.entries(sideSchedule).forEach(([day, schedule]) => {
-                schedulePowerOn(settingsData, side, day, schedule.power);
-                schedulePowerOff(settingsData, side, day, schedule.power);
-                scheduleTemperatures(settingsData, side, day, schedule.temperatures);
-                scheduleAlarm(settingsData, side, day, schedule);
+                try {
+                    schedulePowerOn(settingsData, side, day, schedule.power);
+                    schedulePowerOff(settingsData, side, day, schedule.power);
+                    scheduleTemperatures(settingsData, side, day, schedule.temperatures, schedule.power);
+                    scheduleAlarm(settingsData, side, day, schedule);
+                }
+                catch (error) {
+                    failedDays += 1;
+                    const message = error instanceof Error ? error.message : String(error);
+                    logger.error(`Failed to schedule ${side} ${day}, skipping it: ${message}`);
+                }
             });
         });
         schedulePrimingRebootAndCalibration(settingsData);
         logger.info('Done scheduling jobs!');
         serverStatus.status.alarmSchedule.status = 'healthy';
-        serverStatus.status.jobs.status = 'healthy';
+        serverStatus.status.jobs.status = failedDays > 0 ? 'failed' : 'healthy';
+        serverStatus.status.jobs.message = failedDays > 0
+            ? `Skipped ${failedDays} unschedulable day(s), check the schedule data`
+            : '';
         serverStatus.status.primeSchedule.status = 'healthy';
         serverStatus.status.powerSchedule.status = 'healthy';
         serverStatus.status.rebootSchedule.status = 'healthy';
@@ -84,27 +99,35 @@ async function setupJobs() {
     }
 }
 let RETRY_COUNT = 0;
+const FAST_RETRIES = 20;
+const FAST_RETRY_MS = 5_000;
+// The pod boots before NTP has corrected the clock, and a sync can take much
+// longer than the fast retries cover. Giving up permanently left the pod with
+// no jobs at all until someone edited a schedule, so keep checking slowly.
+const SLOW_RETRY_MS = 5 * 60 * 1000;
 function waitForValidDateAndSetupJobs() {
     serverStatus.status.systemDate.status = 'started';
     if (isSystemDateValid()) {
         serverStatus.status.systemDate.status = 'healthy';
         serverStatus.status.systemDate.message = '';
+        RETRY_COUNT = 0;
         logger.info('System date is valid. Setting up jobs...');
         void setupJobs();
+        return;
     }
-    else if (RETRY_COUNT < 20) {
-        serverStatus.status.systemDate.status = 'retrying';
-        const message = `System date is invalid (year 2010). Retrying in 5 seconds... (Attempt #${RETRY_COUNT}})`;
-        serverStatus.status.systemDate.message = message;
-        RETRY_COUNT++;
+    const withinFastRetries = RETRY_COUNT < FAST_RETRIES;
+    const delay = withinFastRetries ? FAST_RETRY_MS : SLOW_RETRY_MS;
+    serverStatus.status.systemDate.status = 'retrying';
+    const message = `System date is invalid (year 2010). No jobs scheduled yet, retrying in ${delay / 1000}s (attempt #${RETRY_COUNT})`;
+    serverStatus.status.systemDate.message = message;
+    RETRY_COUNT++;
+    if (withinFastRetries) {
         logger.debug(message);
-        setTimeout(waitForValidDateAndSetupJobs, 5_000);
     }
     else {
-        const message = `System date is invalid! No jobs can be scheduled! ${new Date().toISOString()} `;
-        serverStatus.status.systemDate.message = message;
         logger.warn(message);
     }
+    setTimeout(waitForValidDateAndSetupJobs, delay).unref?.();
 }
 // Monitor the JSON file and refresh jobs on change
 chokidar.watch(config.lowDbFolder).on('change', (changedPath) => {

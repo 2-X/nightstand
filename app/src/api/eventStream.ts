@@ -10,7 +10,7 @@ import { useEffect } from 'react';
 import { create } from 'zustand';
 import { useQueryClient, QueryClient } from '@tanstack/react-query';
 import { baseURL } from './api';
-import type { DeviceStatus } from './deviceStatusSchema';
+import { DeviceStatusSchema } from './deviceStatusSchema';
 
 type ConnectionState = 'idle' | 'connecting' | 'open' | 'reconnecting';
 
@@ -49,11 +49,21 @@ const INITIAL_BACKOFF_MS = 500;
 
 function applyEvent(env: EventEnvelope, qc: QueryClient): void {
   switch (env.channel) {
-  case 'device-status':
+  case 'device-status': {
     // Server sends the full DeviceStatus payload; write directly to cache
-    // so the UI reflects the change without a follow-up GET.
-    qc.setQueryData(['useDeviceStatus'], env.payload as DeviceStatus);
+    // so the UI reflects the change without a follow-up GET. Validate first:
+    // consumers read this with optional chaining and defaults, so a null or
+    // garbage frame would quietly show the bed as off rather than as broken,
+    // and the 60s refetch would leave it that way for a minute. Ignoring the
+    // frame keeps the last good status until the next valid push or poll.
+    const parsed = DeviceStatusSchema.safeParse(env.payload);
+    if (!parsed.success) {
+      console.warn('[eventStream] ignoring invalid device-status payload');
+      break;
+    }
+    qc.setQueryData(['useDeviceStatus'], parsed.data);
     break;
+  }
   case 'service-health':
     // Partial server status patch: easiest path is to invalidate so the
     // next read fetches the canonical full snapshot.

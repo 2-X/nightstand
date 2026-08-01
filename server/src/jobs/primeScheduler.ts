@@ -81,7 +81,10 @@ export const schedulePrimingRebootAndCalibration = (settingsData: Settings) => {
   dailyRule.minute = onMinute;
   dailyRule.tz = timeZone;
 
-  scheduleRebootJob(onHour - 1, onMinute, timeZone);
+  // Wrap around midnight: a prime time of 00:30 reboots at 23:30, not at an
+  // hour of -1, which node-schedule rejects silently so the pod would simply
+  // stop rebooting.
+  scheduleRebootJob((onHour + 23) % 24, onMinute, timeZone);
   scheduleCalibrationJob(CALIBRATE_LEFT_HOUR, CALIBRATE_LEFT_MINUTE, timeZone, 'left');
   scheduleCalibrationJob(CALIBRATE_RIGHT_HOUR, CALIBRATE_RIGHT_MINUTE, timeZone, 'right');
 

@@ -63,7 +63,9 @@ export default function SettingsPage() {
         </Section>
       </ErrorBoundary>
 
-      <FeaturesSection/>
+      <ErrorBoundary componentName='Features section'>
+        <FeaturesSection/>
+      </ErrorBoundary>
       <ErrorBoundary componentName='Side settings'>
 
         <Section title="Side settings">

@@ -8,9 +8,12 @@ import schedulesDB from '../db/schedules.js';
 import settingsDB from '../db/settings.js';
 import { dailyAlarmSchedules } from '../db/scheduleAlarms.js';
 import { executeFunction } from '../8sleep/deviceApi.js';
-import { getDayIndexForSchedule, logJob } from './utils.js';
+import { getDayIndexForTime, isValidTime, logJob } from './utils.js';
 import { connectFranken } from '../8sleep/frankenServer.js';
 import { emitJobEvent } from './jobEvents.js';
+// A repeated fall-back hour replays an alarm ~60 min later, so anything inside
+// this window is the same alarm firing twice, not a second intentional alarm.
+const ALARM_DEDUPE_MS = 50 * 60 * 1000;
 export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPattern, side, force = false }) => {
     emitJobEvent({ jobName: `alarm-${side}`, status: 'started' });
     try {
@@ -30,6 +33,15 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
             logger.debug('Not executing alarm, side is off!');
             return;
         }
+        // On the DST fall-back day a time between 01:00 and 01:59 occurs twice, so
+        // node-schedule fires the same alarm again an hour later. Swallow a repeat
+        // that lands within the dedupe window rather than vibrating the bed twice.
+        await memoryDB.read();
+        const lastFiredAt = memoryDB.data[side].lastAlarmFiredAt;
+        if (!force && lastFiredAt !== undefined && Date.now() - lastFiredAt < ALARM_DEDUPE_MS) {
+            logger.debug(`Skipping duplicate alarm for ${side}, one already fired recently`);
+            return;
+        }
         const currentTime = moment.tz(settingsDB.data.timeZone);
         const alarmTimeEpoch = currentTime.unix();
         const alarmPayload = {
@@ -45,6 +57,7 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
         await executeFunction(command, hexPayload);
         await memoryDB.read();
         memoryDB.data[side].isAlarmVibrating = true;
+        memoryDB.data[side].lastAlarmFiredAt = Date.now();
         await memoryDB.write();
         setTimeout(async () => {
             logger.debug('');
@@ -186,9 +199,20 @@ export const scheduleAlarm = (settingsData, side, day, dailySchedule) => {
     const enabledAlarms = dailyAlarmSchedules(dailySchedule).filter(alarm => alarm.enabled);
     enabledAlarms.forEach((alarm, alarmIndex) => {
         const alarmRule = new schedule.RecurrenceRule();
-        const dayIndex = getDayIndexForSchedule(day, dailySchedule.power.off);
-        alarmRule.dayOfWeek = dayIndex;
         const { time } = alarm;
+        // Schedule data written before the API validated alarm entries, or edited
+        // by hand, can be missing a time. Skip that alarm instead of throwing, so
+        // one bad entry cannot take down the rest of the pod's jobs.
+        if (!isValidTime(time)) {
+            logger.warn(`Skipping ${side} ${day} alarm ${alarmIndex}: invalid time ${JSON.stringify(time)}`);
+            return;
+        }
+        // Resolve the alarm's day from its own time against the day's power on,
+        // not from power.off: an alarm and the power off can sit on opposite
+        // sides of midnight, and keying off power.off moved the alarm to another
+        // weekday whenever the off time changed.
+        const dayIndex = getDayIndexForTime(day, time, dailySchedule.power.on);
+        alarmRule.dayOfWeek = dayIndex;
         const [alarmHour, alarmMinute] = time.split(':').map(Number);
         alarmRule.hour = alarmHour;
         alarmRule.minute = alarmMinute;

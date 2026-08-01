@@ -1,7 +1,7 @@
 import schedule from 'node-schedule';
 
 import { DailySchedule, DayOfWeek, Side, Time } from '../db/schedulesSchema.js';
-import { getDayIndexForSchedule, logJob } from './utils.js';
+import { getDayIndexForTime, logJob } from './utils.js';
 import { Settings } from '../db/settingsSchema.js';
 import { TimeZone } from '../db/timeZones.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
@@ -11,10 +11,10 @@ import { isTempScheduleOverridden } from './scheduleOverride.js';
 import settingsDB from '../db/settings.js';
 
 
-const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time: Time, temperature: number) => {
+const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time: Time, temperature: number, powerOn: Time) => {
   const onRule = new schedule.RecurrenceRule();
 
-  const dayOfWeekIndex = getDayIndexForSchedule(day, time);
+  const dayOfWeekIndex = getDayIndexForTime(day, time, powerOn);
   const [onHour, onMinute] = time.split(':').map(Number);
   logJob('Scheduling temperature adjustment job', side, day, dayOfWeekIndex, time);
 
@@ -49,12 +49,18 @@ const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time
   });
 };
 
-export const scheduleTemperatures = (settingsData: Settings, side: Side, day: DayOfWeek, temperatures: DailySchedule['temperatures']) => {
+export const scheduleTemperatures = (
+  settingsData: Settings,
+  side: Side,
+  day: DayOfWeek,
+  temperatures: DailySchedule['temperatures'],
+  power: DailySchedule['power'],
+) => {
   if (settingsData[side].awayMode) return;
   const { timeZone } = settingsData;
   if (timeZone === null) return;
 
   Object.entries(temperatures).forEach(([time, temperature]) => {
-    scheduleAdjustment(timeZone, side, day, time, temperature);
+    scheduleAdjustment(timeZone, side, day, time, temperature, power.on);
   });
 };

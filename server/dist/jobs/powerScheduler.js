@@ -1,12 +1,14 @@
 import schedule from 'node-schedule';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
-import { getDayIndexForSchedule, getDayOfWeekIndex, logJob } from './utils.js';
+import { getDayOfWeekIndex, getPowerOffDayIndex, logJob } from './utils.js';
 import { executeAnalyzeSleep } from './analyzeSleep.js';
 import moment from 'moment-timezone';
 import serverStatus from '../serverStatus.js';
 import logger from '../logger.js';
 import servicesDB from '../db/services.js';
 import memoryDB from '../db/memoryDB.js';
+import settingsDB from '../db/settings.js';
+import { isTempScheduleOverridden } from './scheduleOverride.js';
 export const schedulePowerOn = (settingsData, side, day, power) => {
     if (!power.enabled)
         return;
@@ -26,11 +28,19 @@ export const schedulePowerOn = (settingsData, side, day, power) => {
     schedule.scheduleJob(`${side}-${day}-${time}-power-on`, onRule, async () => {
         try {
             logJob('Executing power on job', side, day, dayOfWeekIndex, time);
+            // A manual temperature change pauses the schedule's temperature control,
+            // so turn the side on but leave the user's chosen temperature in place.
+            // Applying onTemperature here would undo the override minutes after the
+            // user set it, which is exactly what the temperature jobs already avoid.
+            await settingsDB.read();
+            const overridden = isTempScheduleOverridden(side);
+            if (overridden) {
+                logJob('Temperature schedule overridden, powering on without setting temperature', side, day, dayOfWeekIndex, time);
+            }
             await updateDeviceStatus({
-                [side]: {
-                    isOn: true,
-                    targetTemperatureF: power.onTemperature
-                }
+                [side]: overridden
+                    ? { isOn: true }
+                    : { isOn: true, targetTemperatureF: power.onTemperature },
             });
             serverStatus.status.powerSchedule.status = 'healthy';
             serverStatus.status.powerSchedule.message = '';
@@ -101,7 +111,7 @@ export const schedulePowerOff = (settingsData, side, day, power) => {
     if (settingsData.timeZone === null)
         return;
     const offRule = new schedule.RecurrenceRule();
-    const dayOfWeekIndex = getDayIndexForSchedule(day, power.off);
+    const dayOfWeekIndex = getPowerOffDayIndex(day, power);
     offRule.dayOfWeek = dayOfWeekIndex;
     const time = power.off;
     const [offHour, offMinute] = time.split(':').map(Number);

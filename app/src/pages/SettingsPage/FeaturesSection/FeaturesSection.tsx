@@ -38,12 +38,19 @@ export default function FeaturesSection() {
 
   if (servicesLoading || settingsLoading || !services || !settings) return <CircularProgress />;
 
+  // A degraded response (partially written db, a proxy error page, version
+  // skew) can arrive with pieces missing. Read every field defensively so the
+  // section renders as off and untouchable instead of throwing out of render.
+  const features = settings.features;
+  const biometricsEnabled = services.biometrics?.enabled ?? false;
+  const biometricsInstalled = services.biometrics?.jobs?.installation?.status === 'healthy';
+
   return (
     <Section title='Features'>
       <FeatureToggleRow
         label='Biometrics'
-        disabled={ isUpdating || services?.biometrics.jobs.installation.status !== 'healthy' }
-        checked={ services.biometrics.enabled }
+        disabled={ isUpdating || !biometricsInstalled }
+        checked={ biometricsEnabled }
         onChange={ (next) => updateServices({ biometrics: { enabled: next } }) }
         description={
           <>
@@ -60,24 +67,24 @@ export default function FeaturesSection() {
       />
       <FeatureToggleRow
         label='Sleep score and stages'
-        disabled={ isUpdating || !services.biometrics.enabled }
-        checked={ settings.features.sleepScore }
+        disabled={ isUpdating || !features || !biometricsEnabled }
+        checked={ features?.sleepScore ?? false }
         onChange={ (next) => updateFeature({ sleepScore: next }) }
-        description={ !services.biometrics.enabled
+        description={ !biometricsEnabled
           ? 'Needs Biometrics turned on above.'
           : 'The Sleep Fitness Score and the sleep-stages chart on the Sleep page.' }
       />
       <FeatureToggleRow
         label='Level temperature display'
-        disabled={ isUpdating }
-        checked={ settings.features.levelTemps }
+        disabled={ isUpdating || !features }
+        checked={ features?.levelTemps ?? false }
         onChange={ (next) => updateFeature({ levelTemps: next }) }
         description='The -10 to +10 level option in the temperature display picker above.'
       />
       <FeatureToggleRow
         label='One-off alarms'
-        disabled={ isUpdating }
-        checked={ settings.features.oneOffAlarms }
+        disabled={ isUpdating || !features }
+        checked={ features?.oneOffAlarms ?? false }
         onChange={ (next) => updateFeature({ oneOffAlarms: next }) }
         description='The single-fire alarm section on the Schedules page, separate from the recurring per-day alarm.'
       />

@@ -35,12 +35,20 @@ export const TapConfig = z.discriminatedUnion('type', [
 
 export const GestureSchema = z.enum(['doubleTap', 'tripleTap', 'quadTap']);
 
+// alarmScheduler arms real jobs off these strings, and moment overflows or
+// no-ops on garbage instead of rejecting it ('25:00' would fire at 01:00 the
+// next day), so they are validated here rather than downstream. Empty string
+// is the stored "unset" value (see db/settings.ts defaults) and stays valid.
+const UNSET = z.literal('');
+const OptionalTimeSchema = z.union([UNSET, TimeSchema]);
+const OptionalDateTimeSchema = z.union([UNSET, z.string().datetime({ offset: true })]);
+
 // One-off alarm: fires once at fireAt then disables itself. Independent of
 // the recurring per-day-of-week alarm. fireAt is an ISO 8601 datetime
 // including offset, e.g. "2026-04-30T07:00:00-07:00".
 const OneOffAlarmSchema = z.object({
   enabled: z.boolean(),
-  fireAt: z.string(),
+  fireAt: OptionalDateTimeSchema,
   vibrationIntensity: z.number().int().min(1).max(100),
   vibrationPattern: z.enum(['double', 'rise']),
   duration: z.number().int().min(0).max(180),
@@ -53,12 +61,12 @@ const SideSettingsSchema = z.object({
   scheduleOverrides: z.object({
     temperatureSchedules: z.object({
       disabled: z.boolean(),
-      expiresAt: z.string(),
+      expiresAt: OptionalDateTimeSchema,
     }),
     alarm: z.object({
       disabled: z.boolean(),
-      timeOverride: z.string(),
-      expiresAt: z.string(),
+      timeOverride: OptionalTimeSchema,
+      expiresAt: OptionalDateTimeSchema,
     })
   }),
   oneOffAlarm: OneOffAlarmSchema,

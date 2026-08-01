@@ -1,9 +1,5 @@
 import _ from 'lodash';
 import express, { Request, Response } from 'express';
-// @ts-ignore
-import { partialUtil } from 'zod/lib/helpers/partialUtil';
-import DeepPartial = partialUtil.DeepPartial;
-import { Schedules } from '../../db/schedulesSchema.js';
 import logger from '../../logger.js';
 import schedulesDB from '../../db/schedules.js';
 import { sanitizeScheduleBody } from './sanitizeScheduleBody.js';
@@ -13,7 +9,8 @@ import {
   AlarmSchedule,
   DailySchedule,
   DayOfWeek,
-  SchedulesSchema,
+  SchedulesUpdate,
+  SchedulesUpdateSchema,
   Side,
   SideSchedule,
 } from '../../db/schedulesSchema.js';
@@ -32,7 +29,7 @@ router.get('/schedules', async (req: Request, res: Response) => {
 
 router.post('/schedules', async (req: Request, res: Response) => {
   const body = sanitizeScheduleBody(req.body);
-  const validationResult = SchedulesSchema.deepPartial().safeParse(body);
+  const validationResult = SchedulesUpdateSchema.safeParse(body);
   if (!validationResult.success) {
     logger.error('Invalid schedules update:', validationResult.error);
     res.status(400).json({
@@ -41,7 +38,7 @@ router.post('/schedules', async (req: Request, res: Response) => {
     });
     return;
   }
-  const schedules: DeepPartial<Schedules> = validationResult.data;
+  const schedules: SchedulesUpdate = validationResult.data;
   await schedulesDB.read();
 
   (

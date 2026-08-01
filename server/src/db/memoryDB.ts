@@ -5,6 +5,10 @@ import { Low, Memory } from 'lowdb';
 
 type SideState = {
   isAlarmVibrating: boolean;
+  // Epoch ms of the last alarm that actually fired. Used to swallow a repeat
+  // firing of the same wall-clock time, which happens on the DST fall-back
+  // day when a time between 01:00 and 01:59 occurs twice.
+  lastAlarmFiredAt?: number;
   analyzeSleep: {
     lastRan?: number;
   }
@@ -27,12 +31,14 @@ type MemoryDB = {
 const defaultMemoryDB: MemoryDB = {
   left: {
     isAlarmVibrating: false,
+    lastAlarmFiredAt: undefined,
     analyzeSleep: {
       lastRan: undefined,
     }
   },
   right: {
     isAlarmVibrating: false,
+    lastAlarmFiredAt: undefined,
     analyzeSleep: {
       lastRan: undefined,
     }

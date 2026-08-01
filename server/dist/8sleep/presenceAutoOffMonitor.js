@@ -22,57 +22,50 @@ import settingsDB from '../db/settings.js';
 import { getPresenceData } from '../routes/metrics/presence.js';
 import { getDeviceStatusCoalesced } from './frankenServer.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
+import { scheduleWrapsToNextDay } from '../jobs/utils.js';
 export const PRESENCE_AUTO_OFF_MS = 45 * 60 * 1000;
 const CHECK_INTERVAL_MS = 60 * 1000;
+// The presence stream heartbeats about once a minute. If its last report is
+// older than this we cannot tell "the bed is empty" from "nothing is
+// reporting" (biometrics turned off, stream crashed, service restarting), so
+// presence is UNKNOWN and auto-off must hold rather than guess.
+export const PRESENCE_STALE_MS = 5 * 60 * 1000;
+// The pod can boot with a wrong clock and NTP-step it later. A gap between
+// ticks far larger than the interval means the wall clock jumped, not that
+// time passed, so elapsed idle times computed against it are meaningless.
+const CLOCK_STEP_MS = 5 * CHECK_INTERVAL_MS;
 // Per-side tracking. We need the on-transition timestamp because the
 // presence stream may not have emitted any "present" event for a side that
 // was never occupied - without this we'd auto-off immediately on a fresh
 // power-on. We also avoid firing repeatedly for the same idle session.
 const lastSeenOnAt = { left: null, right: null };
 const prevIsOn = { left: null, right: null };
+let lastTickAt = null;
 let timer = null;
 /**
- * Returns true if `now` falls inside an enabled power schedule's on-window
- * for the given side. Handles overnight schedules (off-time before noon ⇒
- * crosses midnight). The off threshold uses isEndTimeNextDay: hour <= 12
- * means the off fires the next day, matching the rest of the codebase's
- * convention (see [`utils.ts:isEndTimeNextDay`](../jobs/utils.ts)).
+ * Returns true if `now` falls inside an enabled power schedule's on-window for
+ * the given side. A window opens at power.on on its own day and closes at
+ * power.off, which lands on the next day when it is not strictly later than
+ * power.on (see `scheduleWrapsToNextDay`). Checking the windows opened by both
+ * yesterday and today covers overnight schedules without special-casing them.
  */
 function isInActivePowerSchedule(side, now, schedules) {
-    const todayName = now.format('dddd').toLowerCase();
-    const yesterdayName = now.clone().subtract(1, 'day').format('dddd').toLowerCase();
-    const today = schedules[side]?.[todayName];
-    const yesterday = schedules[side]?.[yesterdayName];
     const parseAt = (anchor, hhmm) => {
         const [h, m] = hhmm.split(':').map(Number);
         return anchor.clone().startOf('day').hour(h).minute(m).second(0).millisecond(0);
     };
-    const isOvernight = (off) => Number(off.split(':')[0]) <= 12;
-    // Yesterday's overnight schedule (e.g., on=21:50 → off=09:50 next day).
-    // Active if now is between yesterday-on and today-off-time.
-    if (yesterday?.power.enabled && isOvernight(yesterday.power.off)) {
-        const yOn = parseAt(now.clone().subtract(1, 'day'), yesterday.power.on);
-        const tOff = parseAt(now, yesterday.power.off);
-        if (now.isSameOrAfter(yOn) && now.isBefore(tOff))
+    for (const daysAgo of [1, 0]) {
+        const anchor = now.clone().subtract(daysAgo, 'day');
+        const dayName = anchor.format('dddd').toLowerCase();
+        const daySchedule = schedules[side]?.[dayName];
+        if (!daySchedule?.power.enabled)
+            continue;
+        const start = parseAt(anchor, daySchedule.power.on);
+        const end = parseAt(anchor, daySchedule.power.off);
+        if (scheduleWrapsToNextDay(daySchedule.power))
+            end.add(1, 'day');
+        if (now.isSameOrAfter(start) && now.isBefore(end))
             return true;
-    }
-    // Today's schedule. Two cases:
-    //   - Same-day (off later than on, e.g. on=14:00 → off=18:00): window is
-    //     [today-on, today-off].
-    //   - Overnight (off before noon, e.g. on=21:50 → off=09:50): window from
-    //     today-on through end-of-today; the wrap into tomorrow morning is
-    //     handled when "tomorrow" rolls over and yesterday-overnight kicks in.
-    if (today?.power.enabled) {
-        const tOn = parseAt(now, today.power.on);
-        if (isOvernight(today.power.off)) {
-            if (now.isSameOrAfter(tOn))
-                return true;
-        }
-        else {
-            const tOff = parseAt(now, today.power.off);
-            if (now.isSameOrAfter(tOn) && now.isBefore(tOff))
-                return true;
-        }
     }
     return false;
 }
@@ -92,6 +85,20 @@ async function tick() {
     const now = Date.now();
     const tz = settingsDB.data.timeZone || 'UTC';
     const nowMoment = moment.tz(now, tz);
+    // A wall-clock jump (NTP correcting a bad boot clock) would otherwise read
+    // as hours of absence and power a side off immediately. Rebase the
+    // references and wait for the next tick to measure real elapsed time.
+    const sinceLastTick = lastTickAt === null ? 0 : now - lastTickAt;
+    const clockStepped = lastTickAt !== null && (sinceLastTick > CLOCK_STEP_MS || sinceLastTick < 0);
+    lastTickAt = now;
+    if (clockStepped) {
+        logger.warn(`presenceAutoOff: clock stepped by ${Math.round(sinceLastTick / 1000)}s, skipping this tick`);
+        for (const side of ['left', 'right']) {
+            if (lastSeenOnAt[side] !== null)
+                lastSeenOnAt[side] = now;
+        }
+        return;
+    }
     for (const side of ['left', 'right']) {
         const isOn = !!status?.[side]?.isOn;
         if (isOn && !prevIsOn[side]) {
@@ -117,6 +124,16 @@ async function tick() {
         // lastPresenceAt while the Python only POSTs on transitions.
         if (presence[side].present)
             continue;
+        // "Not present" is only trustworthy while the stream is actually
+        // reporting. A stale or missing lastUpdatedAt means presence is unknown,
+        // not absent, so hold rather than shut off a bed someone may be in.
+        const lastUpdatedAt = presence[side].lastUpdatedAt
+            ? moment(presence[side].lastUpdatedAt).valueOf()
+            : null;
+        if (lastUpdatedAt === null || Number.isNaN(lastUpdatedAt) || now - lastUpdatedAt > PRESENCE_STALE_MS) {
+            logger.debug(`presenceAutoOff: presence unknown for ${side} (stream not reporting), skipping`);
+            continue;
+        }
         const lastPresenceAt = presence[side].lastPresenceAt
             ? moment(presence[side].lastPresenceAt).valueOf()
             : null;
