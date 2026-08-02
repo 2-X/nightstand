@@ -31,11 +31,11 @@ TAG_ZIP_URL_PREFIX="https://github.com/${NIGHTSTAND_REPO}/archive/refs/tags/v"
 # file can never redirect a future plain update. FLOOR_VERSION is the first
 # release that ships this protocol; versions below it predate the target
 # protocol, the rollback service, and possibly current lockfile/node_modules
-# compatibility, so the picker can't reach them. This tree has no version of
-# its own yet, so this stays a marker for the first real release rather than
-# a currently reachable floor.
+# compatibility, so the picker can't reach them. 3.0.0 is this stream's first
+# release and it ships both, so the floor sits there. Keep it in step with
+# CAPABLE_FLOOR in the app's VersionsPage, which gates the same picker.
 TARGET_FILE=/persistent/free-sleep-data/update-target.json
-FLOOR_VERSION="3.2.0"
+FLOOR_VERSION="3.0.0"
 
 LIVE=/home/dac/free-sleep
 PREV=/home/dac/free-sleep-prev

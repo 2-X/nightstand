@@ -3,6 +3,12 @@
   "releases": [
     {
       "kind": "agent",
+      "version": "3.0.1",
+      "channel": "beta",
+      "date": "2026-08-01"
+    },
+    {
+      "kind": "agent",
       "version": "3.0.0",
       "channel": "stable",
       "date": "2026-07-16"

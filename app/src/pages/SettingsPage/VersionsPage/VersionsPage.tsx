@@ -28,10 +28,11 @@ import currentServerInfo from '../../../../../server/src/serverInfo.json';
 // ignores the file and always installs the branch tip instead, which is
 // harmless but means the picker and rollback wouldn't do what they say.
 // Reads deviceStatus (the live running version), not the served bundle, so
-// a stale cached page can't show a picker that won't work. This tree has no
-// version of its own yet (still the stock marker), so this floor is not
-// reachable until a real one is assigned.
-const CAPABLE_FLOOR = '3.2.0';
+// a stale cached page can't show a picker that won't work. 3.0.0 is this
+// stream's first release and ships both the target protocol and the rollback
+// service, so it is the floor. Keep it in step with FLOOR_VERSION in
+// scripts/update.sh, which gates the same picker from the pod side.
+const CAPABLE_FLOOR = '3.0.0';
 
 export default function VersionsPage() {
   const { data: deviceStatus } = useDeviceStatus();
