@@ -81,6 +81,20 @@ def record_run(
     return cursor.lastrowid
 
 
+def update_run(run_id: int, status: str, message: Optional[str] = None, conn=None) -> None:
+    """Amend an existing run row rather than appending a new one.
+
+    A single attempt must leave a single record. When a failure happens after
+    the success row for that attempt has already been written (a late
+    save_profile error, for instance), the honest fix is to correct that row
+    in place, not to append a second, contradicting one for the same attempt.
+    """
+    _connection(conn).execute(
+        'UPDATE calibration_runs SET status = ?, message = ? WHERE id = ?',
+        (status, message, run_id),
+    )
+
+
 def save_profile(
     side: str,
     sensor_type: str,

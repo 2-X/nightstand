@@ -177,6 +177,40 @@ class CalibrationStoreTest(unittest.TestCase):
             calibration.import_legacy_baseline('left', '/nonexistent/none.json', conn=self.conn)
         )
 
+    def test_update_run_amends_the_existing_row_instead_of_adding_one(self):
+        # A late failure (e.g. save_profile throwing after the success row
+        # lands) must correct that row, not append a contradicting one.
+        run_id = calibration.record_run(
+            'left', 'cap', calibration.STATUS_SUCCESS, calibration.TRIGGER_DAILY,
+            started_at=1, duration_ms=1, quality=0.9, conn=self.conn,
+        )
+        calibration.update_run(run_id, calibration.STATUS_FAILED, message='disk full', conn=self.conn)
+
+        rows = self.conn.execute('SELECT COUNT(*) FROM calibration_runs').fetchone()[0]
+        self.assertEqual(rows, 1)
+        row = self.conn.execute(
+            'SELECT status, message FROM calibration_runs WHERE id = ?', (run_id,)
+        ).fetchone()
+        self.assertEqual(row[0], calibration.STATUS_FAILED)
+        self.assertEqual(row[1], 'disk full')
+
+    def test_update_run_leaves_other_runs_untouched(self):
+        other_id = calibration.record_run(
+            'left', 'cap', calibration.STATUS_SUCCESS, calibration.TRIGGER_DAILY,
+            started_at=1, duration_ms=1, quality=0.9, conn=self.conn,
+        )
+        target_id = calibration.record_run(
+            'right', 'cap', calibration.STATUS_SUCCESS, calibration.TRIGGER_DAILY,
+            started_at=2, duration_ms=1, quality=0.9, conn=self.conn,
+        )
+        calibration.update_run(target_id, calibration.STATUS_FAILED, message='disk full', conn=self.conn)
+
+        other = self.conn.execute(
+            'SELECT status, message FROM calibration_runs WHERE id = ?', (other_id,)
+        ).fetchone()
+        self.assertEqual(other[0], calibration.STATUS_SUCCESS)
+        self.assertIsNone(other[1])
+
 
 if __name__ == '__main__':
     unittest.main()

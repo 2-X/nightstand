@@ -102,6 +102,7 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
     def _elapsed_ms():
         return int((time.time() - started_at) * 1000)
 
+    run_id = None
     try:
         data = load_raw_files(
             folder_path,
@@ -189,10 +190,17 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
         )
         raise
     except Exception as error:
-        calibration.record_run(
-            side, 'cap', calibration.STATUS_FAILED, trigger,
-            started_at=started_at, duration_ms=_elapsed_ms(), message=str(error),
-        )
+        if run_id is not None:
+            # The success row for this attempt already autocommitted (SQLite
+            # isolation_level=None). A failure past this point amends that
+            # row so one attempt still leaves exactly one record, instead of
+            # appending a second, contradicting row for the same attempt.
+            calibration.update_run(run_id, calibration.STATUS_FAILED, message=str(error))
+        else:
+            calibration.record_run(
+                side, 'cap', calibration.STATUS_FAILED, trigger,
+                started_at=started_at, duration_ms=_elapsed_ms(), message=str(error),
+            )
         raise
 
 
