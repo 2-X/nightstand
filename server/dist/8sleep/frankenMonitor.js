@@ -129,7 +129,16 @@ export class FrankenMonitor {
         try {
             for (const gesture of GestureSchema.options) {
                 if (nextDeviceStatus[side].taps?.[gesture] !== this?.deviceStatus?.[side].taps?.[gesture]) {
-                    this.processGesture(side, gesture);
+                    // Deliberately detached: a base move takes seconds over BLE and this
+                    // loop doubles as the tap-detection cadence, so awaiting here would
+                    // delay the next gesture. Detached means the surrounding try cannot
+                    // see a rejection, and an unhandled one takes the whole server down
+                    // (the process-level handler shuts it down), so catch it here.
+                    void this.processGesture(side, gesture).catch(error => {
+                        const message = error instanceof Error ? error.message : String(error);
+                        logger.error(`Failed to process ${gesture} on the ${side} side: ${message}`);
+                        this.markStatus('failed', message);
+                    });
                 }
             }
         }
@@ -137,7 +146,9 @@ export class FrankenMonitor {
             logger.error(error);
         }
     }
-    async processGestures(nextDeviceStatus) {
+    // Not async: it awaits nothing, and an async function called without await
+    // is the same floating-promise trap the gesture calls above just closed.
+    processGestures(nextDeviceStatus) {
         if (!this.deviceStatus) {
             logger.warn('Missing current deviceStatus, exiting...');
             return;

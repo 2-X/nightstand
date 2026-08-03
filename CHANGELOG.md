@@ -8,6 +8,13 @@ is a hard fork; for the history of the projects it descends from, see
 
 ## [Unreleased]
 
+- A physical double or triple tap that failed to write its temperature change
+  restarted the server. Tap handling runs detached from the polling loop, so a
+  base movement over Bluetooth cannot delay the next tap being noticed, but that
+  also meant a failure had nowhere to go and the server treats an unhandled one
+  as a reason to shut down. The failure is now caught where it happens, logged,
+  and shown on the Status page.
+
 ## [3.0.1] - 2026-08-01
 
 A bug-fix release. Most of it comes from one root cause: the app and the
