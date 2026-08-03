@@ -47,4 +47,33 @@ model movement {
   @@index([side, timestamp])
 }
 
+model calibration_profiles {
+  id           Int    @id @default(autoincrement())
+  side         String
+  sensor_type  String
+  payload      String
+  quality      Float
+  source_start Int
+  source_end   Int
+  samples_used Int
+  run_id       Int
+  created_at   Int
+
+  @@unique([side, sensor_type])
+}
+
+model calibration_runs {
+  id          Int     @id @default(autoincrement())
+  side        String
+  sensor_type String
+  status      String
+  trigger     String
+  started_at  Int
+  duration_ms Int
+  quality     Float?
+  message     String?
+
+  @@index([side, started_at])
+}
+
 
