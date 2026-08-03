@@ -150,6 +150,33 @@ class CalibrationStoreTest(unittest.TestCase):
     def test_quality_is_zero_when_no_samples_were_expected(self):
         self.assertEqual(calibration.compute_quality(1800, 0, 0), 0.0)
 
+    def test_legacy_json_is_imported_once_and_marked_as_carried_over(self):
+        # rollback_pod.sh swaps back to a tree that reads these files, so an
+        # existing baseline is real calibration and must not be thrown away.
+        import json as _json
+        import tempfile
+
+        with tempfile.NamedTemporaryFile('w', suffix='.json', delete=False) as f:
+            _json.dump({'left_out': {'mean': 9.0, 'std': 0.5}}, f)
+            path = f.name
+
+        self.assertTrue(calibration.import_legacy_baseline('left', path, conn=self.conn))
+
+        profile = calibration.get_profile('left', 'cap', conn=self.conn)
+        self.assertEqual(profile['payload']['left_out']['mean'], 9.0)
+        self.assertEqual(profile['quality'], 0.0)
+
+        trigger = self.conn.execute('SELECT trigger FROM calibration_runs').fetchone()[0]
+        self.assertEqual(trigger, calibration.TRIGGER_MIGRATION)
+
+        # Second call is a no-op: a profile already exists.
+        self.assertFalse(calibration.import_legacy_baseline('left', path, conn=self.conn))
+
+    def test_legacy_import_is_a_no_op_when_the_file_is_absent(self):
+        self.assertFalse(
+            calibration.import_legacy_baseline('left', '/nonexistent/none.json', conn=self.conn)
+        )
+
 
 if __name__ == '__main__':
     unittest.main()

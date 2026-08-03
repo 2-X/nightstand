@@ -18,6 +18,7 @@ import platform
 import os
 import gc
 import json
+import time
 import urllib.request
 from argparse import Namespace, ArgumentParser
 import traceback
@@ -44,6 +45,7 @@ from resource_usage import get_memory_usage_unix, get_available_memory_mb
 from biometrics_helpers import validate_datetime_utc
 from service_health import update_health, is_biometrics_enabled
 from insufficient_data import InsufficientDataError, outcome_for_exception
+import calibration
 
 
 def _parse_args() -> Union[Namespace, None]:
@@ -92,72 +94,106 @@ def _parse_args() -> Union[Namespace, None]:
     return args
 
 
-def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: datetime, folder_path: str):
+def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: datetime, folder_path: str, trigger: str = calibration.TRIGGER_DAILY):
+    started_at = int(time.time())
     expected_row_count = int((end_time - start_time).total_seconds())
     logger.debug(f"Calibrating sensors for {side} side | {start_time.isoformat()} -> {end_time.isoformat()} | Expected row count: {expected_row_count:,}")
 
-    data = load_raw_files(
-        folder_path,
-        start_time,
-        end_time,
-        side,
-        sensor_count=1,
-        raw_data_types=['capSense', 'piezo-dual']
-    )
+    def _elapsed_ms():
+        return int((time.time() - started_at) * 1000)
 
-    piezo_df = load_piezo_df(data, side, expected_row_count=expected_row_count)
-    # threshold_percent=0.70: 70% of the rolling window must read "above range"
-    # before that window counts as occupied, so a couple of noisy seconds inside
-    # an otherwise-empty window can't flip the calibration off course.
-    # range_threshold=80_000: piezo range gate for this pass, same family as
-    # NOISE_THRESHOLD in biometric_processor.py (both bound the same signal).
-    detect_presence_piezo(
-        piezo_df,
-        side,
-        rolling_seconds=10,
-        threshold_percent=0.70,
-        range_threshold=80_000,
-        range_rolling_seconds=10,
-        clean=False
-    )
-
-    cap_df = load_cap_df(data, side, expected_row_count=expected_row_count)
-    # Cleanup data
-    del data
-    gc.collect()
-
-    merged_df = piezo_df.merge(cap_df, on='ts', how='inner')
-    # Free up memory from old dfs
-    piezo_df.drop(piezo_df.index, inplace=True)
-    cap_df.drop(cap_df.index, inplace=True)
-    del piezo_df
-    del cap_df
-    gc.collect()
-
-    # Create baseline. min_std uses create_cap_baseline_from_cap_df's default
-    # (see that function's docstring/comment for how it was derived).
-    # empty_minutes=5: shortest window worth calibrating from; long enough for
-    # the stability check below to be meaningful, short enough that a genuinely
-    # empty stretch of the night is still likely to contain one.
-    baseline_start_time, baseline_end_time = identify_baseline_period(merged_df, side, threshold_range=10_000, empty_minutes=5)
-    if baseline_start_time is None:
-        # RAW data exists but no clean empty-bed window was found in it yet, so
-        # there is nothing trustworthy to calibrate against. Treat this as
-        # insufficient-data (a calm waiting state), not a failure, and don't
-        # save a baseline built over occupied time (that offsets toward
-        # "present" and is exactly what the occupancy guard protects against).
-        raise InsufficientDataError(
-            f'No empty-bed period found for the {side} side yet, so there is '
-            f'nothing to calibrate against. This resolves once the sensors '
-            f'record a stretch of empty bed.'
+    try:
+        data = load_raw_files(
+            folder_path,
+            start_time,
+            end_time,
+            side,
+            sensor_count=1,
+            raw_data_types=['capSense', 'piezo-dual']
         )
-    cap_baseline = create_cap_baseline_from_cap_df(merged_df, baseline_start_time, baseline_end_time, side)
-    save_baseline(side, cap_baseline)
 
-    # Cleanup
-    merged_df.drop(merged_df.index, inplace=True)
-    del merged_df
-    gc.collect()
+        piezo_df = load_piezo_df(data, side, expected_row_count=expected_row_count)
+        # threshold_percent=0.70: 70% of the rolling window must read "above range"
+        # before that window counts as occupied, so a couple of noisy seconds inside
+        # an otherwise-empty window can't flip the calibration off course.
+        # range_threshold=80_000: piezo range gate for this pass, same family as
+        # NOISE_THRESHOLD in biometric_processor.py (both bound the same signal).
+        detect_presence_piezo(
+            piezo_df,
+            side,
+            rolling_seconds=10,
+            threshold_percent=0.70,
+            range_threshold=80_000,
+            range_rolling_seconds=10,
+            clean=False
+        )
+
+        cap_df = load_cap_df(data, side, expected_row_count=expected_row_count)
+        # Cleanup data
+        del data
+        gc.collect()
+
+        merged_df = piezo_df.merge(cap_df, on='ts', how='inner')
+        # Free up memory from old dfs
+        piezo_df.drop(piezo_df.index, inplace=True)
+        cap_df.drop(cap_df.index, inplace=True)
+        del piezo_df
+        del cap_df
+        gc.collect()
+
+        # Create baseline. min_std uses create_cap_baseline_from_cap_df's default
+        # (see that function's docstring/comment for how it was derived).
+        # empty_minutes=5: shortest window worth calibrating from; long enough for
+        # the stability check below to be meaningful, short enough that a genuinely
+        # empty stretch of the night is still likely to contain one.
+        baseline_start_time, baseline_end_time = identify_baseline_period(merged_df, side, threshold_range=10_000, empty_minutes=5)
+        if baseline_start_time is None:
+            # RAW data exists but no clean empty-bed window was found in it yet, so
+            # there is nothing trustworthy to calibrate against. Treat this as
+            # insufficient-data (a calm waiting state), not a failure, and don't
+            # save a baseline built over occupied time (that offsets toward
+            # "present" and is exactly what the occupancy guard protects against).
+            raise InsufficientDataError(
+                f'No empty-bed period found for the {side} side yet, so there is '
+                f'nothing to calibrate against. This resolves once the sensors '
+                f'record a stretch of empty bed.'
+            )
+        cap_baseline = create_cap_baseline_from_cap_df(merged_df, baseline_start_time, baseline_end_time, side)
+
+        # Score the profile over the baseline window that was actually used,
+        # not the much longer window of raw data loaded to find it.
+        window_seconds = (baseline_end_time - baseline_start_time).total_seconds()
+        window_df = merged_df[baseline_start_time:baseline_end_time]
+        samples_used = len(window_df)
+        quality = calibration.compute_quality(window_seconds, samples_used, int(window_seconds))
+
+        run_id = calibration.record_run(
+            side, 'cap', calibration.STATUS_SUCCESS, trigger,
+            started_at=started_at, duration_ms=_elapsed_ms(), quality=quality,
+        )
+        calibration.save_profile(
+            side, 'cap', cap_baseline, quality=quality,
+            source_start=int(baseline_start_time.timestamp()),
+            source_end=int(baseline_end_time.timestamp()),
+            samples_used=samples_used, run_id=run_id,
+        )
+        save_baseline(side, cap_baseline)
+
+        merged_df.drop(merged_df.index, inplace=True)
+        del merged_df
+        gc.collect()
+    except InsufficientDataError as error:
+        calibration.record_run(
+            side, 'cap', calibration.STATUS_INSUFFICIENT_DATA, trigger,
+            started_at=started_at, duration_ms=_elapsed_ms(), message=str(error),
+        )
+        raise
+    except Exception as error:
+        calibration.record_run(
+            side, 'cap', calibration.STATUS_FAILED, trigger,
+            started_at=started_at, duration_ms=_elapsed_ms(), message=str(error),
+        )
+        raise
 
 
 def calibrate_both_sides():
@@ -250,6 +286,13 @@ if __name__ == "__main__":
                 # window happened to find the bed empty.
                 msg = 'Bed is currently occupied, skipping calibration to avoid corrupting the baseline.'
                 logger.warning(msg)
+                sides_skipped = [args.side] if args.side is not None else ['left', 'right']
+                for skipped_side in sides_skipped:
+                    calibration.record_run(
+                        skipped_side, 'cap', calibration.STATUS_SKIPPED_OCCUPIED, calibration.TRIGGER_DAILY,
+                        started_at=int(time.time()), duration_ms=0,
+                        message='Someone was on this side at the scheduled time, so calibration was skipped.',
+                    )
                 sys.exit(0)
             elif occupied is None:
                 logger.warning('Presence API unreachable, proceeding with calibration anyway.')

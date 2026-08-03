@@ -69,6 +69,10 @@ def create_cap_baseline_from_cap_df(merged_df: pd.DataFrame, start_time: datetim
     return cap_baseline
 
 
+# Still written alongside the calibration store for one release. An instant
+# rollback swaps to a tree that reads these files, so dropping them early
+# would silently lose calibration with no visible cause. Remove one release
+# after the store ships.
 def save_baseline(side: Side, cap_baseline: dict):
     if side == 'right':
         file_path = RIGHT_CAP_BASELINE_FILE_PATH

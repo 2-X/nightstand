@@ -135,3 +135,37 @@ def get_profile(side: str, sensor_type: str, conn=None) -> Optional[dict]:
         'samples_used': row[4],
         'created_at': row[5],
     }
+
+
+def import_legacy_baseline(side: str, file_path: str, conn=None) -> bool:
+    """Carry a pre-store baseline JSON file into the store, once.
+
+    Quality is 0.0 because nothing measured it, and the run is tagged
+    TRIGGER_MIGRATION so the UI can say "carried over, confidence unknown"
+    rather than "measured and poor". Those are different claims.
+
+    Returns True when an import happened.
+    """
+    import os
+
+    if get_profile(side, 'cap', conn=conn) is not None:
+        return False
+    if not os.path.isfile(file_path):
+        return False
+
+    with open(file_path, 'r') as json_file:
+        payload = json.load(json_file)
+
+    now = int(time.time())
+    run_id = record_run(
+        side, 'cap', STATUS_SUCCESS, TRIGGER_MIGRATION,
+        started_at=now, duration_ms=0, quality=0.0,
+        message='Carried over from a baseline file that predates provenance tracking',
+        conn=conn,
+    )
+    save_profile(
+        side, 'cap', payload, quality=0.0,
+        source_start=now, source_end=now, samples_used=0, run_id=run_id, conn=conn,
+    )
+    logger.info(f'Imported the legacy {side} baseline into the calibration store')
+    return True
