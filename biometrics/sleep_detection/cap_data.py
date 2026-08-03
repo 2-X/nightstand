@@ -20,6 +20,7 @@ import json
 import math
 import pandas as pd
 from datetime import datetime
+import calibration
 from data_types import *
 from get_logger import get_logger
 from insufficient_data import InsufficientDataError
@@ -86,20 +87,28 @@ def save_baseline(side: Side, cap_baseline: dict):
 
 
 def load_baseline(side: Side):
-    if side == 'right':
-        file_path = RIGHT_CAP_BASELINE_FILE_PATH
-    else:
-        file_path = LEFT_CAP_BASE_LINE_FILE_PATH
-    logger.debug(f'Loading cap baseline from: {file_path}')
-    if os.path.isfile(file_path):
-        with open(file_path, 'r') as json_file:
-            baseline = json.load(json_file)
-            json_file.close()
-            return baseline
-    else:
-        raise FileNotFoundError(f'''Capacitance thresholds must be calibrated prior to running
-Run `python3 calibrate_sensor_thresholds.py --side=right --start_time="2025-02-02 06:00:00" --end_time="2025-02-02 15:01:00"`
-''')
+    """The active capSense baseline, or None when nothing is calibrated yet.
+
+    Reads the calibration store first and falls back to the legacy JSON file
+    for one release, so a pod rolled forward mid-cycle still finds its
+    baseline. Returns None rather than raising: never having calibrated is a
+    normal state on a fresh install, and callers fall back to defaults.
+    """
+    profile = calibration.get_profile(side, 'cap')
+    if profile is not None:
+        return profile['payload']
+
+    file_path = RIGHT_CAP_BASELINE_FILE_PATH if side == 'right' else LEFT_CAP_BASE_LINE_FILE_PATH
+    if calibration.import_legacy_baseline(side, file_path):
+        imported = calibration.get_profile(side, 'cap')
+        if imported is not None:
+            return imported['payload']
+
+    logger.warning(
+        f'No capSense baseline for the {side} side yet. Calibration runs '
+        f'automatically once the sensors record a stretch of empty bed.'
+    )
+    return None
 
 
 def load_cap_df(data: Data, side: Side, expected_row_count=None) -> pd.DataFrame:

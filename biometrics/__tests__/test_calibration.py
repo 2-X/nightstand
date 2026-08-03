@@ -211,6 +211,12 @@ class CalibrationStoreTest(unittest.TestCase):
         self.assertEqual(other[0], calibration.STATUS_SUCCESS)
         self.assertIsNone(other[1])
 
+    def test_reading_an_absent_profile_does_not_raise(self):
+        # The old load_baseline raised FileNotFoundError carrying a CLI command
+        # to type by hand. A fresh install is a normal state, not an error.
+        self.assertIsNone(calibration.get_profile('right', 'cap', conn=self.conn))
+        self.assertEqual(calibration.DEFAULTS['cap']['min_std'], 1)
+
 
 if __name__ == '__main__':
     unittest.main()
