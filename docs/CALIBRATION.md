@@ -19,7 +19,7 @@ Every constant below is one of four kinds:
 
 | File | Constant | Value | Class | Rationale |
 |---|---|---|---|---|
-| `biometrics/stream/biometric_processor.py` | `NOISE_THRESHOLD` | 150,000 | Per-bed learned | A loaded piezo idles higher. Left idles 80k to 170k against right's 40k to 85k on this pod |
+| `biometrics/stream/biometric_processor.py` | `NOISE_THRESHOLD` | 150,000 | Per-bed learned | An empty side idles 40k to 110k on this pod; occupied jumps to 200k and above, even on the off side via mattress transmission. 150k keeps a 25% margin below the weakest occupied signal |
 | `biometrics/stream/biometric_processor.py` | `DOMINANCE_RATIO` | 1.3 | Per-bed learned | Cross-side ratio depends on mattress coupling |
 | `biometrics/stream/biometric_processor.py` | `_SANE_MAX_SIGNAL` | 25,000,000 | Hardware fact | Anchored to the 24-bit ADC ceiling of 16,777,215; rejects int32 overflow sentinels |
 | `biometrics/stream/biometric_processor.py` | `no_presence_tolerance` | 180s | Timing margin | Slow-exit debounce |
