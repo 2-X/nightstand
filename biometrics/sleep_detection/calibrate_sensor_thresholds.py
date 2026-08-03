@@ -106,6 +106,11 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
     )
 
     piezo_df = load_piezo_df(data, side, expected_row_count=expected_row_count)
+    # threshold_percent=0.70: 70% of the rolling window must read "above range"
+    # before that window counts as occupied, so a couple of noisy seconds inside
+    # an otherwise-empty window can't flip the calibration off course.
+    # range_threshold=80_000: piezo range gate for this pass, same family as
+    # NOISE_THRESHOLD in biometric_processor.py (both bound the same signal).
     detect_presence_piezo(
         piezo_df,
         side,
@@ -131,6 +136,9 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
 
     # Create baseline. min_std uses create_cap_baseline_from_cap_df's default
     # (see that function's docstring/comment for how it was derived).
+    # empty_minutes=5: shortest window worth calibrating from; long enough for
+    # the stability check below to be meaningful, short enough that a genuinely
+    # empty stretch of the night is still likely to contain one.
     baseline_start_time, baseline_end_time = identify_baseline_period(merged_df, side, threshold_range=10_000, empty_minutes=5)
     if baseline_start_time is None:
         # RAW data exists but no clean empty-bed window was found in it yet, so

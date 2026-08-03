@@ -9,6 +9,8 @@ import settingsDB from '../../db/settings.js';
 import memoryDB from '../../db/memoryDB.js';
 import { INVERTED_SETTINGS_KEY_MAPPING } from '../../8sleep/loadDeviceStatus.js';
 
+// Inverse of loadDeviceStatus.ts's calculateTempInF. Same fixed firmware
+// level scale, so the two files must be changed together.
 const calculateLevelFromF = (temperatureF: number) => {
   const level = (temperatureF - 82.5) / 27.5 * 100;
   return Math.round(level).toString();

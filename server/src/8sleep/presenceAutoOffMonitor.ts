@@ -27,6 +27,8 @@ import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js
 import { scheduleWrapsToNextDay } from '../jobs/utils.js';
 
 export const PRESENCE_AUTO_OFF_MS = 45 * 60 * 1000;
+// Matches the presence stream's own ~once-a-minute heartbeat cadence, so a
+// tighter poll wouldn't see any new information between checks.
 const CHECK_INTERVAL_MS = 60 * 1000;
 
 // The presence stream heartbeats about once a minute. If its last report is

@@ -258,6 +258,12 @@ class BiometricProcessor:
         # against its OWN learned occupied floor -- biased hard toward staying
         # present (a wrongly-aborted thermal session is worse than a late
         # auto-off). See presence_floor.py for the pure decision helpers.
+        # Low end of the recent-range distribution, not the minimum: a single
+        # near-zero sample (a gap between breathing micro-movements) would
+        # otherwise make the floor collapse to near zero every window. The
+        # 20th percentile is low enough to track the between-burst floor
+        # rather than the median signal, while still being a handful of
+        # samples wide so one outlier can't swing it.
         self._FLOOR_PERCENTILE = FLOOR_PERCENTILE
         self._FLOOR_MIN_WINDOW = FLOOR_MIN_WINDOW
         # "Empty-looking" = rolling floor below this fraction of the learned

@@ -53,6 +53,12 @@ from service_health import update_health, update_sensor_temps, update_pump_healt
 # Global queue for processing decoded biometric data
 piezo_record_queue = queue.Queue()
 
+# How often the NATS consumer loop reports itself healthy. Matches the ~60s
+# cadence used elsewhere for biometrics heartbeats (see
+# service_health.SENSOR_TEMPS_UPDATE_INTERVAL and
+# BiometricProcessor._presence_heartbeat_interval); frequent enough that a
+# stall shows up on the health page within a minute, without posting a
+# request on every loop iteration.
 STREAM_HEALTH_INTERVAL_SECONDS = 60
 RECENT_RECORD_WINDOW = timedelta(minutes=2)
 NATS_URL = 'nats://127.0.0.1:4222'
