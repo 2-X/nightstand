@@ -11,8 +11,12 @@ export type CalibrationState = {
 export const useCalibration = () => {
   return useQuery<CalibrationState>({
     queryKey: ['useCalibration'],
-    queryFn: async () => {
-      const response = await axios.get<CalibrationState>('/calibration');
+    // Forward the query's abort signal so unmounting actually cancels the
+    // request instead of leaving it in flight. Every Status row calls this
+    // hook, so without it a page that unmounts mid-request leaves a response
+    // with nothing left to deliver to.
+    queryFn: async ({ signal }) => {
+      const response = await axios.get<CalibrationState>('/calibration', { signal });
       return response.data;
     },
   });
