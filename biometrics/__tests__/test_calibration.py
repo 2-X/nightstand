@@ -102,9 +102,6 @@ class CalibrationStoreTest(unittest.TestCase):
         # A fresh install has never calibrated. That is a normal state.
         self.assertIsNone(calibration.get_profile('left', 'cap', conn=self.conn))
 
-    def test_defaults_cover_every_sensor_type_we_read(self):
-        self.assertIn('cap', calibration.DEFAULTS)
-
     def test_save_then_get_round_trips_the_payload_and_provenance(self):
         run_id = calibration.record_run(
             'left', 'cap', calibration.STATUS_SUCCESS, calibration.TRIGGER_DAILY,
@@ -254,7 +251,6 @@ class CalibrationStoreTest(unittest.TestCase):
         # The old load_baseline raised FileNotFoundError carrying a CLI command
         # to type by hand. A fresh install is a normal state, not an error.
         self.assertIsNone(calibration.get_profile('right', 'cap', conn=self.conn))
-        self.assertEqual(calibration.DEFAULTS['cap']['min_std'], 1)
 
 
 class LoadBaselineFallbackTest(unittest.TestCase):

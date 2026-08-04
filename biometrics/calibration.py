@@ -28,16 +28,6 @@ TRIGGER_MIGRATION = 'migration'
 # proportionally less, floored by empty_minutes in the calibrator at 5 minutes.
 TARGET_WINDOW_SECONDS = 1800
 
-# What each sensor type falls back to when no profile exists. A fresh install,
-# a first night, or a pod that has never seen an empty bed are normal states,
-# not errors, so every reader must have somewhere to land. Keep this in step
-# with the per-bed learned rows in docs/CALIBRATION.md.
-DEFAULTS = {
-    'cap': {
-        'min_std': 1,
-    },
-}
-
 
 def _connection(conn=None):
     if conn is not None:
@@ -131,8 +121,14 @@ def save_profile(
 def get_profile(side: str, sensor_type: str, conn=None) -> Optional[dict]:
     """The active profile, or None when nothing has been calibrated yet.
 
-    Returning None rather than raising is deliberate: callers fall back to
-    DEFAULTS, because never having calibrated is a normal state.
+    Returning None rather than raising is deliberate: a fresh install, a
+    first night, or a pod that has never seen an empty bed are normal states,
+    not errors. Callers do not substitute a synthetic baseline for a missing
+    one: the capacitive baseline's std is a z-score denominator, and a
+    synthetic std would make every reading look like an enormous deviation
+    and manufacture presence on an empty bed. The real caller
+    (sleep_detector) skips capacitive presence for this side on None and
+    falls back to the piezo signal alone.
     """
     row = _connection(conn).execute(
         'SELECT payload, quality, source_start, source_end, samples_used, created_at '
