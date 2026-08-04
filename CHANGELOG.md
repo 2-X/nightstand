@@ -8,11 +8,11 @@ is a hard fork; for the history of the projects it descends from, see
 
 ## [Unreleased]
 
-- The Status page now says when presence calibration last ran and what it
-  learned from, instead of only whether it succeeded. Calibration results are
-  stored with the window they came from, so a thin result can be told apart
-  from a good one. A pod that has never calibrated now says so plainly rather
-  than reporting an error.
+- The Status page now shows when the active presence calibration profile was
+  created and what it learned from, instead of only whether the last run
+  succeeded. Calibration results are stored with the window they came from,
+  so a thin result can be told apart from a good one. A pod that has never
+  calibrated now says so plainly rather than reporting an error.
 
 - A physical double or triple tap that failed to write its temperature change
   restarted the server. Tap handling runs detached from the polling loop, so a
