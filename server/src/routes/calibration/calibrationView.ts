@@ -20,6 +20,7 @@ export type CalibrationView = {
 
 export function buildCalibrationView(
   profile: CalibrationProfileRow | null,
+  originatingRun: CalibrationRunRow | null,
   lastRun: CalibrationRunRow | null,
 ): CalibrationView {
   if (profile === null) {
@@ -33,15 +34,17 @@ export function buildCalibrationView(
   }
 
   // An imported profile and a genuinely thin one both carry quality 0. Only
-  // the trigger separates them, and describing a carry-over as poor would
+  // the trigger of the run that produced THIS profile (originatingRun, keyed
+  // off profile.run_id) separates them. A later run of any kind, unrelated to
+  // this profile, must not flip that: describing a carry-over as poor would
   // assert a measurement that was never taken.
-  if (lastRun?.trigger === 'migration') {
+  if (originatingRun?.trigger === 'migration') {
     return {
       state: 'imported',
       summary: 'Carried over from an earlier version, confidence unknown.',
       quality: null,
       calibratedAt: profile.created_at,
-      lastRunStatus: lastRun.status,
+      lastRunStatus: lastRun?.status ?? null,
     };
   }
 

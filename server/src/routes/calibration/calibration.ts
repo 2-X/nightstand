@@ -14,11 +14,17 @@ router.get('/', async (_req: Request, res: Response) => {
       const profile = await prisma.calibration_profiles.findFirst({
         where: { side, sensor_type: 'cap' },
       });
+      // The run that actually produced the active profile, not whichever run
+      // is most recent: a later skip or failure must not flip an imported
+      // profile's state.
+      const originatingRun = profile
+        ? await prisma.calibration_runs.findUnique({ where: { id: profile.run_id } })
+        : null;
       const lastRun = await prisma.calibration_runs.findFirst({
         where: { side, sensor_type: 'cap' },
-        orderBy: { started_at: 'desc' },
+        orderBy: [{ started_at: 'desc' }, { id: 'desc' }],
       });
-      result[side] = buildCalibrationView(profile, lastRun);
+      result[side] = buildCalibrationView(profile, originatingRun, lastRun);
     }
     res.json(result);
   } catch (error) {
