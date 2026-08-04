@@ -30,21 +30,36 @@ import cap_data
 
 # sleep_detector imports db at module level, which opens a real sqlite file
 # under /persistent or a prior maintainer's local path, neither of which
-# exists here. Stub it out only for this import: sleep_detector binds the two
-# names it needs at import time, so the stub can come right back out
-# afterward and leave other test modules free to install their own (they
-# each need a different slice of db's surface).
-_fake_db = types.ModuleType('db')
-_fake_db.insert_sleep_records = lambda *a, **k: None
-_fake_db.insert_movement_df = lambda *a, **k: None
-_db_already_stubbed = 'db' in sys.modules
-if not _db_already_stubbed:
-    sys.modules['db'] = _fake_db
+# exists here. Only one test below actually needs sleep_detector, so it is
+# imported lazily inside that test instead of at module scope: that keeps
+# the db stubbing local to the single place that needs it rather than shared
+# global state every other test file has to reason about.
+def _import_sleep_detector():
+    """Import sleep_detector with the two db names it binds at import time
+    present, then leave sys.modules['db'] exactly as found.
 
-import sleep_detector
+    Another test module may already have installed its own db stub (a
+    different slice of db's surface), so only add names that are missing,
+    never overwrite ones already there, and only remove what was added.
+    """
+    had_db = 'db' in sys.modules
+    db_module = sys.modules['db'] if had_db else types.ModuleType('db')
+    added = []
+    for name in ('insert_sleep_records', 'insert_movement_df'):
+        if not hasattr(db_module, name):
+            setattr(db_module, name, lambda *a, **k: None)
+            added.append(name)
+    sys.modules['db'] = db_module
 
-if not _db_already_stubbed:
-    del sys.modules['db']
+    try:
+        import sleep_detector
+        return sleep_detector
+    finally:
+        if had_db:
+            for name in added:
+                delattr(db_module, name)
+        else:
+            del sys.modules['db']
 
 
 SCHEMA = """
@@ -261,6 +276,7 @@ class FinalOccupancyPiezoOnlyFallbackTest(unittest.TestCase):
         # cap-only columns should appear, since detect_presence_cap never runs.
         df = pd.DataFrame({'piezo_left1_presence': [0, 1, 1, 0]})
 
+        sleep_detector = _import_sleep_detector()
         sleep_detector._set_final_occupancy(df, 'left', None)
 
         self.assertTrue(df['final_left_occupied'].equals(df['piezo_left1_presence']))
