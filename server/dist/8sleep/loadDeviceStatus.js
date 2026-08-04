@@ -43,6 +43,9 @@ const parseRawDeviceData = (response) => {
 // 0 -> 82.5f
 // -100 -> 55f
 // 100 -> 110f
+// This mapping comes from the pod firmware's fixed level scale, not a
+// setting of ours, so 82.5/27.5 cannot change without the firmware itself
+// changing what a "level" means.
 const calculateTempInF = (value) => {
     const level = Number(value);
     if (level === 0) {
