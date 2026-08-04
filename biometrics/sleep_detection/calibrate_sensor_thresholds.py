@@ -168,6 +168,13 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
         samples_used = len(window_df)
         quality = calibration.compute_quality(window_seconds, samples_used, int(window_seconds))
 
+        # Write the legacy baseline file before touching the calibration
+        # store. It is what an instant rollback to an older server reads, and
+        # that database is shared with the vitals writer (5 second busy
+        # timeout), so a store write can fail on a lock. Writing it first
+        # means a store failure costs the store, not the rollback safety net.
+        save_baseline(side, cap_baseline)
+
         run_id = calibration.record_run(
             side, 'cap', calibration.STATUS_SUCCESS, trigger,
             started_at=started_at, duration_ms=_elapsed_ms(), quality=quality,
@@ -178,7 +185,6 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
             source_end=int(baseline_end_time.timestamp()),
             samples_used=samples_used, run_id=run_id,
         )
-        save_baseline(side, cap_baseline)
 
         merged_df.drop(merged_df.index, inplace=True)
         del merged_df
@@ -299,7 +305,7 @@ if __name__ == "__main__":
                     calibration.record_run(
                         skipped_side, 'cap', calibration.STATUS_SKIPPED_OCCUPIED, calibration.TRIGGER_DAILY,
                         started_at=int(time.time()), duration_ms=0,
-                        message='Someone was on this side at the scheduled time, so calibration was skipped.',
+                        message='Someone was on the bed at the scheduled time, so calibration was skipped.',
                     )
                 sys.exit(0)
             elif occupied is None:
