@@ -29,9 +29,12 @@ it touches anything hardware-adjacent.
 - `server/`: Express TypeScript backend, LowDB JSON settings/schedules, Prisma SQLite metrics, node-schedule jobs, and Franken socket control.
 - `biometrics/`: Python stream processing, sleep detection, vitals calculation, and SQLite writes for biometrics.
 - `scripts/`: Pod install/update/reset/service helper scripts.
-- `docs/`: user-facing screenshots, hardware teardown/install docs, and
+- `docs/`: user-facing screenshots, hardware teardown/install docs,
   [EIGHT_SLEEP_PROTOCOL.md](docs/EIGHT_SLEEP_PROTOCOL.md) (reverse-engineered
-  hardware protocol reference, see below).
+  hardware protocol reference, see below), and
+  [CALIBRATION.md](docs/CALIBRATION.md) (catalog classifying the numeric
+  constants used for sleep detection as hardware fact, timing margin,
+  population bound, or per-bed learned).
 
 ## Common Commands
 - App typecheck: `cd app && npx tsc -b`
