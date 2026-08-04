@@ -14,7 +14,12 @@ type Props = { view: CalibrationView | undefined };
 export default function CalibrationSubline({ view }: Props) {
   if (!view) return null;
 
-  const when = view.calibratedAt ? moment.unix(view.calibratedAt).fromNow() : null;
+  // An imported profile's created_at is import time, not a measurement time,
+  // so "Calibrated a few seconds ago" would contradict the very next
+  // sentence saying it was carried over from an earlier version.
+  const when = view.state !== 'imported' && view.calibratedAt
+    ? moment.unix(view.calibratedAt).fromNow()
+    : null;
   const isLowConfidence = view.state === 'calibrated'
     && view.quality !== null
     && view.quality < LOW_QUALITY;

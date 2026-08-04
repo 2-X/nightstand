@@ -38,17 +38,32 @@ describe('CalibrationSubline', () => {
     renderWithProviders(
       <CalibrationSubline
         view={ {
-          // quality is 0, not null (the server's actual value for imported
-          // profiles), so this pins the component's own gate: the state
-          // check, not a null quality, is what suppresses the wording. Do
-          // not "fix" this back to null, that would silently remove the
-          // regression protection this test exists for.
+          // quality is 0 here, not null (the server actually returns null
+          // for imported profiles), so this pins the component's own gate:
+          // the state check, not a null quality, is what suppresses the
+          // wording. Do not "fix" this back to null, that would silently
+          // remove the regression protection this test exists for.
           state: 'imported', summary: 'Carried over from an earlier version, confidence unknown.',
           quality: 0, calibratedAt: 1_700_001_400, lastRunStatus: 'success',
         } }/>,
     );
     expect(await screen.findByText(/confidence unknown/)).toBeInTheDocument();
     expect(screen.queryByText(/low confidence/i)).not.toBeInTheDocument();
+  });
+
+  it('does not prefix a carried-over profile with a calibration time', async () => {
+    // created_at for an imported profile is import time, not measurement
+    // time. Showing "Calibrated a few seconds ago." would contradict the
+    // very next sentence saying it was carried over.
+    renderWithProviders(
+      <CalibrationSubline
+        view={ {
+          state: 'imported', summary: 'Carried over from an earlier version, confidence unknown.',
+          quality: null, calibratedAt: 1_700_001_400, lastRunStatus: 'success',
+        } }/>,
+    );
+    expect(await screen.findByText(/confidence unknown/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Calibrated/)).not.toBeInTheDocument();
   });
 
   it('renders nothing when there is no calibration data for this row', () => {
