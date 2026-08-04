@@ -878,3 +878,21 @@ export const presence = {
   right: { present: false },
 };
 
+// Mock calibration state for both sides.
+export const mockCalibration = {
+  left: {
+    state: 'calibrated' as const,
+    summary: 'Learned from a 22 min empty-bed window.',
+    quality: 0.8,
+    calibratedAt: 1_700_001_400,
+    lastRunStatus: 'success',
+  },
+  right: {
+    state: 'none' as const,
+    summary: 'Not calibrated yet. This happens automatically once the sensors record a stretch of empty bed.',
+    quality: null,
+    calibratedAt: null,
+    lastRunStatus: null,
+  },
+};
+

@@ -34,6 +34,7 @@ import {
   remoteChangelogMarkdown,
   rollbackInfo,
   presence,
+  mockCalibration,
 } from './mockData';
 
 type Side = 'left' | 'right';
@@ -211,6 +212,7 @@ export const handlers = [
     return HttpResponse.json(records);
   }),
   http.get('/api/metrics/presence', () => HttpResponse.json(presence)),
+  http.get('/api/calibration', () => HttpResponse.json(mockCalibration)),
   http.get('/api/metrics/vitals/summary', async () => {
     await delay(120);
     return HttpResponse.json({

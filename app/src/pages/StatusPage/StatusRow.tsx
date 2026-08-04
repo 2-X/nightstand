@@ -5,9 +5,11 @@ import { Box, Button, Typography } from '@mui/material';
 
 import StatusChip from './StatusChip.tsx';
 import { postJobs, JobSchema, Jobs } from '@api/jobs.ts';
+import { useCalibration } from '@api/calibration.ts';
 import { useState } from 'react';
 import { palette } from '@design/tokens';
 import { STATUS_META, GENERIC_MEANING } from './statusMeta.ts';
+import CalibrationSubline from './CalibrationSubline.tsx';
 
 type StatusRowProps = {
   statusInfo: StatusInfo;
@@ -21,6 +23,10 @@ export default function StatusRow({ job, statusInfo, divider }: StatusRowProps) 
   const timestamp = statusInfo.timestamp && moment(statusInfo.timestamp).format('MMM D, h:mm A');
   // @ts-expect-error - JobSchema only covers the subset of status keys that are runnable
   const isRunnable = JobSchema.options.includes(job);
+  const { data: calibration } = useCalibration();
+  const calibrationSide = job === 'biometricsCalibrationLeft'
+    ? 'left'
+    : job === 'biometricsCalibrationRight' ? 'right' : null;
 
   const [disabled, setDisabled] = useState(false);
   const startJob = () => {
@@ -55,6 +61,8 @@ export default function StatusRow({ job, statusInfo, divider }: StatusRowProps) 
       >
         { statusInfo.status === 'failed' && statusInfo.message ? `Error: ${statusInfo.message}` : meaning }
       </Typography>
+
+      { calibrationSide && <CalibrationSubline view={ calibration?.[calibrationSide] }/> }
 
       { timestamp && (
         <Typography sx={ { fontSize: '0.7rem', color: palette.text.tertiary, mt: 0.25, opacity: 0.7 } }>
