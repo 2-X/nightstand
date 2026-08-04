@@ -4,11 +4,14 @@ Run on the pod venv (no pytest there):
     /home/dac/venv/bin/python -m unittest __tests__.test_calibration -v
 """
 import unittest
+import unittest.mock
 import sqlite3
 import sys
 import os
+import types
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'sleep_detection'))
 
 import logging
 import get_logger as _gl
@@ -20,7 +23,28 @@ from get_logger import get_logger, LOGGER_NAMES
 for _name in LOGGER_NAMES:
     get_logger(_name)
 
+import pandas as pd
+
 import calibration
+import cap_data
+
+# sleep_detector imports db at module level, which opens a real sqlite file
+# under /persistent or a prior maintainer's local path, neither of which
+# exists here. Stub it out only for this import: sleep_detector binds the two
+# names it needs at import time, so the stub can come right back out
+# afterward and leave other test modules free to install their own (they
+# each need a different slice of db's surface).
+_fake_db = types.ModuleType('db')
+_fake_db.insert_sleep_records = lambda *a, **k: None
+_fake_db.insert_movement_df = lambda *a, **k: None
+_db_already_stubbed = 'db' in sys.modules
+if not _db_already_stubbed:
+    sys.modules['db'] = _fake_db
+
+import sleep_detector
+
+if not _db_already_stubbed:
+    del sys.modules['db']
 
 
 SCHEMA = """
@@ -216,6 +240,32 @@ class CalibrationStoreTest(unittest.TestCase):
         # to type by hand. A fresh install is a normal state, not an error.
         self.assertIsNone(calibration.get_profile('right', 'cap', conn=self.conn))
         self.assertEqual(calibration.DEFAULTS['cap']['min_std'], 1)
+
+
+class LoadBaselineFallbackTest(unittest.TestCase):
+    def test_load_baseline_returns_none_with_no_store_row_and_no_legacy_file(self):
+        # A fresh install: the store has no profile and there is no legacy
+        # JSON file to carry over either. load_baseline must return None
+        # rather than raise or invent a baseline, since a zero/empty baseline
+        # would make every reading look like a huge deviation and report an
+        # occupied bed on an empty one.
+        with unittest.mock.patch.object(calibration, 'get_profile', return_value=None), \
+                unittest.mock.patch.object(calibration, 'import_legacy_baseline', return_value=False):
+            self.assertIsNone(cap_data.load_baseline('left'))
+
+
+class FinalOccupancyPiezoOnlyFallbackTest(unittest.TestCase):
+    def test_no_baseline_falls_back_to_piezo_alone(self):
+        # This is the branch detect_sleep takes when load_baseline returns
+        # None: final occupancy must come from piezo alone, and none of the
+        # cap-only columns should appear, since detect_presence_cap never runs.
+        df = pd.DataFrame({'piezo_left1_presence': [0, 1, 1, 0]})
+
+        sleep_detector._set_final_occupancy(df, 'left', None)
+
+        self.assertTrue(df['final_left_occupied'].equals(df['piezo_left1_presence']))
+        self.assertNotIn('cap_left_occupied', df.columns)
+        self.assertNotIn('left_combined', df.columns)
 
 
 if __name__ == '__main__':

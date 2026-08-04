@@ -234,6 +234,34 @@ def build_sleep_records(merged_df: pd.DataFrame, side: Side, max_gap_in_minutes:
     return sleep_records
 
 
+def _set_final_occupancy(merged_df: pd.DataFrame, side: Side, cap_baseline) -> pd.DataFrame:
+    """Set final_{side}_occupied, from piezo alone when there is no cap baseline.
+
+    Extracted from detect_sleep so the piezo-only fallback (cap_baseline is
+    None) can be tested directly without the raw-file loading detect_sleep
+    otherwise requires.
+    """
+    if cap_baseline is None:
+        # No calibrated baseline yet: fall back to piezo alone rather than
+        # inventing a zero baseline, which would make every reading look
+        # like an enormous deviation and manufacture presence in an empty bed.
+        logger.warning(f'Skipping cap presence for {side} side: no baseline calibrated yet')
+        merged_df[f'final_{side}_occupied'] = merged_df[f'piezo_{side}1_presence']
+    else:
+        detect_presence_cap(
+            merged_df,
+            cap_baseline,
+            side,
+            occupancy_threshold=5,
+            rolling_seconds=10,
+            threshold_percent=0.90,
+            clean=False
+        )
+
+        merged_df[f'final_{side}_occupied'] = merged_df[f'piezo_{side}1_presence'] + merged_df[f'cap_{side}_occupied']
+    return merged_df
+
+
 def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_path: str) -> pd.DataFrame:
     expected_row_count = int((end_time - start_time).total_seconds())
     logger.info(f"Detecting sleep interval for {side} side | {start_time.isoformat()} -> {end_time.isoformat()} | Expected row count: {expected_row_count:,}")
@@ -266,25 +294,8 @@ def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_pa
     gc.collect()
 
     cap_baseline = load_baseline(side)
+    _set_final_occupancy(merged_df, side, cap_baseline)
 
-    if cap_baseline is None:
-        # No calibrated baseline yet: fall back to piezo alone rather than
-        # inventing a zero baseline, which would make every reading look
-        # like an enormous deviation and manufacture presence in an empty bed.
-        logger.warning(f'Skipping cap presence for {side} side: no baseline calibrated yet')
-        merged_df[f'final_{side}_occupied'] = merged_df[f'piezo_{side}1_presence']
-    else:
-        detect_presence_cap(
-            merged_df,
-            cap_baseline,
-            side,
-            occupancy_threshold=5,
-            rolling_seconds=10,
-            threshold_percent=0.90,
-            clean=False
-        )
-
-        merged_df[f'final_{side}_occupied'] = merged_df[f'piezo_{side}1_presence'] + merged_df[f'cap_{side}_occupied']
     sleep_records = build_sleep_records(merged_df, side, max_gap_in_minutes=15)
     if len(sleep_records) == 0:
         logger.warning(f'No sleep periods found for {side} side! {start_time} -> {end_time} ')
