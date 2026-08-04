@@ -38,8 +38,13 @@ describe('CalibrationSubline', () => {
     renderWithProviders(
       <CalibrationSubline
         view={ {
+          // quality is 0, not null (the server's actual value for imported
+          // profiles), so this pins the component's own gate: the state
+          // check, not a null quality, is what suppresses the wording. Do
+          // not "fix" this back to null, that would silently remove the
+          // regression protection this test exists for.
           state: 'imported', summary: 'Carried over from an earlier version, confidence unknown.',
-          quality: null, calibratedAt: 1_700_001_400, lastRunStatus: 'success',
+          quality: 0, calibratedAt: 1_700_001_400, lastRunStatus: 'success',
         } }/>,
     );
     expect(await screen.findByText(/confidence unknown/)).toBeInTheDocument();
