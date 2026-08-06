@@ -16,22 +16,44 @@ Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || (() => {}
 // of returning undefined.
 export const server = setupServer(...handlers);
 
+// A request that is still in flight when a test file's environment is torn
+// down delivers its response into a scope whose DOM globals are already gone,
+// which throws inside the request interceptor. That rejection is reported
+// against whichever file happened to be running rather than the one that
+// started the request, so it misdirects badly.
+//
+// Unmounting cancels queries, because every hook in src/api forwards the
+// query's abort signal, but it cannot cancel a plain POST: the save helpers
+// are ordinary promises with nothing to cancel them. So rather than guessing
+// how many turns a response needs, track what is outstanding and wait for it.
+const inFlightRequests = new Set<string>();
+server.events.on('request:start', ({ requestId }) => { inFlightRequests.add(requestId); });
+server.events.on('request:end', ({ requestId }) => { inFlightRequests.delete(requestId); });
+
+const SETTLE_TIMEOUT_MS = 2_000;
+
+async function waitForRequestsToSettle() {
+  const startedAt = Date.now();
+  while (inFlightRequests.size > 0 && Date.now() - startedAt < SETTLE_TIMEOUT_MS) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  if (inFlightRequests.size > 0) {
+    // Never seen in practice. Say so loudly if it happens, because the
+    // alternative is the misdirecting failure described above.
+    console.error(
+      `${inFlightRequests.size} request(s) did not settle within ${SETTLE_TIMEOUT_MS}ms `
+      + 'and may outlive this test environment.',
+    );
+    inFlightRequests.clear();
+  }
+}
+
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(async () => {
   cleanup();
+  // Settle before resetting handlers: a request still in flight would
+  // otherwise lose the handler it matched and be reported as unhandled.
+  await waitForRequestsToSettle();
   server.resetHandlers();
-  // Let any request still in flight deliver its mocked response while this
-  // file's jsdom environment is still alive. A response arriving after
-  // teardown lands in a scope whose DOM globals are already gone, and the
-  // resulting rejection gets reported against whichever file happened to be
-  // running rather than the one that started it, which makes it very hard to
-  // trace. Most hooks do not forward the query's abort signal to axios, so
-  // unmounting alone does not stop the request.
-  // Responses are served from memory, but the interceptor needs several turns
-  // to deliver one, so yield a few rather than one.
-  for (let i = 0; i < 4; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await new Promise((resolve) => setImmediate(resolve));
-  }
 });
 afterAll(() => server.close());
