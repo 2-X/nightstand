@@ -14,6 +14,17 @@ is a hard fork; for the history of the projects it descends from, see
   so a thin result can be told apart from a good one. A pod that has never
   calibrated now says so plainly rather than reporting an error.
 
+- The in-bed indicator starts and ends far more sessions than anyone actually
+  has. Over eleven days of recordings the live detector counted 23 to 30
+  separate sessions per side per day, most of them under twenty minutes, while
+  the overnight analysis of the same nights found the one real session per side
+  you would expect. Signal strength is not the reason: an occupied side reads
+  around forty times higher than an empty one, so the two are easy to tell
+  apart. The sessions are being started by something in the entry logic, which
+  the once-a-minute log is too coarse to show. Each start is now recorded along
+  with the few seconds that led into it, so the next look at this can read what
+  happened instead of estimating.
+
 - The pump warning on the Status page is a false alarm, and this release starts
   gathering what is needed to fix it properly. The check treats "pump reporting
   no speed while the cooling element draws current" as a stalled pump, but

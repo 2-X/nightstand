@@ -248,6 +248,15 @@ class BiometricProcessor:
         # hundred floats).
         self._recent_ranges: Deque[float] = deque([], maxlen=FLOOR_MIN_WINDOW)
         self._range_log_counter = 0
+        # The frames leading into a presence entry, kept only so the entry can
+        # be logged with its own run-up. The periodic snapshot below is
+        # throttled to one line a minute, which is far too coarse to see how a
+        # session began: measured over 11 days, most sessions last under 20
+        # minutes while the offline analyzer sees one session a night, and the
+        # snapshot cannot show whether those starts are brief real
+        # disturbances or something in the entry gate. Long enough to cover
+        # the 5-frame entry gate with room before it.
+        self._entry_trace: Deque[tuple] = deque([], maxlen=12)
         # --- is_ambiguous_both exit-freeze discriminators ---
         # The `is_ambiguous_both` branch used to freeze the exit clock
         # unconditionally, which let an empty side latch "present" for hours
@@ -490,6 +499,11 @@ class BiometricProcessor:
         elif other_is_clearly_dominant:
             self._time_since_clearly_dominant += 1
 
+        self._entry_trace.append((
+            signal_range, decision[self.side], decision[other_side],
+            is_clearly_dominant, floor_empty, self.present_for,
+        ))
+
         # Periodic debug log
         self._range_log_counter += 1
         if self._range_log_counter >= _PRESENCE_DEBUG_LOG_INTERVAL_S:
@@ -540,6 +554,17 @@ class BiometricProcessor:
                 self._presence_session_seconds = 0
                 self._update_presence_api(True)
                 self._presence_heartbeat_counter = 0
+                # Each frame is (own range, this side above noise, other side
+                # above noise, clearly dominant, floor looks empty, entry
+                # counter), oldest first, one per second. The counter is its
+                # value entering that frame, so a clean entry reads 0 1 2 3 4
+                # and the gate opens on the fifth.
+                run_up = ' '.join(
+                    f'{rng:.0f}/{"S" if s else "-"}{"O" if o else "-"}'
+                    f'{"D" if d else "-"}{"E" if fe else "-"}/{pf}'
+                    for rng, s, o, d, fe, pf in self._entry_trace
+                )
+                logger.info(f'Presence entry on {self.side} side, run-up: {run_up}')
         elif is_ambiguous_both:
             # Both above noise, neither dominant. We can't tell from one tick
             # whether this is real two-person occupancy or cross-transmission,
