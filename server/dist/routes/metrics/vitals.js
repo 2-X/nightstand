@@ -1,7 +1,5 @@
 import express from 'express';
 import moment from 'moment-timezone';
-import settingsDB from '../../db/settings.js';
-import { loadVitals } from '../../db/loadVitals.js';
 import { prisma } from '../../db/prisma.js';
 const router = express.Router();
 router.get('/vitals', async (req, res) => {
@@ -23,9 +21,13 @@ router.get('/vitals', async (req, res) => {
         where: query,
         orderBy: { timestamp: 'asc' },
     });
-    await settingsDB.read();
-    const formattedVitals = await loadVitals(vitals);
-    res.json(formattedVitals);
+    // Timestamps go out as the epoch seconds they are stored as. They used to
+    // be reformatted here into an ISO8601 string in the user's timezone, which
+    // silently emptied the chart: the client scales the value to milliseconds
+    // and discards anything that is not a finite number, so every record was
+    // filtered out. Returning the row unchanged keeps one type across the wire,
+    // and the client already renders in local time.
+    res.json(vitals);
 });
 router.get('/vitals/summary', async (req, res) => {
     const { side, startTime, endTime } = req.query;

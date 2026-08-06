@@ -14,6 +14,13 @@ is a hard fork; for the history of the projects it descends from, see
   so a thin result can be told apart from a good one. A pod that has never
   calibrated now says so plainly rather than reporting an error.
 
+- The heart rate, HRV and breathing charts on the Sleep page were blank. The
+  server reformatted each reading's timestamp into a local-time string before
+  sending it, and the charts scale the timestamp themselves and discard
+  anything that is not a number, so every reading was thrown away and the
+  charts drew nothing. No error appeared anywhere. Readings now go out as the
+  plain timestamps they are stored as, which is what the charts already expect.
+
 - Heart rate variability and breathing rate recorded at the start of a sleep
   session belonged to the previous session. Both are smoothed running values,
   and neither can be recomputed immediately: breathing rate needs 30 seconds of

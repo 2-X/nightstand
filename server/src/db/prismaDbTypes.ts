@@ -1,15 +1,5 @@
 import { Side } from './schedulesSchema.js';
 
-export interface VitalRecord {
-  id: number;
-  side: Side;
-  timestamp: string;
-  heart_rate: number;
-  hrv: number;
-  breathing_rate: number;
-}
-
-
 export interface SleepRecord {
   id: number;
   side: Side;

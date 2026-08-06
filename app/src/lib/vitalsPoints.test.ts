@@ -38,4 +38,17 @@ describe('vitalsRecordsToPoints', () => {
     const [point] = vitalsRecordsToPoints([record({})], 'breathing_rate');
     expect(point.value).toBe(12);
   });
+
+  it('yields nothing when timestamps arrive as formatted strings', () => {
+    // Not a supported input: this pins the shape of a past failure. The vitals
+    // route used to reformat each epoch into an ISO8601 string before
+    // responding, and because the filter below only keeps finite numbers,
+    // every record was discarded and the chart rendered blank with no error
+    // anywhere. The mocks returned numbers, so the whole suite stayed green.
+    // If a transform like that comes back, this test says so directly.
+    const stringly = [
+      { ...record({}), timestamp: '2026-08-05T00:00:52-07:00' as unknown as number },
+    ];
+    expect(vitalsRecordsToPoints(stringly, 'heart_rate')).toEqual([]);
+  });
 });
