@@ -13,14 +13,14 @@ interface VitalsRecordQueryParams {
 export const useVitalsRecords = (params?: VitalsRecordQueryParams, enabled=true) => {
   return useQuery<VitalsRecord[]>({
     queryKey: ['useVitalsRecords', params],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const queryParams = new URLSearchParams();
 
       if (params?.startTime) queryParams.append('startTime', params.startTime);
       if (params?.endTime) queryParams.append('endTime', params.endTime);
       if (params?.side) queryParams.append('side', params.side);
 
-      const response = await axios.get<VitalsRecord[]>(`/metrics/vitals?${queryParams.toString()}`);
+      const response = await axios.get<VitalsRecord[]>(`/metrics/vitals?${queryParams.toString()}`, { signal });
       return response.data;
     },
     enabled,
@@ -31,14 +31,14 @@ export const useVitalsRecords = (params?: VitalsRecordQueryParams, enabled=true)
 export const useVitalsSummary = (params?: VitalsRecordQueryParams) => {
   return useQuery<VitalsSummary>({
     queryKey: ['useVitalsSummary', params],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const queryParams = new URLSearchParams();
 
       if (params?.startTime) queryParams.append('startTime', params.startTime);
       if (params?.endTime) queryParams.append('endTime', params.endTime);
       if (params?.side) queryParams.append('side', params.side);
 
-      const response = await axios.get<VitalsSummary>(`/metrics/vitals/summary?${queryParams.toString()}`);
+      const response = await axios.get<VitalsSummary>(`/metrics/vitals/summary?${queryParams.toString()}`, { signal });
       return response.data;
     },
   });

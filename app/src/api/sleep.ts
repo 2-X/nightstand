@@ -12,14 +12,14 @@ interface SleepRecordQueryParams {
 export const useSleepRecords = (params?: SleepRecordQueryParams) => {
   return useQuery<SleepRecord[]>({
     queryKey: ['useSleepRecords', params],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const queryParams = new URLSearchParams();
 
       if (params?.startTime) queryParams.append('startTime', params.startTime);
       if (params?.endTime) queryParams.append('endTime', params.endTime);
       if (params?.side) queryParams.append('side', params.side);
 
-      const response = await axios.get<SleepRecord[]>(`/metrics/sleep?${queryParams.toString()}`);
+      const response = await axios.get<SleepRecord[]>(`/metrics/sleep?${queryParams.toString()}`, { signal });
       return response.data;
     },
   });

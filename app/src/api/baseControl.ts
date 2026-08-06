@@ -25,8 +25,8 @@ export type BaseStatusUI = Pick<
 export type BasePosition = z.infer<typeof BasePositionSchema>;
 
 // API functions
-const getBaseStatus = async (): Promise<BaseStatus> => {
-  const response = await axiosInstance.get('/base-control');
+const getBaseStatus = async (signal?: AbortSignal): Promise<BaseStatus> => {
+  const response = await axiosInstance.get('/base-control', { signal });
   return BaseStatusSchema.parse(response.data);
 };
 
@@ -51,7 +51,7 @@ const stopBase = async () => {
 export const useBaseStatus = () => {
   return useQuery({
     queryKey: ['baseStatus'],
-    queryFn: getBaseStatus,
+    queryFn: ({ signal }) => getBaseStatus(signal),
     refetchInterval: 2000, // Refetch every 2 seconds to track movement
     select: (data) => ({
       // Only include fields that matter for UI state, exclude lastUpdate to prevent unnecessary re-renders
@@ -71,7 +71,7 @@ export const useBaseStatus = () => {
 export const useBaseConfigured = (): boolean => {
   const { data } = useQuery({
     queryKey: ['baseConfigured'],
-    queryFn: getBaseStatus,
+    queryFn: ({ signal }) => getBaseStatus(signal),
     staleTime: Infinity,
     gcTime: Infinity,
     refetchOnWindowFocus: false,

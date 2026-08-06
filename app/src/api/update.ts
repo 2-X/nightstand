@@ -10,8 +10,8 @@ export const postRevertToStock = () => axios.post('/update/revert-to-stock');
 
 export const useRollbackInfo = () => useQuery<RollbackInfo>({
   queryKey: ['useRollbackInfo'],
-  queryFn: async () => {
-    const response = await axios.get<RollbackInfo>('/update/rollback-info');
+  queryFn: async ({ signal }) => {
+    const response = await axios.get<RollbackInfo>('/update/rollback-info', { signal });
     return response.data;
   },
   staleTime: 30_000,

@@ -10,8 +10,8 @@ export * from '../../../server/src/db/servicesSchema.ts';
 export const useServices = () => {
   return useQuery<Services>({
     queryKey: ['useServices'],
-    queryFn: async () => {
-      const response = await axios.get<Services>('/services');
+    queryFn: async ({ signal }) => {
+      const response = await axios.get<Services>('/services', { signal });
       return response.data;
     },
   });

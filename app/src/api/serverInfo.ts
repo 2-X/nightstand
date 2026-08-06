@@ -17,17 +17,18 @@ type LatestVersion = {
 // The newest build published on this fork's main, which is what the pod's
 // updater installs. Fetched raw from GitHub, same reasoning as releases.ts:
 // the pod has no WAN, so this only ever resolves from the browser.
-export const getLatestVersion = async () => {
+export const getLatestVersion = async (signal?: AbortSignal) => {
   return axios.get<LatestVersion>(
-    'https://raw.githubusercontent.com/LTimothy/nightstand/main/server/src/serverInfo.json'
+    'https://raw.githubusercontent.com/LTimothy/nightstand/main/server/src/serverInfo.json',
+    { signal }
   );
 };
 
 
 export const useServerInfo = () => useQuery<ServerInfo>({
   queryKey: ['useServerInfo'],
-  queryFn: async () => {
-    const response = await getLatestVersion();
+  queryFn: async ({ signal }) => {
+    const response = await getLatestVersion(signal);
     let updateAvailable = semver.gt(response.data.version, serverInfo.version);
     if (import.meta.env.VITE_ENV === 'demo') {
       updateAvailable = true;

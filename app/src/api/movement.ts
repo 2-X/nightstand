@@ -13,14 +13,14 @@ interface MovementQueryParams {
 export const useMovementRecords = (params?: MovementQueryParams, enabled=true) => {
   return useQuery<MovementRecord[]>({
     queryKey: ['useMovementRecords', params],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const queryParams = new URLSearchParams();
 
       if (params?.startTime) queryParams.append('startTime', params.startTime);
       if (params?.endTime) queryParams.append('endTime', params.endTime);
       if (params?.side) queryParams.append('side', params.side);
 
-      const response = await axios.get<MovementRecord[]>(`/metrics/movement?${queryParams.toString()}`);
+      const response = await axios.get<MovementRecord[]>(`/metrics/movement?${queryParams.toString()}`, { signal });
       return response.data;
     },
     enabled,

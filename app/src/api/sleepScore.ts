@@ -33,9 +33,10 @@ type Args = {
 export const useSleepScore = ({ side, startTime, endTime }: Args, enabled = true) => {
   return useQuery<SleepScore>({
     queryKey: ['useSleepScore', side, startTime, endTime],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const response = await axios.get<SleepScore>('/metrics/sleep-score', {
         params: { side, startTime, endTime },
+        signal,
       });
       return response.data;
     },

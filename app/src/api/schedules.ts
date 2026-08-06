@@ -6,8 +6,8 @@ import { Schedules } from '@api/schedulesSchema.ts';
 
 export const useSchedules = () => useQuery<Schedules>({
   queryKey: ['useSchedules'],
-  queryFn: async () => {
-    const response = await axios.get<Schedules>('/schedules');
+  queryFn: async ({ signal }) => {
+    const response = await axios.get<Schedules>('/schedules', { signal });
     return response.data;
   },
 });

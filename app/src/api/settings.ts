@@ -6,8 +6,8 @@ import { Settings } from './settingsSchema';
 
 export const useSettings = () => useQuery<Settings>({
   queryKey: ['useSettings'],
-  queryFn: async () => {
-    const response = await axios.get<Settings>('/settings');
+  queryFn: async ({ signal }) => {
+    const response = await axios.get<Settings>('/settings', { signal });
     return response.data;
   },
 });

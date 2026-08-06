@@ -43,8 +43,8 @@ const CHANNEL_RANK: Record<UpdateChannelType, number> = { stable: 0, beta: 1 };
 
 export const useReleases = () => useQuery<ReleasesManifest>({
   queryKey: ['useReleases'],
-  queryFn: async () => {
-    const response = await axios.get<ReleasesManifest>(RELEASES_URL);
+  queryFn: async ({ signal }) => {
+    const response = await axios.get<ReleasesManifest>(RELEASES_URL, { signal });
     return ReleasesManifestSchema.parse(response.data);
   },
   staleTime: 60_000,

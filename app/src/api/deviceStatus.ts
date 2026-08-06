@@ -4,8 +4,8 @@ import { DeepPartial } from 'ts-essentials';
 import { DeviceStatus } from './deviceStatusSchema';
 
 
-export const getDeviceStatus = async () => {
-  return axios.get<DeviceStatus>('/deviceStatus');
+export const getDeviceStatus = async (signal?: AbortSignal) => {
+  return axios.get<DeviceStatus>('/deviceStatus', { signal });
 };
 
 // Real-time updates flow over the WebSocket (see api/eventStream.ts); the
@@ -13,8 +13,8 @@ export const getDeviceStatus = async () => {
 // connection and haven't reconnected yet.
 export const useDeviceStatus = () => useQuery<DeviceStatus>({
   queryKey: ['useDeviceStatus'],
-  queryFn: async () => {
-    const response = await getDeviceStatus();
+  queryFn: async ({ signal }) => {
+    const response = await getDeviceStatus(signal);
     return response.data;
   },
   refetchInterval: 60_000,

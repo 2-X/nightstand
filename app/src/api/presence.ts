@@ -14,8 +14,8 @@ export type PresenceData = {
 export const usePresence = (refetchInterval: number = 10_000) => {
   return useQuery<PresenceData>({
     queryKey: ['usePresence'],
-    queryFn: async () => {
-      const response = await axios.get<PresenceData>('/metrics/presence');
+    queryFn: async ({ signal }) => {
+      const response = await axios.get<PresenceData>('/metrics/presence', { signal });
       return response.data;
     },
     refetchInterval,

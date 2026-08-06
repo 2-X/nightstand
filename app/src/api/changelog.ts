@@ -21,8 +21,8 @@ const RAW_CHANGELOG_URL = 'https://raw.githubusercontent.com/LTimothy/nightstand
 
 export const useChangelog = () => useQuery<ChangelogEntry[]>({
   queryKey: ['useChangelog'],
-  queryFn: async () => {
-    const response = await podAxios.get<ChangelogResponse>('/changelog');
+  queryFn: async ({ signal }) => {
+    const response = await podAxios.get<ChangelogResponse>('/changelog', { signal });
     return response.data.entries;
   },
   staleTime: 60_000,
@@ -30,8 +30,8 @@ export const useChangelog = () => useQuery<ChangelogEntry[]>({
 
 export const useRemoteChangelog = () => useQuery<ChangelogEntry[]>({
   queryKey: ['useRemoteChangelog'],
-  queryFn: async () => {
-    const response = await axios.get<string>(RAW_CHANGELOG_URL, { responseType: 'text' });
+  queryFn: async ({ signal }) => {
+    const response = await axios.get<string>(RAW_CHANGELOG_URL, { responseType: 'text', signal });
     return parseChangelog(response.data);
   },
   staleTime: 60_000,

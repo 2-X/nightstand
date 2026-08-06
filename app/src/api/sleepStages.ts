@@ -29,9 +29,10 @@ type Args = {
 export const useSleepStages = ({ side, startTime, endTime }: Args, enabled = true) => {
   return useQuery<SleepStagesResponse>({
     queryKey: ['useSleepStages', side, startTime, endTime],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const response = await axios.get<SleepStagesResponse>('/metrics/sleep-stages', {
         params: { side, startTime, endTime },
+        signal,
       });
       return response.data;
     },
