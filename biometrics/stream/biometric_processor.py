@@ -206,8 +206,6 @@ class BiometricProcessor:
         # at the cost of detecting "person actually got out of bed" 3 min
         # later instead of 30s later.
         self.no_presence_tolerance = 180
-        self.breathing_rate = 0
-        self.hrv = 0
         self.not_present_for = 0
         self.present_for = 0
         # Re-POST the current presence state every N seconds even when nothing
@@ -295,7 +293,6 @@ class BiometricProcessor:
         self._AMBIGUOUS_FREEZE_CAP = AMBIGUOUS_FREEZE_CAP
         self._AMBIGUOUS_LEAK_DIVISOR = AMBIGUOUS_LEAK_DIVISOR
         self._ambiguous_streak = 0
-        self.combined_measurements: Deque[Measurement] = deque([], maxlen=100)
         self.debug_measurements: List[Measurement] = []
 
     def init_tracking(self):
@@ -310,6 +307,25 @@ class BiometricProcessor:
         # not enough to erase the per-epoch variability the stage classifier
         # uses.
         self.hrv_rates:  Deque[float] = deque([], maxlen=3)
+        # The smoothed outputs of the two deques above. They live here rather
+        # than in __init__ because a presence exit has to clear them along
+        # with the samples they summarize. Previously they were set once at
+        # construction, so the next occupant's opening rows were written with
+        # the last occupant's numbers: breathing cannot recompute until
+        # present_for reaches 30 and HRV not until 300, and nothing else ever
+        # wrote to them. Measured against 11 days of pulled data, that was 16%
+        # of stored rows, 10% of them carrying a plausible-looking value from
+        # the previous session rather than the no-reading sentinel.
+        #
+        # 0 is that sentinel: every consumer of the vitals table already
+        # excludes it by value, so a zero is correctly ignored where a stale
+        # number is silently averaged in as if it had been measured.
+        self.breathing_rate = 0
+        self.hrv = 0
+        # Cleared for the same reason. next() reads combined_measurements[-1]
+        # to build the row it inserts, so a leftover entry here is another way
+        # the previous session can reach the current one's data.
+        self.combined_measurements: Deque[Measurement] = deque([], maxlen=100)
         self.lower_bound = None
         self.upper_bound = None
         self.hr_moving_avg = None

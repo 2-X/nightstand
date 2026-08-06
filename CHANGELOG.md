@@ -14,6 +14,17 @@ is a hard fork; for the history of the projects it descends from, see
   so a thin result can be told apart from a good one. A pod that has never
   calibrated now says so plainly rather than reporting an error.
 
+- Heart rate variability and breathing rate recorded at the start of a sleep
+  session belonged to the previous session. Both are smoothed running values,
+  and neither can be recomputed immediately: breathing rate needs 30 seconds of
+  established presence and HRV needs five minutes. Leaving the bed cleared the
+  samples behind them but not the values themselves, so the opening minutes of
+  the next session were written with whoever was there last. Measured against
+  eleven days of recordings, that was 16% of stored readings, 10% of them
+  carrying a plausible-looking number rather than the blank the rest of the
+  system knows to ignore. Leaving the bed now clears both, along with any
+  measurement still waiting to be written.
+
 - A physical double or triple tap that failed to write its temperature change
   restarted the server. Tap handling runs detached from the polling loop, so a
   base movement over Bluetooth cannot delay the next tap being noticed, but that
