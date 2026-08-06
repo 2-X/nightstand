@@ -14,6 +14,17 @@ is a hard fork; for the history of the projects it descends from, see
   so a thin result can be told apart from a good one. A pod that has never
   calibrated now says so plainly rather than reporting an error.
 
+- The pump warning on the Status page is a false alarm, and this release starts
+  gathering what is needed to fix it properly. The check treats "pump reporting
+  no speed while the cooling element draws current" as a stalled pump, but
+  across eleven days of recordings the pump reports no speed for exactly the
+  hours the power schedule has that side switched off, and the current reading
+  never drops low enough to tell a switched-off side from a running one. So the
+  warning fires most days when the bed powers off. The check is unchanged for
+  now, because getting it wrong in the other direction would hide a real stall.
+  It now records the full pump reading when the pump starts or stops reporting
+  speed, which is the missing piece for telling those two cases apart.
+
 - The heart rate, HRV and breathing charts on the Sleep page were blank. The
   server reformatted each reading's timestamp into a local-time string before
   sending it, and the charts scale the timestamp themselves and discard

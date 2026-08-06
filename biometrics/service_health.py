@@ -136,15 +136,35 @@ _PUMP_TEC_ACTIVE_AMPS = 1.0
 # frzHealth frames arrive roughly once every 10s; 6 consecutive ~= 1 minute
 # of sustained stall before alerting, 3 consecutive ~= 30s of recovery
 # before clearing, avoids flapping on a single noisy frame in either
-# direction, without needing to know whether the side was "commanded on"
-# (TEC current itself is the "commanded active" signal).
+# direction.
+#
+# KNOWN WRONG, do not tune these to compensate. This check was built on the
+# assumption that TEC current is the "commanded active" signal, so that a
+# side which is merely switched off would not look like a stall. Eleven days
+# of the per-frame trace say otherwise: rpm reads 0 for exactly the hours the
+# power schedule has the side off (0% of frames from 20:00 to 07:00 local,
+# ~100% from 08:00 to 19:00), while TEC current never once falls below 7.2A
+# in 96,247 frames, so the 1.0A bar never excludes anything. The rule
+# therefore reduces to "rpm below 200" and fires every day at power-off.
+# No threshold on current can separate on from off, and any dwell short
+# enough to catch a real stall is far shorter than the multi-hour normal off
+# stretches. The fix is to gate on whether the side is actually powered on;
+# see the transition trace below for the data being gathered to do that.
 _PUMP_STALL_DWELL_FRAMES = 6
 _PUMP_RECOVERY_DWELL_FRAMES = 3
 
-_pump_state = {
-    'left': {'consecutive_stall': 0, 'consecutive_healthy': 0, 'is_stalled': False, 'reported_healthy': False},
-    'right': {'consecutive_stall': 0, 'consecutive_healthy': 0, 'is_stalled': False, 'reported_healthy': False},
-}
+def new_pump_state() -> dict:
+    """Per-side dwell state. Shared with the tests so the two cannot drift."""
+    return {
+        'consecutive_stall': 0,
+        'consecutive_healthy': 0,
+        'is_stalled': False,
+        'reported_healthy': False,
+        'prev_pump_ok': None,
+    }
+
+
+_pump_state = {'left': new_pump_state(), 'right': new_pump_state()}
 
 
 def update_pump_health(frz_health_data: dict):
@@ -183,6 +203,22 @@ def update_pump_health(frz_health_data: dict):
                 f'tec_active={tec_active} pump_ok={pump_ok} '
                 f'consecutive_stall={state["consecutive_stall"]} consecutive_healthy={state["consecutive_healthy"]}'
             )
+
+            # Whole-frame dump on the frames where pump_ok flips, which is
+            # where the pump starts or stops reporting rpm. Eleven days of the
+            # per-frame trace showed rpm sits at 0 for the exact hours the
+            # power schedule has the side off, and TEC current never drops
+            # below 7A even then, so `current` cannot tell a commanded-off side
+            # from a running one. What the frame carries alongside rpm at that
+            # moment (pump mode, and anything else) is the missing piece for
+            # gating this check on the side actually being on. Logged only on
+            # the transition, a few times a day, not on every frame.
+            if state.get('prev_pump_ok') != pump_ok:
+                logger.info(
+                    f'pump health {side} transition: pump_ok {state.get("prev_pump_ok")} '
+                    f'-> {pump_ok}, pump={pump} tec={tec}'
+                )
+            state['prev_pump_ok'] = pump_ok
 
             if tec_active and not pump_ok:
                 state['consecutive_stall'] += 1

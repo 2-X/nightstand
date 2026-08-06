@@ -44,8 +44,8 @@ class TestPumpHealth(unittest.TestCase):
         # Fresh dwell-counter state per test, and capture update_health calls
         # instead of hitting the network.
         service_health._pump_state = {
-            'left': {'consecutive_stall': 0, 'consecutive_healthy': 0, 'is_stalled': False, 'reported_healthy': False},
-            'right': {'consecutive_stall': 0, 'consecutive_healthy': 0, 'is_stalled': False, 'reported_healthy': False},
+            'left': service_health.new_pump_state(),
+            'right': service_health.new_pump_state(),
         }
         self.calls = []
         self._orig_update_health = service_health.update_health
@@ -120,6 +120,30 @@ class TestPumpHealth(unittest.TestCase):
         self.assertEqual(len(left_calls), 1)
         self.assertEqual(left_calls[0][1], 'healthy')
         self.assertFalse(service_health._pump_state['left']['is_stalled'])
+
+    def test_transition_trace_fires_only_when_pump_ok_changes(self):
+        # The per-frame trace records rpm but not the rest of the frame, which
+        # is what is needed to tell a commanded-off side from a stalled one.
+        # Dump the whole frame on the frames where that state flips, and only
+        # those, so the diagnostic costs a few lines a day rather than one per
+        # frame.
+        logger = service_health.logger
+        with self.assertLogs(logger, level='INFO') as captured:
+            # first frame ever seen: None -> True is a transition
+            service_health.update_pump_health(_frame())
+            # steady state, no further transitions
+            for _ in range(3):
+                service_health.update_pump_health(_frame())
+            # pump stops reporting rpm: True -> False
+            service_health.update_pump_health(_frame(left_rpm=0))
+
+        lines = [r.getMessage() for r in captured.records
+                 if 'transition' in r.getMessage() and ' left ' in r.getMessage()]
+        self.assertEqual(len(lines), 2)
+        self.assertIn('pump_ok None -> True', lines[0])
+        self.assertIn('pump_ok True -> False', lines[1])
+        # the whole pump dict rides along, which is the point of the line
+        self.assertIn("'mode': 'pwm'", lines[1])
 
 
 if __name__ == '__main__':
