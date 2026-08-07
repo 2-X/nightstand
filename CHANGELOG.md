@@ -6,7 +6,7 @@ is a hard fork; for the history of the projects it descends from, see
 [jmew/free-sleep](https://github.com/jmew/free-sleep) and
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
 
-## [Unreleased]
+## [3.1.0] - 2026-08-07
 
 - The Status page now shows when the active presence calibration profile was
   created and what it learned from, instead of only whether the last run
