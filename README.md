@@ -70,6 +70,45 @@ hidden instead of logging retry errors indefinitely.
 
 ---
 
+## Opening the app
+
+The pod serves the app itself, on port 3000, to anything on the same network.
+There is no cloud account and no app store download.
+
+Pods answer to their own hostname, so the usual address is:
+
+```
+http://eight-pod.local:3000
+```
+
+`eight-pod` is the hostname the pod ships with, not something the installer
+sets, and the pod already runs an mDNS responder, so `.local` resolution works
+without any configuration. This is verified on a Pod 5; if your pod was renamed
+or your network does not carry mDNS, use its IP address instead
+(`http://<POD_IP>:3000`), which always works. Your router's client list will
+show the address, and so will the Eight Sleep app.
+
+One thing that will not work: the pod does not advertise itself as a web
+service, only as a name. It will not appear in Bonjour or service-discovery
+browsers, so type the address rather than looking for it in a list.
+
+### Add it to an iPhone home screen
+
+The app is installable, so it can sit on the home screen and open without any
+browser chrome around it.
+
+1. Open `http://eight-pod.local:3000` in Safari. This has to be Safari; other
+   iOS browsers cannot install to the home screen.
+2. Tap the Share button, then **Add to Home Screen**.
+3. Name it and tap **Add**.
+
+It opens full screen with its own icon, which on a phone at night is most of
+the point. It is still talking directly to the pod on your network, so it works
+with the internet down and stops working away from home. Android's Chrome has
+the same option under its menu, as **Add to Home screen** or **Install app**.
+
+---
+
 ## Compatibility
 
 | Pod | Compatible |
