@@ -39,7 +39,7 @@ logger = get_logger('calibrate-sensor')
 
 from data_types import *
 from load_raw_files import load_raw_files
-from piezo_data import load_piezo_df, detect_presence_piezo, identify_baseline_period
+from piezo_data import load_piezo_df, detect_presence_piezo, identify_baseline_period, summarize_empty_floor
 from cap_data import load_cap_df, create_cap_baseline_from_cap_df, save_baseline
 from resource_usage import get_memory_usage_unix, get_available_memory_mb
 from biometrics_helpers import validate_datetime_utc
@@ -94,6 +94,61 @@ def _parse_args() -> Union[Namespace, None]:
     return args
 
 
+def _record_piezo_floor(side: Side, merged_df, window_start, window_end, window_seconds: float, trigger: str):
+    """Measure this side's empty-bed piezo floor and store it. Never raises.
+
+    Runs after the capacitive baseline has already been saved, and that
+    baseline is what presence detection depends on today. This measurement
+    depends on nothing and is depended on by nothing, so it must not be able
+    to turn a calibration that already succeeded into a failed one. Every
+    error is recorded against its own run row and swallowed.
+
+    The floor is measured over the same window the capacitive baseline came
+    from, which is the only empty-bed label on this pod that is produced by a
+    guard rather than by an assumption about what time of day it is.
+    """
+    started_at = int(time.time())
+
+    def _record(status: str, quality=None, message=None):
+        return calibration.record_run(
+            side, calibration.SENSOR_TYPE_PIEZO, status, trigger,
+            started_at=started_at,
+            duration_ms=int((time.time() - started_at) * 1000),
+            quality=quality, message=message,
+        )
+
+    try:
+        try:
+            column = f'{side}1_p2p'
+            if column not in merged_df.columns:
+                raise KeyError(f'{column} is missing, load_piezo_df was called without with_p2p=True')
+
+            payload = summarize_empty_floor(merged_df.loc[window_start:window_end, column])
+            quality = calibration.compute_quality(window_seconds, payload['samples'], int(window_seconds))
+            run_id = _record(calibration.STATUS_SUCCESS, quality=quality)
+            calibration.save_profile(
+                side, calibration.SENSOR_TYPE_PIEZO, payload, quality=quality,
+                source_start=int(window_start.timestamp()),
+                source_end=int(window_end.timestamp()),
+                samples_used=payload['samples'], run_id=run_id,
+            )
+            logger.info(
+                f"Learned an empty-bed piezo floor for the {side} side: {payload['floor']:,.0f} "
+                f"(p{payload['floor_percentile']} of {payload['samples']:,} samples, quality {quality:.2f})"
+            )
+        except InsufficientDataError as error:
+            _record(calibration.STATUS_INSUFFICIENT_DATA, message=str(error))
+        except Exception as error:
+            logger.warning(f'Could not measure the {side} empty-bed piezo floor: {error}')
+            _record(calibration.STATUS_FAILED, message=str(error))
+    except Exception as error:
+        # Recording the outcome can itself fail: the store shares its SQLite
+        # file with the vitals writer and a write can hit a lock. Losing this
+        # record is acceptable. Losing the calibration that already succeeded
+        # is not.
+        logger.warning(f'Could not record the {side} piezo floor run: {error}')
+
+
 def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: datetime, folder_path: str, trigger: str = calibration.TRIGGER_DAILY):
     started_at = int(time.time())
     expected_row_count = int((end_time - start_time).total_seconds())
@@ -113,7 +168,11 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
             raw_data_types=['capSense', 'piezo-dual']
         )
 
-        piezo_df = load_piezo_df(data, side, expected_row_count=expected_row_count)
+        # with_p2p=True adds the within-second p98-p2 range column. That is the
+        # quantity both presence detectors threshold, so it is the only one
+        # whose empty-bed floor is comparable to their entry bar. It costs one
+        # extra pass over the raw arrays before they are dropped below.
+        piezo_df = load_piezo_df(data, side, expected_row_count=expected_row_count, with_p2p=True)
         # threshold_percent=0.70: 70% of the rolling window must read "above range"
         # before that window counts as occupied, so a couple of noisy seconds inside
         # an otherwise-empty window can't flip the calibration off course.
@@ -185,6 +244,11 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
             source_end=int(baseline_end_time.timestamp()),
             samples_used=samples_used, run_id=run_id,
         )
+
+        # Nothing reads this yet. Both presence detectors still gate on their
+        # hardcoded threshold. Storing the learned number first makes it, and
+        # its night-to-night stability, observable before anything bets on it.
+        _record_piezo_floor(side, merged_df, baseline_start_time, baseline_end_time, window_seconds, trigger)
 
         merged_df.drop(merged_df.index, inplace=True)
         del merged_df

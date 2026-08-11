@@ -14,6 +14,12 @@ from get_logger import get_logger
 
 logger = get_logger()
 
+# The empty-bed piezo floor is written here and read from the presence
+# detectors, so the string travels between modules. A typo would write a
+# second profile row under a sensor type no reader ever asks for, and the
+# unique index would not catch it.
+SENSOR_TYPE_PIEZO = 'piezo'
+
 STATUS_SUCCESS = 'success'
 STATUS_FAILED = 'failed'
 STATUS_INSUFFICIENT_DATA = 'insufficient_data'

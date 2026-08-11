@@ -174,6 +174,56 @@ def detect_presence_piezo_p2p(df: pd.DataFrame, side: Side, rolling_seconds=10,
     gc.collect()
 
 
+# Which percentile of the empty-window amplitude becomes the stored floor.
+# Not the max: a five minute window is a few hundred samples, and one sensor
+# glitch in it would otherwise set the floor for the whole day.
+FLOOR_PERCENTILE = 95
+
+_FLOOR_PERCENTILES = (50, 90, 95, 99)
+
+
+def summarize_empty_floor(p2p_values, percentile: int = FLOOR_PERCENTILE) -> dict:
+    """Summarize the within-second piezo amplitude over a window believed empty.
+
+    `p2p_values` is the `{side}1_p2p` column (see _calculate_p2p) restricted to
+    the empty-bed window calibration already identifies. That column, not the
+    `{side}1_range` one, is the quantity both presence detectors threshold, so
+    it is the only one whose floor is comparable to their entry bar.
+
+    The whole distribution is returned, not just the chosen percentile: the
+    point of measuring before consuming is to find out whether this number is
+    stable night to night, and a single stored scalar cannot answer that.
+    `floor_percentile` travels with the value so a floor measured under one
+    rule is never silently compared against one measured under another.
+    """
+    values = np.asarray(p2p_values, dtype=np.float64).ravel()
+    # A rolling window or a merge gap leaves NaN, and one NaN makes every
+    # numpy percentile NaN. That would store a null floor that still reads as
+    # "measured" to anything looking at the row rather than the value.
+    values = values[np.isfinite(values)]
+    if values.size == 0:
+        raise InsufficientDataError(
+            'The empty-bed window held no usable piezo samples, so there is '
+            'nothing to measure a floor from.'
+        )
+
+    percentiles = {
+        f'p{p}': float(np.percentile(values, p)) for p in _FLOOR_PERCENTILES
+    }
+    # float()/int() rather than the numpy scalars: save_profile json.dumps()
+    # this payload, and numpy scalars are not JSON serializable.
+    return {
+        'floor': float(np.percentile(values, percentile)),
+        'floor_percentile': int(percentile),
+        'percentiles': percentiles,
+        'min': float(values.min()),
+        'max': float(values.max()),
+        'mean': float(values.mean()),
+        'std': float(values.std()),
+        'samples': int(values.size),
+    }
+
+
 def identify_baseline_period(merged_df: pd.DataFrame, side: str, threshold_range: int = 10_000, empty_minutes: int = 5):
     logger.debug('Finding baseline period...')
     merged_df = merged_df.sort_index()  # Ensure the index is sorted
