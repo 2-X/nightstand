@@ -139,3 +139,60 @@ describe('deploy-dev.sh paces its uploads over the same link', () => {
     }
   });
 });
+
+describe('deploy.sh will not ship code onto a schema that did not migrate', () => {
+  // A release once shipped with its new tables missing: prisma migrate failed
+  // against the biometrics streamer's SQLite lock, the failure was a warning,
+  // and the health check passed because HTTP 200, the version string and the
+  // sensor reading are all blind to a missing table. Each test below is one
+  // link in that chain.
+  const src = readFileSync(path.join(repoRoot, 'ops/deploy.sh'), 'utf8');
+
+  const assertOrder = (markers: string[], label: string) => {
+    let from = 0;
+    for (const marker of markers) {
+      const idx = src.indexOf(marker, from);
+      assert.notEqual(idx, -1, `${label}: "${marker}" is missing, or out of order`);
+      from = idx + marker.length;
+    }
+  };
+
+  it('stops the biometrics streamer before it migrates', () => {
+    // The streamer holds the same SQLite file the schema engine needs.
+    assertOrder([
+      'systemctl stop free-sleep-stream',
+      'prisma migrate deploy',
+    ], 'stop-before-migrate');
+  });
+
+  it('retries the migration rather than giving up on one lock', () => {
+    assert.match(src, /for attempt in 1 2 3; do[\s\S]*prisma migrate deploy/);
+  });
+
+  it('asserts the end state instead of trusting the exit code', () => {
+    assert.match(src, /prisma migrate status/, 'nothing verifies that migrations actually applied');
+  });
+
+  it('fails the deploy when migrations did not apply, so it rolls back', () => {
+    assert.match(src, /MIGRATION_FAILED=yes/, 'a failed migration must be recorded');
+    assertOrder([
+      'if [ "$MIGRATION_FAILED" = "yes" ]; then',
+      'HEALTHY=no',
+    ], 'migration-failure-forces-unhealthy');
+  });
+
+  it('never downgrades a failed migration to a bare warning', () => {
+    assert.doesNotMatch(
+      src,
+      /prisma step failed; health check will decide/,
+      'the health check cannot see a missing table, so it must not be the arbiter',
+    );
+  });
+
+  it('restarts the streamer it stopped, rather than leaving it down', () => {
+    // try-restart is a no-op on a stopped unit, which is exactly what the
+    // migration step leaves behind.
+    assert.match(src, /STREAM_WAS_ACTIVE/, 'nothing records whether the streamer was running');
+    assert.match(src, /systemctl restart free-sleep-stream/, 'a stopped streamer is never started again');
+  });
+});

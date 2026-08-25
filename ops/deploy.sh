@@ -202,17 +202,46 @@ if [ "$LOCK_SAME" = "yes" ]; then
   MOVED_MODULES=yes
 fi
 
-# prisma: apply any pending migrations (DB already backed up); regenerate client if schema changed
+# prisma: apply any pending migrations (DB already backed up); regenerate client if schema changed.
+# The server is already stopped by the swap above, but the biometrics streamer
+# writes to the same SQLite file continuously, and its lock is enough to fail
+# the schema engine outright. That is not hypothetical: it is how a release
+# once shipped with its new tables missing, because the failure was a warning
+# and the health check below cannot see a missing table.
+STREAM_WAS_ACTIVE=$(SSH "systemctl is-active free-sleep-stream 2>/dev/null || true")
+MIGRATION_FAILED=no
 if ! SSH "cmp -s $PREV/server/prisma/schema.prisma $LIVE/server/prisma/schema.prisma"; then
   say "Prisma schema changed: migrate deploy + generate"
-  SSH "sudo -u dac bash -c 'cd $LIVE/server && $NPX dotenv -e .env.pod -- npx prisma migrate deploy && $NPX dotenv -e .env.pod -- npx prisma generate'" \
-    || echo "WARNING: prisma step failed; health check will decide"
+  SSH "systemctl stop free-sleep-stream 2>/dev/null || true"
+  PRISMA_OK=no
+  for attempt in 1 2 3; do
+    if SSH "sudo -u dac bash -c 'cd $LIVE/server && $NPX dotenv -e .env.pod -- npx prisma migrate deploy'"; then
+      PRISMA_OK=yes
+      break
+    fi
+    echo "  prisma migrate attempt $attempt failed"
+    sleep 5
+  done
+  [ "$PRISMA_OK" = "yes" ] &&
+    { SSH "sudo -u dac bash -c 'cd $LIVE/server && $NPX dotenv -e .env.pod -- npx prisma generate'" || PRISMA_OK=no; }
+  # Assert the end state rather than trusting the exit code: migrate status
+  # fails when anything is still pending, which is the exact condition that
+  # nothing downstream of here is able to notice.
+  [ "$PRISMA_OK" = "yes" ] &&
+    { SSH "sudo -u dac bash -c 'cd $LIVE/server && $NPX dotenv -e .env.pod -- npx prisma migrate status'" || PRISMA_OK=no; }
+  [ "$PRISMA_OK" = "yes" ] || MIGRATION_FAILED=yes
 fi
 
 SSH "systemctl start free-sleep"
 # jmew's biometrics stream service runs out of the same tree; if it's active,
 # bounce it so it picks up the swapped code instead of holding stale handles.
-SSH "systemctl try-restart free-sleep-stream 2>/dev/null || true"
+# Plain restart when it was running before, since the prisma step above may
+# have stopped it and try-restart would leave a stopped unit stopped.
+if [ "$STREAM_WAS_ACTIVE" = "active" ]; then
+  SSH "systemctl restart free-sleep-stream 2>/dev/null || true"
+else
+  SSH "systemctl try-restart free-sleep-stream 2>/dev/null || true"
+fi
 
 # --- health check -----------------------------------------------------------
 say "Health check (up to 90s)"
@@ -241,6 +270,12 @@ rm -f "$HBODY"
 
 if [ "$HEALTHY" = "yes" ]; then
   SSH "systemctl is-active free-sleep >/dev/null" || HEALTHY=no
+fi
+
+# A pod serving HTTP 200 against a half-applied schema looks healthy and is not.
+if [ "$MIGRATION_FAILED" = "yes" ]; then
+  echo "  prisma migrations did not apply; failing the deploy so it rolls back"
+  HEALTHY=no
 fi
 
 if [ "$HEALTHY" = "yes" ]; then

@@ -207,16 +207,45 @@ if [ "$LOCK_SAME" = yes ]; then
   MOVED_MODULES=yes
 fi
 
+# The server is already stopped by the swap above, but the biometrics streamer
+# writes to the same SQLite file continuously, and its lock is enough to fail
+# the schema engine outright. That is not hypothetical: it is how a release
+# once shipped with its new tables missing, because the failure was a warning
+# and the health check below cannot see a missing table.
+STREAM_WAS_ACTIVE=$(systemctl is-active free-sleep-stream 2>/dev/null || true)
+MIGRATION_FAILED=no
 if [ "$IS_DOWNGRADE" = yes ]; then
   say "Downgrade: skipping prisma migrate (schema stays newer; migrations are additive by standing rule)"
 elif ! cmp -s "$PREV/server/prisma/schema.prisma" "$LIVE/server/prisma/schema.prisma"; then
   say "Prisma schema changed: migrate deploy + generate"
-  sudo -u dac bash -c "cd '$LIVE/server' && '$NPX' dotenv -e .env.pod -- npx prisma migrate deploy && '$NPX' dotenv -e .env.pod -- npx prisma generate" \
-    || say "WARNING: prisma step failed; health check will decide"
+  systemctl stop free-sleep-stream 2>/dev/null || true
+  PRISMA_OK=no
+  for attempt in 1 2 3; do
+    if sudo -u dac bash -c "cd '$LIVE/server' && '$NPX' dotenv -e .env.pod -- npx prisma migrate deploy"; then
+      PRISMA_OK=yes
+      break
+    fi
+    say "prisma migrate attempt $attempt failed"
+    sleep 5
+  done
+  [ "$PRISMA_OK" = yes ] &&
+    { sudo -u dac bash -c "cd '$LIVE/server' && '$NPX' dotenv -e .env.pod -- npx prisma generate" || PRISMA_OK=no; }
+  # Assert the end state rather than trusting the exit code: migrate status
+  # fails when anything is still pending, which is the exact condition that
+  # nothing downstream of here is able to notice.
+  [ "$PRISMA_OK" = yes ] &&
+    { sudo -u dac bash -c "cd '$LIVE/server' && '$NPX' dotenv -e .env.pod -- npx prisma migrate status" || PRISMA_OK=no; }
+  [ "$PRISMA_OK" = yes ] || MIGRATION_FAILED=yes
 fi
 
 systemctl start free-sleep
-systemctl try-restart free-sleep-stream 2>/dev/null || true
+# Plain restart when the streamer was running before, since the prisma step
+# above may have stopped it and try-restart would leave a stopped unit stopped.
+if [ "$STREAM_WAS_ACTIVE" = active ]; then
+  systemctl restart free-sleep-stream 2>/dev/null || true
+else
+  systemctl try-restart free-sleep-stream 2>/dev/null || true
+fi
 
 # Self-heal exec bits on the updater chain: free-sleep-update.service execs
 # update_service.sh directly on older installs, and a missing exec bit fails
@@ -307,6 +336,12 @@ except Exception:
   [ "$OK" = yes ] && { HEALTHY=yes; break; }
 done
 [ "$HEALTHY" = yes ] && systemctl is-active free-sleep >/dev/null || HEALTHY=no
+
+# A pod serving HTTP 200 against a half-applied schema looks healthy and is not.
+if [ "$MIGRATION_FAILED" = yes ]; then
+  say "prisma migrations did not apply; failing the update so it rolls back"
+  HEALTHY=no
+fi
 
 if [ "$HEALTHY" = yes ]; then
   say "SUCCESS: pod is serving v$STAGED_VERSION. Previous version kept at $PREV; backup at $BK"

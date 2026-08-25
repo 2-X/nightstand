@@ -158,3 +158,64 @@ describe('updater shell scripts', () => {
     });
   });
 });
+
+describe('update.sh will not ship code onto a schema that did not migrate', () => {
+  // A release once shipped with its new tables missing: prisma migrate failed
+  // against the biometrics streamer's SQLite lock, the failure was a warning,
+  // and the health check passed because HTTP 200, the version string and the
+  // sensor reading are all blind to a missing table. This is the in-app update
+  // path, so it is the one that reaches a user's pod.
+  const src = readFileSync(path.join(repoRoot, 'scripts/update.sh'), 'utf8');
+
+  const assertOrder = (markers: string[], label: string) => {
+    let from = 0;
+    for (const marker of markers) {
+      const idx = src.indexOf(marker, from);
+      assert.notEqual(idx, -1, `${label}: "${marker}" is missing, or out of order`);
+      from = idx + marker.length;
+    }
+  };
+
+  it('stops the biometrics streamer before it migrates', () => {
+    assertOrder([
+      'systemctl stop free-sleep-stream',
+      'prisma migrate deploy',
+    ], 'stop-before-migrate');
+  });
+
+  it('retries the migration rather than giving up on one lock', () => {
+    assert.match(src, /for attempt in 1 2 3; do[\s\S]*prisma migrate deploy/);
+  });
+
+  it('asserts the end state instead of trusting the exit code', () => {
+    assert.match(src, /prisma migrate status/, 'nothing verifies that migrations actually applied');
+  });
+
+  it('fails the update when migrations did not apply, so it rolls back', () => {
+    assert.match(src, /MIGRATION_FAILED=yes/, 'a failed migration must be recorded');
+    assertOrder([
+      'if [ "$MIGRATION_FAILED" = yes ]; then',
+      'HEALTHY=no',
+    ], 'migration-failure-forces-unhealthy');
+  });
+
+  it('never downgrades a failed migration to a bare warning', () => {
+    assert.doesNotMatch(
+      src,
+      /prisma step failed; health check will decide/,
+      'the health check cannot see a missing table, so it must not be the arbiter',
+    );
+  });
+
+  it('still skips migrations on a downgrade', () => {
+    // Migrations are additive by standing rule, so an older build runs fine
+    // against a newer schema. Reverting one would be the destructive path.
+    assert.match(src, /IS_DOWNGRADE.*=.*yes/);
+    assertOrder(['Downgrade: skipping prisma migrate', 'prisma migrate deploy'], 'downgrade-skips-first');
+  });
+
+  it('restarts the streamer it stopped, rather than leaving it down', () => {
+    assert.match(src, /STREAM_WAS_ACTIVE/, 'nothing records whether the streamer was running');
+    assert.match(src, /systemctl restart free-sleep-stream/, 'a stopped streamer is never started again');
+  });
+});
