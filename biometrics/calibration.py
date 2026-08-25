@@ -65,14 +65,26 @@ def record_run(
     duration_ms: int,
     quality: Optional[float] = None,
     message: Optional[str] = None,
+    payload: Optional[dict] = None,
+    source_start: Optional[int] = None,
+    source_end: Optional[int] = None,
     conn=None,
 ) -> int:
-    """Append one attempt. Called on every exit path, including skips."""
+    """Append one attempt. Called on every exit path, including skips.
+
+    `payload` is what this run measured, and it is stored here as well as on
+    the profile because calibration_profiles is upserted per
+    (side, sensor_type) and therefore holds only the latest. Without it, a
+    value's history lives nowhere but a rotating log file, which is how three
+    weeks of empty-bed floors came to exist only as one number per night.
+    """
     cursor = _connection(conn).execute(
         'INSERT INTO calibration_runs '
-        '(side, sensor_type, status, trigger, started_at, duration_ms, quality, message) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        (side, sensor_type, status, trigger, started_at, duration_ms, quality, message),
+        '(side, sensor_type, status, trigger, started_at, duration_ms, quality, message, '
+        'payload, source_start, source_end) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        (side, sensor_type, status, trigger, started_at, duration_ms, quality, message,
+         json.dumps(payload) if payload is not None else None, source_start, source_end),
     )
     return cursor.lastrowid
 

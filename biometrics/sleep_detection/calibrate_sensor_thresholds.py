@@ -109,12 +109,14 @@ def _record_piezo_floor(side: Side, merged_df, window_start, window_end, window_
     """
     started_at = int(time.time())
 
-    def _record(status: str, quality=None, message=None):
+    def _record(status: str, quality=None, message=None, payload=None,
+                source_start=None, source_end=None):
         return calibration.record_run(
             side, calibration.SENSOR_TYPE_PIEZO, status, trigger,
             started_at=started_at,
             duration_ms=int((time.time() - started_at) * 1000),
-            quality=quality, message=message,
+            quality=quality, message=message, payload=payload,
+            source_start=source_start, source_end=source_end,
         )
 
     try:
@@ -125,7 +127,10 @@ def _record_piezo_floor(side: Side, merged_df, window_start, window_end, window_
 
             payload = summarize_empty_floor(merged_df.loc[window_start:window_end, column])
             quality = calibration.compute_quality(window_seconds, payload['samples'], int(window_seconds))
-            run_id = _record(calibration.STATUS_SUCCESS, quality=quality)
+            run_id = _record(
+                calibration.STATUS_SUCCESS, quality=quality, payload=payload,
+                source_start=int(window_start.timestamp()), source_end=int(window_end.timestamp()),
+            )
             calibration.save_profile(
                 side, calibration.SENSOR_TYPE_PIEZO, payload, quality=quality,
                 source_start=int(window_start.timestamp()),

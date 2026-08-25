@@ -72,6 +72,12 @@ model calibration_runs {
   duration_ms Int
   quality     Float?
   message     String?
+  // What the run measured, kept per run because calibration_profiles is
+  // upserted per (side, sensor_type) and so holds only the latest. Nullable:
+  // failed and skipped runs measured nothing.
+  payload      String?
+  source_start Int?
+  source_end   Int?
 
   @@index([side, started_at])
 }

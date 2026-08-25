@@ -6,6 +6,7 @@ Run on the pod venv (no pytest there):
 import unittest
 import unittest.mock
 import sqlite3
+import json
 import sys
 import os
 import types
@@ -85,9 +86,85 @@ CREATE TABLE calibration_runs (
     started_at INTEGER NOT NULL,
     duration_ms INTEGER NOT NULL,
     quality REAL,
-    message TEXT
+    message TEXT,
+    payload TEXT,
+    source_start INTEGER,
+    source_end INTEGER
 );
 """
+
+
+class RunHistoryRetentionTest(unittest.TestCase):
+    """calibration_profiles keeps only the latest row per (side, sensor_type).
+
+    Anything that wants to know how a measured value moves over time therefore
+    has to read the run rows, so the runs must carry the measurement itself.
+    Three weeks of empty-bed floors once existed only in a rotating log because
+    they did not.
+    """
+
+    def setUp(self):
+        self.conn = sqlite3.connect(':memory:')
+        self.conn.executescript(SCHEMA)
+
+    def tearDown(self):
+        self.conn.close()
+
+    def test_a_run_keeps_what_it_measured(self):
+        calibration.record_run(
+            'left', calibration.SENSOR_TYPE_PIEZO, calibration.STATUS_SUCCESS,
+            calibration.TRIGGER_DAILY, started_at=1000, duration_ms=10, quality=0.5,
+            payload={'floor': 47332.0, 'percentiles': {'p99': 61000.0}},
+            source_start=900, source_end=1200, conn=self.conn,
+        )
+        row = self.conn.execute(
+            'SELECT payload, source_start, source_end FROM calibration_runs'
+        ).fetchone()
+        self.assertEqual(json.loads(row[0])['floor'], 47332.0)
+        self.assertEqual(json.loads(row[0])['percentiles']['p99'], 61000.0)
+        self.assertEqual((row[1], row[2]), (900, 1200))
+
+    def test_history_survives_a_profile_being_overwritten(self):
+        # The upsert is the whole reason these columns exist: three nights of
+        # floors must still be readable after the third night replaces the
+        # profile the first two wrote.
+        for night, floor in enumerate([203506.0, 114471.0, 47091.0]):
+            run_id = calibration.record_run(
+                'right', calibration.SENSOR_TYPE_PIEZO, calibration.STATUS_SUCCESS,
+                calibration.TRIGGER_DAILY, started_at=1000 + night, duration_ms=10,
+                quality=0.17, payload={'floor': floor}, conn=self.conn,
+            )
+            calibration.save_profile(
+                'right', calibration.SENSOR_TYPE_PIEZO, {'floor': floor}, quality=0.17,
+                source_start=1, source_end=2, samples_used=590, run_id=run_id, conn=self.conn,
+            )
+
+        profiles = self.conn.execute(
+            'SELECT COUNT(*) FROM calibration_profiles'
+        ).fetchone()[0]
+        self.assertEqual(profiles, 1)
+
+        floors = [
+            json.loads(r[0])['floor'] for r in self.conn.execute(
+                'SELECT payload FROM calibration_runs ORDER BY started_at'
+            )
+        ]
+        self.assertEqual(floors, [203506.0, 114471.0, 47091.0])
+
+    def test_a_run_that_measured_nothing_stores_null_not_empty_json(self):
+        # A failed or skipped run has no measurement. Storing "null" or "{}"
+        # would read as "measured, and the answer was nothing".
+        calibration.record_run(
+            'left', calibration.SENSOR_TYPE_PIEZO, calibration.STATUS_FAILED,
+            calibration.TRIGGER_DAILY, started_at=1000, duration_ms=10,
+            message='no empty window', conn=self.conn,
+        )
+        row = self.conn.execute(
+            'SELECT payload, source_start, source_end FROM calibration_runs'
+        ).fetchone()
+        self.assertIsNone(row[0])
+        self.assertIsNone(row[1])
+        self.assertIsNone(row[2])
 
 
 class CalibrationStoreTest(unittest.TestCase):
