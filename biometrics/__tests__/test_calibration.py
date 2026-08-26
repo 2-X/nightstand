@@ -91,7 +91,54 @@ CREATE TABLE calibration_runs (
     source_start INTEGER,
     source_end INTEGER
 );
+CREATE TABLE vitals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    side TEXT NOT NULL,
+    timestamp INTEGER NOT NULL,
+    heart_rate INTEGER,
+    hrv INTEGER,
+    breathing_rate INTEGER
+);
 """
+
+
+class OccupiedSecondsTest(unittest.TestCase):
+    """A calibration window has to be empty on both sides, not just its own."""
+
+    def setUp(self):
+        self.conn = sqlite3.connect(':memory:')
+        self.conn.executescript(SCHEMA)
+
+    def tearDown(self):
+        self.conn.close()
+
+    def _vital(self, side, ts):
+        self.conn.execute(
+            'INSERT INTO vitals (side, timestamp, heart_rate, hrv, breathing_rate) '
+            'VALUES (?, ?, 60, 40, 14)', (side, ts),
+        )
+
+    def test_it_reports_both_sides_not_just_one(self):
+        # The whole point: the left side's window is spoiled by someone on the
+        # right, and a per-side query would never see them.
+        self._vital('left', 1000)
+        self._vital('right', 1005)
+        self.assertEqual(calibration.occupied_seconds(900, 1100, conn=self.conn), [1000, 1005])
+
+    def test_it_respects_the_requested_range(self):
+        for ts in (500, 1000, 5000):
+            self._vital('right', ts)
+        self.assertEqual(calibration.occupied_seconds(900, 1100, conn=self.conn), [1000])
+
+    def test_an_empty_bed_reports_nothing(self):
+        self.assertEqual(calibration.occupied_seconds(0, 10_000, conn=self.conn), [])
+
+    def test_results_come_back_sorted_and_deduplicated(self):
+        # Both sides commonly write the same second, and the caller bisects.
+        self._vital('right', 1005)
+        self._vital('left', 1000)
+        self._vital('right', 1000)
+        self.assertEqual(calibration.occupied_seconds(0, 10_000, conn=self.conn), [1000, 1005])
 
 
 class RunHistoryRetentionTest(unittest.TestCase):

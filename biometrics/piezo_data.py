@@ -1,3 +1,4 @@
+import bisect
 import gc
 import math
 import sys
@@ -224,12 +225,31 @@ def summarize_empty_floor(p2p_values, percentile: int = FLOOR_PERCENTILE) -> dic
     }
 
 
-def identify_baseline_period(merged_df: pd.DataFrame, side: str, threshold_range: int = 10_000, empty_minutes: int = 5):
+def identify_baseline_period(merged_df: pd.DataFrame, side: str, threshold_range: int = 10_000, empty_minutes: int = 5,
+                             occupied_seconds=None):
+    """Find a stretch this side's sensors agree was empty.
+
+    `occupied_seconds` is epoch seconds when EITHER side of the bed recorded
+    vitals, and any candidate window containing one is rejected. Without it,
+    the search reads only this side's own range and capacitive stability, so a
+    side can learn its empty-bed baseline from a stretch where the partner was
+    in bed and their movement was coupling through the mattress frame. The
+    run-time occupancy guard does not cover this: it is whole-bed but asks
+    about the present moment, while the window is chosen from hours of history.
+
+    Finding nothing is a valid answer. Calibrating against an occupied bed is
+    the failure this exists to prevent, so an entirely occupied load returns
+    (None, None) rather than falling back to the least bad window.
+    """
     logger.debug('Finding baseline period...')
     merged_df = merged_df.sort_index()  # Ensure the index is sorted
 
     range_column = f'{side.lower()}1_range'
     stability_columns = [f'{side.lower()}_out', f'{side.lower()}_cen', f'{side.lower()}_in']
+
+    # Sorted once here rather than trusted from the caller: the lookup below
+    # bisects, and an unsorted list would miss hits instead of erroring.
+    occupied = sorted(occupied_seconds) if occupied_seconds else []
 
     # Iterate over time chunks (efficient early exit)
     window_size = pd.Timedelta(f'{empty_minutes}min')
@@ -242,6 +262,12 @@ def identify_baseline_period(merged_df: pd.DataFrame, side: str, threshold_range
 
         if len(window_df) == 0:
             continue  # Skip if no data
+
+        # Condition 0: nobody was in the bed, on either side, during this window
+        if occupied:
+            position = bisect.bisect_left(occupied, int(start_time.timestamp()))
+            if position < len(occupied) and occupied[position] < int(end_time.timestamp()):
+                continue
 
         # Condition 1: Max range values must be < threshold_range
         if window_df[range_column].max() >= threshold_range:

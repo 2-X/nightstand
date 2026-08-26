@@ -136,6 +136,30 @@ def save_profile(
     )
 
 
+def occupied_seconds(start_ts: int, end_ts: int, conn=None) -> list:
+    """Seconds in [start_ts, end_ts] when EITHER side of the bed had vitals.
+
+    Lives here rather than with the other vitals code because it exists only
+    to validate a candidate calibration window: a baseline learned while the
+    partner was in bed measures their movement coupling through the mattress
+    frame, not an empty bed.
+
+    Both sides on purpose. A window is only usable if nobody was in the bed at
+    all, and the caller asks about one side at a time.
+
+    The signal is one-directional and should be used that way. A vitals row
+    proves somebody was there; the absence of one does not prove the bed was
+    empty, since a row needs presence AND a readable signal. That makes this
+    sound for rejecting contaminated windows and unsound for certifying clean
+    ones, which is the job it has.
+    """
+    rows = _connection(conn).execute(
+        'SELECT DISTINCT timestamp FROM vitals WHERE timestamp BETWEEN ? AND ? ORDER BY timestamp',
+        (start_ts, end_ts),
+    ).fetchall()
+    return [row[0] for row in rows]
+
+
 def get_profile(side: str, sensor_type: str, conn=None) -> Optional[dict]:
     """The active profile, or None when nothing has been calibrated yet.
 
