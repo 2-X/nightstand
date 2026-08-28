@@ -14,15 +14,17 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const OPS_SCRIPTS = ['ops/deploy.sh', 'ops/rollback.sh'];
 const STOCK_BIOMETRICS_SCRIPTS = ['scripts/enable_biometrics.sh', 'scripts/disable_biometrics.sh'];
+// Run by hand on a pod, never by the updater, so it is not overlay-owned either.
+const POD_SETUP_SCRIPTS = ['scripts/setup_watchdog.sh'];
 describe('this repo\'s own tooling (not part of the agent overlay)', () => {
-    for (const script of [...OPS_SCRIPTS, ...STOCK_BIOMETRICS_SCRIPTS]) {
+    for (const script of [...OPS_SCRIPTS, ...STOCK_BIOMETRICS_SCRIPTS, ...POD_SETUP_SCRIPTS]) {
         it(`${script} exists and parses (bash -n)`, () => {
             const full = path.join(repoRoot, script);
             assert.equal(existsSync(full), true, `${script} is missing`);
             assert.doesNotThrow(() => execFileSync('bash', ['-n', full]));
         });
     }
-    for (const script of [...OPS_SCRIPTS, ...STOCK_BIOMETRICS_SCRIPTS]) {
+    for (const script of [...OPS_SCRIPTS, ...STOCK_BIOMETRICS_SCRIPTS, ...POD_SETUP_SCRIPTS]) {
         it(`${script} is executable in this repo`, () => {
             const mode = statSync(path.join(repoRoot, script)).mode;
             assert.ok(mode & 0o111, `${script} must carry the exec bit`);
@@ -148,6 +150,52 @@ describe('deploy.sh will not ship code onto a schema that did not migrate', () =
         // migration step leaves behind.
         assert.match(src, /STREAM_WAS_ACTIVE/, 'nothing records whether the streamer was running');
         assert.match(src, /systemctl restart free-sleep-stream/, 'a stopped streamer is never started again');
+    });
+});
+// The pod has an mtk-wdt hardware watchdog, but systemd shipped with
+// RuntimeWatchdogSec off, so PID 1 never opened the device while the system
+// was running. systemd does arm a watchdog for reboots, and that part worked,
+// but it is armed only at the final reboot handoff. The stock Wi-Fi driver
+// oopsed, processes wedged in uninterruptible sleep, and the nightly reboot
+// never reached that handoff: PID 1 froze partway through
+// stopping units, so the arming code never ran, the 30min reboot-force
+// fallback on reboot.target never fired either, and nothing reset the board.
+// The pod held no server and no cooling for over eight hours. Each test below
+// pins one link in that chain.
+describe('setup_watchdog.sh arms the layer that was missing', () => {
+    const src = readFileSync(path.join(repoRoot, 'scripts/setup_watchdog.sh'), 'utf8');
+    it('sets the runtime watchdog, not just the reboot one', () => {
+        // RebootWatchdogSec alone is what the pod already had, and it is armed too
+        // late to catch a shutdown that wedges before the handoff.
+        assert.match(src, /RuntimeWatchdogSec=/, 'the runtime watchdog is the whole point of this script');
+    });
+    it('keeps the runtime timeout inside the hardware maximum', () => {
+        const match = src.match(/NIGHTSTAND_WATCHDOG_RUNTIME:-(\d+)s\}/);
+        assert.ok(match, 'the runtime timeout must carry an overridable default');
+        // mtk-wdt reports max_timeout 31s. Above it the driver would have to fall
+        // back to a software-extended timer, which is not what we want holding the
+        // bed's last line of defence.
+        assert.ok(Number(match[1]) <= 31, `default ${match[1]}s exceeds the 31s mtk-wdt hardware maximum`);
+    });
+    it('ships a drop-in rather than overwriting the stock system.conf', () => {
+        assert.match(src, /system\.conf\.d/, 'stock config must stay editable and the change must be removable');
+        assert.doesNotMatch(src, /> *"?\/etc\/systemd\/system\.conf"?$/m, 'never clobber the stock system.conf itself');
+    });
+    it('applies with daemon-reexec, since daemon-reload does not re-read Manager settings', () => {
+        assert.match(src, /systemctl daemon-reexec/, 'daemon-reload would leave the watchdog disarmed');
+    });
+    it('verifies the device actually armed instead of assuming it did', () => {
+        // Assuming an armed watchdog is precisely the mistake that made the outage
+        // eight hours long rather than thirty seconds.
+        assert.match(src, /\/proc\/1\/fd/, 'must confirm PID 1 really holds the watchdog device');
+        assert.match(src, /RuntimeWatchdogUSec/, 'must read back the effective setting');
+    });
+    it('fails loudly when the watchdog did not arm', () => {
+        assert.match(src, /is NOT active/, 'a silent failure here is indistinguishable from success');
+        assert.match(src, /exit 1/, 'must exit non-zero so a failed setup is noticed');
+    });
+    it('refuses to configure a watchdog on a device that has none', () => {
+        assert.match(src, /\/dev\/watchdog/, 'must check the device exists before promising protection');
     });
 });
 //# sourceMappingURL=opsScripts.test.js.map
