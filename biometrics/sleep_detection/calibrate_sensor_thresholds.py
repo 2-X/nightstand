@@ -212,21 +212,27 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
         # the stability check below to be meaningful, short enough that a genuinely
         # empty stretch of the night is still likely to contain one.
         # Reject any candidate window where either side recorded vitals. The
-        # search below reads only this side's sensors, so without this a side
-        # can learn its empty-bed baseline from a stretch where the partner
-        # was in bed and coupling through the mattress frame.
-        try:
-            occupied = calibration.occupied_seconds(int(start_time.timestamp()), int(end_time.timestamp()))
-            if occupied:
-                logger.debug(f'{len(occupied):,} seconds in this load had someone in the bed')
-        except Exception as error:
-            # Falling back to the previous behaviour beats failing a
-            # calibration the capacitive baseline depends on, but say so
-            # plainly: this run's window was not checked for occupancy.
-            logger.warning(f'Could not read bed occupancy, picking a window without that check: {error}')
-            occupied = []
+        # search reads only this side's sensors, so without this a side can
+        # learn its empty-bed baseline from a stretch where the partner was in
+        # bed and coupling through the mattress frame. The range is chosen by
+        # identify_baseline_period from the frame it searches, not here: the
+        # loaded frame starts before the requested window, and a range taken
+        # from the request leaves those early candidates unchecked.
+        def _occupied_lookup(window_start_ts: int, window_end_ts: int):
+            try:
+                occupied = calibration.occupied_seconds(window_start_ts, window_end_ts)
+                if occupied:
+                    logger.debug(f'{len(occupied):,} seconds in this load had someone in the bed')
+                return occupied
+            except Exception as error:
+                # Falling back to the previous behaviour beats failing a
+                # calibration the capacitive baseline depends on, but say so
+                # plainly: this run's window was not checked for occupancy.
+                logger.warning(f'Could not read bed occupancy, picking a window without that check: {error}')
+                return []
+
         baseline_start_time, baseline_end_time = identify_baseline_period(
-            merged_df, side, threshold_range=10_000, empty_minutes=5, occupied_seconds=occupied)
+            merged_df, side, threshold_range=10_000, empty_minutes=5, occupied_lookup=_occupied_lookup)
         if baseline_start_time is None:
             # RAW data exists but no clean empty-bed window was found in it yet, so
             # there is nothing trustworthy to calibrate against. Treat this as

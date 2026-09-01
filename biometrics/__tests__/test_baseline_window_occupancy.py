@@ -57,7 +57,7 @@ class TestWindowRejectsOccupiedStretches(unittest.TestCase):
         # The real case: someone on the other side during this side's window.
         occupied = [_epoch('2026-08-25 19:03:00')]
         start, _ = identify_baseline_period(
-            _frame(), 'left', empty_minutes=5, occupied_seconds=occupied,
+            _frame(), 'left', empty_minutes=5, occupied_lookup=lambda a, b: occupied,
         )
         self.assertIsNotNone(start, 'a later clean window exists and should be used')
         self.assertGreater(start, pd.Timestamp('2026-08-25 19:03:00'))
@@ -68,7 +68,7 @@ class TestWindowRejectsOccupiedStretches(unittest.TestCase):
             _epoch('2026-08-25 19:00:00') + s for s in range(0, 600, 30)
         ]
         start, end = identify_baseline_period(
-            _frame(), 'left', empty_minutes=5, occupied_seconds=occupied,
+            _frame(), 'left', empty_minutes=5, occupied_lookup=lambda a, b: occupied,
         )
         self.assertIsNotNone(start)
         self.assertGreaterEqual(start, pd.Timestamp('2026-08-25 19:09:30'))
@@ -83,7 +83,7 @@ class TestWindowRejectsOccupiedStretches(unittest.TestCase):
         # extend past the last row, so a sparse list leaves a gap there.
         occupied = [_epoch(ts) for ts in frame.index]
         start, end = identify_baseline_period(
-            frame, 'left', empty_minutes=5, occupied_seconds=occupied,
+            frame, 'left', empty_minutes=5, occupied_lookup=lambda a, b: occupied,
         )
         self.assertIsNone(start)
         self.assertIsNone(end)
@@ -93,14 +93,14 @@ class TestWindowRejectsOccupiedStretches(unittest.TestCase):
         # throw away usable windows on a night with any occupancy at all.
         occupied = [_epoch('2026-08-25 19:20:00')]
         start, _ = identify_baseline_period(
-            _frame(), 'left', empty_minutes=5, occupied_seconds=occupied,
+            _frame(), 'left', empty_minutes=5, occupied_lookup=lambda a, b: occupied,
         )
         self.assertEqual(start, pd.Timestamp('2026-08-25 19:00:00'))
 
     def test_an_empty_occupancy_list_behaves_like_no_guard(self):
         # A night with no vitals at all is the common case, not a special one.
         start, _ = identify_baseline_period(
-            _frame(), 'left', empty_minutes=5, occupied_seconds=[],
+            _frame(), 'left', empty_minutes=5, occupied_lookup=lambda a, b: [],
         )
         self.assertEqual(start, pd.Timestamp('2026-08-25 19:00:00'))
 
@@ -112,7 +112,7 @@ class TestWindowRejectsOccupiedStretches(unittest.TestCase):
             _epoch('2026-08-25 19:11:00'),
         ]
         start, _ = identify_baseline_period(
-            _frame(), 'left', empty_minutes=5, occupied_seconds=occupied,
+            _frame(), 'left', empty_minutes=5, occupied_lookup=lambda a, b: occupied,
         )
         self.assertIsNotNone(start)
         for bad in occupied:
@@ -120,6 +120,63 @@ class TestWindowRejectsOccupiedStretches(unittest.TestCase):
                 start <= pd.Timestamp(bad, unit='s') < start + pd.Timedelta(minutes=5),
                 'chosen window still contains an occupied second',
             )
+
+
+class TestTheLookupCoversTheWholeFrame(unittest.TestCase):
+    """The frame is wider than the window that was requested.
+
+    `load_raw_files` returns whole 15-minute RAW files, so a load asking for
+    19:30 onward gets a frame beginning around 19:15, and the first candidates
+    the search considers are in that margin. An occupancy range taken from the
+    REQUEST instead of the FRAME leaves exactly those unchecked, which is how a
+    window containing two vitals rows was accepted on a live pod. Passing a
+    lookup rather than a list is what makes that mismatch impossible, so this
+    pins the property rather than the implementation.
+    """
+
+    def test_the_lookup_is_asked_about_the_frames_own_span(self):
+        frame = _frame()
+        asked = []
+
+        def lookup(start_ts, end_ts):
+            asked.append((start_ts, end_ts))
+            return []
+
+        identify_baseline_period(frame, 'left', empty_minutes=5, occupied_lookup=lookup)
+
+        self.assertEqual(len(asked), 1, 'the lookup should be called exactly once')
+        start_ts, end_ts = asked[0]
+        self.assertEqual(start_ts, int(frame.index[0].timestamp()))
+        self.assertEqual(end_ts, int(frame.index[-1].timestamp()))
+
+    def test_occupancy_before_the_requested_window_still_rejects(self):
+        # The live failure, reduced: the contaminated candidate sits in the
+        # frame's leading margin, which a request-derived range never covers.
+        frame = _frame()
+        first_second = _epoch(frame.index[0]) + 60
+        start, _ = identify_baseline_period(
+            frame, 'left', empty_minutes=5,
+            occupied_lookup=lambda a, b: [first_second],
+        )
+        self.assertIsNotNone(start)
+        self.assertGreater(start, pd.Timestamp(first_second, unit='s'))
+
+    def test_no_lookup_means_no_call_and_no_guard(self):
+        start, _ = identify_baseline_period(_frame(), 'left', empty_minutes=5)
+        self.assertEqual(start, pd.Timestamp('2026-08-25 19:00:00'))
+
+    def test_an_empty_frame_does_not_ask_the_lookup_about_nothing(self):
+        # index[0] on an empty frame raises, and a calibration should not die
+        # inside the occupancy guard.
+        empty = _frame().iloc[0:0]
+        called = []
+        start, end = identify_baseline_period(
+            empty, 'left', empty_minutes=5,
+            occupied_lookup=lambda a, b: called.append((a, b)) or [],
+        )
+        self.assertEqual(called, [])
+        self.assertIsNone(start)
+        self.assertIsNone(end)
 
 
 if __name__ == '__main__':

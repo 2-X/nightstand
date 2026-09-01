@@ -226,11 +226,17 @@ def summarize_empty_floor(p2p_values, percentile: int = FLOOR_PERCENTILE) -> dic
 
 
 def identify_baseline_period(merged_df: pd.DataFrame, side: str, threshold_range: int = 10_000, empty_minutes: int = 5,
-                             occupied_seconds=None):
+                             occupied_lookup=None):
     """Find a stretch this side's sensors agree was empty.
 
-    `occupied_seconds` is epoch seconds when EITHER side of the bed recorded
-    vitals, and any candidate window containing one is rejected. Without it,
+    `occupied_lookup(start_ts, end_ts)` returns the epoch seconds when EITHER
+    side of the bed recorded vitals, and any candidate window containing one is
+    rejected. It takes a lookup rather than a ready-made list so the range is
+    derived from the frame being searched: `load_raw_files` returns whole
+    15-minute RAW files, so the frame reliably begins BEFORE the window that
+    was requested, and the first candidates considered live in that margin. A
+    list built from the requested range leaves exactly those unchecked, which
+    is how a window holding two vitals rows was once accepted. Without it,
     the search reads only this side's own range and capacitive stability, so a
     side can learn its empty-bed baseline from a stretch where the partner was
     in bed and their movement was coupling through the mattress frame. The
@@ -249,7 +255,12 @@ def identify_baseline_period(merged_df: pd.DataFrame, side: str, threshold_range
 
     # Sorted once here rather than trusted from the caller: the lookup below
     # bisects, and an unsorted list would miss hits instead of erroring.
-    occupied = sorted(occupied_seconds) if occupied_seconds else []
+    occupied = []
+    if occupied_lookup is not None and len(merged_df) > 0:
+        occupied = sorted(occupied_lookup(
+            int(merged_df.index[0].timestamp()),
+            int(merged_df.index[-1].timestamp()),
+        ))
 
     # Iterate over time chunks (efficient early exit)
     window_size = pd.Timedelta(f'{empty_minutes}min')
