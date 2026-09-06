@@ -49,8 +49,12 @@ let schedulesDB: typeof import('../db/schedules.js')['default'];
 // can still yield genuine event-loop turns for lowdb's file reads.
 const realSetTimeout = globalThis.setTimeout;
 
+// setupJobs() awaits several lowdb file reads (settings, schedules, and now
+// recurringAlarms). Each read is an async fs round-trip, so give the flush
+// enough event-loop turns to drain them all even when the test runner is
+// running many files in parallel and starving this process of CPU.
 async function flush() {
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 12; i++) {
     await new Promise((resolve) => realSetTimeout(resolve, 1));
     await new Promise((resolve) => setImmediate(resolve));
   }

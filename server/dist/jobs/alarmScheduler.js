@@ -5,10 +5,13 @@ import logger from '../logger.js';
 import memoryDB from '../db/memoryDB.js';
 import serverStatus from '../serverStatus.js';
 import schedulesDB from '../db/schedules.js';
+import recurringAlarmsDB from '../db/recurringAlarms.js';
 import settingsDB from '../db/settings.js';
 import { dailyAlarmSchedules } from '../db/scheduleAlarms.js';
 import { executeFunction } from '../8sleep/deviceApi.js';
 import { getDayIndexForTime, isValidTime, logJob } from './utils.js';
+import { expandAlarmOccurrences } from './recurrenceExpansion.js';
+import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import { connectFranken } from '../8sleep/frankenServer.js';
 import { emitJobEvent } from './jobEvents.js';
 import { recordEvent } from '../db/collector.js';
@@ -196,7 +199,160 @@ export function scheduleAlarmOverride(settingsData, side) {
         });
     });
 }
+// True once Phase 2 recurring alarms are the source of truth for a side (the
+// list is non-empty). When so, the legacy per-day scheduleAlarm() below stands
+// down for that side so the two paths never both arm a job and double-vibrate.
+export function hasRecurringAlarms(side) {
+    const list = recurringAlarmsDB.data?.[side];
+    return Array.isArray(list) && list.length > 0;
+}
+// --- Phase 2: recurring-alarm scheduling -----------------------------------
+// How far ahead we look for the next occurrence of each alarm. everyNDays with
+// large n can have gaps; 400 days comfortably covers the widest allowed n.
+const RECURRENCE_LOOKAHEAD_MS = 400 * 24 * 60 * 60 * 1000;
+// Wake temp the warm ramp aims for when the alarm itself doesn't name one.
+const DEFAULT_WARM_RAMP_TARGET_F = 82;
+function warmRampTargetForSide(side, alarm) {
+    if (typeof alarm.warmRampTargetF === 'number')
+        return alarm.warmRampTargetF;
+    // Fall back to any enabled power schedule's onTemperature for the side, else
+    // a sane default. We scan the day schedules for the first enabled power block.
+    const sideSchedule = schedulesDB.data?.[side];
+    if (sideSchedule) {
+        for (const day of Object.values(sideSchedule)) {
+            if (day?.power?.enabled && typeof day.power.onTemperature === 'number') {
+                return day.power.onTemperature;
+            }
+        }
+    }
+    return DEFAULT_WARM_RAMP_TARGET_F;
+}
+// Compute the next occurrence instant (ms) of an alarm strictly after `afterMs`,
+// or null if none within the lookahead window.
+function nextOccurrenceMs(alarm, timeZone, afterMs) {
+    const occ = expandAlarmOccurrences(alarm, timeZone, afterMs, afterMs + RECURRENCE_LOOKAHEAD_MS);
+    return occ.length > 0 ? occ[0].epochMs : null;
+}
+// Arm the warm-ramp temperature step for a single occurrence, if configured
+// and still in the future.
+function scheduleWarmRamp(side, alarm, occurrenceMs) {
+    if (!alarm.warmRampMinutes || alarm.warmRampMinutes <= 0)
+        return;
+    const rampAtMs = occurrenceMs - alarm.warmRampMinutes * 60 * 1000;
+    if (rampAtMs <= Date.now())
+        return;
+    const targetF = warmRampTargetForSide(side, alarm);
+    const jobName = `${side}-recurring-${alarm.id}-warmramp`;
+    schedule.scheduleJob(jobName, new Date(rampAtMs), async () => {
+        try {
+            logger.debug(`Executing warm ramp for ${side} alarm ${alarm.id} -> ${targetF}F`);
+            await updateDeviceStatus({ [side]: { targetTemperatureF: targetF } });
+            recordEvent('warm_ramp', {
+                side,
+                payload: { alarmId: alarm.id, targetTemperatureF: targetF, warmRampMinutes: alarm.warmRampMinutes },
+                source: 'jobs/alarmScheduler',
+            });
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            logger.error(`Warm ramp for ${side} alarm ${alarm.id} failed: ${message}`);
+        }
+    });
+}
+// Arm one dated job for the next occurrence of `alarm`. When it fires it
+// executes the alarm and self-reschedules the following occurrence, so a single
+// job per alarm keeps the recurrence alive between setupJobs() rebuilds.
+function armNextRecurringOccurrence(side, alarm, timeZone) {
+    const nextMs = nextOccurrenceMs(alarm, timeZone, Date.now());
+    if (nextMs === null) {
+        logger.debug(`No upcoming occurrence for ${side} recurring alarm ${alarm.id} within lookahead`);
+        return;
+    }
+    scheduleWarmRamp(side, alarm, nextMs);
+    const jobName = `${side}-recurring-${alarm.id}`;
+    logger.debug(`Scheduling recurring alarm ${side}/${alarm.id} for ${new Date(nextMs).toISOString()}`);
+    schedule.scheduleJob(jobName, new Date(nextMs), async () => {
+        try {
+            // Respect an active alarm-schedule override the same way the legacy path
+            // does: a temporary override suppresses the recurring fire.
+            await settingsDB.read();
+            const override = settingsDB.data[side]?.scheduleOverrides?.alarm;
+            if (override?.expiresAt) {
+                const expiresAt = moment(override.expiresAt);
+                if (expiresAt.isAfter(moment())) {
+                    logger.debug(`Recurring alarm ${side}/${alarm.id} suppressed by override until ${expiresAt.format()}`);
+                    return;
+                }
+            }
+            await executeAlarm({
+                side,
+                vibrationIntensity: alarm.vibration.intensity,
+                duration: alarm.vibration.duration,
+                vibrationPattern: alarm.vibration.pattern,
+            });
+        }
+        catch (error) {
+            serverStatus.status.alarmSchedule.status = 'failed';
+            const message = error instanceof Error ? error.message : String(error);
+            serverStatus.status.alarmSchedule.message = message;
+            logger.error(error);
+        }
+        finally {
+            // Re-arm the following occurrence. Re-read the DB / settings so a delete
+            // or disable made since this job was armed is honored on the next hop.
+            try {
+                await recurringAlarmsDB.read();
+                await settingsDB.read();
+                const stillEnabledSide = settingsDB.data[side]?.alarmsEnabled && !settingsDB.data[side]?.awayMode;
+                const current = recurringAlarmsDB.data?.[side]?.find((a) => a.id === alarm.id);
+                const tz = settingsDB.data.timeZone;
+                if (stillEnabledSide && current?.enabled && tz) {
+                    armNextRecurringOccurrence(side, current, tz);
+                }
+            }
+            catch (err) {
+                logger.warn(`Failed to re-arm recurring alarm ${side}/${alarm.id}: ${err}`);
+            }
+        }
+    });
+}
+/**
+ * Arm all enabled recurring alarms for a side. Called from setupJobs() after
+ * the old jobs are cancelled. Unlike the legacy per-day scheduler this is NOT
+ * gated on any single day's power.enabled — a recurring alarm fires on its own
+ * calendar; the runtime isOn / awayMode checks inside executeAlarm still skip a
+ * powered-off pod.
+ */
+export function scheduleRecurringAlarms(settingsData, side) {
+    if (!settingsData[side].alarmsEnabled)
+        return;
+    if (settingsData[side].awayMode)
+        return;
+    const timeZone = settingsData.timeZone;
+    if (!timeZone)
+        return;
+    const alarms = recurringAlarmsDB.data?.[side] ?? [];
+    alarms
+        .filter((alarm) => alarm.enabled)
+        .forEach((alarm) => {
+        if (!isValidTime(alarm.time)) {
+            logger.warn(`Skipping ${side} recurring alarm ${alarm.id}: invalid time ${JSON.stringify(alarm.time)}`);
+            return;
+        }
+        try {
+            armNextRecurringOccurrence(side, alarm, timeZone);
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            logger.error(`Failed to schedule recurring alarm ${side}/${alarm.id}: ${message}`);
+        }
+    });
+}
 export const scheduleAlarm = (settingsData, side, day, dailySchedule) => {
+    // Once the side has Phase 2 recurring alarms, they own alarm scheduling and
+    // this legacy per-day path stands down to avoid arming a duplicate job.
+    if (hasRecurringAlarms(side))
+        return;
     // Recurring alarms stay coupled to the day's power schedule; the runtime
     // isOn check inside executeAlarm still skips a manually-off pod.
     if (!dailySchedule.power.enabled)

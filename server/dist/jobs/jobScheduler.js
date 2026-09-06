@@ -8,7 +8,8 @@ import schedulesDB from '../db/schedules.js';
 import serverStatus from '../serverStatus.js';
 import settingsDB from '../db/settings.js';
 import { isSystemDateValid } from './isSystemDateValid.js';
-import { scheduleAlarm, scheduleAlarmOverride, scheduleOneOffAlarm } from './alarmScheduler.js';
+import { scheduleAlarm, scheduleAlarmOverride, scheduleOneOffAlarm, scheduleRecurringAlarms } from './alarmScheduler.js';
+import recurringAlarmsDB from '../db/recurringAlarms.js';
 import { schedulePowerOff, schedulePowerOn, scheduleSleepAnalysis } from './powerScheduler.js';
 import { schedulePrimingRebootAndCalibration } from './primeScheduler.js';
 import { scheduleTemperatures } from './temperatureScheduler.js';
@@ -30,12 +31,17 @@ async function setupJobs() {
         await schedule.gracefulShutdown();
         await settingsDB.read();
         await schedulesDB.read();
+        await recurringAlarmsDB.read();
         moment.tz.setDefault(settingsDB.data.timeZone || 'UTC');
         const schedulesData = schedulesDB.data;
         const settingsData = settingsDB.data;
         logger.info('Scheduling jobs...');
         scheduleAlarmOverride(settingsData, 'left');
         scheduleAlarmOverride(settingsData, 'right');
+        // Phase 2 recurring alarms own alarm scheduling once present; the legacy
+        // per-day scheduleAlarm() inside the day loop stands down for those sides.
+        scheduleRecurringAlarms(settingsData, 'left');
+        scheduleRecurringAlarms(settingsData, 'right');
         if (settingsData.features.oneOffAlarms) {
             scheduleOneOffAlarm(settingsData, 'left');
             scheduleOneOffAlarm(settingsData, 'right');
