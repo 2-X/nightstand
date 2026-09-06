@@ -313,6 +313,7 @@ const createSettings = (): Settings => ({
     buttons: {
       invertButtons: false,
       stepF: 1,
+      favoriteTemperatureF: 80,
       doubleClickWindowMs: 2000,
       hapticEcho: false,
     },
@@ -353,6 +354,7 @@ const createSettings = (): Settings => ({
     buttons: {
       invertButtons: false,
       stepF: 1,
+      favoriteTemperatureF: 80,
       doubleClickWindowMs: 2000,
       hapticEcho: false,
     },
@@ -495,6 +497,12 @@ const createServerStatus = (): ServerStatus => ({
     name: 'Franken monitor',
     status: 'not_started',
     description: 'Handles gestures and monitoring the status',
+    message: '',
+  },
+  buttonMonitor: {
+    name: 'Cover buttons',
+    status: 'not_started',
+    description: 'Pod 5 cover physical-button monitor (tails RAW log for presses)',
     message: '',
   },
   jobs: {

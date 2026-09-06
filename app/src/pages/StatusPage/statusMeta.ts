@@ -118,6 +118,11 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
     blurb: 'Watches for physical taps on the pod and keeps the hardware connection alive.',
     meaning: { healthy: 'Watching for taps and monitoring the connection.' },
   },
+  buttonMonitor: {
+    group: 'core',
+    blurb: 'Watches the Pod 5 cover buttons (+ / logo / -) for presses to adjust temperature or power.',
+    meaning: { healthy: 'Tailing the RAW log for button presses.' },
+  },
   jobs: {
     group: 'core',
     blurb: 'The internal scheduler that runs all the timed jobs below (temperature, power, priming, reboots).',
