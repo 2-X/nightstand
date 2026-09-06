@@ -46,7 +46,9 @@ import {
   ButtonName,
 } from './buttonEvents.js';
 
-const RAW_DIR = '/persistent';
+// Directory holding the pod's rolling *.RAW captures. Overridable via env for
+// tests and local dev; production leaves it at the pod's /persistent.
+const RAW_DIR = process.env.POD_RAW_DIR || '/persistent';
 const POLL_MS = 1_000;
 // Only inner records at/under this many bytes are CBOR-decoded. Piezo-dual
 // records are ~2700 bytes; log records are well under 512. This is how we skip
@@ -68,6 +70,18 @@ interface TailState {
   // Leftover bytes from a record that was truncated at the read boundary,
   // prepended to the next chunk.
   carry: Buffer;
+}
+
+// Fast ASCII pre-filter: does this small record contain a button log tag?
+// Avoids a full CBOR decode for unrelated short log lines.
+const TAG_TCA = Buffer.from('[tca8418');
+const TAG_BTN = Buffer.from('[buttons]');
+function bufferHasTag(data: Buffer): boolean {
+  return data.includes(TAG_TCA) || data.includes(TAG_BTN);
+}
+
+function errMsg(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export class ButtonMonitor {
@@ -405,18 +419,6 @@ export class ButtonMonitor {
       logger.warn(`[buttonMonitor] haptic echo failed: ${errMsg(error)}`);
     }
   }
-}
-
-// Fast ASCII pre-filter: does this small record contain a button log tag?
-// Avoids a full CBOR decode for unrelated short log lines.
-const TAG_TCA = Buffer.from('[tca8418');
-const TAG_BTN = Buffer.from('[buttons]');
-function bufferHasTag(data: Buffer): boolean {
-  return data.includes(TAG_TCA) || data.includes(TAG_BTN);
-}
-
-function errMsg(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 let singleton: ButtonMonitor | null = null;

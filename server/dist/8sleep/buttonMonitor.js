@@ -32,7 +32,9 @@ import { executeFunction } from './deviceApi.js';
 import { applyTemperatureDelta } from './applyTemperatureChange.js';
 import { readRawRecord, RawTruncatedError, RawFramingError, } from './rawLogReader.js';
 import { ButtonEventMachine, DoubleClickDetector, } from './buttonEvents.js';
-const RAW_DIR = '/persistent';
+// Directory holding the pod's rolling *.RAW captures. Overridable via env for
+// tests and local dev; production leaves it at the pod's /persistent.
+const RAW_DIR = process.env.POD_RAW_DIR || '/persistent';
 const POLL_MS = 1_000;
 // Only inner records at/under this many bytes are CBOR-decoded. Piezo-dual
 // records are ~2700 bytes; log records are well under 512. This is how we skip
@@ -47,6 +49,16 @@ const MAX_READ_CHUNK = 1 << 20; // 1 MiB
 const HAPTIC_INTENSITY = 15;
 const HAPTIC_DURATION_S = 1;
 const HAPTIC_CLEAR_MS = 1_000;
+// Fast ASCII pre-filter: does this small record contain a button log tag?
+// Avoids a full CBOR decode for unrelated short log lines.
+const TAG_TCA = Buffer.from('[tca8418');
+const TAG_BTN = Buffer.from('[buttons]');
+function bufferHasTag(data) {
+    return data.includes(TAG_TCA) || data.includes(TAG_BTN);
+}
+function errMsg(error) {
+    return error instanceof Error ? error.message : String(error);
+}
 export class ButtonMonitor {
     timer = null;
     inFlight = false;
@@ -379,16 +391,6 @@ export class ButtonMonitor {
             logger.warn(`[buttonMonitor] haptic echo failed: ${errMsg(error)}`);
         }
     }
-}
-// Fast ASCII pre-filter: does this small record contain a button log tag?
-// Avoids a full CBOR decode for unrelated short log lines.
-const TAG_TCA = Buffer.from('[tca8418');
-const TAG_BTN = Buffer.from('[buttons]');
-function bufferHasTag(data) {
-    return data.includes(TAG_TCA) || data.includes(TAG_BTN);
-}
-function errMsg(error) {
-    return error instanceof Error ? error.message : String(error);
 }
 let singleton = null;
 export function startButtonMonitor() {

@@ -37,7 +37,8 @@ const CODE_TO_BUTTON: Record<number, ButtonName> = {
 const PRESS_RE = /\[tca8418([RL])\]\s+gpi\s+(press|release)\s+(\d+)/i;
 const HELD_RE = /\[buttons\]\s+(top|middle|bottom)\s+button\s+held\s+for\s+(\d+)ms\s*(\(abort\))?/i;
 
-type PendingKey = `${ButtonSide}:${ButtonName}`;
+// Map key encoding side+button. Kept as a plain string (a template-literal
+// type alias trips the repo's no-type-alias rule).
 
 interface Pending {
   // We've seen a press edge but not yet the matching release.
@@ -48,9 +49,9 @@ interface Pending {
 }
 
 export class ButtonEventMachine {
-  private pending = new Map<PendingKey, Pending>();
+  private pending = new Map<string, Pending>();
 
-  private static key(side: ButtonSide, button: ButtonName): PendingKey {
+  private static key(side: ButtonSide, button: ButtonName): string {
     return `${side}:${button}`;
   }
 
