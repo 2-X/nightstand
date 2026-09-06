@@ -309,7 +309,13 @@ const createSettings = (): Settings => ({
         snoozeDuration: 60,
         inactiveAlarmBehavior: 'power',
       },
-    }
+    },
+    buttons: {
+      invertButtons: false,
+      stepF: 1,
+      doubleClickWindowMs: 2000,
+      hapticEcho: false,
+    },
   },
   right: {
     name: 'Right side',
@@ -343,7 +349,13 @@ const createSettings = (): Settings => ({
         snoozeDuration: 60,
         inactiveAlarmBehavior: 'power',
       },
-    }
+    },
+    buttons: {
+      invertButtons: false,
+      stepF: 1,
+      doubleClickWindowMs: 2000,
+      hapticEcho: false,
+    },
   },
   primePodDaily: { enabled: true, time: '14:30' },
 });
@@ -775,6 +787,113 @@ export const setSleepRecords = (records: SleepRecord[]) => {
 
 export const getSleepStages = createSleepStages;
 export const getSleepScore = createSleepScore;
+
+// --- Phase 2/3: recurring alarms + temperature history ---------------------
+
+type MockBedSample = {
+  id: number;
+  side: Side;
+  timestamp: number; // epoch seconds
+  current_level: number | null;
+  target_level: number | null;
+  current_temp_f: number | null;
+  target_temp_f: number | null;
+  is_on: boolean;
+};
+
+// Synthesize a plausible actual-water-temp series over [startSec, endSec] that
+// only extends up to "now" (values in the future are the projected curve's job,
+// not the actual series). One sample per 5 minutes, easing toward the setpoint.
+export const getTemperatureHistory = (side: Side, startTime?: string, endTime?: string): MockBedSample[] => {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const startSec = startTime ? Math.floor(new Date(startTime).getTime() / 1000) : nowSec - 6 * 3600;
+  const endSec = Math.min(nowSec, endTime ? Math.floor(new Date(endTime).getTime() / 1000) : nowSec);
+  if (endSec <= startSec) return [];
+  const rows: MockBedSample[] = [];
+  const target = side === 'left' ? 88 : 84;
+  let current = target - 12; // start well below target, warm toward it
+  let id = 1;
+  for (let t = startSec; t <= endSec; t += 300) {
+    current += (target - current) * 0.18; // exponential approach
+    rows.push({
+      id: id++,
+      side,
+      timestamp: t,
+      current_level: null,
+      target_level: null,
+      current_temp_f: Math.round(current * 10) / 10,
+      target_temp_f: target,
+      is_on: true,
+    });
+  }
+  return rows;
+};
+
+type MockRecurringAlarm = {
+  id: string;
+  time: string;
+  recurrence: { kind: string; days?: number[]; n?: number; anchorDate?: string };
+  vibration: { intensity: number; duration: number; pattern: 'double' | 'rise' };
+  warmRampMinutes?: number;
+  warmRampTargetF?: number;
+  enabled: boolean;
+};
+
+let recurringAlarms: { left: MockRecurringAlarm[]; right: MockRecurringAlarm[] } = {
+  left: [
+    { id: 'demo-left-1', time: '07:00', recurrence: { kind: 'weekdays' }, vibration: { intensity: 60, duration: 90, pattern: 'rise' }, warmRampMinutes: 20, enabled: true },
+    { id: 'demo-left-2', time: '09:00', recurrence: { kind: 'weekends' }, vibration: { intensity: 40, duration: 120, pattern: 'double' }, enabled: true },
+  ],
+  right: [
+    { id: 'demo-right-1', time: '06:30', recurrence: { kind: 'daily' }, vibration: { intensity: 50, duration: 60, pattern: 'rise' }, enabled: true },
+  ],
+};
+
+export const getRecurringAlarms = () => recurringAlarms;
+export const setRecurringAlarmsForSide = (side: Side, list: MockRecurringAlarm[]) => {
+  recurringAlarms = { ...recurringAlarms, [side]: list };
+  return recurringAlarms[side];
+};
+
+// Client-side recurrence expansion mirroring the server, so the demo places
+// real alarm markers on the Tonight chart.
+const DAY_MS = 24 * 3600 * 1000;
+export const getUpcomingAlarms = (hours: number, side?: Side) => {
+  const tz = 'America/Los_Angeles';
+  const fromMs = Date.now();
+  const toMs = fromMs + hours * 3600 * 1000;
+  const sides: Side[] = side ? [side] : ['left', 'right'];
+  const occurrences: Array<{ side: Side; alarmId: string; time: string; epochMs: number; iso: string; vibration: unknown; warmRampMinutes?: number }> = [];
+  for (const s of sides) {
+    for (const a of recurringAlarms[s]) {
+      if (!a.enabled) continue;
+      const [h, m] = a.time.split(':').map(Number);
+      for (let dayMs = fromMs - DAY_MS; dayMs <= toMs + DAY_MS; dayMs += DAY_MS) {
+        const day = moment.tz(dayMs, tz).startOf('day');
+        const weekday = day.day();
+        const r = a.recurrence;
+        let matches = false;
+        if (r.kind === 'daily') matches = true;
+        else if (r.kind === 'weekdays') matches = weekday >= 1 && weekday <= 5;
+        else if (r.kind === 'weekends') matches = weekday === 0 || weekday === 6;
+        else if (r.kind === 'customDays') matches = !!r.days?.includes(weekday);
+        else if (r.kind === 'everyNDays' && r.anchorDate && r.n) {
+          const anchor = moment.tz(r.anchorDate, 'YYYY-MM-DD', tz).startOf('day');
+          const diff = day.clone().startOf('day').diff(anchor, 'days');
+          matches = diff >= 0 && diff % r.n === 0;
+        }
+        if (!matches) continue;
+        const fire = day.clone().hour(h).minute(m).second(0).millisecond(0);
+        const epochMs = fire.valueOf();
+        if (epochMs > fromMs && epochMs <= toMs) {
+          occurrences.push({ side: s, alarmId: a.id, time: a.time, epochMs, iso: fire.toISOString(true), vibration: a.vibration, warmRampMinutes: a.warmRampMinutes });
+        }
+      }
+    }
+  }
+  occurrences.sort((a, b) => a.epochMs - b.epochMs);
+  return { hours, timeZone: tz, occurrences };
+};
 
 export const listMovementRecords = () => movementRecords;
 

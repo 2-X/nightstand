@@ -24,6 +24,10 @@ import {
   listVitalsRecords,
   getSleepStages,
   getSleepScore,
+  getTemperatureHistory,
+  getRecurringAlarms,
+  setRecurringAlarmsForSide,
+  getUpcomingAlarms,
   filterByQuery,
   listLogs,
   getLogFiles,
@@ -210,6 +214,32 @@ export const handlers = [
     // const filtered = filterByQuery(records, filters, (record: VitalsRecord) => record.timestamp * 1000);
     await delay(120);
     return HttpResponse.json(records);
+  }),
+  http.get('/api/metrics/temperature', async ({ request }) => {
+    const { side, startTime, endTime } = toFilters(request);
+    await delay(120);
+    // The Tonight page always passes a side, so return the bed array directly
+    // (the server returns { bed, hub } only when no side filter is present).
+    return HttpResponse.json(getTemperatureHistory(side ?? 'left', startTime, endTime));
+  }),
+  http.get('/api/alarms', async () => {
+    await delay(100);
+    return HttpResponse.json(deepClone(getRecurringAlarms()));
+  }),
+  http.put('/api/alarms/:side', async ({ params, request }) => {
+    const side = params.side === 'right' ? 'right' : 'left';
+    const body = (await request.json()) as Parameters<typeof setRecurringAlarmsForSide>[1];
+    const updated = setRecurringAlarmsForSide(side, body);
+    await delay(100);
+    return HttpResponse.json(deepClone(updated));
+  }),
+  http.get('/api/alarms/upcoming', async ({ request }) => {
+    const url = new URL(request.url);
+    const hours = Number(url.searchParams.get('hours') ?? '12');
+    const sideParam = url.searchParams.get('side');
+    const side = sideParam === 'left' || sideParam === 'right' ? sideParam : undefined;
+    await delay(100);
+    return HttpResponse.json(getUpcomingAlarms(hours, side));
   }),
   http.get('/api/metrics/presence', () => HttpResponse.json(presence)),
   http.get('/api/calibration', () => HttpResponse.json(mockCalibration)),

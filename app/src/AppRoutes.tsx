@@ -6,6 +6,8 @@ import RouteFallback from './components/RouteFallback.tsx';
 // Pages are lazy-loaded so each route ships only what it needs. The shell
 // (Layout, AppStoreProvider, theme, query client) stays in the entry chunk so
 // the first paint doesn't wait on a route-specific download.
+const TonightPage = lazy(() => import('./pages/TonightPage/TonightPage'));
+const AlarmsPage = lazy(() => import('./pages/AlarmsPage/AlarmsPage'));
 const ControlTempPage = lazy(() => import('./pages/ControlTempPage/ControlTempPage'));
 const BaseControlPage = lazy(() => import('./pages/BaseControlPage/BaseControlPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage/SettingsPage'));
@@ -23,7 +25,9 @@ export default function AppRoutes() {
     <Suspense fallback={ <RouteFallback /> }>
       <Routes>
         <Route path="/" element={ <Layout/> }>
-          <Route index element={ <ControlTempPage/> }/>
+          <Route index element={ <TonightPage/> }/>
+          <Route path="control" element={ <ControlTempPage/> }/>
+          <Route path="alarms" element={ <AlarmsPage/> }/>
           <Route path="temperature" element={ <ControlTempPage/> }/>
           <Route path="left" element={ <ControlTempPage/> }/>
           <Route path="right" element={ <ControlTempPage/> }/>

@@ -5,6 +5,7 @@ import ThermostatIcon from '@mui/icons-material/Thermostat';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import SettingsIcon from '@mui/icons-material/Settings';
 import BugReportIcon from '@mui/icons-material/BugReport';
+import BedtimeIcon from '@mui/icons-material/Bedtime';
 import AirlineSeatReclineExtraIcon from '@mui/icons-material/AirlineSeatReclineExtra';
 
 type Page = {
@@ -23,7 +24,8 @@ function TemperatureIcon() {
 }
 
 export const PAGES: Page[] = [
-  { title: 'Temperature', route: '/temperature', icon: <TemperatureIcon/> },
+  { title: 'Tonight', route: '/', icon: <BedtimeIcon/> },
+  { title: 'Temperature', route: '/control', icon: <TemperatureIcon/> },
   { title: 'Schedules', route: '/schedules', icon: <ScheduleIcon/> },
   // Reclining-seat glyph reads as a tilted/raised bed posture better than a
   // flat bed icon.
