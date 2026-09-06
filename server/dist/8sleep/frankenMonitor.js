@@ -5,8 +5,7 @@ import memoryDB from '../db/memoryDB.js';
 import { connectFranken, FrankenCommandTimeoutError } from './frankenServer.js';
 import { wait } from './promises.js';
 import { GestureSchema } from '../db/settingsSchema.js';
-import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
-import { markManualTempChange } from '../jobs/scheduleOverride.js';
+import { applyTemperatureDelta } from './applyTemperatureChange.js';
 import serverStatus from '../serverStatus.js';
 import { trimixBase } from './trimixBaseControl.js';
 import { BASE_PRESETS } from './basePresets.js';
@@ -62,18 +61,10 @@ export class FrankenMonitor {
         logger.debug(`[processGesture] side: ${side}, gesture: ${gesture}, type: ${behavior.type}`);
         if (behavior.type === 'temperature') {
             const currentTemperatureTarget = this.deviceStatus[side].targetTemperatureF;
-            let newTemperatureTargetF;
-            const change = behavior.amount;
-            if (behavior.change === 'increment') {
-                newTemperatureTargetF = currentTemperatureTarget + change;
-            }
-            else {
-                newTemperatureTargetF = currentTemperatureTarget + (-1 * change);
-            }
-            logger.debug(`Processing gesture temperature change for ${side}. ${currentTemperatureTarget} -> ${newTemperatureTargetF}`);
-            await updateDeviceStatus({ [side]: { targetTemperatureF: newTemperatureTargetF } });
-            // Tap counts as a manual change for schedule-override purposes.
-            await markManualTempChange(side, { from: currentTemperatureTarget, to: newTemperatureTargetF });
+            const deltaF = behavior.change === 'increment' ? behavior.amount : -behavior.amount;
+            // Shared with the Pod 5 cover-button path so both physical controls apply
+            // identical temperature semantics (see applyTemperatureChange.ts).
+            await applyTemperatureDelta(side, currentTemperatureTarget, deltaF);
             return;
         }
         else if (behavior.type === 'base_control') {
