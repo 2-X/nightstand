@@ -1,0 +1,402 @@
+// Pod 5 cover physical-button support.
+//
+// The Pod 5 cover has three buttons per side (+ / logo / -) wired to a TCA8418
+// keypad the stock frank firmware receives but deliberately ignores (it logs
+// `[TTC] ignoring short top click(s)` and never bumps the DEVICE_STATUS tap
+// counters). Frank DOES write every press into the RAW capture as `log`
+// records, so we tail the newest /persistent/*.RAW file, extract the button
+// log lines, debounce/classify them, and apply the actions the firmware
+// declined to.
+//
+// Resilience contract (this runs unattended at 3 AM next to bed control):
+//  - Never blocks: setInterval with an in-flight guard, incremental reads only.
+//  - Fail-soft: any parse/dispatch error is caught and logged; a bad byte
+//    resyncs rather than crashing.
+//  - EVERY promise is caught. An unhandled rejection triggers a full server
+//    shutdown (server.ts), which would take out bed control.
+//  - Offset lives in memory only; on rollover to a newer file we start at 0.
+//  - Gated behind settings.features.coverButtons.
+import fsp from 'fs/promises';
+import path from 'path';
+import cbor from 'cbor';
+import moment from 'moment-timezone';
+import logger from '../logger.js';
+import settingsDB from '../db/settings.js';
+import memoryDB from '../db/memoryDB.js';
+import serverStatus from '../serverStatus.js';
+import eventBus from '../events/eventBus.js';
+import { recordEvent } from '../db/collector.js';
+import { getDeviceStatusCoalesced } from './frankenServer.js';
+import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
+import { executeFunction } from './deviceApi.js';
+import { applyTemperatureDelta } from './applyTemperatureChange.js';
+import { readRawRecord, RawTruncatedError, RawFramingError, } from './rawLogReader.js';
+import { ButtonEventMachine, DoubleClickDetector, } from './buttonEvents.js';
+const RAW_DIR = '/persistent';
+const POLL_MS = 1_000;
+// Only inner records at/under this many bytes are CBOR-decoded. Piezo-dual
+// records are ~2700 bytes; log records are well under 512. This is how we skip
+// piezo payloads by length alone, never buffering a sample array.
+const MAX_LOG_RECORD_BYTES = 512;
+// How much of the tail to read per tick. Frank appends slowly; a press is one
+// short record. Cap the read so a huge backlog (first open of a large file)
+// can't allocate an enormous buffer in one shot.
+const MAX_READ_CHUNK = 1 << 20; // 1 MiB
+// A short soft pulse to confirm a handled temperature press. du is in seconds;
+// we clear it ourselves after this many ms so it's a brief buzz, not an alarm.
+const HAPTIC_INTENSITY = 15;
+const HAPTIC_DURATION_S = 1;
+const HAPTIC_CLEAR_MS = 1_000;
+export class ButtonMonitor {
+    timer = null;
+    inFlight = false;
+    tail = null;
+    machine = new ButtonEventMachine();
+    doubleClick = new DoubleClickDetector(2_000);
+    start() {
+        if (this.timer) {
+            logger.warn('[buttonMonitor] already running');
+            return;
+        }
+        logger.info('[buttonMonitor] starting (poll every ' + POLL_MS + 'ms)');
+        this.markStatus('started', '');
+        // unref so the poll timer never keeps the process alive on its own.
+        this.timer = setInterval(() => { void this.tick(); }, POLL_MS);
+        this.timer.unref?.();
+    }
+    stop() {
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+    }
+    markStatus(status, message = '') {
+        const s = serverStatus.status.buttonMonitor;
+        if (!s)
+            return;
+        const prev = s.status;
+        s.status = status;
+        s.message = message;
+        s.timestamp = moment.tz().format();
+        if (prev !== status) {
+            eventBus.emit('service-health', { buttonMonitor: s });
+        }
+    }
+    // One poll tick. Wrapped so it can NEVER throw or reject into the interval.
+    async tick() {
+        if (this.inFlight)
+            return; // previous tick still working; skip
+        this.inFlight = true;
+        try {
+            await settingsDB.read();
+            if (!settingsDB.data.features.coverButtons) {
+                // Disabled: hold status calm and do nothing.
+                this.markStatus('not_started', 'coverButtons disabled');
+                return;
+            }
+            const newest = await this.findNewestRawFile();
+            if (!newest) {
+                // No RAW files yet; not an error (fresh pod / internet-blocked).
+                this.markStatus('healthy', 'no RAW file');
+                return;
+            }
+            // Rollover: frank writes a new hex-named file ~every 15 min. When the
+            // newest file changes, reset offset/carry and start from the top of the
+            // new file. The state machine's pending presses are per-file transient;
+            // clearing them on rollover avoids a press stuck "down" forever.
+            if (!this.tail || this.tail.file !== newest) {
+                logger.debug(`[buttonMonitor] tailing ${newest}`);
+                this.tail = { file: newest, offset: 0, carry: Buffer.alloc(0) };
+            }
+            await this.readAppended();
+            this.markStatus('healthy', '');
+        }
+        catch (error) {
+            // Fail-soft: log and keep polling. Do not rethrow.
+            this.markStatus('failed', errMsg(error));
+            logger.warn(`[buttonMonitor] tick failed: ${errMsg(error)}`);
+        }
+        finally {
+            this.inFlight = false;
+        }
+    }
+    // Find the newest *.RAW in /persistent by mtime, excluding SEQNO.RAW.
+    async findNewestRawFile() {
+        let entries;
+        try {
+            entries = await fsp.readdir(RAW_DIR);
+        }
+        catch {
+            return null; // dir missing (local dev); caller treats as no-file
+        }
+        let newest = null;
+        let newestMtime = -Infinity;
+        for (const name of entries) {
+            if (!name.endsWith('.RAW') || name === 'SEQNO.RAW')
+                continue;
+            const full = path.join(RAW_DIR, name);
+            try {
+                const st = await fsp.stat(full);
+                if (!st.isFile())
+                    continue;
+                if (st.mtimeMs > newestMtime) {
+                    newestMtime = st.mtimeMs;
+                    newest = full;
+                }
+            }
+            catch {
+                // File vanished mid-scan (frank rolled it); skip.
+            }
+        }
+        return newest;
+    }
+    // Read bytes appended since our last offset, parse out log records, dispatch.
+    async readAppended() {
+        const tail = this.tail;
+        let st;
+        try {
+            st = await fsp.stat(tail.file);
+        }
+        catch {
+            // File disappeared; force re-discovery next tick.
+            this.tail = null;
+            return;
+        }
+        // File truncated/replaced under the same name (size shrank): restart it.
+        if (st.size < tail.offset) {
+            tail.offset = 0;
+            tail.carry = Buffer.alloc(0);
+        }
+        const available = st.size - tail.offset;
+        if (available <= 0)
+            return; // nothing new
+        const toRead = Math.min(available, MAX_READ_CHUNK);
+        const buf = Buffer.alloc(toRead);
+        let bytesRead = 0;
+        const fh = await fsp.open(tail.file, 'r');
+        try {
+            const res = await fh.read(buf, 0, toRead, tail.offset);
+            bytesRead = res.bytesRead;
+        }
+        finally {
+            await fh.close();
+        }
+        if (bytesRead <= 0)
+            return;
+        // Prepend any carry from a record that straddled the previous read.
+        const chunk = tail.carry.length
+            ? Buffer.concat([tail.carry, buf.subarray(0, bytesRead)])
+            : buf.subarray(0, bytesRead);
+        tail.carry = Buffer.alloc(0);
+        let cursor = 0;
+        // consumedFromChunk maps back to the source-file offset advance. The number
+        // of raw file bytes consumed equals cursor over the part of chunk that came
+        // from the file (i.e. cursor minus the carry we prepended). We advance the
+        // file offset by bytesRead unconditionally at the end and stash any
+        // unconsumed tail as carry, so offset math stays simple and monotonic.
+        const events = [];
+        while (cursor < chunk.length) {
+            let rec;
+            try {
+                rec = readRawRecord(chunk, cursor);
+            }
+            catch (error) {
+                if (error instanceof RawTruncatedError) {
+                    // Incomplete record at the end: keep it as carry for next tick.
+                    tail.carry = Buffer.from(chunk.subarray(cursor));
+                    break;
+                }
+                if (error instanceof RawFramingError) {
+                    // Resync: skip one byte and try to re-lock onto a record start.
+                    cursor += 1;
+                    continue;
+                }
+                // Unknown error: bail out of this chunk, keep going next tick.
+                logger.warn(`[buttonMonitor] parse error: ${errMsg(error)}`);
+                break;
+            }
+            if (rec === null)
+                break; // only padding left
+            cursor = rec.nextOffset;
+            const ev = this.classifyRecord(rec.data);
+            if (ev)
+                events.push(...ev);
+        }
+        // Advance the file offset past everything we pulled off disk. Anything not
+        // yet consumed lives in carry, so we never re-read those bytes.
+        tail.offset += bytesRead;
+        for (const ev of events) {
+            await this.dispatch(ev);
+        }
+    }
+    // Decode a small inner record and, if it's a button log line, run it through
+    // the edge machine. Large records (piezo) are skipped by length.
+    classifyRecord(data) {
+        if (data.length === 0 || data.length > MAX_LOG_RECORD_BYTES)
+            return [];
+        // Cheap pre-filter: only decode records that mention our tags. Avoids
+        // CBOR-decoding every small non-button log line.
+        if (!bufferHasTag(data))
+            return [];
+        let decoded;
+        try {
+            decoded = cbor.decodeFirstSync(data);
+        }
+        catch {
+            return [];
+        }
+        if (!decoded || typeof decoded !== 'object')
+            return [];
+        const rec = decoded;
+        if (rec.type !== 'log' || typeof rec.msg !== 'string')
+            return [];
+        return this.machine.push(rec.msg);
+    }
+    async dispatch(ev) {
+        try {
+            await settingsDB.read();
+            const side = ev.side;
+            const cfg = settingsDB.data[side].buttons;
+            this.doubleClick.setWindow(cfg.doubleClickWindowMs);
+            // Middle double-click -> alarm dismiss. Route through the detector.
+            if (ev.button === 'middle') {
+                const result = this.doubleClick.feed(ev, Date.now());
+                if (result.doubleClick) {
+                    await this.handleAlarmDismiss(side);
+                }
+                // A lone middle single-click is a no-op in the mapping.
+                return;
+            }
+            // Hold events on top/bottom are not mapped to anything yet; record and
+            // skip so a long-press doesn't spam temperature.
+            if (ev.kind === 'hold') {
+                recordEvent('button_press', {
+                    side,
+                    payload: { side, button: ev.button, kind: ev.kind, action: 'ignored_hold' },
+                    source: '8sleep/buttonMonitor',
+                });
+                return;
+            }
+            // Top/bottom click -> temperature. invertButtons swaps which physical
+            // button counts as +. Resolved HERE (not in the parser) so the user can
+            // flip it live via settings if +/- come out reversed on the hardware.
+            const isPlus = cfg.invertButtons
+                ? ev.button === 'bottom'
+                : ev.button === 'top';
+            const deltaF = isPlus ? cfg.stepF : -cfg.stepF;
+            await this.handleTemperature(side, deltaF, ev.button);
+        }
+        catch (error) {
+            // Never let a dispatch failure escape as an unhandled rejection.
+            logger.warn(`[buttonMonitor] dispatch failed (${ev.side}/${ev.button}/${ev.kind}): ${errMsg(error)}`);
+            this.markStatus('failed', errMsg(error));
+        }
+    }
+    async handleTemperature(side, deltaF, button) {
+        // Need the live target to increment from. If we can't read it, skip rather
+        // than guess a base value.
+        let currentTargetF;
+        try {
+            const status = await getDeviceStatusCoalesced();
+            currentTargetF = status?.[side]?.targetTemperatureF;
+        }
+        catch (error) {
+            logger.warn(`[buttonMonitor] could not read device status for temp press: ${errMsg(error)}`);
+            return;
+        }
+        if (typeof currentTargetF !== 'number' || !Number.isFinite(currentTargetF)) {
+            logger.warn(`[buttonMonitor] no target temperature for ${side}; skipping press`);
+            return;
+        }
+        await applyTemperatureDelta(side, currentTargetF, deltaF);
+        recordEvent('button_press', {
+            side,
+            payload: {
+                side,
+                button,
+                kind: 'click',
+                action: deltaF > 0 ? 'temp_up' : 'temp_down',
+                deltaF,
+            },
+            source: '8sleep/buttonMonitor',
+        });
+        // Haptic echo AFTER the temperature change, gated + never during an alarm.
+        await this.maybeHaptic(side);
+    }
+    async handleAlarmDismiss(side) {
+        await memoryDB.read();
+        const vibrating = memoryDB.data[side].isAlarmVibrating === true;
+        if (!vibrating) {
+            // Middle double-click with no active alarm is a no-op.
+            recordEvent('button_press', {
+                side,
+                payload: { side, button: 'middle', kind: 'click', action: 'dismiss_noop' },
+                source: '8sleep/buttonMonitor',
+            });
+            return;
+        }
+        // Same path the API's ALARM_CLEAR uses (updateDeviceStatus isAlarmVibrating
+        // false -> ALARM_CLEAR + memoryDB flip + alarm_cleared event).
+        await updateDeviceStatus({ [side]: { isAlarmVibrating: false } });
+        recordEvent('button_press', {
+            side,
+            payload: { side, button: 'middle', kind: 'click', action: 'alarm_dismiss' },
+            source: '8sleep/buttonMonitor',
+        });
+    }
+    async maybeHaptic(side) {
+        await settingsDB.read();
+        if (!settingsDB.data[side].buttons.hapticEcho)
+            return;
+        // Never buzz while a real alarm is vibrating.
+        await memoryDB.read();
+        if (memoryDB.data[side].isAlarmVibrating === true)
+            return;
+        try {
+            const payload = {
+                pl: HAPTIC_INTENSITY,
+                du: HAPTIC_DURATION_S,
+                pi: 'double',
+                tt: moment.tz(settingsDB.data.timeZone || 'UTC').unix(),
+            };
+            const hex = cbor.encode(payload).toString('hex');
+            const command = side === 'left' ? 'ALARM_LEFT' : 'ALARM_RIGHT';
+            await executeFunction(command, hex);
+            // Clear the pulse shortly after so it's a brief confirmation, not an
+            // alarm. Detached timer: catch its own rejection so it can't escape.
+            setTimeout(() => {
+                void (async () => {
+                    try {
+                        await executeFunction('ALARM_CLEAR', 'empty');
+                    }
+                    catch (error) {
+                        logger.warn(`[buttonMonitor] haptic clear failed: ${errMsg(error)}`);
+                    }
+                })();
+            }, HAPTIC_CLEAR_MS);
+        }
+        catch (error) {
+            logger.warn(`[buttonMonitor] haptic echo failed: ${errMsg(error)}`);
+        }
+    }
+}
+// Fast ASCII pre-filter: does this small record contain a button log tag?
+// Avoids a full CBOR decode for unrelated short log lines.
+const TAG_TCA = Buffer.from('[tca8418');
+const TAG_BTN = Buffer.from('[buttons]');
+function bufferHasTag(data) {
+    return data.includes(TAG_TCA) || data.includes(TAG_BTN);
+}
+function errMsg(error) {
+    return error instanceof Error ? error.message : String(error);
+}
+let singleton = null;
+export function startButtonMonitor() {
+    if (!singleton)
+        singleton = new ButtonMonitor();
+    singleton.start();
+}
+export function stopButtonMonitor() {
+    singleton?.stop();
+}
+//# sourceMappingURL=buttonMonitor.js.map

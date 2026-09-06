@@ -39,6 +39,12 @@ class ServerStatus {
                 description: 'Handles gestures and monitoring the status',
                 message: '',
             },
+            buttonMonitor: {
+                name: 'Cover buttons',
+                status: 'not_started',
+                description: 'Pod 5 cover physical-button monitor (tails RAW log for presses)',
+                message: '',
+            },
             jobs: {
                 name: 'Job scheduler',
                 status: 'not_started',

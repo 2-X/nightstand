@@ -4,6 +4,7 @@ import logger from './logger.js';
 import { connectFranken, disconnectFranken, getFrankenQueueDepth } from './8sleep/frankenServer.js';
 import { FrankenMonitor } from './8sleep/frankenMonitor.js';
 import { startPresenceAutoOff, stopPresenceAutoOff } from './8sleep/presenceAutoOffMonitor.js';
+import { startButtonMonitor, stopButtonMonitor } from './8sleep/buttonMonitor.js';
 import './jobs/jobScheduler.js';
 // Setup code
 import setupMiddleware from './setup/middleware.js';
@@ -79,6 +80,7 @@ async function gracefulShutdown(signal) {
         }
         if (!config.remoteDevMode) {
             stopPresenceAutoOff();
+            stopButtonMonitor();
             frankenMonitor?.stop();
             await disconnectFranken();
             logger.debug('Successfully closed Franken components.');
@@ -108,6 +110,9 @@ const initFrankenMonitor = () => {
     void frankenMonitor.start();
     logger.info('Frank monitor started!');
     startPresenceAutoOff();
+    // Pod 5 cover-button monitor. Self-gates on settings.features.coverButtons
+    // each tick, so starting it unconditionally is safe.
+    startButtonMonitor();
 };
 // Main startup function
 async function startServer() {
