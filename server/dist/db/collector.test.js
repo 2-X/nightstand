@@ -110,19 +110,22 @@ describe('collector on-change / heartbeat sampling', () => {
         // timestamp and the heartbeat comparison.
         const realNow = Date.now;
         try {
-            const base = 1_000_000_000_000;
+            // Use a timestamp far in the future so it dominates any "last written"
+            // state left over from earlier tests, and force a value change on the
+            // seed snapshot so it definitely writes and reseeds lastBed at `base`.
+            const base = 4_000_000_000_000;
             Date.now = () => base;
-            onDeviceStatus(makeStatus()); // seeds "last written" at base
+            onDeviceStatus(makeStatus({ left: makeSide({ targetTemperatureF: 70 }), right: makeSide({ targetTemperatureF: 70 }) }));
             await flush();
             captured.bed.length = 0;
             // +30s: unchanged, under heartbeat -> no write
             Date.now = () => base + 30_000;
-            onDeviceStatus(makeStatus());
+            onDeviceStatus(makeStatus({ left: makeSide({ targetTemperatureF: 70 }), right: makeSide({ targetTemperatureF: 70 }) }));
             await flush();
             assert.equal(captured.bed.length, 0, 'under 60s heartbeat should suppress');
             // +61s: unchanged, past heartbeat -> both sides write
             Date.now = () => base + 61_000;
-            onDeviceStatus(makeStatus());
+            onDeviceStatus(makeStatus({ left: makeSide({ targetTemperatureF: 70 }), right: makeSide({ targetTemperatureF: 70 }) }));
             await flush();
             assert.equal(captured.bed.filter((r) => r.side === 'left').length, 1);
             assert.equal(captured.bed.filter((r) => r.side === 'right').length, 1);
