@@ -44,9 +44,11 @@ const defaultSideSettings = {
     },
     buttons: {
         // Pod 5 cover button behavior (see settingsSchema ButtonsConfigSchema).
-        // top click = +1F, bottom click = -1F, middle double-click = dismiss alarm.
+        // top click = +1F, bottom click = -1F, middle click = dismiss a vibrating
+        // alarm, else jump to the side's favorite temperature.
         invertButtons: false,
         stepF: 1,
+        favoriteTemperatureF: 80,
         doubleClickWindowMs: 2000,
         // DEFAULT OFF: enable per side after live-verifying the presses land.
         hapticEcho: false,

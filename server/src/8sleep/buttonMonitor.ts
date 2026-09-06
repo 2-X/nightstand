@@ -34,6 +34,7 @@ import { getDeviceStatusCoalesced } from './frankenServer.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import { executeFunction } from './deviceApi.js';
 import { applyTemperatureDelta } from './applyTemperatureChange.js';
+import { markManualTempChange } from '../jobs/scheduleOverride.js';
 import {
   readRawRecord,
   RawTruncatedError,
@@ -41,7 +42,6 @@ import {
 } from './rawLogReader.js';
 import {
   ButtonEventMachine,
-  DoubleClickDetector,
   ButtonEvent,
   ButtonName,
 } from './buttonEvents.js';
@@ -89,7 +89,6 @@ export class ButtonMonitor {
   private inFlight = false;
   private tail: TailState | null = null;
   private readonly machine = new ButtonEventMachine();
-  private readonly doubleClick = new DoubleClickDetector(2_000);
 
   public start(): void {
     if (this.timer) {
@@ -292,15 +291,19 @@ export class ButtonMonitor {
       await settingsDB.read();
       const side: Side = ev.side;
       const cfg = settingsDB.data[side].buttons;
-      this.doubleClick.setWindow(cfg.doubleClickWindowMs);
 
-      // Middle double-click -> alarm dismiss. Route through the detector.
+      // Middle (logo) click: dismiss a vibrating alarm, else jump the side to
+      // its saved favorite temperature. Single click for both - a groggy
+      // sleeper shouldn't need a double-click to stop the buzzing, and the
+      // favorite jump is the button's whole job when no alarm is active.
       if (ev.button === 'middle') {
-        const result = this.doubleClick.feed(ev, Date.now());
-        if (result.doubleClick) {
+        if (ev.kind === 'hold') return; // reserve holds for future mapping
+        await memoryDB.read();
+        if (memoryDB.data[side].isAlarmVibrating === true) {
           await this.handleAlarmDismiss(side);
+        } else {
+          await this.handleFavoriteTemperature(side, cfg.favoriteTemperatureF);
         }
-        // A lone middle single-click is a no-op in the mapping.
         return;
       }
 
@@ -362,6 +365,22 @@ export class ButtonMonitor {
     });
 
     // Haptic echo AFTER the temperature change, gated + never during an alarm.
+    await this.maybeHaptic(side);
+  }
+
+  // Middle (logo) button with no active alarm: set the side to its saved
+  // favorite temperature, powering the side on if it was off. An absolute set,
+  // not a delta - pressing it twice is idempotent.
+  private async handleFavoriteTemperature(side: Side, favoriteF: number): Promise<void> {
+    await updateDeviceStatus(
+      { [side]: { isOn: true, targetTemperatureF: favoriteF } } as Parameters<typeof updateDeviceStatus>[0],
+    );
+    await markManualTempChange(side, { to: favoriteF });
+    recordEvent('button_press', {
+      side,
+      payload: { side, button: 'middle', kind: 'click', action: 'favorite_temp', favoriteF },
+      source: '8sleep/buttonMonitor',
+    });
     await this.maybeHaptic(side);
   }
 

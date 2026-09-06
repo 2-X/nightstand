@@ -11,6 +11,7 @@ Run locally (needs cbor2, not part of the node CI):
     python3 -m pytest biometrics/__tests__/test_pump_health.py -v
 (also runs under plain unittest: python3 -m unittest discover ...)
 """
+import time
 import unittest
 
 import sys, os
@@ -30,13 +31,20 @@ import service_health
 
 
 def _frame(left_rpm=1950, left_current=12.0, left_water=True,
-           right_rpm=2000, right_current=8.0, right_water=True):
+           right_rpm=2000, right_current=8.0, right_water=True, ts=None):
+    # Live frames carry epoch seconds (e.g. 1783654226); default to "now" so
+    # frames pass the staleness guard.
     return {
         'type': 'frzHealth',
-        'ts': 1783654226,
+        'ts': int(time.time()) if ts is None else ts,
         'left': {'tec': {'current': left_current}, 'pump': {'mode': 'pwm', 'rpm': left_rpm, 'water': left_water}},
         'right': {'tec': {'current': right_current}, 'pump': {'mode': 'pwm', 'rpm': right_rpm, 'water': right_water}},
     }
+
+
+def _quiet_frame(ts=None):
+    # A side that's fully powered off stops carrying live TEC/pump numbers.
+    return {'type': 'frzHealth', 'ts': int(time.time()) if ts is None else ts, 'left': {}, 'right': {}}
 
 
 class TestPumpHealth(unittest.TestCase):
@@ -100,7 +108,7 @@ class TestPumpHealth(unittest.TestCase):
         self.assertEqual(left_calls[0][1], 'healthy')
 
     def test_missing_fields_are_skipped_not_crashed(self):
-        service_health.update_pump_health({'type': 'frzHealth', 'ts': 1, 'left': {}, 'right': {}})
+        service_health.update_pump_health(_quiet_frame())
         self.assertEqual(self.calls, [])
 
     def test_stalled_latch_clears_once_side_goes_fully_quiet(self):
@@ -115,7 +123,7 @@ class TestPumpHealth(unittest.TestCase):
         self.calls.clear()
 
         for _ in range(service_health._PUMP_RECOVERY_DWELL_FRAMES):
-            service_health.update_pump_health({'type': 'frzHealth', 'ts': 1, 'left': {}, 'right': {}})
+            service_health.update_pump_health(_quiet_frame())
         left_calls = [c for c in self.calls if c[0] == 'pumpLeft']
         self.assertEqual(len(left_calls), 1)
         self.assertEqual(left_calls[0][1], 'healthy')
@@ -144,6 +152,48 @@ class TestPumpHealth(unittest.TestCase):
         self.assertIn('pump_ok True -> False', lines[1])
         # the whole pump dict rides along, which is the point of the line
         self.assertIn("'mode': 'pwm'", lines[1])
+
+    # Replayed/stale frames (RAW-file fallback re-reads from byte 0 on
+    # startup; the durable NATS consumer replays its acked backlog after a
+    # restart) must not advance the dwell counters. Same bug class as
+    # update_sensor_temps, see test_sensor_temps.py.
+
+    def test_stale_frames_do_not_trip_stall(self):
+        stale_ts = int(time.time()) - 3600
+        for _ in range(service_health._PUMP_STALL_DWELL_FRAMES * 2):
+            service_health.update_pump_health(
+                _frame(left_rpm=5, left_current=12.0, left_water=False, ts=stale_ts))
+        self.assertEqual(self.calls, [])
+        self.assertEqual(service_health._pump_state['left']['consecutive_stall'], 0)
+
+    def test_stale_frames_do_not_clear_latched_stall(self):
+        for _ in range(service_health._PUMP_STALL_DWELL_FRAMES):
+            service_health.update_pump_health(_frame(left_rpm=5, left_current=12.0, left_water=False))
+        self.assertTrue(service_health._pump_state['left']['is_stalled'])
+        self.calls.clear()
+
+        stale_ts = int(time.time()) - 3600
+        for _ in range(service_health._PUMP_RECOVERY_DWELL_FRAMES * 2):
+            service_health.update_pump_health(_frame(ts=stale_ts))
+        self.assertTrue(service_health._pump_state['left']['is_stalled'])
+        self.assertEqual(self.calls, [])
+
+    def test_stale_string_timestamp_is_dropped(self):
+        # load_raw_files rewrites ts to a '%Y-%m-%d %H:%M:%S' UTC string;
+        # a stale one must still be recognized as stale.
+        from datetime import datetime, timezone
+        stale = datetime.fromtimestamp(time.time() - 3600, timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+        for _ in range(service_health._PUMP_STALL_DWELL_FRAMES * 2):
+            service_health.update_pump_health(
+                _frame(left_rpm=5, left_current=12.0, left_water=False, ts=stale))
+        self.assertEqual(self.calls, [])
+
+    def test_frame_without_ts_is_treated_as_live(self):
+        frame = _frame()
+        del frame['ts']
+        for _ in range(3):
+            service_health.update_pump_health(frame)
+        self.assertEqual(self.calls, [('pumpLeft', 'healthy', ''), ('pumpRight', 'healthy', '')])
 
 
 if __name__ == '__main__':

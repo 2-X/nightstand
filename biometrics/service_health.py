@@ -19,6 +19,36 @@ import json
 # Throttle sensor temp updates to avoid flooding the server
 _last_sensor_temps_update: float = 0
 SENSOR_TEMPS_UPDATE_INTERVAL = 30  # seconds
+# Both ingest paths can hand update_sensor_temps() records far older than
+# "now": the RAW-file fallback replays the current file from byte 0 on
+# startup, and the durable NATS consumer replays its acked backlog after a
+# restart. Posting those makes the API re-live the historical temperature
+# trajectory instead of tracking the sensor (observed Sep 6 2026:
+# sensorTemps.heatsinkC climbing 16->19C while the live frzTemp `hs` stream
+# fell to 14.5C), and the wall-clock throttle compounds it by posting the
+# oldest record of each 30s window and suppressing the fresher ones behind
+# it. Mirrors RECENT_RECORD_WINDOW in stream/stream.py, which already
+# applies the same guard to piezo records.
+SENSOR_TEMPS_MAX_RECORD_AGE = 120  # seconds
+
+
+def _frz_record_epoch(record: dict):
+    """Epoch seconds of a frzTemp/frzHealth record's `ts`, or None if missing/unparseable.
+
+    Live records carry epoch seconds; load_raw_files-style replays may have
+    already rewritten `ts` to a '%Y-%m-%d %H:%M:%S' UTC string.
+    """
+    ts = record.get('ts')
+    if isinstance(ts, bool):
+        return None
+    if isinstance(ts, (int, float)):
+        return float(ts)
+    if isinstance(ts, str):
+        try:
+            return datetime.strptime(ts, '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc).timestamp()
+        except ValueError:
+            return None
+    return None
 
 
 def is_biometrics_enabled() -> bool:
@@ -81,14 +111,30 @@ def update_sensor_temps(frz_temp_data: dict):
     """
     global _last_sensor_temps_update
 
-    # Throttle updates
     now = time.time()
+
+    # Drop replayed/stale records before the throttle check so they cannot
+    # consume the 30s window and shadow the live records behind them. A
+    # record with no parseable ts is treated as live rather than discarded.
+    record_epoch = _frz_record_epoch(frz_temp_data)
+    if record_epoch is not None and now - record_epoch > SENSOR_TEMPS_MAX_RECORD_AGE:
+        logger.debug(f'Skipping stale frzTemp record ({now - record_epoch:.0f}s old)')
+        return
+
+    # Throttle updates
     if now - _last_sensor_temps_update < SENSOR_TEMPS_UPDATE_INTERVAL:
         return
     _last_sensor_temps_update = now
 
     try:
         logger.debug(f'Updating sensor temps - amb={frz_temp_data.get("amb")}')
+
+        # lastUpdated reflects when the reading was taken, not when it was
+        # posted; stamping now() here is what hid the replay staleness.
+        if record_epoch is not None:
+            last_updated = datetime.fromtimestamp(record_epoch, timezone.utc).isoformat()
+        else:
+            last_updated = datetime.now(timezone.utc).isoformat()
 
         data = json.dumps({
             "biometrics": {
@@ -97,7 +143,7 @@ def update_sensor_temps(frz_temp_data: dict):
                     "heatsink": frz_temp_data.get("hs"),
                     "left": frz_temp_data.get("left"),
                     "right": frz_temp_data.get("right"),
-                    "lastUpdated": datetime.now(timezone.utc).isoformat(),
+                    "lastUpdated": last_updated,
                 }
             },
         }).encode("utf-8")
@@ -152,6 +198,13 @@ _PUMP_TEC_ACTIVE_AMPS = 1.0
 # see the transition trace below for the data being gathered to do that.
 _PUMP_STALL_DWELL_FRAMES = 6
 _PUMP_RECOVERY_DWELL_FRAMES = 3
+# Same replay hazard as SENSOR_TEMPS_MAX_RECORD_AGE: the RAW-file fallback
+# re-reads the current file from byte 0 on startup and the durable NATS
+# consumer replays its acked backlog after a restart, so this function can
+# receive frzHealth frames far older than "now". Each replayed frame
+# advances the per-side dwell counters as if it were live, so a stale burst
+# can trip a false pump-stall alert or clear a real latched one.
+PUMP_HEALTH_MAX_RECORD_AGE = 120  # seconds
 
 def new_pump_state() -> dict:
     """Per-side dwell state. Shared with the tests so the two cannot drift."""
@@ -174,6 +227,15 @@ def update_pump_health(frz_health_data: dict):
     via the same update_health() job-status mechanism as other biometrics
     jobs. Called from the stream processor for every frzHealth frame.
     """
+    # Drop replayed/stale frames before they can advance the dwell counters
+    # with historical data. A frame with no parseable ts is treated as live
+    # rather than discarded.
+    now = time.time()
+    record_epoch = _frz_record_epoch(frz_health_data)
+    if record_epoch is not None and now - record_epoch > PUMP_HEALTH_MAX_RECORD_AGE:
+        logger.debug(f'Skipping stale frzHealth frame ({now - record_epoch:.0f}s old)')
+        return
+
     try:
         for side in ('left', 'right'):
             side_data = frz_health_data.get(side) or {}

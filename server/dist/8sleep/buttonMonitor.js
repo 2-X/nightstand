@@ -30,8 +30,9 @@ import { getDeviceStatusCoalesced } from './frankenServer.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import { executeFunction } from './deviceApi.js';
 import { applyTemperatureDelta } from './applyTemperatureChange.js';
+import { markManualTempChange } from '../jobs/scheduleOverride.js';
 import { readRawRecord, RawTruncatedError, RawFramingError, } from './rawLogReader.js';
-import { ButtonEventMachine, DoubleClickDetector, } from './buttonEvents.js';
+import { ButtonEventMachine, } from './buttonEvents.js';
 // Directory holding the pod's rolling *.RAW captures. Overridable via env for
 // tests and local dev; production leaves it at the pod's /persistent.
 const RAW_DIR = process.env.POD_RAW_DIR || '/persistent';
@@ -64,7 +65,6 @@ export class ButtonMonitor {
     inFlight = false;
     tail = null;
     machine = new ButtonEventMachine();
-    doubleClick = new DoubleClickDetector(2_000);
     start() {
         if (this.timer) {
             logger.warn('[buttonMonitor] already running');
@@ -269,14 +269,20 @@ export class ButtonMonitor {
             await settingsDB.read();
             const side = ev.side;
             const cfg = settingsDB.data[side].buttons;
-            this.doubleClick.setWindow(cfg.doubleClickWindowMs);
-            // Middle double-click -> alarm dismiss. Route through the detector.
+            // Middle (logo) click: dismiss a vibrating alarm, else jump the side to
+            // its saved favorite temperature. Single click for both - a groggy
+            // sleeper shouldn't need a double-click to stop the buzzing, and the
+            // favorite jump is the button's whole job when no alarm is active.
             if (ev.button === 'middle') {
-                const result = this.doubleClick.feed(ev, Date.now());
-                if (result.doubleClick) {
+                if (ev.kind === 'hold')
+                    return; // reserve holds for future mapping
+                await memoryDB.read();
+                if (memoryDB.data[side].isAlarmVibrating === true) {
                     await this.handleAlarmDismiss(side);
                 }
-                // A lone middle single-click is a no-op in the mapping.
+                else {
+                    await this.handleFavoriteTemperature(side, cfg.favoriteTemperatureF);
+                }
                 return;
             }
             // Hold events on top/bottom are not mapped to anything yet; record and
@@ -333,6 +339,19 @@ export class ButtonMonitor {
             source: '8sleep/buttonMonitor',
         });
         // Haptic echo AFTER the temperature change, gated + never during an alarm.
+        await this.maybeHaptic(side);
+    }
+    // Middle (logo) button with no active alarm: set the side to its saved
+    // favorite temperature, powering the side on if it was off. An absolute set,
+    // not a delta - pressing it twice is idempotent.
+    async handleFavoriteTemperature(side, favoriteF) {
+        await updateDeviceStatus({ [side]: { isOn: true, targetTemperatureF: favoriteF } });
+        await markManualTempChange(side, { to: favoriteF });
+        recordEvent('button_press', {
+            side,
+            payload: { side, button: 'middle', kind: 'click', action: 'favorite_temp', favoriteF },
+            source: '8sleep/buttonMonitor',
+        });
         await this.maybeHaptic(side);
     }
     async handleAlarmDismiss(side) {

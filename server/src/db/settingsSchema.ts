@@ -59,22 +59,25 @@ const OneOffAlarmSchema = z.object({
 // frank firmware deliberately ignores; buttonMonitor tails the RAW capture for
 // the press events and applies these actions instead.
 //
-// Defaults: top click = +stepF, bottom click = -stepF, middle double-click =
-// dismiss a vibrating alarm on that side (else no-op).
+// Defaults: top click = +stepF, bottom click = -stepF, middle (logo) click =
+// dismiss the alarm if that side is vibrating, else set the side to its saved
+// favorite temperature (powering the side on if needed).
 //
 //  - invertButtons: swaps which physical button is treated as top vs bottom.
 //    The physical top/bottom -> +/- assignment is UNVERIFIED on this hardware,
 //    so this lets the user flip it live without a code change if +/- come out
 //    reversed.
 //  - stepF: degrees Fahrenheit per single top/bottom click.
-//  - doubleClickWindowMs: max gap between two middle clicks to count as a
-//    double-click (alarm dismiss).
+//  - favoriteTemperatureF: the target the middle (logo) button applies.
+//  - doubleClickWindowMs: retained for config compatibility (middle acts on a
+//    single click now).
 //  - hapticEcho: fire a short confirmation vibration after a handled
 //    temperature press. DEFAULT OFF - unsolicited midnight buzzing is worse
 //    than no echo; enable after live testing.
 const ButtonsConfigSchema = z.object({
   invertButtons: z.boolean(),
   stepF: z.number().min(0).max(10),
+  favoriteTemperatureF: z.number().int().min(55).max(110),
   doubleClickWindowMs: z.number().int().min(200).max(5000),
   hapticEcho: z.boolean(),
 }).strict();

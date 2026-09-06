@@ -121,7 +121,8 @@ describe('ButtonMonitor dispatch', () => {
     await settingsDB.read();
     for (const side of ['left', 'right'] as const) {
       settingsDB.data[side].buttons = {
-        invertButtons: false, stepF: 1, doubleClickWindowMs: 2000, hapticEcho: false,
+        invertButtons: false, stepF: 1, favoriteTemperatureF: 78,
+        doubleClickWindowMs: 2000, hapticEcho: false,
       };
     }
     settingsDB.data.features.coverButtons = true;
@@ -176,43 +177,42 @@ describe('ButtonMonitor dispatch', () => {
     assert.equal(tempCalls[0].delta, 3);
   });
 
-  it('middle double-click dismisses a vibrating alarm on that side', async () => {
+  it('middle click dismisses a vibrating alarm on that side', async () => {
     await memoryDB.read();
     memoryDB.data.right.isAlarmVibrating = true;
     await memoryDB.write();
 
-    // Two middle press/release pairs = two clicks within the window.
-    writeRaw('001.RAW', Buffer.concat([
-      pressReleaseLog('R', 98),
-      pressReleaseLog('R', 98),
-    ]), 1000);
+    writeRaw('001.RAW', pressReleaseLog('R', 98), 1000);
     const mon = new ButtonMonitor() as unknown as Internals;
     await mon.tick();
 
     assert.equal(updateCalls.length, 1);
     assert.deepEqual(updateCalls[0], { right: { isAlarmVibrating: false } });
-    assert.equal(tempCalls.length, 0, 'middle must not touch temperature');
+    assert.equal(tempCalls.length, 0, 'middle must not touch temperature while alarm is active');
   });
 
-  it('middle double-click is a no-op when no alarm is vibrating', async () => {
+  it('middle click with no alarm sets the side to its favorite temperature', async () => {
+    writeRaw('001.RAW', pressReleaseLog('L', 98), 1000);
+    const mon = new ButtonMonitor() as unknown as Internals;
+    await mon.tick();
+
+    assert.equal(updateCalls.length, 1);
+    assert.deepEqual(updateCalls[0], { left: { isOn: true, targetTemperatureF: 78 } });
+    assert.equal(tempCalls.length, 0, 'favorite is an absolute set, not a delta');
+    const ev = recordedEvents.find(e => e.opts?.payload?.action === 'favorite_temp');
+    assert.ok(ev, 'expected a favorite_temp event');
+    assert.equal(ev?.opts.payload.favoriteF, 78);
+  });
+
+  it('middle click favorite is idempotent across repeated presses', async () => {
     writeRaw('001.RAW', Buffer.concat([
-      pressReleaseLog('L', 98),
-      pressReleaseLog('L', 98),
+      pressReleaseLog('R', 98),
+      pressReleaseLog('R', 98),
     ]), 1000);
     const mon = new ButtonMonitor() as unknown as Internals;
     await mon.tick();
-
-    assert.equal(updateCalls.length, 0);
-    const ev = recordedEvents.find(e => e.opts?.payload?.action === 'dismiss_noop');
-    assert.ok(ev, 'expected a dismiss_noop event');
-  });
-
-  it('a single middle click does nothing', async () => {
-    writeRaw('001.RAW', pressReleaseLog('R', 98), 1000);
-    const mon = new ButtonMonitor() as unknown as Internals;
-    await mon.tick();
-    assert.equal(updateCalls.length, 0);
-    assert.equal(tempCalls.length, 0);
+    assert.equal(updateCalls.length, 2);
+    assert.deepEqual(updateCalls[0], updateCalls[1]);
   });
 
   it('does nothing when coverButtons is disabled', async () => {
