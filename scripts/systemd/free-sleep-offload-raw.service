@@ -1,9 +1,0 @@
-[Unit]
-Description=Offload RAW piezo files to the NAS
-After=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/home/root/offload/offload-raw.sh
-Nice=10
-IOSchedulingClass=idle
