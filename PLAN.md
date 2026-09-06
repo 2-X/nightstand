@@ -100,6 +100,18 @@ Subsumed by Phase 0 item 1 (bed_state_samples/hub_state_samples).
 - Warm ramp: for each alarm occurrence, schedule a temperature job at
   `time - warmRampMinutes` stepping toward wake temp.
 
+### Phase 2.5 — honest temperature display (observed Sep 6 2026)
+`heatLevel` (the app's "current temp") is the hub water sensor at the TEC —
+it hits a new target in ~1-2 min while the bed surface takes 10-25 min
+(water must propagate through the king cover + soak the foam). Fix: consume
+the unused `bedTemp` firmware records (6-8 bed-surface temps + humidity) as
+the primary "actual" series; show hub water as secondary; once collector
+history holds a few setpoint steps, fit a per-cover propagation constant and
+display "water at target, bed there in ~N min". Also: flag vitals rows as
+occluded when two people share a side (hrv=0 sentinel on the empty side,
+frozen/degenerate HRV on the shared side, or vitals dropout) — observed live
+during a cuddle event; single piezo zones cannot separate two hearts.
+
 ### Phase 3 — Tonight page (app)
 - `app/src/pages/TonightPage/` with the chart; route `/` (move current
   ControlTempPage to `/control`, keep its slider embedded below the chart).
