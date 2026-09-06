@@ -54,6 +54,31 @@ const OneOffAlarmSchema = z.object({
   duration: z.number().int().min(0).max(180),
 });
 
+// Pod 5 cover physical-button behavior (buttonMonitor.ts). The Pod 5 cover has
+// three buttons per side (+ / logo / -) wired to a TCA8418 keypad the stock
+// frank firmware deliberately ignores; buttonMonitor tails the RAW capture for
+// the press events and applies these actions instead.
+//
+// Defaults: top click = +stepF, bottom click = -stepF, middle double-click =
+// dismiss a vibrating alarm on that side (else no-op).
+//
+//  - invertButtons: swaps which physical button is treated as top vs bottom.
+//    The physical top/bottom -> +/- assignment is UNVERIFIED on this hardware,
+//    so this lets the user flip it live without a code change if +/- come out
+//    reversed.
+//  - stepF: degrees Fahrenheit per single top/bottom click.
+//  - doubleClickWindowMs: max gap between two middle clicks to count as a
+//    double-click (alarm dismiss).
+//  - hapticEcho: fire a short confirmation vibration after a handled
+//    temperature press. DEFAULT OFF - unsolicited midnight buzzing is worse
+//    than no echo; enable after live testing.
+const ButtonsConfigSchema = z.object({
+  invertButtons: z.boolean(),
+  stepF: z.number().min(0).max(10),
+  doubleClickWindowMs: z.number().int().min(200).max(5000),
+  hapticEcho: z.boolean(),
+}).strict();
+
 const SideSettingsSchema = z.object({
   name: z.string().min(1).max(20),
   awayMode: z.boolean(),
@@ -74,7 +99,8 @@ const SideSettingsSchema = z.object({
     doubleTap: TapConfig,
     tripleTap: TapConfig,
     quadTap: TapConfig,
-  })
+  }),
+  buttons: ButtonsConfigSchema,
 }).strict();
 
 // Which release channel the update alert/version picker treats as "latest".
@@ -92,12 +118,16 @@ export const defaultFeatures = {
   levelTemps: true,
   oneOffAlarms: true,
   nightstandTheme: true,
+  // Master enable for the Pod 5 cover-button monitor (buttonMonitor.ts). When
+  // false the tailer never starts; the RAW file is left untouched.
+  coverButtons: true,
 } as const;
 const FeaturesSchema = z.object({
   sleepScore: z.boolean(),
   levelTemps: z.boolean(),
   oneOffAlarms: z.boolean(),
   nightstandTheme: z.boolean(),
+  coverButtons: z.boolean(),
 }).strict();
 
 export const SettingsSchema = z.object({
@@ -115,6 +145,7 @@ export const SettingsSchema = z.object({
   features: FeaturesSchema,
 }).strict();
 
+export type ButtonsConfig = z.infer<typeof ButtonsConfigSchema>;
 export type SideSettings = z.infer<typeof SideSettingsSchema>;
 export type Settings = z.infer<typeof SettingsSchema>;
 export type Features = z.infer<typeof FeaturesSchema>;

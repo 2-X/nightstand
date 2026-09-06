@@ -41,7 +41,16 @@ const defaultSideSettings = {
             type: 'base_control',
             behavior: 'toggle_preset',
         },
-    }
+    },
+    buttons: {
+        // Pod 5 cover button behavior (see settingsSchema ButtonsConfigSchema).
+        // top click = +1F, bottom click = -1F, middle double-click = dismiss alarm.
+        invertButtons: false,
+        stepF: 1,
+        doubleClickWindowMs: 2000,
+        // DEFAULT OFF: enable per side after live-verifying the presses land.
+        hapticEcho: false,
+    },
 };
 const defaultData = {
     id: crypto.randomUUID(),
