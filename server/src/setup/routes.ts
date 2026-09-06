@@ -14,6 +14,8 @@ import vitals from '../routes/metrics/vitals.js';
 import sleepScore from '../routes/metrics/sleepScore.js';
 import sleepStages from '../routes/metrics/sleepStages.js';
 import presence from '../routes/metrics/presence.js';
+import temperature from '../routes/metrics/temperature.js';
+import events from '../routes/events/events.js';
 import logs from '../routes/logs/logs.js';
 import serverStatus from '../routes/serverStatus/serverStatus.js';
 import baseControl from '../routes/baseControl/baseControl.js';
@@ -43,6 +45,8 @@ export default function (app: Express) {
   app.use('/api/metrics/', sleepScore);
   app.use('/api/metrics/', sleepStages);
   app.use('/api/metrics/', presence);
+  app.use('/api/metrics/', temperature);
+  app.use('/api/', events);
   app.use('/api/logs', logs);
   app.use('/api/serverStatus', serverStatus);
   app.use('/api/', baseControl);

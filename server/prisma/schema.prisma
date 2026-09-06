@@ -62,6 +62,68 @@ model calibration_profiles {
   @@unique([side, sensor_type])
 }
 
+// --- Phase 0 "collect everything" data layer ---
+// All four tables below are written ONLY by src/db/collector.ts.
+
+// Per-side bed state time series. One row per side, written on-change (level,
+// target, or isOn) with a 60s heartbeat floor. Fed from the eventBus
+// 'device-status' stream, never a new dac.sock caller.
+model bed_state_samples {
+  id            Int     @id @default(autoincrement())
+  side          String
+  timestamp     Int // epoch seconds
+  current_level Int?
+  target_level  Int?
+  current_temp_f Float?
+  target_temp_f Float?
+  is_on         Boolean
+
+  @@unique([side, timestamp])
+  @@index([side, timestamp])
+}
+
+// Hub-wide state time series (ambient/heatsink/water temps, priming, wifi).
+// On-change-or-60s over ambient/heatsink/water/priming/wifi.
+model hub_state_samples {
+  id           Int      @id @default(autoincrement())
+  timestamp    Int // epoch seconds
+  ambient_c    Float?
+  heatsink_c   Float?
+  left_c       Float?
+  right_c      Float?
+  water_ok     Boolean?
+  is_priming   Boolean?
+  wifi_strength Int?
+
+  @@unique([timestamp])
+}
+
+// Discrete event journal (alarm fired/cleared, power on/off, prime, water,
+// taps, base moves, boot, manual temp change...). payload is JSON.
+model pod_events {
+  id        Int    @id @default(autoincrement())
+  timestamp Int // epoch seconds
+  type      String
+  side      String?
+  payload   String // JSON
+  source    String // module/route that emitted it
+
+  @@index([type, timestamp])
+  @@index([timestamp])
+}
+
+// Append-only config/command audit: every schedules/settings write, every
+// hardware command (scheduler or user), base control. snapshot is JSON.
+model config_audit {
+  id        Int    @id @default(autoincrement())
+  timestamp Int // epoch seconds
+  kind      String // schedules | settings | device_status | execute | base_control
+  source    String
+  snapshot  String // JSON of new state / command payload
+
+  @@index([kind, timestamp])
+}
+
 model calibration_runs {
   id          Int     @id @default(autoincrement())
   side        String

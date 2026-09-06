@@ -9,6 +9,7 @@ import settingsDB from '../db/settings.js';
 import schedulesDB from '../db/schedules.js';
 import { Side, DayOfWeek } from '../db/schedulesSchema.js';
 import logger from '../logger.js';
+import { recordEvent } from '../db/collector.js';
 
 export const OVERRIDE_WINDOW_HOURS = 3;
 export const OVERRIDE_DURATION_HOURS = 12;
@@ -57,7 +58,17 @@ export const isTempScheduleOverridden = (side: Side): boolean => {
   return moment(override.expiresAt).isAfter(moment());
 };
 
-export const markManualTempChange = async (side: Side): Promise<void> => {
+export const markManualTempChange = async (
+  side: Side,
+  temps?: { from?: number; to?: number },
+): Promise<void> => {
+  // Journal every manual temperature change, independent of whether it ends up
+  // pausing the schedule below. Fire-and-forget.
+  recordEvent('manual_temp_change', {
+    side,
+    payload: { side, from: temps?.from, to: temps?.to },
+    source: 'jobs/scheduleOverride',
+  });
   await settingsDB.read();
   await schedulesDB.read();
 

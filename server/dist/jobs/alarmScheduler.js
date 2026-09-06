@@ -11,6 +11,7 @@ import { executeFunction } from '../8sleep/deviceApi.js';
 import { getDayIndexForTime, isValidTime, logJob } from './utils.js';
 import { connectFranken } from '../8sleep/frankenServer.js';
 import { emitJobEvent } from './jobEvents.js';
+import { recordEvent } from '../db/collector.js';
 // A repeated fall-back hour replays an alarm ~60 min later, so anything inside
 // this window is the same alarm firing twice, not a second intentional alarm.
 const ALARM_DEDUPE_MS = 50 * 60 * 1000;
@@ -65,6 +66,16 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
             memoryDB.data[side].isAlarmVibrating = false;
             await memoryDB.write();
         }, min10Duration * 1_000);
+        recordEvent('alarm_fired', {
+            side,
+            payload: {
+                intensity: vibrationIntensity,
+                duration: min10Duration,
+                pattern: vibrationPattern,
+                scheduledTime: alarmTimeEpoch,
+            },
+            source: 'jobs/alarmScheduler',
+        });
         serverStatus.status.alarmSchedule.status = 'healthy';
         serverStatus.status.alarmSchedule.message = '';
         emitJobEvent({ jobName: `alarm-${side}`, status: 'ok' });

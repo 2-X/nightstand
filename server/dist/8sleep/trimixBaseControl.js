@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { readFile } from 'fs/promises';
 import memoryDB from '../db/memoryDB.js';
 import logger from '../logger.js';
+import { recordEvent } from '../db/collector.js';
 // Configuration file path
 const BASE_CONFIG_PATH = '/persistent/AdjustableBaseConfiguration.json';
 // --- Angle-to-Ticks conversion maps from C# source ---
@@ -422,6 +423,14 @@ export class TriMixBaseControl {
                         memoryDB.data.baseStatus.isMoving = false;
                         memoryDB.data.baseStatus.lastUpdate = new Date().toISOString();
                         memoryDB.write();
+                        // Movement settled: journal the resting position. Fire-and-forget.
+                        recordEvent('base_move', {
+                            payload: {
+                                head: memoryDB.data.baseStatus.head,
+                                feet: memoryDB.data.baseStatus.feet,
+                            },
+                            source: '8sleep/trimixBaseControl',
+                        });
                     }
                 }, 3000);
             }

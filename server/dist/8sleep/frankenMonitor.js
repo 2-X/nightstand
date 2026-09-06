@@ -11,6 +11,7 @@ import serverStatus from '../serverStatus.js';
 import { trimixBase } from './trimixBaseControl.js';
 import { BASE_PRESETS } from './basePresets.js';
 import eventBus from '../events/eventBus.js';
+import { recordEvent } from '../db/collector.js';
 // Pod 4+ only: gestures and the 2s cadence are the only path. The Pod 3
 // 60s slow-poll branch was removed alongside the WebSocket initiative.
 //
@@ -72,7 +73,7 @@ export class FrankenMonitor {
             logger.debug(`Processing gesture temperature change for ${side}. ${currentTemperatureTarget} -> ${newTemperatureTargetF}`);
             await updateDeviceStatus({ [side]: { targetTemperatureF: newTemperatureTargetF } });
             // Tap counts as a manual change for schedule-override purposes.
-            await markManualTempChange(side);
+            await markManualTempChange(side, { from: currentTemperatureTarget, to: newTemperatureTargetF });
             return;
         }
         else if (behavior.type === 'base_control') {
@@ -129,6 +130,9 @@ export class FrankenMonitor {
         try {
             for (const gesture of GestureSchema.options) {
                 if (nextDeviceStatus[side].taps?.[gesture] !== this?.deviceStatus?.[side].taps?.[gesture]) {
+                    // Fire-and-forget journal write; recordEvent only enqueues in memory
+                    // and never throws, so it adds no latency to the tap-detection path.
+                    recordEvent('tap_gesture', { side, payload: { side, kind: gesture }, source: '8sleep/frankenMonitor' });
                     // Deliberately detached: a base move takes seconds over BLE and this
                     // loop doubles as the tap-detection cadence, so awaiting here would
                     // delay the next gesture. Detached means the surrounding try cannot

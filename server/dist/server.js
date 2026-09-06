@@ -14,6 +14,9 @@ import { prisma } from './db/prisma.js';
 import { loadWifiSignalStrength } from './8sleep/wifiSignalStrength.js';
 import metrics from './metrics/metrics.js';
 import { wsServer } from './ws/wsServer.js';
+import { startCollector, recordEvent } from './db/collector.js';
+import { startRetentionJob } from './jobs/retentionJob.js';
+import serverInfo from './serverInfo.json' with { type: 'json' };
 const port = 3000;
 const app = express();
 let server;
@@ -111,6 +114,13 @@ async function startServer() {
     metrics.registerFrankenQueueDepth(getFrankenQueueDepth);
     setupMiddleware(app);
     setupRoutes(app);
+    // Phase 0 collector: subscribes to the eventBus 'device-status' stream and
+    // owns the bed/hub/event/audit tables. Start it before Franken so the very
+    // first device-status emit is captured. Fire-and-forget internally; never
+    // blocks the poll loop.
+    startCollector();
+    startRetentionJob();
+    recordEvent('boot', { payload: { version: serverInfo.version, branch: serverInfo.branch }, source: 'server.ts' });
     // Listen on desired port
     server = app.listen(port, () => {
         logger.debug(`Server running on http://localhost:${port}`);

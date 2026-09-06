@@ -3,6 +3,7 @@ import express, { Request, Response } from 'express';
 import logger from '../../logger.js';
 import schedulesDB from '../../db/schedules.js';
 import { sanitizeScheduleBody } from './sanitizeScheduleBody.js';
+import { recordConfigAudit } from '../../db/collector.js';
 
 
 import {
@@ -58,6 +59,7 @@ router.post('/schedules', async (req: Request, res: Response) => {
     });
   });
   await schedulesDB.write();
+  recordConfigAudit('schedules', 'POST /api/schedules', schedules);
   res.status(200).json(schedulesDB.data);
 });
 

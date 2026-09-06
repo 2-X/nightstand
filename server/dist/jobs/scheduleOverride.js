@@ -8,6 +8,7 @@ import moment from 'moment-timezone';
 import settingsDB from '../db/settings.js';
 import schedulesDB from '../db/schedules.js';
 import logger from '../logger.js';
+import { recordEvent } from '../db/collector.js';
 export const OVERRIDE_WINDOW_HOURS = 3;
 export const OVERRIDE_DURATION_HOURS = 12;
 const DAYS = [
@@ -49,7 +50,14 @@ export const isTempScheduleOverridden = (side) => {
         return false;
     return moment(override.expiresAt).isAfter(moment());
 };
-export const markManualTempChange = async (side) => {
+export const markManualTempChange = async (side, temps) => {
+    // Journal every manual temperature change, independent of whether it ends up
+    // pausing the schedule below. Fire-and-forget.
+    recordEvent('manual_temp_change', {
+        side,
+        payload: { side, from: temps?.from, to: temps?.to },
+        source: 'jobs/scheduleOverride',
+    });
     await settingsDB.read();
     await schedulesDB.read();
     const timeZone = settingsDB.data.timeZone || 'UTC';

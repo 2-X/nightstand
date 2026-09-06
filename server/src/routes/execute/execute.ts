@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import { frankenCommands, executeFunction } from '../../8sleep/deviceApi.js';
 import { isArgWithinBounds } from './executeHelpers.js';
+import { recordConfigAudit } from '../../db/collector.js';
 
 const router = express.Router();
 
@@ -20,6 +21,7 @@ router.post('/execute', async (req: Request, res: Response) => {
 
   // Execute the 8sleep command
   await executeFunction(command as keyof typeof frankenCommands, arg || 'empty');
+  recordConfigAudit('execute', 'POST /api/execute', { command, arg: arg ?? null });
 
   // Respond with success
   res.json({ success: true, message: `Command '${command}' executed successfully.` });

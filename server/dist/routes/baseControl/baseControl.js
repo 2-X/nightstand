@@ -4,6 +4,7 @@ import { BASE_PRESETS } from '../../8sleep/basePresets.js';
 import { trimixBase } from '../../8sleep/trimixBaseControl.js';
 import memoryDB from '../../db/memoryDB.js';
 import logger from '../../logger.js';
+import { recordConfigAudit } from '../../db/collector.js';
 const router = express.Router();
 // Schema for base position request
 const BasePositionSchema = z.object({
@@ -85,6 +86,7 @@ router.post('/base-control', async (req, res) => {
             feedRate: validatedData.feedRate || 50,
         });
         // Note: Position and movement status will be updated automatically by BLE notifications
+        recordConfigAudit('base_control', 'POST /api/base-control', validatedData);
         res.json({
             success: true,
             position: validatedData,
@@ -123,6 +125,7 @@ router.post('/base-control/preset', async (req, res) => {
             feedRate: position.feedRate || 50,
         });
         // Note: Position and movement status will be updated automatically by BLE notifications
+        recordConfigAudit('base_control', 'POST /api/base-control/preset', { preset, position });
         res.json({
             success: true,
             preset,
@@ -142,6 +145,7 @@ router.post('/base-control/stop', async (_req, res) => {
         await trimixBase.stop();
         logger.info('Base movement stopped via BLE');
         // Note: isMoving status will be updated automatically by BLE System Flags packets when motors actually stop
+        recordConfigAudit('base_control', 'POST /api/base-control/stop', {});
         res.json({ success: true, message: 'Stop command sent' });
     }
     catch (error) {

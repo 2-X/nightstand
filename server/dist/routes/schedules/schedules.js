@@ -3,6 +3,7 @@ import express from 'express';
 import logger from '../../logger.js';
 import schedulesDB from '../../db/schedules.js';
 import { sanitizeScheduleBody } from './sanitizeScheduleBody.js';
+import { recordConfigAudit } from '../../db/collector.js';
 import { SchedulesUpdateSchema, } from '../../db/schedulesSchema.js';
 const router = express.Router();
 const primaryAlarm = (alarms, fallback) => alarms[0] ?? {
@@ -44,6 +45,7 @@ router.post('/schedules', async (req, res) => {
         });
     });
     await schedulesDB.write();
+    recordConfigAudit('schedules', 'POST /api/schedules', schedules);
     res.status(200).json(schedulesDB.data);
 });
 export default router;

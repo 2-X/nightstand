@@ -4,6 +4,7 @@ import { DeviceStatusSchema } from './deviceStatusSchema.js';
 import logger from '../../logger.js';
 import { updateDeviceStatus } from './updateDeviceStatus.js';
 import { markManualTempChange } from '../../jobs/scheduleOverride.js';
+import { recordConfigAudit } from '../../db/collector.js';
 const router = express.Router();
 router.get('/deviceStatus', async (req, res) => {
     // Franken's initial hardware handshake can take ~25-30s (one connection
@@ -47,11 +48,12 @@ router.post('/deviceStatus', async (req, res) => {
         return;
     }
     await updateDeviceStatus(body);
+    recordConfigAudit('device_status', 'POST /api/deviceStatus', validationResult.data);
     // If the user manually set a target temperature on a side, maybe pause the
     // remaining schedule (see scheduleOverride.markManualTempChange for rules).
     for (const side of ['left', 'right']) {
         if (body?.[side]?.targetTemperatureF !== undefined) {
-            await markManualTempChange(side);
+            await markManualTempChange(side, { to: body[side].targetTemperatureF });
         }
     }
     res.status(204).end();

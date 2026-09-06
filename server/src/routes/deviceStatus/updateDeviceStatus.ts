@@ -8,6 +8,7 @@ import logger from '../../logger.js';
 import settingsDB from '../../db/settings.js';
 import memoryDB from '../../db/memoryDB.js';
 import { INVERTED_SETTINGS_KEY_MAPPING } from '../../8sleep/loadDeviceStatus.js';
+import { recordEvent } from '../../db/collector.js';
 
 // Inverse of loadDeviceStatus.ts's calculateTempInF. Same fixed firmware
 // level scale, so the two files must be changed together.
@@ -58,8 +59,20 @@ const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideSt
 
   if (isAlarmVibrating !== undefined) {
     logger.debug('Can only set isAlarmVibrating to false for now...');
-    if (!isAlarmVibrating) await executeFunction('ALARM_CLEAR', 'empty');
-    await memoryDB.read();
+    if (!isAlarmVibrating) {
+      await executeFunction('ALARM_CLEAR', 'empty');
+      await memoryDB.read();
+      // clearedEarly: the alarm was still vibrating (within its duration) when
+      // the clear came in. If it wasn't vibrating, this is a no-op clear.
+      const clearedEarly = memoryDB.data[side].isAlarmVibrating === true;
+      recordEvent('alarm_cleared', {
+        side,
+        payload: { clearedEarly },
+        source: 'routes/deviceStatus/updateDeviceStatus',
+      });
+    } else {
+      await memoryDB.read();
+    }
     memoryDB.data[side].isAlarmVibrating = false;
     await memoryDB.write();
   }

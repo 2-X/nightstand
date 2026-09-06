@@ -1,0 +1,10 @@
+[Unit]
+Description=Run RAW piezo NAS offload every 10 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=10min
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

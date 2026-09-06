@@ -7,6 +7,7 @@ const router = express.Router();
 import settingsDB from '../../db/settings.js';
 import { SettingsSchema } from '../../db/settingsSchema.js';
 import { wouldOrphanLevelFormat } from './settingsGuards.js';
+import { recordConfigAudit } from '../../db/collector.js';
 
 router.get('/settings', async (req: Request, res: Response) => {
   await settingsDB.read();
@@ -42,6 +43,7 @@ router.post('/settings', async (req: Request, res: Response) => {
 
   _.merge(settingsDB.data, validatedUpdate);
   await settingsDB.write();
+  recordConfigAudit('settings', 'POST /api/settings', validatedUpdate);
   res.status(200).json(settingsDB.data);
 });
 

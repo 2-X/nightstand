@@ -14,6 +14,7 @@ import { getDayIndexForTime, isValidTime, logJob } from './utils.js';
 import { connectFranken } from '../8sleep/frankenServer.js';
 import { Settings } from '../db/settingsSchema.js';
 import { emitJobEvent } from './jobEvents.js';
+import { recordEvent } from '../db/collector.js';
 
 
 // A repeated fall-back hour replays an alarm ~60 min later, so anything inside
@@ -81,6 +82,16 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
       },
       min10Duration * 1_000
     );
+    recordEvent('alarm_fired', {
+      side,
+      payload: {
+        intensity: vibrationIntensity,
+        duration: min10Duration,
+        pattern: vibrationPattern,
+        scheduledTime: alarmTimeEpoch,
+      },
+      source: 'jobs/alarmScheduler',
+    });
     serverStatus.status.alarmSchedule.status = 'healthy';
     serverStatus.status.alarmSchedule.message = '';
     emitJobEvent({ jobName: `alarm-${side}`, status: 'ok' });
