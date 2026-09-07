@@ -64,6 +64,10 @@ const MAX_READ_CHUNK = 1 << 20; // 1 MiB
 const HAPTIC_INTENSITY = 15;
 const HAPTIC_DURATION_S = 1;
 const HAPTIC_CLEAR_MS = 1_000;
+// How long an optimistic target stays authoritative over the device snapshot.
+// Long enough to cover a burst of presses + the franken round-trip, short
+// enough that app/schedule changes take back over quickly.
+const PENDING_TARGET_TTL_MS = 10_000;
 
 interface TailState {
   file: string;
@@ -90,6 +94,12 @@ export class ButtonMonitor {
   private inFlight = false;
   private tail: TailState | null = null;
   private readonly machine = new ButtonEventMachine();
+  // Optimistic per-side target: rapid presses land faster than the device
+  // status refreshes (observed live: three +1 presses in one second all read
+  // the same stale target and netted +2). After we change the target, use OUR
+  // value as the base for the next press instead of the coalesced snapshot,
+  // for a short freshness window.
+  private pendingTargets: Partial<Record<Side, { f: number; at: number }>> = {};
 
   public start(): void {
     if (this.timer) {
@@ -367,7 +377,12 @@ export class ButtonMonitor {
       return;
     }
 
-    await applyTemperatureDelta(side, currentTargetF, deltaF);
+    const pending = this.pendingTargets[side];
+    const base = pending && Date.now() - pending.at < PENDING_TARGET_TTL_MS
+      ? pending.f
+      : currentTargetF;
+    const newTargetF = await applyTemperatureDelta(side, base, deltaF);
+    this.pendingTargets[side] = { f: newTargetF, at: Date.now() };
 
     recordEvent('button_press', {
       side,
@@ -392,6 +407,7 @@ export class ButtonMonitor {
     await updateDeviceStatus(
       { [side]: { isOn: true, targetTemperatureF: favoriteF } } as Parameters<typeof updateDeviceStatus>[0],
     );
+    this.pendingTargets[side] = { f: favoriteF, at: Date.now() };
     await markManualTempChange(side, { to: favoriteF });
     recordEvent('button_press', {
       side,

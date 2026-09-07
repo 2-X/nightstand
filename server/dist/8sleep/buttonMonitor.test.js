@@ -147,6 +147,21 @@ describe('ButtonMonitor dispatch', () => {
         assert.equal(tempCalls.length, 1, 'batched chunk press must dispatch');
         assert.deepEqual(tempCalls[0], { side: 'right', current: 82, delta: 1 });
     });
+    it('rapid presses stack via the optimistic target instead of re-reading stale status', async () => {
+        // Three + presses in one chunk. The mocked device status target stays
+        // frozen at 82 the whole time (as observed live: the coalesced snapshot
+        // does not refresh between rapid presses), so without the pending-target
+        // fix all three would compute 82->83 and net +1.
+        writeRaw('001.RAW', Buffer.concat([
+            pressReleaseLog('R', 97, 1),
+            pressReleaseLog('R', 97, 2),
+            pressReleaseLog('R', 97, 3),
+        ]), 1000);
+        const mon = new ButtonMonitor();
+        await mon.tick();
+        assert.equal(tempCalls.length, 3);
+        assert.deepEqual(tempCalls.map(c => c.current), [82, 83, 84], 'each press must base on the previous result');
+    });
     it('top click raises temperature by stepF on the right side', async () => {
         writeRaw('001.RAW', pressReleaseLog('R', 97), 1000);
         const mon = new ButtonMonitor();
