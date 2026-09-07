@@ -19,6 +19,10 @@ export const AlarmSchema = z.object({
 export const AlarmJobSchema = AlarmSchema.extend({
   side: SideSchema,
   force: z.boolean().optional(),
+  // Deadline alarms opt into re-firing at full intensity every 45s (up to 10
+  // min) until dismissed, so a single short buzz can't be slept through. The
+  // "fire now" API and the alarm test leave this off (a single buzz).
+  refireUntilDismissed: z.boolean().optional(),
 }).strict();
 
 export const AlarmScheduleSchema = AlarmSchema.extend({
@@ -70,6 +74,28 @@ export const VibrationSchema = z.object({
   pattern: z.enum(['double', 'rise']),
 }).strict();
 
+// Sleep Cycle-style smart wake. When enabled, a session starts
+// `windowMinutes` before the alarm's deadline time and tries to nudge the
+// sleeper out of LIGHT sleep with gentle escalating pulses, so they wake
+// feeling rested instead of yanked out of deep sleep at the deadline.
+//
+// HARD GUARANTEE: the deadline alarm still fires at the configured time no
+// matter what the session does (see alarmScheduler). The smart layer only
+// ADDS earlier wakes; it can never remove or delay the deadline.
+//
+// Optional on the alarm + `windowMinutes` defaulted, so existing alarm rows
+// with no `smartWake` key parse unchanged (migration safe).
+export const SMART_WAKE_MIN_WINDOW_MINUTES = 5;
+export const SMART_WAKE_MAX_WINDOW_MINUTES = 60;
+export const SMART_WAKE_DEFAULT_WINDOW_MINUTES = 30;
+export const SmartWakeSchema = z.object({
+  enabled: z.boolean(),
+  windowMinutes: z.number().int()
+    .min(SMART_WAKE_MIN_WINDOW_MINUTES)
+    .max(SMART_WAKE_MAX_WINDOW_MINUTES)
+    .default(SMART_WAKE_DEFAULT_WINDOW_MINUTES),
+}).strict();
+
 export const RecurringAlarmSchema = z.object({
   id: z.string().min(1),
   time: TimeSchema,
@@ -81,6 +107,9 @@ export const RecurringAlarmSchema = z.object({
   // Wake temperature the warm ramp targets. Optional; falls back to the side's
   // power onTemperature when absent so old rows without it still ramp sanely.
   warmRampTargetF: TemperatureSchema.optional(),
+  // Smart wake (Sleep Cycle-style). Optional; absent => disabled. Existing
+  // alarm rows without this key parse unchanged.
+  smartWake: SmartWakeSchema.optional(),
   enabled: z.boolean(),
 }).strict();
 
@@ -172,6 +201,7 @@ export type AlarmSchedules = z.infer<typeof AlarmSchedulesSchema>;
 export type Time = z.infer<typeof TimeSchema>;
 export type Recurrence = z.infer<typeof RecurrenceSchema>;
 export type Vibration = z.infer<typeof VibrationSchema>;
+export type SmartWake = z.infer<typeof SmartWakeSchema>;
 export type RecurringAlarm = z.infer<typeof RecurringAlarmSchema>;
 export type RecurringAlarms = z.infer<typeof RecurringAlarmsSchema>;
 

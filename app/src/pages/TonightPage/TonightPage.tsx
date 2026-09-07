@@ -190,19 +190,31 @@ export default function TonightPage() {
             No alarms set for this side.
           </Typography>
         ) : (
-          sideAlarms.map((a) => (
-            <Box key={ a.id } sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1, borderTop: `1px solid ${palette.border.subtle}` } }>
-              <Typography sx={ { fontSize: '1.4rem', fontWeight: 500, color: palette.text.primary, fontVariantNumeric: 'tabular-nums' } }>
-                { moment(a.time, 'HH:mm').format('h:mm A') }
-              </Typography>
-              <Chip
-                label={ cadenceLabel(a.recurrence) }
-                size="small"
-                sx={ { color: palette.text.secondary, borderColor: palette.border.medium, backgroundColor: 'transparent' } }
-                variant="outlined"
-              />
-            </Box>
-          ))
+          sideAlarms.map((a) => {
+            const wakeFrom = a.smartWake?.enabled
+              ? moment(a.time, 'HH:mm').subtract(a.smartWake.windowMinutes, 'minutes').format('h:mm A')
+              : null;
+            return (
+              <Box key={ a.id } sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1, borderTop: `1px solid ${palette.border.subtle}` } }>
+                <Box>
+                  <Typography sx={ { fontSize: '1.4rem', fontWeight: 500, color: palette.text.primary, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 } }>
+                    { moment(a.time, 'HH:mm').format('h:mm A') }
+                  </Typography>
+                  { wakeFrom && (
+                    <Typography sx={ { fontSize: '0.72rem', color: palette.accent.green } }>
+                      smart wake from { wakeFrom }
+                    </Typography>
+                  ) }
+                </Box>
+                <Chip
+                  label={ cadenceLabel(a.recurrence) }
+                  size="small"
+                  sx={ { color: palette.text.secondary, borderColor: palette.border.medium, backgroundColor: 'transparent' } }
+                  variant="outlined"
+                />
+              </Box>
+            );
+          })
         ) }
       </Box>
 

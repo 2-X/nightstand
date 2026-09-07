@@ -91,6 +91,10 @@ router.get('/alarms/upcoming', async (req, res) => {
                     iso: o.iso,
                     vibration: alarm.vibration,
                     warmRampMinutes: alarm.warmRampMinutes,
+                    smartWake: alarm.smartWake,
+                    smartWakeStartMs: alarm.smartWake?.enabled
+                        ? o.epochMs - alarm.smartWake.windowMinutes * 60 * 1000
+                        : undefined,
                 });
             }
         }

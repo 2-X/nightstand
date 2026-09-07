@@ -844,16 +844,17 @@ type MockRecurringAlarm = {
   vibration: { intensity: number; duration: number; pattern: 'double' | 'rise' };
   warmRampMinutes?: number;
   warmRampTargetF?: number;
+  smartWake?: { enabled: boolean; windowMinutes: number };
   enabled: boolean;
 };
 
 let recurringAlarms: { left: MockRecurringAlarm[]; right: MockRecurringAlarm[] } = {
   left: [
-    { id: 'demo-left-1', time: '07:00', recurrence: { kind: 'weekdays' }, vibration: { intensity: 60, duration: 90, pattern: 'rise' }, warmRampMinutes: 20, enabled: true },
+    { id: 'demo-left-1', time: '07:00', recurrence: { kind: 'weekdays' }, vibration: { intensity: 60, duration: 90, pattern: 'rise' }, warmRampMinutes: 20, smartWake: { enabled: true, windowMinutes: 30 }, enabled: true },
     { id: 'demo-left-2', time: '09:00', recurrence: { kind: 'weekends' }, vibration: { intensity: 40, duration: 120, pattern: 'double' }, enabled: true },
   ],
   right: [
-    { id: 'demo-right-1', time: '06:30', recurrence: { kind: 'daily' }, vibration: { intensity: 50, duration: 60, pattern: 'rise' }, enabled: true },
+    { id: 'demo-right-1', time: '06:30', recurrence: { kind: 'daily' }, vibration: { intensity: 50, duration: 60, pattern: 'rise' }, smartWake: { enabled: true, windowMinutes: 20 }, enabled: true },
   ],
 };
 
@@ -871,7 +872,7 @@ export const getUpcomingAlarms = (hours: number, side?: Side) => {
   const fromMs = Date.now();
   const toMs = fromMs + hours * 3600 * 1000;
   const sides: Side[] = side ? [side] : ['left', 'right'];
-  const occurrences: Array<{ side: Side; alarmId: string; time: string; epochMs: number; iso: string; vibration: unknown; warmRampMinutes?: number }> = [];
+  const occurrences: Array<{ side: Side; alarmId: string; time: string; epochMs: number; iso: string; vibration: unknown; warmRampMinutes?: number; smartWake?: { enabled: boolean; windowMinutes: number }; smartWakeStartMs?: number }> = [];
   for (const s of sides) {
     for (const a of recurringAlarms[s]) {
       if (!a.enabled) continue;
@@ -894,7 +895,12 @@ export const getUpcomingAlarms = (hours: number, side?: Side) => {
         const fire = day.clone().hour(h).minute(m).second(0).millisecond(0);
         const epochMs = fire.valueOf();
         if (epochMs > fromMs && epochMs <= toMs) {
-          occurrences.push({ side: s, alarmId: a.id, time: a.time, epochMs, iso: fire.toISOString(true), vibration: a.vibration, warmRampMinutes: a.warmRampMinutes });
+          occurrences.push({
+            side: s, alarmId: a.id, time: a.time, epochMs, iso: fire.toISOString(true),
+            vibration: a.vibration, warmRampMinutes: a.warmRampMinutes,
+            smartWake: a.smartWake,
+            smartWakeStartMs: a.smartWake?.enabled ? epochMs - a.smartWake.windowMinutes * 60 * 1000 : undefined,
+          });
         }
       }
     }

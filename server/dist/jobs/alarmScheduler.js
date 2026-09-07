@@ -15,10 +15,19 @@ import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js
 import { connectFranken } from '../8sleep/frankenServer.js';
 import { emitJobEvent } from './jobEvents.js';
 import { recordEvent } from '../db/collector.js';
+import { armVibe } from './armVibe.js';
+import { startSmartWakeSession, stopSmartWakeSession } from '../8sleep/smartWakeController.js';
 // A repeated fall-back hour replays an alarm ~60 min later, so anything inside
 // this window is the same alarm firing twice, not a second intentional alarm.
 const ALARM_DEDUPE_MS = 50 * 60 * 1000;
-export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPattern, side, force = false }) => {
+// Deadline re-fire: a single 10-60s buzz is trivially slept through. After the
+// deadline alarm's vibration duration ends undismissed, re-fire at full
+// intensity on this cadence up to this cap, or until dismissed. Each re-fire is
+// journaled. These live on the deadline (executeAlarm) path only, so they are
+// structurally independent of any smart-wake session.
+const REFIRE_INTERVAL_MS = 45_000;
+const REFIRE_MAX_MS = 10 * 60_000;
+export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPattern, side, force = false, refireUntilDismissed = false }) => {
     emitJobEvent({ jobName: `alarm-${side}`, status: 'started' });
     try {
         const min10Duration = Math.max(10, duration);
@@ -37,6 +46,10 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
             logger.debug('Not executing alarm, side is off!');
             return;
         }
+        // Best-effort arm of the pod vibrator before we fire. Idempotent; silent
+        // no-op on local dev. Never blocks or aborts the alarm - if arming fails
+        // the fire below still runs (the hardware alarm is the real guarantee).
+        await armVibe();
         // On the DST fall-back day a time between 01:00 and 01:59 occurs twice, so
         // node-schedule fires the same alarm again an hour later. Swallow a repeat
         // that lands within the dedupe window rather than vibrating the bed twice.
@@ -79,6 +92,22 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
             },
             source: 'jobs/alarmScheduler',
         });
+        // Deadline re-fire loop: a single short buzz is easily slept through, so
+        // once the vibration duration ends and the alarm is still undismissed, keep
+        // re-firing at full intensity every 45s up to 10 minutes or until the user
+        // dismisses. Only for deadline alarms (refireUntilDismissed); "fire now"
+        // and the test buzz stay a single pulse. firedAt anchors the dismissal
+        // comparison so a dismissal that lands after this fire stops the loop.
+        if (refireUntilDismissed) {
+            // eslint-disable-next-line no-use-before-define
+            scheduleDeadlineRefires({
+                side,
+                firedAt: memoryDB.data[side].lastAlarmFiredAt ?? Date.now(),
+                vibrationIntensity,
+                duration: min10Duration,
+                vibrationPattern,
+            });
+        }
         serverStatus.status.alarmSchedule.status = 'healthy';
         serverStatus.status.alarmSchedule.message = '';
         emitJobEvent({ jobName: `alarm-${side}`, status: 'ok' });
@@ -91,6 +120,99 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
         emitJobEvent({ jobName: `alarm-${side}`, status: 'fail', message });
     }
 };
+// Re-fire the deadline alarm at full intensity on REFIRE_INTERVAL_MS cadence
+// until dismissed or REFIRE_MAX_MS elapses. Self-scheduling via setTimeout so
+// it survives independently of node-schedule job rebuilds. Every promise is
+// caught; a failed re-fire is logged and the loop continues (best effort).
+export function scheduleDeadlineRefires(args) {
+    const { side, firedAt, vibrationIntensity, duration, vibrationPattern } = args;
+    let refireCount = 0;
+    const dismissedSinceFire = async () => {
+        await memoryDB.read();
+        const dismissedAt = memoryDB.data[side].lastAlarmDismissedAt;
+        return dismissedAt !== undefined && dismissedAt >= firedAt;
+    };
+    const scheduleNext = () => {
+        const timer = setTimeout(() => {
+            void (async () => {
+                try {
+                    // Stop if dismissed, if the cap elapsed, or if a newer alarm fired
+                    // (lastAlarmFiredAt moved past our firedAt anchor => a later alarm
+                    // owns the bed now).
+                    if (Date.now() - firedAt >= REFIRE_MAX_MS) {
+                        recordEvent('refire', {
+                            side,
+                            payload: { stopped: 'max_elapsed', refireCount, firedAt },
+                            source: 'jobs/alarmScheduler',
+                        });
+                        return;
+                    }
+                    if (await dismissedSinceFire()) {
+                        recordEvent('refire', {
+                            side,
+                            payload: { stopped: 'dismissed', refireCount, firedAt },
+                            source: 'jobs/alarmScheduler',
+                        });
+                        return;
+                    }
+                    const laterFire = memoryDB.data[side].lastAlarmFiredAt;
+                    if (laterFire !== undefined && laterFire > firedAt) {
+                        // A newer alarm superseded this one; let it own re-firing.
+                        return;
+                    }
+                    // Away/off checks: don't buzz a powered-off or away side.
+                    await settingsDB.read();
+                    if (settingsDB.data[side].awayMode)
+                        return;
+                    const franken = await connectFranken();
+                    const status = await franken.getDeviceStatus();
+                    if (!status[side].isOn)
+                        return;
+                    const payload = {
+                        pl: vibrationIntensity,
+                        du: Math.max(10, duration),
+                        pi: vibrationPattern,
+                        tt: moment.tz(settingsDB.data.timeZone || 'UTC').unix(),
+                    };
+                    const hex = cbor.encode(payload).toString('hex');
+                    const command = side === 'left' ? 'ALARM_LEFT' : 'ALARM_RIGHT';
+                    await executeFunction(command, hex);
+                    await memoryDB.read();
+                    memoryDB.data[side].isAlarmVibrating = true;
+                    await memoryDB.write();
+                    setTimeout(() => {
+                        void (async () => {
+                            try {
+                                await memoryDB.read();
+                                memoryDB.data[side].isAlarmVibrating = false;
+                                await memoryDB.write();
+                            }
+                            catch (err) {
+                                logger.warn(`Refire self-clear failed for ${side}: ${err}`);
+                            }
+                        })();
+                    }, Math.max(10, duration) * 1000).unref?.();
+                    refireCount += 1;
+                    recordEvent('refire', {
+                        side,
+                        payload: { refireCount, intensity: vibrationIntensity, firedAt },
+                        source: 'jobs/alarmScheduler',
+                    });
+                    scheduleNext();
+                }
+                catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    logger.warn(`Deadline re-fire failed for ${side}: ${message}`);
+                    // Keep the loop alive across a transient hardware hiccup, still
+                    // bounded by the max-elapsed check at the top of each iteration.
+                    scheduleNext();
+                }
+            })();
+        }, REFIRE_INTERVAL_MS);
+        timer.unref?.();
+    };
+    scheduleNext();
+}
 /**
  * Next occurrence of HH:mm in tz (today or tomorrow depending on 'now').
  * If the HH:mm is already passed for 'now', schedule for tomorrow.
@@ -259,6 +381,44 @@ function scheduleWarmRamp(side, alarm, occurrenceMs) {
         }
     });
 }
+// Arm the smart-wake SESSION-START job for a single occurrence, if smart wake
+// is enabled and the session start is still in the future. This is a SEPARATE
+// node-schedule job from the deadline alarm job below, and is wrapped so that a
+// failure here can never affect the deadline job (structural HARD GUARANTEE:
+// the deadline always fires regardless of the session). The session controller
+// itself is best-effort and self-guarded.
+function scheduleSmartWakeSession(side, alarm, occurrenceMs) {
+    const sw = alarm.smartWake;
+    if (!sw?.enabled)
+        return;
+    const windowMinutes = sw.windowMinutes;
+    const startAtMs = occurrenceMs - windowMinutes * 60 * 1000;
+    // If we're already inside the window (server restarted mid-window), start the
+    // session now rather than skipping it.
+    const fireAtMs = Math.max(startAtMs, Date.now() + 1000);
+    if (fireAtMs >= occurrenceMs)
+        return; // window already fully elapsed
+    const jobName = `${side}-recurring-${alarm.id}-smartwake`;
+    try {
+        schedule.scheduleJob(jobName, new Date(fireAtMs), () => {
+            // Fire-and-forget: startSmartWakeSession catches all its own errors.
+            void startSmartWakeSession({
+                side,
+                alarmId: alarm.id,
+                deadlineMs: occurrenceMs,
+                windowMinutes,
+            });
+        });
+        logger.debug(`Scheduled smart-wake session ${side}/${alarm.id} start at ${new Date(fireAtMs).toISOString()} `
+            + `(deadline ${new Date(occurrenceMs).toISOString()})`);
+    }
+    catch (error) {
+        // A failure to arm the session must not bubble - the deadline job is armed
+        // separately below and is the guarantee.
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn(`Failed to arm smart-wake session ${side}/${alarm.id}: ${message}`);
+    }
+}
 // Arm one dated job for the next occurrence of `alarm`. When it fires it
 // executes the alarm and self-reschedules the following occurrence, so a single
 // job per alarm keeps the recurrence alive between setupJobs() rebuilds.
@@ -269,6 +429,15 @@ function armNextRecurringOccurrence(side, alarm, timeZone) {
         return;
     }
     scheduleWarmRamp(side, alarm, nextMs);
+    // Smart-wake session start is armed independently of the deadline job below.
+    // Wrapped so it can never prevent the deadline job from being scheduled.
+    try {
+        scheduleSmartWakeSession(side, alarm, nextMs);
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn(`Smart-wake scheduling threw for ${side}/${alarm.id}, deadline still armed: ${message}`);
+    }
     const jobName = `${side}-recurring-${alarm.id}`;
     logger.debug(`Scheduling recurring alarm ${side}/${alarm.id} for ${new Date(nextMs).toISOString()}`);
     schedule.scheduleJob(jobName, new Date(nextMs), async () => {
@@ -284,11 +453,22 @@ function armNextRecurringOccurrence(side, alarm, timeZone) {
                     return;
                 }
             }
+            // Deadline reached: end any smart-wake session so its nudges don't
+            // overlap the real alarm. Done BEFORE firing and independently of the
+            // fire itself - stopping the session can never prevent the fire below.
+            try {
+                stopSmartWakeSession(side, 'deadline');
+            }
+            catch (err) {
+                logger.warn(`Failed to stop smart-wake session at deadline for ${side}: ${err}`);
+            }
             await executeAlarm({
                 side,
                 vibrationIntensity: alarm.vibration.intensity,
                 duration: alarm.vibration.duration,
                 vibrationPattern: alarm.vibration.pattern,
+                // Deadline alarms re-fire until dismissed (see scheduleDeadlineRefires).
+                refireUntilDismissed: true,
             });
         }
         catch (error) {

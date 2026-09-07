@@ -5,6 +5,7 @@ import { connectFranken, disconnectFranken, getFrankenQueueDepth } from './8slee
 import { FrankenMonitor } from './8sleep/frankenMonitor.js';
 import { startPresenceAutoOff, stopPresenceAutoOff } from './8sleep/presenceAutoOffMonitor.js';
 import { startButtonMonitor, stopButtonMonitor } from './8sleep/buttonMonitor.js';
+import { stopAllSmartWakeSessions } from './8sleep/smartWakeController.js';
 import './jobs/jobScheduler.js';
 // Setup code
 import setupMiddleware from './setup/middleware.js';
@@ -81,6 +82,7 @@ async function gracefulShutdown(signal) {
         if (!config.remoteDevMode) {
             stopPresenceAutoOff();
             stopButtonMonitor();
+            stopAllSmartWakeSessions();
             frankenMonitor?.stop();
             await disconnectFranken();
             logger.debug('Successfully closed Franken components.');

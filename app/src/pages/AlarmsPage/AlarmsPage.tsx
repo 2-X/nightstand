@@ -85,6 +85,10 @@ export default function AlarmsPage() {
                     <Chip label={ `warm ${a.warmRampMinutes}m` } size="small" variant="outlined"
                       sx={ { color: palette.accent.orange, borderColor: palette.border.medium } } />
                   ) : null }
+                  { a.smartWake?.enabled ? (
+                    <Chip label={ `smart ${a.smartWake.windowMinutes}m` } size="small" variant="outlined"
+                      sx={ { color: palette.accent.green, borderColor: palette.border.medium } } />
+                  ) : null }
                 </Box>
               </Box>
               <Switch checked={ a.enabled } onChange={ () => toggleEnabled(a.id) } />

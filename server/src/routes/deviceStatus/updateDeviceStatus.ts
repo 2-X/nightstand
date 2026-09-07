@@ -9,6 +9,7 @@ import settingsDB from '../../db/settings.js';
 import memoryDB from '../../db/memoryDB.js';
 import { INVERTED_SETTINGS_KEY_MAPPING } from '../../8sleep/loadDeviceStatus.js';
 import { recordEvent } from '../../db/collector.js';
+import { notifySmartWakeDismissed } from '../../8sleep/smartWakeController.js';
 
 // Inverse of loadDeviceStatus.ts's calculateTempInF. Same fixed firmware
 // level scale, so the two files must be changed together.
@@ -65,11 +66,18 @@ const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideSt
       // clearedEarly: the alarm was still vibrating (within its duration) when
       // the clear came in. If it wasn't vibrating, this is a no-op clear.
       const clearedEarly = memoryDB.data[side].isAlarmVibrating === true;
+      // Record the dismissal instant so the deadline re-fire loop knows to
+      // stop (isAlarmVibrating is also flipped by the per-duration self-clear
+      // timer, so it cannot distinguish "buzz ended" from "user dismissed").
+      memoryDB.data[side].lastAlarmDismissedAt = Date.now();
       recordEvent('alarm_cleared', {
         side,
         payload: { clearedEarly },
         source: 'routes/deviceStatus/updateDeviceStatus',
       });
+      // Same dismissal path the middle cover button and the app use: end any
+      // active smart-wake session on this side as woke_early. No-op when none.
+      notifySmartWakeDismissed(side);
     } else {
       await memoryDB.read();
     }
