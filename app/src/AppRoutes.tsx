@@ -19,11 +19,15 @@ const LogsPage = lazy(() => import('./pages/DataPage/LogsPage/LogsPage.tsx'));
 const ChangelogPage = lazy(() => import('./pages/DataPage/ChangelogPage/ChangelogPage.tsx'));
 const VersionsPage = lazy(() => import('./pages/SettingsPage/VersionsPage/VersionsPage.tsx'));
 const StatusPage = lazy(() => import('./pages/StatusPage/StatusPage.tsx'));
+const ComparePage = lazy(() => import('./pages/ComparePage/ComparePage.tsx'));
 
 export default function AppRoutes() {
   return (
     <Suspense fallback={ <RouteFallback /> }>
       <Routes>
+        { /* Outside Layout: Compare renders the app twice in iframes, so it
+             brings no navbar of its own - each pane has one. */ }
+        <Route path="/compare" element={ <ComparePage/> }/>
         <Route path="/" element={ <Layout/> }>
           <Route index element={ <TonightPage/> }/>
           <Route path="control" element={ <ControlTempPage/> }/>

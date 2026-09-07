@@ -18,6 +18,7 @@ import WeeklyScheduleBars from './WeeklyScheduleBars.tsx';
 import { SleepRecord } from '../../../../../server/src/db/sleepRecordsSchema.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { useSleepRecords } from '@api/sleep.ts';
+import { reconcileSelectedRecord } from '@lib/sleepSelection.ts';
 import { useVitalsRecords, useVitalsSummary } from '@api/vitals.ts';
 import ErrorBoundary from '@components/ErrorBoundary.tsx';
 import { palette } from '@design/tokens';
@@ -67,10 +68,11 @@ export default function SleepPage() {
   const { data: weekVitalsSummary } = useVitalsSummary(sevenDayWindow);
 
   useEffect(() => {
-    // Default to last record selected
-    if (sleepRecords?.length) {
-      setSelectedSleepRecord(sleepRecords[sleepRecords.length - 1]);
-    }
+    // Default to the most recent record, but keep the user's selection
+    // across refetches - see reconcileSelectedRecord for why re-selecting
+    // the last record here made every clicked night show the latest one.
+    if (!sleepRecords?.length) return;
+    setSelectedSleepRecord((current) => reconcileSelectedRecord(current, sleepRecords));
   }, [sleepRecords]);
 
   // Function to move to the previous week

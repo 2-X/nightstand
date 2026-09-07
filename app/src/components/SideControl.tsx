@@ -94,10 +94,14 @@ function PresenceDot({ side }: { side: PresenceSide | undefined }) {
 }
 
 export default function SideControl({ showTemp }: SideControlProps) {
-  const { side, setSide } = useAppStore();
+  const { side, setSide, sidePinned } = useAppStore();
   const { data: settings } = useSettings();
   const { data: deviceStatus } = useDeviceStatus();
   const { data: presence } = usePresence();
+
+  // A Compare pane shows one fixed side; a toggle that can't toggle is
+  // just confusing, and the pane header already names the side.
+  if (sidePinned) return null;
 
   const format = settings?.temperatureFormat ?? 'fahrenheit';
   return (

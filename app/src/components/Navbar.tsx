@@ -24,7 +24,7 @@ const UNHEALTHY_STATUSES: ReadonlySet<Status> = new Set(['failed', 'restarting',
 export default function Navbar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { isUpdating } = useAppStore();
+  const { isUpdating, sidePinned } = useAppStore();
   const theme = useTheme(); // Access the Material-UI theme
   // Show a subtle "Reconnecting…" tag only when the WS is down. When it's
   // 'open' or freshly mounted ('connecting' for a fraction of a second), we
@@ -32,11 +32,14 @@ export default function Navbar() {
   const wsState = useEventStreamStore((s) => s.state);
   const showReconnecting = wsState === 'reconnecting';
   // Hide the Elevation tab entirely on pods with no adjustable base, since
-  // the page would just render dead controls.
+  // the page would just render dead controls. Hide the Compare tab inside a
+  // side-pinned Compare pane - compare-within-compare would nest iframes.
   const baseConfigured = useBaseConfigured();
   const pages = React.useMemo(
-    () => PAGES.filter((page) => page.route !== '/elevation' || baseConfigured),
-    [baseConfigured]
+    () => PAGES.filter((page) =>
+      (page.route !== '/elevation' || baseConfigured)
+      && (page.route !== '/compare' || !sidePinned)),
+    [baseConfigured, sidePinned]
   );
   const [mobileNavValue, setMobileNavValue] = React.useState(
     pages.findIndex((page) => page.route === pathname)

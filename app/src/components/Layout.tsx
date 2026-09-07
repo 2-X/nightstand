@@ -1,9 +1,12 @@
 import { Outlet } from 'react-router-dom';
 import Navbar from './Navbar';
 import Box from '@mui/material/Box';
+import useCompareSync from './useCompareSync';
 
 
 export default function Layout() {
+  // No-op unless this document is a side-pinned Compare pane.
+  useCompareSync();
   return (
     <Box
       id="Layout"

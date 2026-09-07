@@ -7,6 +7,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import BedtimeIcon from '@mui/icons-material/Bedtime';
 import AirlineSeatReclineExtraIcon from '@mui/icons-material/AirlineSeatReclineExtra';
+import VerticalSplitIcon from '@mui/icons-material/VerticalSplit';
 
 type Page = {
   title: string;
@@ -32,6 +33,8 @@ export const PAGES: Page[] = [
   { title: 'Elevation', route: '/elevation', icon: <AirlineSeatReclineExtraIcon/> },
 
   { title: 'Data', route: '/data', icon: <BarChartIcon/> },
+  // Both sides at once: every page rendered twice in side-pinned panes.
+  { title: 'Compare', route: '/compare', icon: <VerticalSplitIcon/> },
   { title: 'Status', route: '/status', icon: <BugReportIcon/> },
   { title: 'Settings', route: '/settings', icon: <SettingsIcon/> },
 ];
