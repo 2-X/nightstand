@@ -360,6 +360,7 @@ export class ButtonMonitor {
             : currentTargetF;
         const newTargetF = await applyTemperatureDelta(side, base, deltaF);
         this.pendingTargets[side] = { f: newTargetF, at: Date.now() };
+        this.broadcastOptimistic(side, { targetTemperatureF: newTargetF });
         recordEvent('button_press', {
             side,
             payload: {
@@ -380,6 +381,7 @@ export class ButtonMonitor {
     async handleFavoriteTemperature(side, favoriteF) {
         await updateDeviceStatus({ [side]: { isOn: true, targetTemperatureF: favoriteF } });
         this.pendingTargets[side] = { f: favoriteF, at: Date.now() };
+        this.broadcastOptimistic(side, { targetTemperatureF: favoriteF, isOn: true });
         await markManualTempChange(side, { to: favoriteF });
         recordEvent('button_press', {
             side,
@@ -408,6 +410,28 @@ export class ButtonMonitor {
             payload: { side, button: 'middle', kind: 'click', action: 'alarm_dismiss' },
             source: '8sleep/buttonMonitor',
         });
+    }
+    // Push the new target to the UI over the WebSocket NOW instead of letting
+    // the app wait out FrankenMonitor's next 2s poll. Detection already costs
+    // ~2-3s (frank's RAW flush + our 1s tail poll); this removes the last
+    // avoidable hop so the portal tracks physical presses as closely as the
+    // pipeline allows. The next real poll confirms (or corrects) the value.
+    broadcastOptimistic(side, patch) {
+        void (async () => {
+            try {
+                const status = await getDeviceStatusCoalesced();
+                if (!status?.[side])
+                    return;
+                const optimistic = {
+                    ...status,
+                    [side]: { ...status[side], ...patch },
+                };
+                eventBus.emit('device-status', optimistic);
+            }
+            catch (error) {
+                logger.debug(`[buttonMonitor] optimistic broadcast skipped: ${errMsg(error)}`);
+            }
+        })();
     }
     async maybeHaptic(side) {
         await settingsDB.read();
