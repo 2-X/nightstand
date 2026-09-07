@@ -50,10 +50,11 @@ import {
 // tests and local dev; production leaves it at the pod's /persistent.
 const RAW_DIR = process.env.POD_RAW_DIR || '/persistent';
 const POLL_MS = 1_000;
-// Only inner records at/under this many bytes are CBOR-decoded. Piezo-dual
-// records are ~2700 bytes; log records are well under 512. This is how we skip
-// piezo payloads by length alone, never buffering a sample array.
-const MAX_LOG_RECORD_BYTES = 512;
+// Only tagged inner chunks at/under this many bytes are CBOR-decoded. Frank
+// batches multiple log records per chunk (~1.6KB observed live); piezo-dual
+// chunks are large binary payloads that never contain the ASCII button tags,
+// so the tag pre-filter is the real piezo guard and this cap is a backstop.
+const MAX_TAGGED_CHUNK_BYTES = 16 * 1024;
 // How much of the tail to read per tick. Frank appends slowly; a press is one
 // short record. Cap the read so a huge backlog (first open of a large file)
 // can't allocate an enormous buffer in one shot.
@@ -267,23 +268,39 @@ export class ButtonMonitor {
     }
   }
 
-  // Decode a small inner record and, if it's a button log line, run it through
-  // the edge machine. Large records (piezo) are skipped by length.
+  // Decode an inner chunk and, if it holds button log lines, run them through
+  // the edge machine. Verified against live capture (Sep 7 2026): frank
+  // BATCHES several CBOR log records into one outer chunk (~1.6KB observed),
+  // so a chunk containing a button line can far exceed a single log record's
+  // size and holds multiple concatenated CBOR maps. The tag pre-filter is the
+  // cheap gate; the size cap only protects against decoding piezo payloads,
+  // which never contain the ASCII tags.
   private classifyRecord(data: Buffer): ButtonEvent[] {
-    if (data.length === 0 || data.length > MAX_LOG_RECORD_BYTES) return [];
-    // Cheap pre-filter: only decode records that mention our tags. Avoids
-    // CBOR-decoding every small non-button log line.
+    if (data.length === 0 || data.length > MAX_TAGGED_CHUNK_BYTES) return [];
+    // Cheap pre-filter: only decode chunks that mention our tags. Avoids
+    // CBOR-decoding unrelated log chunks and all piezo data.
     if (!bufferHasTag(data)) return [];
-    let decoded: unknown;
+    let items: unknown[];
     try {
-      decoded = cbor.decodeFirstSync(data);
+      items = cbor.decodeAllSync(data);
     } catch {
-      return [];
+      // Partial decode salvage: decodeAllSync throws if ANY item is bad.
+      // Fall back to the first item so one corrupt trailing record doesn't
+      // discard a valid button press in the same chunk.
+      try {
+        items = [cbor.decodeFirstSync(data)];
+      } catch {
+        return [];
+      }
     }
-    if (!decoded || typeof decoded !== 'object') return [];
-    const rec = decoded as { type?: unknown; msg?: unknown };
-    if (rec.type !== 'log' || typeof rec.msg !== 'string') return [];
-    return this.machine.push(rec.msg);
+    const events: ButtonEvent[] = [];
+    for (const decoded of items) {
+      if (!decoded || typeof decoded !== 'object') continue;
+      const rec = decoded as { type?: unknown; msg?: unknown };
+      if (rec.type !== 'log' || typeof rec.msg !== 'string') continue;
+      events.push(...this.machine.push(rec.msg));
+    }
+    return events;
   }
 
   private async dispatch(ev: ButtonEvent): Promise<void> {

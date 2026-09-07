@@ -75,8 +75,11 @@ before(async () => {
 // --- RAW fixture helpers (same framing as rawLogReader.test) ---------------
 function frameRecord(seq: number, data: Buffer): Buffer {
   const enc = (n: number): Buffer => (n <= 0x17 ? Buffer.from([n]) : Buffer.from([0x18, n]));
-  const bsHeader = (len: number): Buffer =>
-    len <= 0x17 ? Buffer.from([0x40 | len]) : Buffer.from([0x58, len]);
+  const bsHeader = (len: number): Buffer => {
+    if (len <= 0x17) return Buffer.from([0x40 | len]);
+    if (len <= 0xff) return Buffer.from([0x58, len]);
+    return Buffer.from([0x59, len >> 8, len & 0xff]);
+  };
   return Buffer.concat([
     Buffer.from([0xa2]),
     Buffer.from([0x63, 0x73, 0x65, 0x71]),
@@ -94,6 +97,22 @@ function pressReleaseLog(sideTag: 'R' | 'L', code: number, seq = 1): Buffer {
     logRec(`[tca8418${sideTag}] gpi press ${code}`, seq),
     logRec(`[tca8418${sideTag}] gpi release ${code}`, seq),
   ]);
+}
+
+// The live firmware BATCHES several CBOR log records into ONE outer chunk
+// (~1.6KB observed on-pod Sep 7 2026), so a chunk is multiple concatenated
+// CBOR maps, most of them unrelated log noise, and easily exceeds 512 bytes.
+// This mirrors that exact shape: press + release + filler in a single chunk.
+function batchedPressChunk(sideTag: 'R' | 'L', code: number, seq = 1): Buffer {
+  const filler = 'x'.repeat(120);
+  const records = [
+    cbor.encode({ type: 'log', ts: 1, level: 'debug', msg: `AsioTcpClient.h:63 tryConnect|[asiotcp] ${filler}` }),
+    cbor.encode({ type: 'log', ts: 1, level: 'debug', msg: `Sensor.cpp:608 handleCommand|[sensor] -> FW: 1 [tca8418${sideTag}] gpi press ${code}` }),
+    cbor.encode({ type: 'log', ts: 1, level: 'debug', msg: `Sensor.cpp:608 handleCommand|[sensor] -> FW: 2 [tca8418${sideTag}] gpi release ${code}` }),
+    ...Array.from({ length: 8 }, (_, i) =>
+      cbor.encode({ type: 'log', ts: 1, level: 'debug', msg: `Thermostat.cpp:99 tick|[therm] ${filler} ${i}` })),
+  ];
+  return frameRecord(seq, Buffer.concat(records));
 }
 
 // Access the private tick() to drive polls deterministically.
@@ -132,6 +151,17 @@ describe('ButtonMonitor dispatch', () => {
     memoryDB.data.left.isAlarmVibrating = false;
     memoryDB.data.right.isAlarmVibrating = false;
     await memoryDB.write();
+  });
+
+  it('handles a press inside a >512B batched multi-record chunk (live firmware shape)', async () => {
+    const chunk = batchedPressChunk('R', 97);
+    assert.ok(chunk.length > 512, `fixture must exceed the old size gate (got ${chunk.length})`);
+    writeRaw('001.RAW', chunk, 1000);
+    const mon = new ButtonMonitor() as unknown as Internals;
+    await mon.tick();
+
+    assert.equal(tempCalls.length, 1, 'batched chunk press must dispatch');
+    assert.deepEqual(tempCalls[0], { side: 'right', current: 82, delta: 1 });
   });
 
   it('top click raises temperature by stepF on the right side', async () => {
