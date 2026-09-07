@@ -94,6 +94,10 @@ export const RecurringAlarmSchema = z.object({
     warmRampTargetF: TemperatureSchema.optional(),
     // Smart wake (Sleep Cycle-style). Optional; absent => disabled. Existing
     // alarm rows without this key parse unchanged.
+    // Local calendar dates (YYYY-MM-DD in the pod's time zone) on which this
+    // alarm must NOT fire - holidays, vacations. Purely subtractive: a date
+    // here suppresses an occurrence the recurrence would otherwise produce.
+    skipDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(100).optional(),
     smartWake: SmartWakeSchema.optional(),
     enabled: z.boolean(),
 }).strict();

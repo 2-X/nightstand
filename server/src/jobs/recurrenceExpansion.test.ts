@@ -165,3 +165,37 @@ describe('expandAlarmOccurrences', () => {
     assert.equal((nov1[0].epochMs - oct31!.epochMs) / 3600000, 25);
   });
 });
+
+describe('skipDates', () => {
+  it('suppresses occurrences on listed local dates and nothing else', () => {
+    // Weekdays alarm across Mon Sep 7 - Fri Sep 11 2026 (ET), skipping Labor
+    // Day (Mon Sep 7) and Wed Sep 9.
+    const from = Date.parse('2026-09-06T12:00:00-04:00');
+    const to = Date.parse('2026-09-11T23:00:00-04:00');
+    const occ = expandAlarmOccurrences(
+      {
+        time: '10:00',
+        recurrence: { kind: 'weekdays' },
+        enabled: true,
+        skipDates: ['2026-09-07', '2026-09-09', '2026-12-25'],
+      },
+      'America/New_York',
+      from,
+      to,
+    );
+    const days = occ.map(o => o.iso.slice(0, 10));
+    assert.deepEqual(days, ['2026-09-08', '2026-09-10', '2026-09-11']);
+  });
+
+  it('no skipDates field behaves exactly as before', () => {
+    const from = Date.parse('2026-09-06T12:00:00-04:00');
+    const to = Date.parse('2026-09-09T23:00:00-04:00');
+    const occ = expandAlarmOccurrences(
+      { time: '10:00', recurrence: { kind: 'weekdays' }, enabled: true },
+      'America/New_York',
+      from,
+      to,
+    );
+    assert.deepEqual(occ.map(o => o.iso.slice(0, 10)), ['2026-09-07', '2026-09-08', '2026-09-09']);
+  });
+});

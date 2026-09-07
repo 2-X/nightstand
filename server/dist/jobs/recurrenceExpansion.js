@@ -60,6 +60,7 @@ export function expandAlarmOccurrences(alarm, timeZone, fromMs, toMs) {
         return out;
     // Walk calendar days in the target zone. Start at the local day of `from`
     // and stop once we pass the local day of `to`.
+    const skip = new Set(alarm.skipDates ?? []);
     const cursor = moment.tz(fromMs, timeZone).startOf('day');
     const lastDay = moment.tz(toMs, timeZone).startOf('day');
     // Hard cap the number of days scanned so a corrupt everyNDays rule with a
@@ -69,7 +70,7 @@ export function expandAlarmOccurrences(alarm, timeZone, fromMs, toMs) {
     let scanned = 0;
     while (cursor.isSameOrBefore(lastDay) && scanned < MAX_DAYS) {
         const weekday = cursor.day(); // 0=Sunday..6=Saturday
-        if (dayMatches(alarm.recurrence, weekday, cursor)) {
+        if (dayMatches(alarm.recurrence, weekday, cursor) && !skip.has(cursor.format('YYYY-MM-DD'))) {
             // Build the fire instant on this calendar day at the wall HH:mm.
             const fire = cursor.clone().hour(hour).minute(minute).second(0).millisecond(0);
             const fireMs = fire.valueOf();
