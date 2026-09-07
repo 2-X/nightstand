@@ -31,6 +31,7 @@ import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js
 import { executeFunction } from './deviceApi.js';
 import { applyTemperatureDelta } from './applyTemperatureChange.js';
 import { markManualTempChange } from '../jobs/scheduleOverride.js';
+import { setOptimisticTarget } from './optimisticTargets.js';
 import { readRawRecord, RawTruncatedError, RawFramingError, } from './rawLogReader.js';
 import { ButtonEventMachine, } from './buttonEvents.js';
 // Directory holding the pod's rolling *.RAW captures. Overridable via env for
@@ -360,6 +361,7 @@ export class ButtonMonitor {
             : currentTargetF;
         const newTargetF = await applyTemperatureDelta(side, base, deltaF);
         this.pendingTargets[side] = { f: newTargetF, at: Date.now() };
+        setOptimisticTarget(side, newTargetF);
         this.broadcastOptimistic(side, { targetTemperatureF: newTargetF });
         recordEvent('button_press', {
             side,
@@ -381,6 +383,7 @@ export class ButtonMonitor {
     async handleFavoriteTemperature(side, favoriteF) {
         await updateDeviceStatus({ [side]: { isOn: true, targetTemperatureF: favoriteF } });
         this.pendingTargets[side] = { f: favoriteF, at: Date.now() };
+        setOptimisticTarget(side, favoriteF);
         this.broadcastOptimistic(side, { targetTemperatureF: favoriteF, isOn: true });
         await markManualTempChange(side, { to: favoriteF });
         recordEvent('button_press', {

@@ -35,6 +35,7 @@ import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js
 import { executeFunction } from './deviceApi.js';
 import { applyTemperatureDelta } from './applyTemperatureChange.js';
 import { markManualTempChange } from '../jobs/scheduleOverride.js';
+import { setOptimisticTarget } from './optimisticTargets.js';
 import {
   readRawRecord,
   RawTruncatedError,
@@ -383,6 +384,7 @@ export class ButtonMonitor {
       : currentTargetF;
     const newTargetF = await applyTemperatureDelta(side, base, deltaF);
     this.pendingTargets[side] = { f: newTargetF, at: Date.now() };
+    setOptimisticTarget(side, newTargetF);
     this.broadcastOptimistic(side, { targetTemperatureF: newTargetF });
 
     recordEvent('button_press', {
@@ -409,6 +411,7 @@ export class ButtonMonitor {
       { [side]: { isOn: true, targetTemperatureF: favoriteF } } as Parameters<typeof updateDeviceStatus>[0],
     );
     this.pendingTargets[side] = { f: favoriteF, at: Date.now() };
+    setOptimisticTarget(side, favoriteF);
     this.broadcastOptimistic(side, { targetTemperatureF: favoriteF, isOn: true });
     await markManualTempChange(side, { to: favoriteF });
     recordEvent('button_press', {

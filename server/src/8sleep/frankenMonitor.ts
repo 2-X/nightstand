@@ -13,6 +13,7 @@ import { trimixBase } from './trimixBaseControl.js';
 import { BASE_PRESETS } from './basePresets.js';
 import eventBus from '../events/eventBus.js';
 import { recordEvent } from '../db/collector.js';
+import { getFreshOptimisticTarget, confirmTarget } from './optimisticTargets.js';
 
 // Pod 4+ only: gestures and the 2s cadence are the only path. The Pod 3
 // 60s slow-poll branch was removed alongside the WebSocket initiative.
@@ -213,6 +214,19 @@ export class FrankenMonitor {
 
           await settingsDB.read();
           this.processGestures(nextDeviceStatus);
+
+          // Overlay fresh optimistic targets (physical button presses) so a
+          // poll that was in flight when a press landed can't regress the
+          // just-broadcast value; clears itself once franken confirms.
+          for (const side of ['left', 'right'] as const) {
+            const optimistic = getFreshOptimisticTarget(side);
+            if (optimistic === null) continue;
+            if (nextDeviceStatus[side].targetTemperatureF === optimistic) {
+              confirmTarget(side, optimistic);
+            } else {
+              nextDeviceStatus[side].targetTemperatureF = optimistic;
+            }
+          }
 
           if (this.hasStatusChanged(nextDeviceStatus)) {
             eventBus.emit('device-status', nextDeviceStatus);
