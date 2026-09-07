@@ -9,6 +9,13 @@ type SideState = {
   // firing of the same wall-clock time, which happens on the DST fall-back
   // day when a time between 01:00 and 01:59 occurs twice.
   lastAlarmFiredAt?: number;
+  // Epoch ms of the last real dismissal (middle button or app clearing the
+  // alarm via updateDeviceStatus({isAlarmVibrating:false})). The deadline
+  // re-fire loop stops as soon as this is newer than lastAlarmFiredAt; the
+  // per-duration self-clear timer flips isAlarmVibrating false regardless of
+  // dismissal, so isAlarmVibrating alone cannot tell "stopped buzzing" from
+  // "user dismissed".
+  lastAlarmDismissedAt?: number;
   analyzeSleep: {
     lastRan?: number;
   }

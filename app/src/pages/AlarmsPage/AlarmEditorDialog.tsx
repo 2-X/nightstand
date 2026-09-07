@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react';
 import {
   Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl,
-  InputLabel, MenuItem, Select, Slider, TextField, ToggleButton, ToggleButtonGroup,
-  Typography,
+  FormControlLabel, InputLabel, MenuItem, Select, Slider, Switch, TextField,
+  ToggleButton, ToggleButtonGroup, Typography,
 } from '@mui/material';
 import type { RecurringAlarm, Recurrence } from '@api/schedulesSchema.ts';
+import {
+  SMART_WAKE_MIN_WINDOW_MINUTES,
+  SMART_WAKE_MAX_WINDOW_MINUTES,
+  SMART_WAKE_DEFAULT_WINDOW_MINUTES,
+} from '@api/schedulesSchema.ts';
 import { palette } from '@design/tokens';
 import moment from 'moment-timezone';
 
@@ -61,6 +66,20 @@ export default function AlarmEditorDialog({ open, initial, onCancel, onSave }: P
   };
 
   const warmRamp = alarm.warmRampMinutes ?? 0;
+
+  const smartWakeOn = alarm.smartWake?.enabled ?? false;
+  const smartWakeWindow = alarm.smartWake?.windowMinutes ?? SMART_WAKE_DEFAULT_WINDOW_MINUTES;
+  const setSmartWakeEnabled = (enabled: boolean) => {
+    setAlarm((a) => ({
+      ...a,
+      smartWake: enabled
+        ? { enabled: true, windowMinutes: a.smartWake?.windowMinutes ?? SMART_WAKE_DEFAULT_WINDOW_MINUTES }
+        : undefined, // off => drop the key entirely (parses as a plain alarm)
+    }));
+  };
+  const setSmartWakeWindow = (windowMinutes: number) => {
+    setAlarm((a) => ({ ...a, smartWake: { enabled: true, windowMinutes } }));
+  };
 
   return (
     <Dialog open={ open } onClose={ onCancel } fullWidth maxWidth="xs">
@@ -167,6 +186,41 @@ export default function AlarmEditorDialog({ open, initial, onCancel, onSave }: P
               )) }
             </Select>
           </FormControl>
+
+          <Box sx={ { borderTop: `1px solid ${palette.border.subtle}`, pt: 1.5, mt: 0.5 } }>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={ smartWakeOn }
+                  onChange={ (e) => setSmartWakeEnabled(e.target.checked) }
+                  inputProps={ { 'aria-label': 'Smart wake' } }
+                />
+              }
+              label="Smart wake"
+              sx={ { color: palette.text.primary, ml: 0 } }
+            />
+            <Typography sx={ { fontSize: '0.75rem', color: palette.text.tertiary, mt: -0.5, mb: 0.5 } }>
+              Wake from light sleep inside a window before this alarm. The alarm still
+              rings on time no matter what.
+            </Typography>
+            { smartWakeOn && (
+              <Box sx={ { px: 0.5 } }>
+                <Typography sx={ { fontSize: '0.8rem', color: palette.text.secondary, mb: 0.5 } }>
+                  Wake window: { smartWakeWindow } min before
+                </Typography>
+                <Slider
+                  aria-label="Smart wake window minutes"
+                  value={ smartWakeWindow }
+                  min={ SMART_WAKE_MIN_WINDOW_MINUTES }
+                  max={ SMART_WAKE_MAX_WINDOW_MINUTES }
+                  step={ 5 }
+                  marks
+                  valueLabelDisplay="auto"
+                  onChange={ (_, v) => setSmartWakeWindow(v as number) }
+                />
+              </Box>
+            ) }
+          </Box>
         </Box>
       </DialogContent>
       <DialogActions>

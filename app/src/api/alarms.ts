@@ -16,6 +16,9 @@ export type UpcomingOccurrence = {
   iso: string;
   vibration: { intensity: number; duration: number; pattern: 'double' | 'rise' };
   warmRampMinutes?: number;
+  smartWake?: { enabled: boolean; windowMinutes: number };
+  // Instant the smart-wake window opens (epochMs - windowMinutes), when enabled.
+  smartWakeStartMs?: number;
 };
 
 export type UpcomingResponse = {
