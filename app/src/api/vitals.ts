@@ -10,7 +10,12 @@ interface VitalsRecordQueryParams {
 }
 
 
-export const useVitalsRecords = (params?: VitalsRecordQueryParams, enabled=true) => {
+export const useVitalsRecords = (
+  params?: VitalsRecordQueryParams,
+  enabled = true,
+  // Live views (VitalsPage) poll; historical views omit this and fetch once.
+  refetchInterval?: number,
+) => {
   return useQuery<VitalsRecord[]>({
     queryKey: ['useVitalsRecords', params],
     queryFn: async ({ signal }) => {
@@ -24,6 +29,7 @@ export const useVitalsRecords = (params?: VitalsRecordQueryParams, enabled=true)
       return response.data;
     },
     enabled,
+    refetchInterval,
   });
 };
 

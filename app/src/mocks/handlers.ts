@@ -208,10 +208,15 @@ export const handlers = [
     await delay(120);
     return HttpResponse.json(records);
   }),
-  http.get('/api/metrics/vitals', async () => {
-    // const filters = toFilters(request);
-    const records = listVitalsRecords();
-    // const filtered = filterByQuery(records, filters, (record: VitalsRecord) => record.timestamp * 1000);
+  http.get('/api/metrics/vitals', async ({ request }) => {
+    // Filter by side only (the real server also filters by time, but the mock
+    // dataset's fixed timestamps rarely line up with arbitrary query windows,
+    // so time filtering would leave most demo views empty). Side filtering
+    // matters for the live Vitals page: without it both sides receive
+    // identical merged data and the overlay lines sit exactly on top of each
+    // other.
+    const { side } = toFilters(request);
+    const records = filterByQuery(listVitalsRecords(), { side }, (record) => record.timestamp * 1000);
     await delay(120);
     return HttpResponse.json(records);
   }),
