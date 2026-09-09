@@ -3,3 +3,14 @@
 # Playwright
 test-results/
 playwright-report/
+
+# Capacitor (generated bundles + native build output; native projects themselves are committed)
+dist-mobile/
+ios/App/App/public/
+ios/App/output/
+ios/DerivedData/
+android/app/src/main/assets/public/
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties

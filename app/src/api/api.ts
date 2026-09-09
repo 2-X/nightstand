@@ -10,7 +10,11 @@ if (inDev && !import.meta.env.VITE_POD_IP) {
     'ex: \'VITE_POD_IP=<YOUR_POD_IP> npm run dev\''
   );
 }
-const baseURL = inDev && import.meta.env.VITE_POD_IP ? `http://${import.meta.env.VITE_POD_IP}:3000` : `${window.location.origin}`;
+// VITE_API_BASE is baked into native (Capacitor) builds, where
+// window.location.origin is capacitor://localhost and useless as an API base.
+const baseURL = import.meta.env.VITE_API_BASE
+  ? import.meta.env.VITE_API_BASE
+  : inDev && import.meta.env.VITE_POD_IP ? `http://${import.meta.env.VITE_POD_IP}:3000` : `${window.location.origin}`;
 
 const axiosInstance = axios.create({
   baseURL: `${baseURL}/api/`,

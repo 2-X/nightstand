@@ -8,12 +8,18 @@
     "build:pr": "export VITE_ENV=pr && tsc -b && vite build",
     "build:demo": "export VITE_ENV=demo VITE_USE_MSW=true && tsc -b && vite build",
     "build": "export VITE_ENV=prod && tsc -b && vite build",
+    "build:mobile": "export VITE_ENV=prod VITE_TARGET=mobile VITE_API_BASE=http://192.168.4.54:3000 && tsc -b && vite build",
+    "sync:mobile": "npm run build:mobile && cap sync",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "preview": "vite preview",
     "test": "vitest run"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/cli": "^8.5.1",
+    "@capacitor/core": "^8.5.1",
+    "@capacitor/ios": "^8.5.1",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@fontsource/roboto": "^5.1.0",

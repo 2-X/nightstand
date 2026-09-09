@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
 const isDemoMode = process.env.VITE_ENV === 'demo';
+// Mobile builds produce a self-contained bundle for Capacitor (iOS/Android)
+// instead of writing into server/public.
+const isMobileBuild = process.env.VITE_TARGET === 'mobile';
 
 export default defineConfig({
   plugins: [react(), tsconfigPaths()],
@@ -12,7 +15,7 @@ export default defineConfig({
   },
   build: {
     sourcemap: !isDemoMode,
-    outDir: isDemoMode ? './dist/' : '../server/public/',
+    outDir: isMobileBuild ? './dist-mobile/' : isDemoMode ? './dist/' : '../server/public/',
     rollupOptions: {
       output: {
         entryFileNames: 'index.js', // Set the name for the JS entry file

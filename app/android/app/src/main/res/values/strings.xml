@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Nightstand</string>
+    <string name="title_activity_main">Nightstand</string>
+    <string name="package_name">city.kris.nightstand</string>
+    <string name="custom_url_scheme">city.kris.nightstand</string>
+</resources>
