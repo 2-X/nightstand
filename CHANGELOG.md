@@ -6,6 +6,20 @@ is a hard fork; for the history of the projects it descends from, see
 [jmew/free-sleep](https://github.com/jmew/free-sleep) and
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
 
+## [3.2.0] - 2026-09-10 (beta)
+
+- Add a persistent, per-sleeper adaptive-temperature controller and local
+  `/adaptive-temperature` management page. Observe mode learns without writes;
+  active mode only proposes from repeated confirmed human preferences.
+- Physical buttons and app controls take priority through a shared write queue;
+  interrupted writes and restarts cannot clear the overnight manual hold.
+- Require fresh explicit pump circulation, fresh presence/vitals, and healthy
+  button monitoring before automatic adjustments. Unknown inputs hold steady.
+- Bound changes to 1°F every 30 minutes and ±2°F from the session baseline.
+  This is an experimental comfort controller, not a clinically validated
+  optimizer or sleep-stage detector.
+- Preserve the deployed source baseline and fix pre-existing lint findings.
+
 ## [3.1.0] - 2026-08-07
 
 - The Status page now shows when the active presence calibration profile was

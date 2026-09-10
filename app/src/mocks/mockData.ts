@@ -850,11 +850,34 @@ type MockRecurringAlarm = {
 
 let recurringAlarms: { left: MockRecurringAlarm[]; right: MockRecurringAlarm[] } = {
   left: [
-    { id: 'demo-left-1', time: '07:00', recurrence: { kind: 'weekdays' }, vibration: { intensity: 60, duration: 90, pattern: 'rise' }, warmRampMinutes: 20, smartWake: { enabled: true, windowMinutes: 30 }, enabled: true },
-    { id: 'demo-left-2', time: '09:00', recurrence: { kind: 'weekends' }, vibration: { intensity: 40, duration: 120, pattern: 'double' }, enabled: true },
+    { id: 'demo-left-1',
+      time: '07:00',
+      recurrence: { kind: 'weekdays' },
+      vibration: { intensity: 60,
+        duration: 90,
+        pattern: 'rise' },
+      warmRampMinutes: 20,
+      smartWake: { enabled: true,
+        windowMinutes: 30 },
+      enabled: true },
+    { id: 'demo-left-2',
+      time: '09:00',
+      recurrence: { kind: 'weekends' },
+      vibration: { intensity: 40,
+        duration: 120,
+        pattern: 'double' },
+      enabled: true },
   ],
   right: [
-    { id: 'demo-right-1', time: '06:30', recurrence: { kind: 'daily' }, vibration: { intensity: 50, duration: 60, pattern: 'rise' }, smartWake: { enabled: true, windowMinutes: 20 }, enabled: true },
+    { id: 'demo-right-1',
+      time: '06:30',
+      recurrence: { kind: 'daily' },
+      vibration: { intensity: 50,
+        duration: 60,
+        pattern: 'rise' },
+      smartWake: { enabled: true,
+        windowMinutes: 20 },
+      enabled: true },
   ],
 };
 
@@ -872,7 +895,8 @@ export const getUpcomingAlarms = (hours: number, side?: Side) => {
   const fromMs = Date.now();
   const toMs = fromMs + hours * 3600 * 1000;
   const sides: Side[] = side ? [side] : ['left', 'right'];
-  const occurrences: Array<{ side: Side; alarmId: string; time: string; epochMs: number; iso: string; vibration: unknown; warmRampMinutes?: number; smartWake?: { enabled: boolean; windowMinutes: number }; smartWakeStartMs?: number }> = [];
+  const occurrences: Array<{ side: Side; alarmId: string; time: string; epochMs: number; iso: string; vibration: unknown;
+    warmRampMinutes?: number; smartWake?: { enabled: boolean; windowMinutes: number }; smartWakeStartMs?: number }> = [];
   for (const s of sides) {
     for (const a of recurringAlarms[s]) {
       if (!a.enabled) continue;

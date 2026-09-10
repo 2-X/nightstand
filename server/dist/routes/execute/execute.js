@@ -1,3 +1,5 @@
+import { adaptiveStore } from '../../8sleep/adaptiveState.js';
+import { thermalQueue } from '../../8sleep/thermalQueue.js';
 import express from 'express';
 import { frankenCommands, executeFunction } from '../../8sleep/deviceApi.js';
 import { isArgWithinBounds } from './executeHelpers.js';
@@ -15,7 +17,9 @@ router.post('/execute', async (req, res) => {
         return;
     }
     // Execute the 8sleep command
-    await executeFunction(command, arg || 'empty');
+    adaptiveStore.intent('left');
+    adaptiveStore.intent('right');
+    await thermalQueue.run(() => executeFunction(command, arg || 'empty'));
     recordConfigAudit('execute', 'POST /api/execute', { command, arg: arg ?? null });
     // Respond with success
     res.json({ success: true, message: `Command '${command}' executed successfully.` });

@@ -49,6 +49,8 @@ def _quiet_frame(ts=None):
 
 class TestPumpHealth(unittest.TestCase):
     def setUp(self):
+        self._orig_report_circulation = service_health.report_circulation
+        service_health.report_circulation = lambda record: None
         # Fresh dwell-counter state per test, and capture update_health calls
         # instead of hitting the network.
         service_health._pump_state = {
@@ -60,6 +62,7 @@ class TestPumpHealth(unittest.TestCase):
         service_health.update_health = lambda job_key, status, message='': self.calls.append((job_key, status, message))
 
     def tearDown(self):
+        service_health.report_circulation = self._orig_report_circulation
         service_health.update_health = self._orig_update_health
 
     def test_healthy_pump_reports_healthy_once(self):

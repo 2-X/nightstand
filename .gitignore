@@ -25,3 +25,6 @@ app/dist/
 
 # deploy-dev.sh state (last-deploy markers, staged tarballs)
 .deploy-state/
+
+__pycache__/
+*.pyc

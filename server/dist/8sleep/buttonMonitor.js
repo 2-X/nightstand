@@ -1,21 +1,4 @@
-// Pod 5 cover physical-button support.
-//
-// The Pod 5 cover has three buttons per side (+ / logo / -) wired to a TCA8418
-// keypad the stock frank firmware receives but deliberately ignores (it logs
-// `[TTC] ignoring short top click(s)` and never bumps the DEVICE_STATUS tap
-// counters). Frank DOES write every press into the RAW capture as `log`
-// records, so we tail the newest /persistent/*.RAW file, extract the button
-// log lines, debounce/classify them, and apply the actions the firmware
-// declined to.
-//
-// Resilience contract (this runs unattended at 3 AM next to bed control):
-//  - Never blocks: setInterval with an in-flight guard, incremental reads only.
-//  - Fail-soft: any parse/dispatch error is caught and logged; a bad byte
-//    resyncs rather than crashing.
-//  - EVERY promise is caught. An unhandled rejection triggers a full server
-//    shutdown (server.ts), which would take out bed control.
-//  - Offset lives in memory only; on rollover to a newer file we start at 0.
-//  - Gated behind settings.features.coverButtons.
+import { adaptiveStore } from './adaptiveState.js';
 import fsp from 'fs/promises';
 import path from 'path';
 import cbor from 'cbor';
@@ -294,6 +277,8 @@ export class ButtonMonitor {
         return events;
     }
     async dispatch(ev) {
+        if (ev.kind === 'click' && ev.button !== 'middle')
+            adaptiveStore.intent(ev.side);
         try {
             await settingsDB.read();
             const side = ev.side;
@@ -381,7 +366,7 @@ export class ButtonMonitor {
     // favorite temperature, powering the side on if it was off. An absolute set,
     // not a delta - pressing it twice is idempotent.
     async handleFavoriteTemperature(side, favoriteF) {
-        await updateDeviceStatus({ [side]: { isOn: true, targetTemperatureF: favoriteF } });
+        await updateDeviceStatus({ [side]: { isOn: true, targetTemperatureF: favoriteF } }, 'physical-button');
         this.pendingTargets[side] = { f: favoriteF, at: Date.now() };
         setOptimisticTarget(side, favoriteF);
         this.broadcastOptimistic(side, { targetTemperatureF: favoriteF, isOn: true });

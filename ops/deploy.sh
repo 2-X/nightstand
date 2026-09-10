@@ -10,6 +10,7 @@
 # $POD_PASSWORD or ~/.config/free-sleep/pod.pass (never committed).
 set -euo pipefail
 
+# POD_ADDRESS optionally supplies a LAN IP when mDNS is unavailable.
 # Pod connection. By default, reach the pod at its stock mDNS name
 # (eight-pod.local, advertised on the LAN by the firmware's avahi) over the known
 # ssh user/port, so a fresh clone deploys with no configuration. Set POD_HOST to
@@ -23,7 +24,7 @@ if [ -n "${POD_HOST:-}" ]; then
 else
   # Zero-config default: the stock mDNS name with the known user/port. accept-new
   # records the pod's host key on first contact but still rejects a changed key.
-  POD="${POD_USER}@eight-pod.local"
+  POD="${POD_USER}@${POD_ADDRESS:-eight-pod.local}"
   SSH_CONN="-p $POD_PORT -o StrictHostKeyChecking=accept-new"
   SCP_CONN="-P $POD_PORT -o StrictHostKeyChecking=accept-new"
 fi
@@ -120,6 +121,9 @@ SSH "set -e
   tar czf '$BK/code.tar.gz' -C /home/dac --exclude free-sleep/server/node_modules free-sleep
   cp /persistent/free-sleep-data/free-sleep.db '$BK/' 2>/dev/null || true
   cp -r /persistent/free-sleep-data/lowdb '$BK/lowdb'
+  if [ -f /persistent/free-sleep-data/adaptive-temperature.json ]; then
+    cp /persistent/free-sleep-data/adaptive-temperature.json '$BK/'
+  fi
   ls -1dt $BACKUPS/*/ | tail -n +$((KEEP_BACKUPS+1)) | xargs -r rm -rf
 " || die "backup failed - aborting, nothing changed"
 

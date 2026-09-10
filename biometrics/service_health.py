@@ -3,6 +3,7 @@ import platform
 import os
 from datetime import datetime, timezone
 import time
+from adaptive_circulation import report_circulation
 
 sys.path.append(os.getcwd())
 if platform.system().lower() == 'linux':
@@ -230,6 +231,7 @@ def update_pump_health(frz_health_data: dict):
     # Drop replayed/stale frames before they can advance the dwell counters
     # with historical data. A frame with no parseable ts is treated as live
     # rather than discarded.
+    report_circulation(frz_health_data)
     now = time.time()
     record_epoch = _frz_record_epoch(frz_health_data)
     if record_epoch is not None and now - record_epoch > PUMP_HEALTH_MAX_RECORD_AGE:

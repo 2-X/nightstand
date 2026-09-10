@@ -1,3 +1,5 @@
+import adaptiveTemperature from '../routes/adaptiveTemperature.js';
+import adaptiveTemperaturePage from '../routes/adaptiveTemperaturePage.js';
 import express, { Express, Request, Response, NextFunction } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -33,6 +35,8 @@ const __dirname = path.dirname(__filename);
 
 export default function (app: Express) {
   logger.debug('Registering routes...');
+  app.use('/api/', adaptiveTemperature);
+  app.use('/', adaptiveTemperaturePage);
   app.use('/api/', alarm);
   app.use('/api/', alarms);
   app.use('/api/', deviceStatus);

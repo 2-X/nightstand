@@ -1,4 +1,7 @@
 import _ from 'lodash';
+import { adaptiveStore } from '../../8sleep/adaptiveState.js';
+import { thermalQueue, thermalWriteContext, assertThermalWriteAllowed } from '../../8sleep/thermalQueue.js';
+import { getDeviceStatusCoalesced } from '../../8sleep/frankenServer.js';
 import cbor from 'cbor';
 import { executeFunction } from '../../8sleep/deviceApi.js';
 import logger from '../../logger.js';
@@ -88,7 +91,7 @@ const updateSettings = async (settings) => {
     const hexString = encodedBuffer.toString('hex');
     await executeFunction('SET_SETTINGS', hexString);
 };
-export const updateDeviceStatus = async (deviceStatus) => {
+const updateHardwareStatus = async (deviceStatus) => {
     logger.info(`Updating device status..`);
     if (deviceStatus.isPriming === true)
         await executeFunction('PRIME');
@@ -101,5 +104,76 @@ export const updateDeviceStatus = async (deviceStatus) => {
     if (deviceStatus?.settings)
         await updateSettings(deviceStatus.settings);
     logger.info('Finished updating device status');
+};
+export const updateDeviceStatus = async (deviceStatus, source = 'system', allowed) => {
+    const sides = ['left', 'right'].filter(side => deviceStatus[side]?.targetTemperatureF !== undefined ||
+        deviceStatus[side]?.isOn !== undefined || deviceStatus[side]?.secondsRemaining !== undefined);
+    // Away mode mirrors hardware writes; protect both sleepers when it is already known.
+    if ((settingsDB.data.left.awayMode || settingsDB.data.right.awayMode) && sides.length) {
+        if (!sides.includes('left'))
+            sides.push('left');
+        if (!sides.includes('right'))
+            sides.push('right');
+    }
+    // Intent is synchronous, BEFORE waiting behind a read or another write.
+    if (source !== 'automatic') {
+        for (const side of sides) {
+            if (source === 'app' || source === 'physical-button' || source === 'unknown')
+                adaptiveStore.intent(side);
+            else
+                adaptiveStore.revision[side]++;
+        }
+    }
+    await thermalQueue.run(() => thermalWriteContext.run({ source, allowed }, async () => {
+        assertThermalWriteAllowed();
+        let before;
+        if (sides.some(side => deviceStatus[side]?.targetTemperatureF !== undefined)) {
+            try {
+                before = await getDeviceStatusCoalesced();
+            }
+            catch { /* Manual controls must remain available. */ }
+        }
+        assertThermalWriteAllowed();
+        if (source === 'automatic' && (!before || !allowed?.(before) || before.isPriming || String(before.waterLevel) !== 'true' ||
+            sides.some(side => !before[side].isOn || before[side].isAlarmVibrating))) {
+            throw new Error('Fresh hardware state does not permit an automatic change');
+        }
+        for (const side of sides) {
+            const target = deviceStatus[side]?.targetTemperatureF;
+            if (target !== undefined && (!Number.isFinite(target) || target < 55 || target > 110))
+                throw new Error('Invalid temperature');
+            // A scheduled target owns the rest of the session; do not fight wake ramps.
+            if (source === 'schedule' && adaptiveStore.data[side].session) {
+                adaptiveStore.data[side].session.lastAutomaticAt = Date.now();
+                adaptiveStore.save();
+            }
+            if (source === 'system' && target !== undefined && adaptiveStore.data[side].session) {
+                adaptiveStore.data[side].holdUntil = adaptiveStore.data[side].session.end;
+                adaptiveStore.save();
+            }
+        }
+        await updateHardwareStatus(deviceStatus);
+        if (before) {
+            // This read is queued after the write; no optimistic UI values are used.
+            let after;
+            try {
+                await getDeviceStatusCoalesced();
+                after = await getDeviceStatusCoalesced();
+            }
+            catch { /* Unconfirmed observations never train. */ }
+            for (const side of sides) {
+                const target = deviceStatus[side]?.targetTemperatureF;
+                if (target === undefined)
+                    continue;
+                const confirmed = !!after && Math.abs(after[side].targetTemperatureF - target) < 0.6;
+                adaptiveStore.data[side].expectedF = confirmed ? after[side].targetTemperatureF : null;
+                adaptiveStore.record(side, source === 'system' ? 'schedule' : source, before[side].targetTemperatureF, after?.[side].targetTemperatureF ?? target, confirmed);
+                if (source === 'automatic' && !confirmed) {
+                    adaptiveStore.intent(side);
+                    throw new Error('Automatic temperature was not confirmed; paused for this night');
+                }
+            }
+        }
+    }));
 };
 //# sourceMappingURL=updateDeviceStatus.js.map

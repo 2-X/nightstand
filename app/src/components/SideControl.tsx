@@ -115,7 +115,7 @@ export default function SideControl({ showTemp }: SideControlProps) {
       } }
       size="small"
     >
-      <ToggleButton value="left" sx={ { p: 1 } }>
+      <ToggleButton aria-label={ settings?.left?.name || 'Left side' } value="left" sx={ { p: 1 } }>
         { settings?.left?.name } &nbsp;
         { showTemp && side === 'right' && (
 
@@ -126,7 +126,7 @@ export default function SideControl({ showTemp }: SideControlProps) {
         ) }
         <PresenceDot side={ presence?.left }/>
       </ToggleButton>
-      <ToggleButton value="right">
+      <ToggleButton aria-label={ settings?.right?.name || 'Right side' } value="right">
         { settings?.right?.name } &nbsp;
         { showTemp && side === 'left' && (
 

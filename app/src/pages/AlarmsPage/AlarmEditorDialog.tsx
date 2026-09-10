@@ -13,6 +13,7 @@ import {
 import { palette } from '@design/tokens';
 import moment from 'moment-timezone';
 
+// eslint-disable-next-line @typescript-eslint/no-type-alias
 type RecurrenceKind = Recurrence['kind'];
 const DAY_ABBR = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
@@ -128,7 +129,8 @@ export default function AlarmEditorDialog({ open, initial, onCancel, onSave }: P
               value={ everyN }
               onChange={ (e) => {
                 const n = Math.max(1, Math.min(365, Number(e.target.value) || 1));
-                setAlarm((a) => ({ ...a, recurrence: { kind: 'everyNDays', n, anchorDate: a.recurrence.kind === 'everyNDays' ? a.recurrence.anchorDate : moment().format('YYYY-MM-DD') } }));
+                setAlarm((a) => ({ ...a, recurrence: { kind: 'everyNDays', n,
+                  anchorDate: a.recurrence.kind === 'everyNDays' ? a.recurrence.anchorDate : moment().format('YYYY-MM-DD') } }));
               } }
               variant="standard"
               inputProps={ { min: 1, max: 365 } }

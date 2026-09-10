@@ -30,12 +30,12 @@ export async function applyTemperatureDelta(
   currentTargetF: number,
   deltaF: number,
 ): Promise<number> {
-  const newTargetF = currentTargetF + deltaF;
+  const newTargetF = Math.max(55, Math.min(110, currentTargetF + deltaF));
   logger.debug(
     `[applyTemperatureDelta] ${side}: ${currentTargetF} -> ${newTargetF} (delta ${deltaF})`,
   );
   await updateDeviceStatus(
-    { [side]: { targetTemperatureF: newTargetF } } as DeepPartial<DeviceStatus>,
+    { [side]: { targetTemperatureF: newTargetF } } as DeepPartial<DeviceStatus>, 'physical-button',
   );
   // Counts as a manual change for schedule-override purposes.
   await markManualTempChange(side, { from: currentTargetF, to: newTargetF });

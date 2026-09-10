@@ -1,3 +1,4 @@
+import { adaptiveStore } from './adaptiveState.js';
 // Pod 5 cover physical-button support.
 //
 // The Pod 5 cover has three buttons per side (+ / logo / -) wired to a TCA8418
@@ -315,6 +316,7 @@ export class ButtonMonitor {
   }
 
   private async dispatch(ev: ButtonEvent): Promise<void> {
+    if (ev.kind === 'click' && ev.button !== 'middle') adaptiveStore.intent(ev.side);
     try {
       await settingsDB.read();
       const side: Side = ev.side;
@@ -408,7 +410,7 @@ export class ButtonMonitor {
   // not a delta - pressing it twice is idempotent.
   private async handleFavoriteTemperature(side: Side, favoriteF: number): Promise<void> {
     await updateDeviceStatus(
-      { [side]: { isOn: true, targetTemperatureF: favoriteF } } as Parameters<typeof updateDeviceStatus>[0],
+      { [side]: { isOn: true, targetTemperatureF: favoriteF } } as Parameters<typeof updateDeviceStatus>[0], 'physical-button',
     );
     this.pendingTargets[side] = { f: favoriteF, at: Date.now() };
     setOptimisticTarget(side, favoriteF);

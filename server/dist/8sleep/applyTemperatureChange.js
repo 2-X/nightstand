@@ -15,9 +15,9 @@ import logger from '../logger.js';
  * (an unhandled rejection shuts the whole server down).
  */
 export async function applyTemperatureDelta(side, currentTargetF, deltaF) {
-    const newTargetF = currentTargetF + deltaF;
+    const newTargetF = Math.max(55, Math.min(110, currentTargetF + deltaF));
     logger.debug(`[applyTemperatureDelta] ${side}: ${currentTargetF} -> ${newTargetF} (delta ${deltaF})`);
-    await updateDeviceStatus({ [side]: { targetTemperatureF: newTargetF } });
+    await updateDeviceStatus({ [side]: { targetTemperatureF: newTargetF } }, 'physical-button');
     // Counts as a manual change for schedule-override purposes.
     await markManualTempChange(side, { from: currentTargetF, to: newTargetF });
     return newTargetF;

@@ -48,7 +48,7 @@ export default function TonightPage() {
   const scheduleStartMs = useMemo(() => {
     if (!schedules?.[side]) return nowMs;
     const todayKey = moment.tz(nowMs, timeZone).format('dddd').toLowerCase();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const day = (schedules[side] as any)[todayKey];
     const on = day?.power?.on as string | undefined;
     if (!on) return nowMs;
@@ -178,7 +178,12 @@ export default function TonightPage() {
       { /* Alarm list with cadence chips */ }
       <Box sx={ { width: '100%', px: 0.5 } }>
         <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 } }>
-          <Typography sx={ { fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: palette.text.tertiary } }>
+          <Typography
+            sx={ { fontSize: '0.7rem',
+              fontWeight: 600,
+              letterSpacing: '0.12em',
+              textTransform: 'uppercase',
+              color: palette.text.tertiary } }>
             Alarms
           </Typography>
           <Button size="small" onClick={ () => navigate('/alarms') } sx={ { color: palette.text.secondary, minWidth: 0 } }>
@@ -195,9 +200,17 @@ export default function TonightPage() {
               ? moment(a.time, 'HH:mm').subtract(a.smartWake.windowMinutes, 'minutes').format('h:mm A')
               : null;
             return (
-              <Box key={ a.id } sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1, borderTop: `1px solid ${palette.border.subtle}` } }>
+              <Box
+                key={ a.id }
+                sx={ { display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  py: 1,
+                  borderTop: `1px solid ${palette.border.subtle}` } }>
                 <Box>
-                  <Typography sx={ { fontSize: '1.4rem', fontWeight: 500, color: palette.text.primary, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 } }>
+                  <Typography
+                    sx={ { fontSize: '1.4rem', fontWeight: 500, color: palette.text.primary, fontVariantNumeric: 'tabular-nums',
+                      lineHeight: 1.1 } }>
                     { moment(a.time, 'HH:mm').format('h:mm A') }
                   </Typography>
                   { wakeFrom && (

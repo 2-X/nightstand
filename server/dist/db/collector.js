@@ -1,3 +1,4 @@
+/* eslint no-use-before-define: ["error", { "functions": false }] */
 // The ONLY writer for the Phase 0 "collect everything" tables:
 // bed_state_samples, hub_state_samples, pod_events, config_audit.
 //
@@ -140,74 +141,74 @@ export function onDeviceStatus(status) {
     sampleBedSide(status, 'left', ts);
     sampleBedSide(status, 'right', ts);
     sampleHub(status, ts);
-    deriveTransitionEvents(status, ts);
+    deriveTransitionEvents(status);
 }
 function sampleBedSide(status, side, ts) {
     const s = status[side];
     if (!s)
         return;
-    const current_level = numOrNull(s.currentTemperatureLevel);
-    const target_level = deriveTargetLevel(s.targetTemperatureF);
-    const is_on = s.isOn;
+    const currentLevel = numOrNull(s.currentTemperatureLevel);
+    const targetLevel = deriveTargetLevel(s.targetTemperatureF);
+    const isOn = s.isOn;
     const prev = lastBed[side];
     const changed = !prev ||
-        prev.current_level !== current_level ||
-        prev.target_level !== target_level ||
-        prev.is_on !== is_on;
+        prev.current_level !== currentLevel ||
+        prev.target_level !== targetLevel ||
+        prev.is_on !== isOn;
     const heartbeatDue = !prev || ts - prev.ts >= Math.floor(HEARTBEAT_MS / 1000);
     if (!changed && !heartbeatDue)
         return;
     bedQueue.push({
         side,
         timestamp: ts,
-        current_level,
-        target_level,
+        current_level: currentLevel,
+        target_level: targetLevel,
         current_temp_f: numOrNull(s.currentTemperatureF),
         target_temp_f: numOrNull(s.targetTemperatureF),
-        is_on,
+        is_on: isOn,
     });
-    lastBed[side] = { ts, current_level, target_level, is_on };
+    lastBed[side] = { ts, current_level: currentLevel, target_level: targetLevel, is_on: isOn };
     maybeFlushBySize();
 }
 function sampleHub(status, ts) {
-    const water_ok = parseWaterOk(status.waterLevel);
-    const is_priming = status.isPriming;
-    const wifi_strength = numOrNull(status.wifiStrength);
-    const ambient_c = status.sensorTemps?.ambientC ?? null;
-    const heatsink_c = status.sensorTemps?.heatsinkC ?? null;
-    const left_c = status.sensorTemps?.leftC ?? null;
-    const right_c = status.sensorTemps?.rightC ?? null;
+    const waterOk = parseWaterOk(status.waterLevel);
+    const isPriming = status.isPriming;
+    const wifiStrength = numOrNull(status.wifiStrength);
+    const ambientC = status.sensorTemps?.ambientC ?? null;
+    const heatsinkC = status.sensorTemps?.heatsinkC ?? null;
+    const leftC = status.sensorTemps?.leftC ?? null;
+    const rightC = status.sensorTemps?.rightC ?? null;
     const prev = lastHub;
     const changed = !prev ||
-        prev.ambient_c !== ambient_c ||
-        prev.heatsink_c !== heatsink_c ||
-        prev.water_ok !== water_ok ||
-        prev.is_priming !== is_priming ||
-        prev.wifi_strength !== wifi_strength;
+        prev.ambient_c !== ambientC ||
+        prev.heatsink_c !== heatsinkC ||
+        prev.water_ok !== waterOk ||
+        prev.is_priming !== isPriming ||
+        prev.wifi_strength !== wifiStrength;
     const heartbeatDue = !prev || ts - prev.ts >= Math.floor(HEARTBEAT_MS / 1000);
     if (!changed && !heartbeatDue)
         return;
     hubQueue.push({
         timestamp: ts,
-        ambient_c,
-        heatsink_c,
-        left_c,
-        right_c,
-        water_ok,
-        is_priming,
-        wifi_strength,
+        ambient_c: ambientC,
+        heatsink_c: heatsinkC,
+        left_c: leftC,
+        right_c: rightC,
+        water_ok: waterOk,
+        is_priming: isPriming,
+        wifi_strength: wifiStrength,
     });
-    lastHub = { ts, ambient_c, heatsink_c, water_ok, is_priming, wifi_strength };
+    lastHub = { ts, ambient_c: ambientC, heatsink_c: heatsinkC, water_ok: waterOk, is_priming: isPriming, wifi_strength: wifiStrength };
     maybeFlushBySize();
 }
 // Derive discrete transition events by diffing consecutive snapshots, so these
 // don't require touching frankenMonitor. First snapshot only seeds baseline.
-function deriveTransitionEvents(status, _ts) {
-    const water_ok = parseWaterOk(status.waterLevel);
+function deriveTransitionEvents(status) {
+    const waterOk = parseWaterOk(status.waterLevel);
     const next = {
         left_on: status.left?.isOn ?? false,
         right_on: status.right?.isOn ?? false,
-        water_ok,
+        water_ok: waterOk,
         is_priming: status.isPriming,
     };
     const prev = lastTransition;
@@ -323,7 +324,7 @@ function numOrNull(n) {
 }
 // Firmware level scale is the inverse of loadDeviceStatus.calculateTempInF /
 // updateDeviceStatus.calculateLevelFromF: F = 82.5 + level/100 * 27.5.
-// target_level stored alongside target_temp_f so callers can chart either.
+// targetLevel stored alongside target_temp_f so callers can chart either.
 function deriveTargetLevel(targetTemperatureF) {
     if (typeof targetTemperatureF !== 'number' || !Number.isFinite(targetTemperatureF))
         return null;

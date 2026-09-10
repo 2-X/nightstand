@@ -1,4 +1,5 @@
 import _ from 'lodash';
+import { assertThermalWriteAllowed } from './thermalQueue.js';
 import { connectFranken } from './frankenServer.js';
 import logger from '../logger.js';
 export const frankenCommands = {
@@ -38,6 +39,7 @@ export async function executeFunction(command, arg = 'empty') {
     // the error will bubble up to the main loop of the device-api-client (protocol handling)
     // and the client will crash disconnecting from device-api - this is safe, it's correctly cleaned-up,
     // deviceApiLoop will take care of reconnecting to device-api
+    assertThermalWriteAllowed();
     const response = await franken.callFunction(command, arg);
     logger.debug(response);
     return response;

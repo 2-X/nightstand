@@ -5,6 +5,16 @@ import { z } from 'zod';
 import { prisma } from '../../db/prisma.js';
 import logger from '../../logger.js';
 
+function safeParse(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+
+
 const router = express.Router();
 
 const EventsQuerySchema = z.object({
@@ -45,12 +55,5 @@ router.get('/events', async (req: Request, res: Response) => {
 
 // payload is written by the collector as JSON.stringify, but a hand-edited or
 // legacy row could be non-JSON; fall back to the raw string rather than 500.
-function safeParse(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-}
 
 export default router;

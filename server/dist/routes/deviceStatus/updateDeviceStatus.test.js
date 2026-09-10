@@ -11,23 +11,20 @@ const dataFolder = mkdtempSync(path.join(tmpdir(), 'free-sleep-updateDeviceStatu
 mkdirSync(path.join(dataFolder, 'lowdb'));
 process.env.DATA_FOLDER = `${dataFolder}/`;
 process.env.ENV = 'local';
-// Regression test for a truthiness bug: `if (targetTemperatureF)` silently
-// dropped an explicit `0` (a valid Fahrenheit target), since `0` is falsy.
-// executeFunction talks to the Franken hardware socket, so it's mocked here
-// rather than exercised for real.
+// Validate physical temperature bounds before any command can reach hardware.
 const executeFunctionMock = mock.fn(async (...args) => { void args; });
 mock.module('../../8sleep/deviceApi.js', {
     namedExports: { executeFunction: executeFunctionMock },
 });
+mock.module('../../8sleep/frankenServer.js', { namedExports: {
+        getDeviceStatusCoalesced: async () => ({ left: { targetTemperatureF: 82.5 }, right: { targetTemperatureF: 82.5 } }),
+    } });
 const { updateDeviceStatus } = await import('./updateDeviceStatus.js');
 describe('updateDeviceStatus', () => {
-    it('applies an explicit targetTemperatureF of 0 instead of silently dropping it', async () => {
+    it('rejects targets outside the hardware range', async () => {
         executeFunctionMock.mock.resetCalls();
-        await updateDeviceStatus({ left: { targetTemperatureF: 0 } });
-        const levelCall = executeFunctionMock.mock.calls.find((call) => call.arguments[0] === 'TEMP_LEVEL_LEFT');
-        assert.ok(levelCall, 'expected TEMP_LEVEL_LEFT to be sent for an explicit 0 target');
-        // (0 - 82.5) / 27.5 * 100, rounded
-        assert.equal(levelCall.arguments[1], '-300');
+        await assert.rejects(updateDeviceStatus({ left: { targetTemperatureF: 0 } }));
+        assert.equal(executeFunctionMock.mock.calls.length, 0);
     });
     it('still applies a normal positive targetTemperatureF', async () => {
         executeFunctionMock.mock.resetCalls();

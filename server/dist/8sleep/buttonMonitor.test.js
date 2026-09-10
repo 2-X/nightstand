@@ -98,8 +98,10 @@ function batchedPressChunk(sideTag, code, seq = 1) {
     const filler = 'x'.repeat(120);
     const records = [
         cbor.encode({ type: 'log', ts: 1, level: 'debug', msg: `AsioTcpClient.h:63 tryConnect|[asiotcp] ${filler}` }),
-        cbor.encode({ type: 'log', ts: 1, level: 'debug', msg: `Sensor.cpp:608 handleCommand|[sensor] -> FW: 1 [tca8418${sideTag}] gpi press ${code}` }),
-        cbor.encode({ type: 'log', ts: 1, level: 'debug', msg: `Sensor.cpp:608 handleCommand|[sensor] -> FW: 2 [tca8418${sideTag}] gpi release ${code}` }),
+        cbor.encode({ type: 'log',
+            ts: 1, level: 'debug', msg: `Sensor.cpp:608 handleCommand|[sensor] -> FW: 1 [tca8418${sideTag}] gpi press ${code}` }),
+        cbor.encode({ type: 'log',
+            ts: 1, level: 'debug', msg: `Sensor.cpp:608 handleCommand|[sensor] -> FW: 2 [tca8418${sideTag}] gpi release ${code}` }),
         ...Array.from({ length: 8 }, (_, i) => cbor.encode({ type: 'log', ts: 1, level: 'debug', msg: `Thermostat.cpp:99 tick|[therm] ${filler} ${i}` })),
     ];
     return frameRecord(seq, Buffer.concat(records));

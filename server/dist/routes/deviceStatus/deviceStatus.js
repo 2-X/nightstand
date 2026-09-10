@@ -47,7 +47,7 @@ router.post('/deviceStatus', async (req, res) => {
         });
         return;
     }
-    await updateDeviceStatus(body);
+    await updateDeviceStatus(validationResult.data, 'app');
     recordConfigAudit('device_status', 'POST /api/deviceStatus', validationResult.data);
     // If the user manually set a target temperature on a side, maybe pause the
     // remaining schedule (see scheduleOverride.markManualTempChange for rules).

@@ -1,3 +1,4 @@
+import { startAdaptiveTemperature, stopAdaptiveTemperature } from './8sleep/adaptiveController.js';
 import express from 'express';
 import schedule from 'node-schedule';
 import logger from './logger.js';
@@ -80,6 +81,7 @@ async function gracefulShutdown(signal) {
             });
         }
         if (!config.remoteDevMode) {
+            stopAdaptiveTemperature();
             stopPresenceAutoOff();
             stopButtonMonitor();
             stopAllSmartWakeSessions();
@@ -115,6 +117,7 @@ const initFrankenMonitor = () => {
     // Pod 5 cover-button monitor. Self-gates on settings.features.coverButtons
     // each tick, so starting it unconditionally is safe.
     startButtonMonitor();
+    startAdaptiveTemperature();
 };
 // Main startup function
 async function startServer() {

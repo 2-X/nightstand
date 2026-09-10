@@ -75,18 +75,29 @@ export default function AlarmsPage() {
               } }
             >
               <Box sx={ { flexGrow: 1 } }>
-                <Typography sx={ { fontSize: '1.6rem', fontWeight: 500, color: palette.text.primary, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 } }>
+                <Typography
+                  sx={ { fontSize: '1.6rem', fontWeight: 500, color: palette.text.primary, fontVariantNumeric: 'tabular-nums',
+                    lineHeight: 1.1 } }>
                   { moment(a.time, 'HH:mm').format('h:mm A') }
                 </Typography>
                 <Box sx={ { display: 'flex', gap: 0.75, mt: 0.5, alignItems: 'center', flexWrap: 'wrap' } }>
-                  <Chip label={ cadenceLabel(a.recurrence) } size="small" variant="outlined"
+                  <Chip
+                    label={ cadenceLabel(a.recurrence) }
+                    size="small"
+                    variant="outlined"
                     sx={ { color: palette.text.secondary, borderColor: palette.border.medium } } />
                   { a.warmRampMinutes ? (
-                    <Chip label={ `warm ${a.warmRampMinutes}m` } size="small" variant="outlined"
+                    <Chip
+                      label={ `warm ${a.warmRampMinutes}m` }
+                      size="small"
+                      variant="outlined"
                       sx={ { color: palette.accent.orange, borderColor: palette.border.medium } } />
                   ) : null }
                   { a.smartWake?.enabled ? (
-                    <Chip label={ `smart ${a.smartWake.windowMinutes}m` } size="small" variant="outlined"
+                    <Chip
+                      label={ `smart ${a.smartWake.windowMinutes}m` }
+                      size="small"
+                      variant="outlined"
                       sx={ { color: palette.accent.green, borderColor: palette.border.medium } } />
                   ) : null }
                 </Box>

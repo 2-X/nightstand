@@ -1,3 +1,4 @@
+import { adaptiveStore } from '../8sleep/adaptiveState.js';
 import schedule from 'node-schedule';
 
 import { DailySchedule, DayOfWeek, Side, Time } from '../db/schedulesSchema.js';
@@ -26,7 +27,8 @@ const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time
   schedule.scheduleJob(`${side}-${day}-${time}-${temperature}-temperature-adjustment`, onRule, async () => {
     try {
       await settingsDB.read();
-      if (isTempScheduleOverridden(side)) {
+      if (isTempScheduleOverridden(side) ||
+          (adaptiveStore.data[side].mode !== 'off' && adaptiveStore.data[side].holdUntil > Date.now())) {
         const expiresAt = settingsDB.data[side].scheduleOverrides.temperatureSchedules.expiresAt;
         logJob(`Skipping temperature adjustment, schedule overridden until ${expiresAt}`, side, day, dayOfWeekIndex, time);
         return;
@@ -37,7 +39,7 @@ const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time
         [side]: {
           targetTemperatureF: temperature,
         }
-      });
+      }, 'schedule');
       serverStatus.status.temperatureSchedule.status = 'healthy';
       serverStatus.status.temperatureSchedule.message = '';
     } catch (error: unknown) {
