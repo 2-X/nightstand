@@ -71,6 +71,11 @@ function isAllowedOrigin(origin) {
         // module, and module script requests always carry an Origin header, so
         // same-origin loads via the .local name must pass this check too.
         /^http:\/\/[a-z0-9-]+\.local(:\d+)?$/i.test(origin) ||
+        // Capacitor native shells: iOS pages load from capacitor://localhost,
+        // Android from https://localhost. Fixed origins only reachable from a
+        // device running the app, so allowing them adds no LAN exposure.
+        origin === 'capacitor://localhost' ||
+        origin === 'https://localhost' ||
         getLocalSubnetPrefixes().some(prefix => origin.startsWith(`http://${prefix}`)) ||
         (ALLOWED_ORIGIN && origin.startsWith(ALLOWED_ORIGIN))) {
         return true;
