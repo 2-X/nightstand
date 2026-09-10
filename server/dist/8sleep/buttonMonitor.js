@@ -53,6 +53,8 @@ export class ButtonMonitor {
     timer = null;
     inFlight = false;
     tail = null;
+    initialScan = true;
+    startedAt = Date.now();
     machine = new ButtonEventMachine();
     // Optimistic per-side target: rapid presses land faster than the device
     // status refreshes (observed live: three +1 presses in one second all read
@@ -102,9 +104,10 @@ export class ButtonMonitor {
                 return;
             }
             const newest = await this.findNewestRawFile();
+            const initialScan = this.initialScan;
+            this.initialScan = false;
             if (!newest) {
-                // No RAW files yet; not an error (fresh pod / internet-blocked).
-                this.markStatus('healthy', 'no RAW file');
+                this.markStatus('failed', 'No live RAW telemetry');
                 return;
             }
             // Rollover: frank writes a new hex-named file ~every 15 min. When the
@@ -113,10 +116,14 @@ export class ButtonMonitor {
             // clearing them on rollover avoids a press stuck "down" forever.
             if (!this.tail || this.tail.file !== newest) {
                 logger.debug(`[buttonMonitor] tailing ${newest}`);
-                this.tail = { file: newest, offset: 0, carry: Buffer.alloc(0) };
+                // A restart must not replay earlier physical button presses from the
+                // hourly archive. Later file rollovers still start at the beginning.
+                const offset = initialScan ? (await fsp.stat(newest)).size : 0;
+                this.tail = { file: newest, offset, carry: Buffer.alloc(0) };
             }
             await this.readAppended();
-            this.markStatus('healthy', '');
+            const age = Date.now() - (await fsp.stat(newest)).mtimeMs;
+            this.markStatus(age >= 0 && age <= 15000 ? 'healthy' : 'failed', age >= 0 && age <= 15000 ? '' : 'RAW telemetry is stale');
         }
         catch (error) {
             // Fail-soft: log and keep polling. Do not rethrow.
@@ -271,6 +278,10 @@ export class ButtonMonitor {
                 continue;
             const rec = decoded;
             if (rec.type !== 'log' || typeof rec.msg !== 'string')
+                continue;
+            if (typeof rec.ts !== 'number' || !Number.isFinite(rec.ts) ||
+                rec.ts * 1000 < this.startedAt || rec.ts * 1000 > Date.now() + 1000 ||
+                Date.now() - rec.ts * 1000 > 15000)
                 continue;
             events.push(...this.machine.push(rec.msg));
         }

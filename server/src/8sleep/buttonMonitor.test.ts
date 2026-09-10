@@ -90,7 +90,7 @@ function frameRecord(seq: number, data: Buffer): Buffer {
   ]);
 }
 const logRec = (msg: string, seq = 1): Buffer =>
-  frameRecord(seq, cbor.encode({ type: 'log', ts: 1, level: 'info', msg, seq }));
+  frameRecord(seq, cbor.encode({ type: 'log', ts: Date.now() / 1000, level: 'info', msg, seq }));
 
 function pressReleaseLog(sideTag: 'R' | 'L', code: number, seq = 1): Buffer {
   return Buffer.concat([
@@ -106,13 +106,13 @@ function pressReleaseLog(sideTag: 'R' | 'L', code: number, seq = 1): Buffer {
 function batchedPressChunk(sideTag: 'R' | 'L', code: number, seq = 1): Buffer {
   const filler = 'x'.repeat(120);
   const records = [
-    cbor.encode({ type: 'log', ts: 1, level: 'debug', msg: `AsioTcpClient.h:63 tryConnect|[asiotcp] ${filler}` }),
+    cbor.encode({ type: 'log', ts: Date.now() / 1000, level: 'debug', msg: `AsioTcpClient.h:63 tryConnect|[asiotcp] ${filler}` }),
     cbor.encode({ type: 'log',
-      ts: 1, level: 'debug', msg: `Sensor.cpp:608 handleCommand|[sensor] -> FW: 1 [tca8418${sideTag}] gpi press ${code}` }),
+      ts: Date.now() / 1000, level: 'debug', msg: `Sensor.cpp:608 handleCommand|[sensor] -> FW: 1 [tca8418${sideTag}] gpi press ${code}` }),
     cbor.encode({ type: 'log',
-      ts: 1, level: 'debug', msg: `Sensor.cpp:608 handleCommand|[sensor] -> FW: 2 [tca8418${sideTag}] gpi release ${code}` }),
+      ts: Date.now() / 1000, level: 'debug', msg: `Sensor.cpp:608 handleCommand|[sensor] -> FW: 2 [tca8418${sideTag}] gpi release ${code}` }),
     ...Array.from({ length: 8 }, (_, i) =>
-      cbor.encode({ type: 'log', ts: 1, level: 'debug', msg: `Thermostat.cpp:99 tick|[therm] ${filler} ${i}` })),
+      cbor.encode({ type: 'log', ts: Date.now() / 1000, level: 'debug', msg: `Thermostat.cpp:99 tick|[therm] ${filler} ${i}` })),
   ];
   return frameRecord(seq, Buffer.concat(records));
 }
@@ -133,6 +133,7 @@ function appendRaw(full: string, buf: Buffer, mtimeSec: number): void {
 }
 
 describe('ButtonMonitor dispatch', () => {
+  let liveMonitor: Internals;
   beforeEach(async () => {
     tempCalls = []; updateCalls = []; execCalls = []; recordedEvents = [];
     // Clean the raw dir.
@@ -153,13 +154,15 @@ describe('ButtonMonitor dispatch', () => {
     memoryDB.data.left.isAlarmVibrating = false;
     memoryDB.data.right.isAlarmVibrating = false;
     await memoryDB.write();
+    liveMonitor = new ButtonMonitor() as unknown as Internals;
+    await liveMonitor.tick();
   });
 
   it('handles a press inside a >512B batched multi-record chunk (live firmware shape)', async () => {
     const chunk = batchedPressChunk('R', 97);
     assert.ok(chunk.length > 512, `fixture must exceed the old size gate (got ${chunk.length})`);
     writeRaw('001.RAW', chunk, 1000);
-    const mon = new ButtonMonitor() as unknown as Internals;
+    const mon = liveMonitor;
     await mon.tick();
 
     assert.equal(tempCalls.length, 1, 'batched chunk press must dispatch');
@@ -176,7 +179,7 @@ describe('ButtonMonitor dispatch', () => {
       pressReleaseLog('R', 97, 2),
       pressReleaseLog('R', 97, 3),
     ]), 1000);
-    const mon = new ButtonMonitor() as unknown as Internals;
+    const mon = liveMonitor;
     await mon.tick();
 
     assert.equal(tempCalls.length, 3);
@@ -185,7 +188,7 @@ describe('ButtonMonitor dispatch', () => {
 
   it('top click raises temperature by stepF on the right side', async () => {
     writeRaw('001.RAW', pressReleaseLog('R', 97), 1000);
-    const mon = new ButtonMonitor() as unknown as Internals;
+    const mon = liveMonitor;
     await mon.tick();
 
     assert.equal(tempCalls.length, 1);
@@ -196,7 +199,7 @@ describe('ButtonMonitor dispatch', () => {
 
   it('bottom click lowers temperature by stepF on the left side', async () => {
     writeRaw('001.RAW', pressReleaseLog('L', 99), 1000);
-    const mon = new ButtonMonitor() as unknown as Internals;
+    const mon = liveMonitor;
     await mon.tick();
 
     assert.equal(tempCalls.length, 1);
@@ -209,7 +212,7 @@ describe('ButtonMonitor dispatch', () => {
     await settingsDB.write();
 
     writeRaw('001.RAW', pressReleaseLog('R', 97), 1000); // physical top
-    const mon = new ButtonMonitor() as unknown as Internals;
+    const mon = liveMonitor;
     await mon.tick();
 
     // Inverted: top now decrements.
@@ -221,7 +224,7 @@ describe('ButtonMonitor dispatch', () => {
     settingsDB.data.right.buttons.stepF = 3;
     await settingsDB.write();
     writeRaw('001.RAW', pressReleaseLog('R', 97), 1000);
-    const mon = new ButtonMonitor() as unknown as Internals;
+    const mon = liveMonitor;
     await mon.tick();
     assert.equal(tempCalls[0].delta, 3);
   });
@@ -232,7 +235,7 @@ describe('ButtonMonitor dispatch', () => {
     await memoryDB.write();
 
     writeRaw('001.RAW', pressReleaseLog('R', 98), 1000);
-    const mon = new ButtonMonitor() as unknown as Internals;
+    const mon = liveMonitor;
     await mon.tick();
 
     assert.equal(updateCalls.length, 1);
@@ -242,7 +245,7 @@ describe('ButtonMonitor dispatch', () => {
 
   it('middle click with no alarm sets the side to its favorite temperature', async () => {
     writeRaw('001.RAW', pressReleaseLog('L', 98), 1000);
-    const mon = new ButtonMonitor() as unknown as Internals;
+    const mon = liveMonitor;
     await mon.tick();
 
     assert.equal(updateCalls.length, 1);
@@ -258,7 +261,7 @@ describe('ButtonMonitor dispatch', () => {
       pressReleaseLog('R', 98),
       pressReleaseLog('R', 98),
     ]), 1000);
-    const mon = new ButtonMonitor() as unknown as Internals;
+    const mon = liveMonitor;
     await mon.tick();
     assert.equal(updateCalls.length, 2);
     assert.deepEqual(updateCalls[0], updateCalls[1]);
@@ -269,7 +272,7 @@ describe('ButtonMonitor dispatch', () => {
     settingsDB.data.features.coverButtons = false;
     await settingsDB.write();
     writeRaw('001.RAW', pressReleaseLog('R', 97), 1000);
-    const mon = new ButtonMonitor() as unknown as Internals;
+    const mon = liveMonitor;
     await mon.tick();
     assert.equal(tempCalls.length, 0);
   });
@@ -279,7 +282,7 @@ describe('ButtonMonitor dispatch', () => {
     settingsDB.data.right.buttons.hapticEcho = true;
     await settingsDB.write();
     writeRaw('001.RAW', pressReleaseLog('R', 97), 1000);
-    const mon = new ButtonMonitor() as unknown as Internals;
+    const mon = liveMonitor;
     await mon.tick();
 
     // The ALARM_RIGHT pulse fires synchronously in dispatch; the clear is on a
@@ -300,14 +303,44 @@ describe('ButtonMonitor dispatch', () => {
     await memoryDB.write();
 
     writeRaw('001.RAW', pressReleaseLog('R', 97), 1000);
-    const mon = new ButtonMonitor() as unknown as Internals;
+    const mon = liveMonitor;
     await mon.tick();
     assert.equal(execCalls.filter(c => c.command === 'ALARM_RIGHT').length, 0);
   });
 
+  it('marks missing and stale RAW feeds unavailable, then recovers on fresh data', async () => {
+    const { default: serverStatus } = await import('../serverStatus.js');
+    assert.equal(serverStatus.status.buttonMonitor.status, 'failed');
+    const payload = frameRecord(1, cbor.encode({ type: 'frzHealth', ts: Date.now() / 1000 }));
+    const full = writeRaw('001.RAW', payload, Date.now() / 1000 - 30);
+    await liveMonitor.tick();
+    assert.equal(serverStatus.status.buttonMonitor.status, 'failed');
+    appendRaw(full, payload, Date.now() / 1000 - 0.1);
+    await liveMonitor.tick();
+    assert.equal(serverStatus.status.buttonMonitor.status, 'healthy');
+  });
+
+  it('does not replay archived presses after a monitor restart', async () => {
+    const full = writeRaw('001.RAW', pressReleaseLog('R', 97), Date.now() / 1000);
+    const restarted = new ButtonMonitor() as unknown as Internals;
+    await restarted.tick();
+    assert.equal(tempCalls.length, 0);
+    appendRaw(full, pressReleaseLog('R', 99, 2), Date.now() / 1000);
+    await restarted.tick();
+    assert.equal(tempCalls.length, 1);
+    assert.equal(tempCalls[0].delta, -1);
+  });
+
+  it('does not dispatch stale button records from a newly discovered file', async () => {
+    const record = frameRecord(1, cbor.encode({ type: 'log', ts: 1, msg: '[tca8418R] gpi press 97' }));
+    writeRaw('001.RAW', record, Date.now() / 1000);
+    await liveMonitor.tick();
+    assert.equal(tempCalls.length, 0);
+  });
+
   it('reads only appended bytes across successive ticks (no re-fire)', async () => {
     const full = writeRaw('001.RAW', pressReleaseLog('R', 97, 1), 1000);
-    const mon = new ButtonMonitor() as unknown as Internals;
+    const mon = liveMonitor;
     await mon.tick();
     assert.equal(tempCalls.length, 1);
 
@@ -320,7 +353,7 @@ describe('ButtonMonitor dispatch', () => {
 
   it('rolls over to a newer file and starts from its top', async () => {
     writeRaw('001.RAW', pressReleaseLog('R', 97, 1), 1000);
-    const mon = new ButtonMonitor() as unknown as Internals;
+    const mon = liveMonitor;
     await mon.tick();
     assert.equal(tempCalls.length, 1);
 
@@ -337,7 +370,7 @@ describe('ButtonMonitor dispatch', () => {
     // SEQNO.RAW has the newest mtime but must be skipped.
     writeRaw('001.RAW', pressReleaseLog('R', 97, 1), 1000);
     writeRaw('SEQNO.RAW', Buffer.from([1, 2, 3, 4]), 5000);
-    const mon = new ButtonMonitor() as unknown as Internals;
+    const mon = liveMonitor;
     await mon.tick();
     assert.equal(tempCalls.length, 1, 'should tail 001.RAW, not SEQNO.RAW');
   });
@@ -345,7 +378,7 @@ describe('ButtonMonitor dispatch', () => {
   it('survives a corrupt byte in the stream and still parses later records', async () => {
     const junk = Buffer.from([0x55, 0x55]);
     writeRaw('001.RAW', Buffer.concat([junk, pressReleaseLog('R', 97)]), 1000);
-    const mon = new ButtonMonitor() as unknown as Internals;
+    const mon = liveMonitor;
     await mon.tick();
     assert.equal(tempCalls.length, 1, 'resynced past the junk and parsed the press');
   });
