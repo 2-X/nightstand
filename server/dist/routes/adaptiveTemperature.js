@@ -25,7 +25,9 @@ router.post('/adaptive-temperature/circulation', (req, res) => {
     // Internal RAW-stream adapter only; the dashboard cannot manufacture healthy pumps.
     if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress ?? ''))
         return res.sendStatus(403);
-    const parsed = z.object({ at: z.number().finite(), left: z.boolean(), right: z.boolean() }).strict().safeParse(req.body);
+    const reading = z.object({ rpm: z.number().finite().nonnegative().nullable(), water: z.boolean().nullable() }).strict();
+    const parsed = z.object({ at: z.number().finite(), left: z.boolean(), right: z.boolean(),
+        readings: z.object({ left: reading, right: reading }).strict().optional() }).strict().safeParse(req.body);
     if (!parsed.success)
         return res.sendStatus(400);
     acceptCirculation(parsed.data);

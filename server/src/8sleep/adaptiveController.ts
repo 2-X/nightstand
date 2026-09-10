@@ -10,7 +10,10 @@ import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js
 import { adaptiveStore } from './adaptiveState.js';
 import { proposeTemperature, ThermalSide, ThermalDecision, ThermalContext } from './adaptivePolicy.js';
 
-export interface CirculationSample { at: number; left: boolean; right: boolean }
+export interface CirculationSample {
+  at: number; left: boolean; right: boolean;
+  readings?: Record<ThermalSide, { rpm: number | null; water: boolean | null }>;
+}
 let circulation: CirculationSample | null = null;
 export function acceptCirculation(sample: CirculationSample): void {
   // Accept only increasing source timestamps, never make replay look current.

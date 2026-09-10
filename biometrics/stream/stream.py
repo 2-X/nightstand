@@ -37,6 +37,7 @@ if platform.system().lower() == 'linux':
     sys.path.append('/home/dac/free-sleep/biometrics/stream/')
 
 import time
+from nats_raw_archive import RawArchive
 import os
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -316,6 +317,8 @@ async def watch_nats_stream():
             config=consumer_config,
         )
         last_health_update = time.monotonic()
+        archive = RawArchive()
+        last_archive_warning = 0
         queued_count = 0
 
         while True:
@@ -333,6 +336,14 @@ async def watch_nats_stream():
                 try:
                     row = cbor2.loads(message.data)
                     decoded_data = _decode_raw_row(row)
+                    if isinstance(decoded_data, dict):
+                        payload = row['data'] if isinstance(row.get('data'), bytes) else message.data
+                        try:
+                            archive.append(payload, message.metadata.sequence.stream, decoded_data.get('ts'))
+                        except OSError as error:
+                            if time.monotonic() - last_archive_warning > 60:
+                                logger.error(f'RAW archive unavailable: {error}')
+                                last_archive_warning = time.monotonic()
                     if isinstance(decoded_data, dict) and decoded_data.get('type') == 'frzTemp':
                         update_sensor_temps(decoded_data)
                     elif isinstance(decoded_data, dict) and decoded_data.get('type') == 'frzHealth':

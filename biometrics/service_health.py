@@ -221,6 +221,18 @@ def new_pump_state() -> dict:
 _pump_state = {'left': new_pump_state(), 'right': new_pump_state()}
 
 
+def _pump_power_status():
+    """Use the managed hardware API; never infer commanded power from TEC current."""
+    try:
+        with urllib.request.urlopen('http://127.0.0.1:3000/api/deviceStatus', timeout=1) as response:
+            status = json.load(response)
+        if status.get('isPriming') is not False:
+            return None
+        return {side: status.get(side, {}).get('isOn') for side in ('left', 'right')}
+    except Exception:
+        return None
+
+
 def update_pump_health(frz_health_data: dict):
     """
     Watches frzHealth frames (pump RPM/water + TEC current per side) for a
@@ -239,6 +251,7 @@ def update_pump_health(frz_health_data: dict):
         return
 
     try:
+        power = _pump_power_status()
         for side in ('left', 'right'):
             side_data = frz_health_data.get(side) or {}
             tec = side_data.get('tec') or {}
@@ -254,7 +267,13 @@ def update_pump_health(frz_health_data: dict):
             # skipping froze the dwell counters entirely, so a stall latched
             # right before power-off could never reach the recovery dwell and
             # stayed 'failed' indefinitely.
-            tec_active = current is not None and abs(current) >= _PUMP_TEC_ACTIVE_AMPS
+            # Frozen 1.5.58 reports -1 when TEC current is unavailable, including
+            # while powered off. It is not evidence of a heater drawing 1A.
+            commanded_on = power.get(side) if power else None
+            if not isinstance(commanded_on, bool):
+                _pump_state[side]['consecutive_stall'] = 0
+                continue
+            tec_active = commanded_on and current is not None and current != -1 and abs(current) >= _PUMP_TEC_ACTIVE_AMPS
             pump_ok = rpm is not None and rpm >= _PUMP_RPM_STALL_THRESHOLD and water is not False
             state = _pump_state[side]
 
@@ -308,9 +327,9 @@ def update_pump_health(frz_health_data: dict):
                 state['is_stalled'] = False
                 logger.info(f'Pump on {side} side recovered: rpm={rpm}, water={water}')
                 update_health(job_key, 'healthy', '')
-            elif not state['is_stalled'] and not state['reported_healthy'] and pump_ok:
+            elif not state['is_stalled'] and not state['reported_healthy'] and (pump_ok or commanded_on is False):
                 state['reported_healthy'] = True
-                update_health(job_key, 'healthy', '')
+                update_health(job_key, 'healthy', '' if commanded_on else 'Side is off; pump stopped.')
     except Exception as error:
         logger.error('Failed updating pump health')
         logger.error(error)

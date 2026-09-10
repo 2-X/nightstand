@@ -49,6 +49,8 @@ def _quiet_frame(ts=None):
 
 class TestPumpHealth(unittest.TestCase):
     def setUp(self):
+        self._orig_power_status = service_health._pump_power_status
+        service_health._pump_power_status = lambda: {'left': True, 'right': True}
         self._orig_report_circulation = service_health.report_circulation
         service_health.report_circulation = lambda record: None
         # Fresh dwell-counter state per test, and capture update_health calls
@@ -62,6 +64,7 @@ class TestPumpHealth(unittest.TestCase):
         service_health.update_health = lambda job_key, status, message='': self.calls.append((job_key, status, message))
 
     def tearDown(self):
+        service_health._pump_power_status = self._orig_power_status
         service_health.report_circulation = self._orig_report_circulation
         service_health.update_health = self._orig_update_health
 
@@ -70,6 +73,23 @@ class TestPumpHealth(unittest.TestCase):
             service_health.update_pump_health(_frame())
         # Only the first confirmed-healthy frame should report; no repeats.
         self.assertEqual(self.calls, [('pumpLeft', 'healthy', ''), ('pumpRight', 'healthy', '')])
+
+    def test_unknown_current_sentinel_does_not_report_idle_pumps_as_stalled(self):
+        for _ in range(12):
+            service_health.update_pump_health(_frame(left_rpm=0, left_current=-1, right_rpm=0, right_current=-1))
+        self.assertFalse(any(status == 'failed' for _, status, _ in self.calls))
+
+    def test_commanded_off_with_nonzero_reported_current_does_not_alert(self):
+        service_health._pump_power_status = lambda: {'left': False, 'right': False}
+        for _ in range(12):
+            service_health.update_pump_health(_frame(left_rpm=0, left_current=18.8, right_rpm=0, right_current=18.6))
+        self.assertFalse(any(status == 'failed' for _, status, _ in self.calls))
+
+    def test_unknown_power_does_not_confirm_stall(self):
+        service_health._pump_power_status = lambda: None
+        for _ in range(12):
+            service_health.update_pump_health(_frame(left_rpm=0))
+        self.assertEqual(self.calls, [])
 
     def test_pump_off_with_tec_idle_does_not_alert(self):
         # Side is off: TEC isn't drawing current, pump is idle at 0 RPM.

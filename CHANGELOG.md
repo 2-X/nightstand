@@ -6,6 +6,13 @@ is a hard fork; for the history of the projects it descends from, see
 [jmew/free-sleep](https://github.com/jmew/free-sleep) and
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
 
+## [3.3.0] - 2026-09-10 (beta)
+
+- Show source-timestamped per-side pump RPM and water detection on the adaptive-temperature page, with a stale-reading indicator.
+- Preserve NATS sensor and log records as private RAW files for physical-button detection and overnight analysis, with 36-hour retention and a low-disk guard.
+- Treat Frozen 1.5.58's unavailable TEC-current value as unknown, preventing false idle-pump stall reports.
+- Circulation requires the separately installed compatible firmware and local broker. Adaptive temperature remains in observe mode unless explicitly configured otherwise.
+
 ## [3.2.0] - 2026-09-10 (beta)
 
 - Add a persistent, per-sleeper adaptive-temperature controller and local

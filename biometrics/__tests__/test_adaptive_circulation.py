@@ -8,7 +8,8 @@ from adaptive_circulation import circulation_sample
 class CirculationTests(unittest.TestCase):
     def test_requires_fresh_source_time_and_explicit_flow(self):
         frame = {'ts': 100, 'left': {'pump': {'rpm': 1950, 'water': True}}, 'right': {}}
-        self.assertEqual(circulation_sample(frame, 101), {'at': 100000, 'left': True, 'right': False})
+        self.assertEqual(circulation_sample(frame, 101), {'at': 100000, 'left': True, 'right': False,
+            'readings': {'left': {'rpm': 1950, 'water': True}, 'right': {'rpm': None, 'water': None}}})
         for timestamp in [None, True, float('nan'), float('inf'), 60, 102]:
             self.assertIsNone(circulation_sample(dict(frame, ts=timestamp), 101))
         for pump in [{}, {'rpm': 0, 'water': True}, {'rpm': 1950}, {'rpm': 1950, 'water': False},

@@ -17,7 +17,7 @@ button{background:#a7e5e0;color:#102128;border:0;cursor:pointer}p{line-height:1.
 const sides=['left','right'];
 for(const [index,side] of sides.entries()){
  const section=document.createElement('section');
- section.innerHTML='<h2></h2><form><label>Mode <select name="mode"><option value="off">Off</option><option value="observe">Observe and learn</option><option value="active">Active</option></select></label><label>Lowest comfortable temperature (°F) <input name="minimumF" type="number" min="55" max="110" required></label><label>Highest comfortable temperature (°F) <input name="maximumF" type="number" min="55" max="110" required></label><button>Save</button></form><p class="status" aria-live="polite"></p>';
+ section.innerHTML='<h2></h2><form><label>Mode <select name="mode"><option value="off">Off</option><option value="observe">Observe and learn</option><option value="active">Active</option></select></label><label>Lowest comfortable temperature (°F) <input name="minimumF" type="number" min="55" max="110" required></label><label>Highest comfortable temperature (°F) <input name="maximumF" type="number" min="55" max="110" required></label><button>Save</button></form><p class="status" aria-live="polite"></p><p class="pump" aria-live="polite"></p>';
  section.querySelector('h2').textContent=index===0?'Sarah':'Kris';
  section.id=side;document.querySelector('#sides').append(section);
  section.querySelector('form').onsubmit=async event=>{event.preventDefault();const form=event.target;
@@ -25,6 +25,10 @@ for(const [index,side] of sides.entries()){
 }
 async function refresh(fill){try{const response=await fetch('/api/adaptive-temperature',{cache:'no-store'});if(!response.ok)throw Error('Pod unavailable');const state=await response.json();
  for(const side of sides){const section=document.getElementById(side),form=section.querySelector('form');if(fill){for(const name of ['mode','minimumF','maximumF'])form.elements[name].value=state[side][name];}
+ const sample=state.circulation,reading=sample?.readings?.[side],age=sample?(Date.now()-sample.at)/1000:Infinity;
+ section.querySelector('.pump').textContent=!sample?'Pump readings unavailable':age<0||age>30?'Pump readings stale — automatic changes paused':
+ reading?'Pump: '+(reading.rpm===null?'RPM unavailable':reading.rpm+' RPM')+' · '+(reading.water===null?'water sensor unavailable':reading.water?'water detected':'water not detected')+' · updated '+Math.max(0,Math.floor(age))+'s ago':
+ sample[side]?'Circulation confirmed':'Pump stopped or circulation unconfirmed';
  const decision=state[side].decision;section.querySelector('.status').textContent=state.fault||
  (decision.kind==='propose'?(state[side].mode==='observe'?'Would adjust to ':'Proposed target: ')+decision.targetF+'°F':decision.reason.replaceAll('-',' '));}
  }catch(error){document.querySelector('#message').textContent=error.message;}}

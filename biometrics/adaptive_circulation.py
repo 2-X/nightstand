@@ -18,7 +18,15 @@ def circulation_sample(record, now):
         rpm = pump.get('rpm')
         return (not isinstance(rpm, bool) and isinstance(rpm, (int, float))
                 and math.isfinite(rpm) and rpm >= 1800 and pump.get('water') is True)
-    return {'at': stamp * 1000, 'left': healthy('left'), 'right': healthy('right')}
+    def reading(side):
+        pump = (record.get(side) or {}).get('pump') or {}
+        rpm = pump.get('rpm')
+        if isinstance(rpm, bool) or not isinstance(rpm, (int, float)) or not math.isfinite(rpm) or rpm < 0:
+            rpm = None
+        water = pump.get('water')
+        return {'rpm': rpm, 'water': water if isinstance(water, bool) else None}
+    return {'at': stamp * 1000, 'left': healthy('left'), 'right': healthy('right'),
+            'readings': {side: reading(side) for side in ('left', 'right')}}
 
 
 def report_circulation(record):
