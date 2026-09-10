@@ -40,7 +40,7 @@ improved subjective comfort/sleep without significant objective improvements.
 Do not claim maximal sleep, increased deep sleep or clinical efficacy.
 
 Deploy only through `ops/deploy.sh`, from a clean commit, while the bed is off.
-`POD_ADDRESS=10.0.4.51 POD_IP=10.0.4.51 ops/deploy.sh` works without mDNS.
+`POD_HOST=pod POD_ADDRESS=10.0.4.51 POD_IP=10.0.4.51 ops/deploy.sh` works without mDNS.
 The normal backup, health-check and rollback path applies. No schema migrations
 or hardware/firmware changes are needed. An old code rollback ignores the
 additive adaptive state file.

@@ -21,6 +21,9 @@ POD_PORT="${POD_PORT:-8822}"
 if [ -n "${POD_HOST:-}" ]; then
   # User-provided ssh target: it carries its own user/port/known_hosts config.
   POD="$POD_HOST"; SSH_CONN=""; SCP_CONN=""
+  if [ -n "${POD_ADDRESS:-}" ]; then
+    SSH_CONN="-o HostName=$POD_ADDRESS"; SCP_CONN="-o HostName=$POD_ADDRESS"
+  fi
 else
   # Zero-config default: the stock mDNS name with the known user/port. accept-new
   # records the pod's host key on first contact but still rejects a changed key.
