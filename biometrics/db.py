@@ -66,19 +66,16 @@ def insert_vitals(data: dict):
     cursor = conn.cursor()
 
     sql = """
-    INSERT INTO vitals (side, timestamp, heart_rate, hrv, breathing_rate)
-    VALUES (:side, :timestamp, :heart_rate, :hrv, :breathing_rate)
+    INSERT INTO vitals (side, timestamp, heart_rate, hrv, breathing_rate, hrv_timestamp, breathing_timestamp)
+    VALUES (:side, :timestamp, :heart_rate, :hrv, :breathing_rate, :hrv_timestamp, :breathing_timestamp)
     ON CONFLICT(side, timestamp) DO NOTHING;
     """
-    if np.isnan(data['hrv']):
-        data['hrv'] = 0
-    else:
-        data['hrv'] = math.floor(data['hrv'])
-
-    if np.isnan(data['breathing_rate']):
-        data['breathing_rate'] = 0
-    else:
-        data['breathing_rate'] = math.floor(data['breathing_rate'])
+    data = dict(data)
+    for metric in ('hrv', 'breathing_rate'):
+        value = data.get(metric)
+        data[metric] = math.floor(value) if value is not None and math.isfinite(value) and value > 0 else None
+    data.setdefault('hrv_timestamp', None)
+    data.setdefault('breathing_timestamp', None)
 
     data['heart_rate'] = math.floor(data['heart_rate'])
     logger.debug('Inserting vitals record...')

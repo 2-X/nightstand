@@ -76,7 +76,7 @@ router.get('/vitals/summary', async (req: Request<object, object, object, Vitals
   const avgBreathingRate = await prisma.vitals.aggregate({
     where: {
       ...query,
-      breathing_rate: { not: 0, lte: 20, gte: 5 }, // Exclude zero values
+      breathing_rate: { gt: 0 }, // Exclude zero values
     },
     _avg: { breathing_rate: true },
   });
@@ -85,17 +85,18 @@ router.get('/vitals/summary', async (req: Request<object, object, object, Vitals
   const avgHRV = await prisma.vitals.aggregate({
     where: {
       ...query,
-      hrv: { not: 0, lte: 120, gte: 30 }, // Exclude zero values
+      hrv: { gt: 0 }, // Exclude zero values
     },
     _avg: { hrv: true },
   });
 
+  const rounded = (value: number | null) => value === null ? null : Math.round(value);
   res.json({
-    avgHeartRate: Math.round(heartRateSummary._avg.heart_rate || 0),
-    minHeartRate: Math.round(heartRateSummary._min.heart_rate || 0),
-    maxHeartRate: Math.round(heartRateSummary._max.heart_rate || 0),
-    avgHRV: Math.round(avgHRV._avg.hrv || 0),
-    avgBreathingRate: Math.round(avgBreathingRate._avg.breathing_rate || 0),
+    avgHeartRate: rounded(heartRateSummary._avg.heart_rate),
+    minHeartRate: rounded(heartRateSummary._min.heart_rate),
+    maxHeartRate: rounded(heartRateSummary._max.heart_rate),
+    avgHRV: rounded(avgHRV._avg.hrv),
+    avgBreathingRate: rounded(avgBreathingRate._avg.breathing_rate),
   });
 });
 

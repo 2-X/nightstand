@@ -30,6 +30,24 @@ type ManifestEntry = {
 
 export const FEATURES_MANIFEST: ManifestEntry[] = [
   {
+    id: 'sensor-diagnostics', title: 'Sensor diagnostics',
+    description: 'Source-timestamped hardware readings, explicit unknown states and local sensor history.',
+    category: 'ui', version: '3.4.0', flag: null, default: true,
+    touchpoints: ['server/src/routes/sensors.ts', 'biometrics/sensor_telemetry.py'],
+    depends_on: ['biometrics'], reversible: true,
+    tests: ['server/src/routes/sensors.test.ts', 'biometrics/__tests__/test_sensor_telemetry.py'],
+    upstream_offer: false, rationale: 'Makes previously archived-only sensor channels visible without claiming physical verification.',
+  },
+  {
+    id: 'source-freshness', title: 'Source freshness',
+    description: 'Expire old measurements and require complete signal windows and fresh hardware inputs.',
+    category: 'safety', version: '3.4.0', flag: null, default: true,
+    touchpoints: ['server/src/8sleep/sensorState.ts', 'biometrics/vital_quality.py'],
+    depends_on: ['biometrics'], reversible: false,
+    tests: ['server/src/8sleep/sensorState.test.ts', 'biometrics/__tests__/test_vital_quality.py'],
+    upstream_offer: false, rationale: 'Missing data must not masquerade as a current measurement.',
+  },
+  {
     id: 'agent',
     title: 'Agent',
     description: 'Update, rollback, revert-to-stock, and the Settings Versions surface. The floor every other feature sits on.',

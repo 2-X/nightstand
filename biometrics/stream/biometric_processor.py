@@ -36,6 +36,7 @@ from heart.preprocessing import scale_data
 from heart.filtering import filter_signal, remove_baseline_wander
 from heart.heartpy import process
 from db import insert_vitals
+from vital_quality import fresh_metric
 from data_types import *
 from presence_floor import (
     low_percentile,
@@ -331,6 +332,8 @@ class BiometricProcessor:
         # number is silently averaged in as if it had been measured.
         self.breathing_rate = 0
         self.hrv = 0
+        self.breathing_measured_at = None
+        self.hrv_measured_at = None
         # Cleared for the same reason. next() reads combined_measurements[-1]
         # to build the row it inserts, so a leftover entry here is another way
         # the previous session can reach the current one's data.
@@ -700,6 +703,7 @@ class BiometricProcessor:
                     breathing_rate = sum(self.breath_rates) / len(self.breath_rates)
                     if not np.isnan(breathing_rate):
                         self.breathing_rate = breathing_rate
+                        self.breathing_measured_at = epoch
 
             if update_hrv:
                 hrv = measurement['sdnn']
@@ -709,6 +713,7 @@ class BiometricProcessor:
 
                     if not np.isnan(hrv):
                         self.hrv = hrv
+                        self.hrv_measured_at = epoch
 
 
             if self.is_valid(measurement):
@@ -833,7 +838,12 @@ class BiometricProcessor:
                 # already-tracked presence-detection problem, not the noise-
                 # spike issue fixed earlier), this gate will not catch it.
                 if self.present:
-                    insert_vitals(self.combined_measurements[-1])
+                    row = dict(self.combined_measurements[-1])
+                    row['hrv'] = fresh_metric(self.hrv, self.hrv_measured_at, row['timestamp'], 90)
+                    row['breathing_rate'] = fresh_metric(self.breathing_rate, self.breathing_measured_at, row['timestamp'], 30)
+                    row['hrv_timestamp'] = self.hrv_measured_at if row['hrv'] is not None else None
+                    row['breathing_timestamp'] = self.breathing_measured_at if row['breathing_rate'] is not None else None
+                    insert_vitals(row)
                 else:
                     logger.debug(
                         f'Skipping vitals insert for {self.side} side: not present'

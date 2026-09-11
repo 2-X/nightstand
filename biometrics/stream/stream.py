@@ -50,6 +50,7 @@ logger = get_logger('free-sleep-stream')
 from stream_processor import StreamProcessor
 from load_raw_files import load_piezo_row, _read_raw_record
 from service_health import update_health, update_sensor_temps, update_pump_health
+from sensor_telemetry import report_sensor
 
 # Global queue for processing decoded biometric data
 piezo_record_queue = queue.Queue()
@@ -187,6 +188,7 @@ class LatestRawFileHandler(FileSystemEventHandler):
 
                 decoded_data = cbor2.loads(data_bytes)
 
+                report_sensor(decoded_data)
                 # Handle frzTemp records for sensor temperatures
                 if isinstance(decoded_data, dict) and decoded_data.get('type') == 'frzTemp':
                     update_sensor_temps(decoded_data)
@@ -344,6 +346,8 @@ async def watch_nats_stream():
                             if time.monotonic() - last_archive_warning > 60:
                                 logger.error(f'RAW archive unavailable: {error}')
                                 last_archive_warning = time.monotonic()
+                    if isinstance(decoded_data, dict):
+                        report_sensor(decoded_data)
                     if isinstance(decoded_data, dict) and decoded_data.get('type') == 'frzTemp':
                         update_sensor_temps(decoded_data)
                     elif isinstance(decoded_data, dict) and decoded_data.get('type') == 'frzHealth':

@@ -9,7 +9,7 @@ type VitalsLineChartProps = {
   metric: Metric;
   /** Average of this metric over the 7 days leading up to the selected
    *  night, computed from the vitals-summary endpoint by the parent. */
-  sevenDayAvg?: number;
+  sevenDayAvg?: number | null;
 };
 
 // Display config per metric: section labels + units + healthy target band.

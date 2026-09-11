@@ -157,6 +157,7 @@ export default function SleepPage() {
         { /* Sleep stages chart replaces the old SleepBarChart at the top. */ }
         { selectedSleepRecord && (
           <ErrorBoundary componentName="Sleep stages">
+            <Typography variant="caption">Sleep stages are estimates; missing metrics reduce reliability.</Typography>
             <SleepStagesCard
               startTime={ selectedSleepRecord.entered_bed_at }
               endTime={ selectedSleepRecord.left_bed_at }

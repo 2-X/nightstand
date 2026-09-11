@@ -3,6 +3,7 @@ import platform
 import os
 from datetime import datetime, timezone
 import time
+import math
 from adaptive_circulation import report_circulation
 
 sys.path.append(os.getcwd())
@@ -93,7 +94,7 @@ def update_health(job_key: str, status: str, message: str = ''):
             data=data,
         )
 
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=1) as response:
             if response.status == 200:
                 logger.debug("Updated status successfully")
             else:
@@ -118,8 +119,8 @@ def update_sensor_temps(frz_temp_data: dict):
     # consume the 30s window and shadow the live records behind them. A
     # record with no parseable ts is treated as live rather than discarded.
     record_epoch = _frz_record_epoch(frz_temp_data)
-    if record_epoch is not None and now - record_epoch > SENSOR_TEMPS_MAX_RECORD_AGE:
-        logger.debug(f'Skipping stale frzTemp record ({now - record_epoch:.0f}s old)')
+    if record_epoch is None or not math.isfinite(record_epoch) or not 0 <= now - record_epoch <= 90:
+        logger.debug('Skipping invalid or stale frzTemp timestamp')
         return
 
     # Throttle updates
@@ -156,7 +157,7 @@ def update_sensor_temps(frz_temp_data: dict):
             data=data,
         )
 
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=1) as response:
             if response.status == 200:
                 logger.debug("Updated sensor temps successfully")
             else:
@@ -167,45 +168,14 @@ def update_sensor_temps(frz_temp_data: dict):
         logger.error(error)
 
 
-# Pump stall detection. The hub water-temperature sensor sits next to the
-# heating/cooling element (TEC), not in the bed. While the pump circulates,
-# it reads moving water leaving the bed, meaningful. If the pump stalls
-# while the TEC keeps drawing current, the sensor reads stagnant water next
-# to a powered heating element instead: a runaway number that doesn't
-# reflect bed temperature. This exact failure mode was reported by a
-# free-sleep user (side ran to 102F against an 84F setpoint overnight,
-# cleared by a power cycle) and independently documented by sleepypod/core's
-# ADR 0022. Verified against this pod's live frzHealth frames: pump RPM
-# running ~1900-2000, TEC current several amps when actively heating/cooling
-#, a >200 RPM floor while TEC is active is a wide, conservative margin.
+# Pump monitoring uses managed commanded power, explicit water detection and
+# fresh RPM. Reported TEC current does not reliably distinguish on from off.
+# Six consecutive fresh frames (~1 minute) latch a stall; three recover it.
+# Gaps and replayed frames must not advance either dwell counter.
 _PUMP_RPM_STALL_THRESHOLD = 200
-_PUMP_TEC_ACTIVE_AMPS = 1.0
-# frzHealth frames arrive roughly once every 10s; 6 consecutive ~= 1 minute
-# of sustained stall before alerting, 3 consecutive ~= 30s of recovery
-# before clearing, avoids flapping on a single noisy frame in either
-# direction.
-#
-# KNOWN WRONG, do not tune these to compensate. This check was built on the
-# assumption that TEC current is the "commanded active" signal, so that a
-# side which is merely switched off would not look like a stall. Eleven days
-# of the per-frame trace say otherwise: rpm reads 0 for exactly the hours the
-# power schedule has the side off (0% of frames from 20:00 to 07:00 local,
-# ~100% from 08:00 to 19:00), while TEC current never once falls below 7.2A
-# in 96,247 frames, so the 1.0A bar never excludes anything. The rule
-# therefore reduces to "rpm below 200" and fires every day at power-off.
-# No threshold on current can separate on from off, and any dwell short
-# enough to catch a real stall is far shorter than the multi-hour normal off
-# stretches. The fix is to gate on whether the side is actually powered on;
-# see the transition trace below for the data being gathered to do that.
 _PUMP_STALL_DWELL_FRAMES = 6
 _PUMP_RECOVERY_DWELL_FRAMES = 3
-# Same replay hazard as SENSOR_TEMPS_MAX_RECORD_AGE: the RAW-file fallback
-# re-reads the current file from byte 0 on startup and the durable NATS
-# consumer replays its acked backlog after a restart, so this function can
-# receive frzHealth frames far older than "now". Each replayed frame
-# advances the per-side dwell counters as if it were live, so a stale burst
-# can trip a false pump-stall alert or clear a real latched one.
-PUMP_HEALTH_MAX_RECORD_AGE = 120  # seconds
+PUMP_HEALTH_MAX_RECORD_AGE = 30  # seconds
 
 def new_pump_state() -> dict:
     """Per-side dwell state. Shared with the tests so the two cannot drift."""
@@ -215,6 +185,9 @@ def new_pump_state() -> dict:
         'is_stalled': False,
         'reported_healthy': False,
         'prev_pump_ok': None,
+        'last_sample_at': None,
+        'last_report_at': 0,
+        'last_report': None,
     }
 
 
@@ -234,102 +207,62 @@ def _pump_power_status():
 
 
 def update_pump_health(frz_health_data: dict):
-    """
-    Watches frzHealth frames (pump RPM/water + TEC current per side) for a
-    stalled-pump-while-heating condition and reports it to the Status page
-    via the same update_health() job-status mechanism as other biometrics
-    jobs. Called from the stream processor for every frzHealth frame.
-    """
-    # Drop replayed/stale frames before they can advance the dwell counters
-    # with historical data. A frame with no parseable ts is treated as live
-    # rather than discarded.
+    """Report known commanded state, unknown telemetry and sustained circulation faults."""
     report_circulation(frz_health_data)
     now = time.time()
-    record_epoch = _frz_record_epoch(frz_health_data)
-    if record_epoch is not None and now - record_epoch > PUMP_HEALTH_MAX_RECORD_AGE:
-        logger.debug(f'Skipping stale frzHealth frame ({now - record_epoch:.0f}s old)')
+    stamp = _frz_record_epoch(frz_health_data)
+    if stamp is None or not math.isfinite(stamp) or not 0 <= now - stamp <= PUMP_HEALTH_MAX_RECORD_AGE:
         return
-
-    try:
-        power = _pump_power_status()
-        for side in ('left', 'right'):
-            side_data = frz_health_data.get(side) or {}
-            tec = side_data.get('tec') or {}
-            pump = side_data.get('pump') or {}
-            current = tec.get('current')
-            rpm = pump.get('rpm')
-            water = pump.get('water')
-
-            # Missing current/rpm can't confirm an active stall (tec_active
-            # requires `current`), so treat it the same as "TEC not active"
-            # rather than skipping the frame outright. A side that's fully
-            # powered off stops carrying live TEC/pump numbers in frzHealth;
-            # skipping froze the dwell counters entirely, so a stall latched
-            # right before power-off could never reach the recovery dwell and
-            # stayed 'failed' indefinitely.
-            # Frozen 1.5.58 reports -1 when TEC current is unavailable, including
-            # while powered off. It is not evidence of a heater drawing 1A.
-            commanded_on = power.get(side) if power else None
-            if not isinstance(commanded_on, bool):
-                _pump_state[side]['consecutive_stall'] = 0
-                continue
-            tec_active = commanded_on and current is not None and current != -1 and abs(current) >= _PUMP_TEC_ACTIVE_AMPS
-            pump_ok = rpm is not None and rpm >= _PUMP_RPM_STALL_THRESHOLD and water is not False
-            state = _pump_state[side]
-
-            # Per-frame trace for diagnosing whether a stall onset is a real
-            # mechanical stall or a momentary frame-data artifact:
-            # there was previously no way to inspect the raw values leading
-            # up to a trip.
-            logger.debug(
-                f'pump health {side}: current={current} rpm={rpm} water={water} '
-                f'tec_active={tec_active} pump_ok={pump_ok} '
-                f'consecutive_stall={state["consecutive_stall"]} consecutive_healthy={state["consecutive_healthy"]}'
-            )
-
-            # Whole-frame dump on the frames where pump_ok flips, which is
-            # where the pump starts or stops reporting rpm. Eleven days of the
-            # per-frame trace showed rpm sits at 0 for the exact hours the
-            # power schedule has the side off, and TEC current never drops
-            # below 7A even then, so `current` cannot tell a commanded-off side
-            # from a running one. What the frame carries alongside rpm at that
-            # moment (pump mode, and anything else) is the missing piece for
-            # gating this check on the side actually being on. Logged only on
-            # the transition, a few times a day, not on every frame.
-            if state.get('prev_pump_ok') != pump_ok:
-                logger.info(
-                    f'pump health {side} transition: pump_ok {state.get("prev_pump_ok")} '
-                    f'-> {pump_ok}, pump={pump} tec={tec}'
-                )
-            state['prev_pump_ok'] = pump_ok
-
-            if tec_active and not pump_ok:
-                state['consecutive_stall'] += 1
-                state['consecutive_healthy'] = 0
-            else:
-                state['consecutive_healthy'] += 1
-                state['consecutive_stall'] = 0
-
-            job_key = f'pump{side.capitalize()}'
-
-            if not state['is_stalled'] and state['consecutive_stall'] >= _PUMP_STALL_DWELL_FRAMES:
-                state['is_stalled'] = True
-                state['reported_healthy'] = True
-                message = (
-                    f'Pump stall suspected on {side} side: TEC drawing {current:.1f}A '
-                    f'(actively heating/cooling) but pump rpm={rpm}, water={water}. '
-                    f'The hub temperature sensor may be reading stagnant water next to '
-                    f'the heating element, not actual bed temperature.'
-                )
-                logger.error(message)
-                update_health(job_key, 'failed', message)
-            elif state['is_stalled'] and state['consecutive_healthy'] >= _PUMP_RECOVERY_DWELL_FRAMES:
+    power = _pump_power_status()
+    for side in ('left', 'right'):
+        state = _pump_state[side]
+        previous = state['last_sample_at']
+        if previous is not None and stamp <= previous:
+            continue
+        if previous is not None and stamp - previous > 30:
+            state['consecutive_stall'] = state['consecutive_healthy'] = 0
+        state['last_sample_at'] = stamp
+        commanded_on = power.get(side) if power else None
+        pump = (frz_health_data.get(side) or {}).get('pump') or {}
+        rpm, water = pump.get('rpm'), pump.get('water')
+        pump_ok = type(rpm) in (int, float) and math.isfinite(rpm) and rpm >= _PUMP_RPM_STALL_THRESHOLD and water is True
+        if state['prev_pump_ok'] != pump_ok:
+            logger.info(f"pump health {side} transition: pump_ok {state['prev_pump_ok']} -> {pump_ok}, pump={pump}")
+        state['prev_pump_ok'] = pump_ok
+        known = type(rpm) in (int, float) and math.isfinite(rpm) and rpm >= 0 and isinstance(water, bool)
+        if not isinstance(commanded_on, bool):
+            state['consecutive_stall'] = state['consecutive_healthy'] = 0
+            report = ('retrying', 'Pump state unknown: commanded power unavailable or priming.')
+        elif not commanded_on:
+            state['consecutive_stall'] = 0
+            state['consecutive_healthy'] += 1
+            if state['consecutive_healthy'] >= _PUMP_RECOVERY_DWELL_FRAMES:
                 state['is_stalled'] = False
-                logger.info(f'Pump on {side} side recovered: rpm={rpm}, water={water}')
-                update_health(job_key, 'healthy', '')
-            elif not state['is_stalled'] and not state['reported_healthy'] and (pump_ok or commanded_on is False):
-                state['reported_healthy'] = True
-                update_health(job_key, 'healthy', '' if commanded_on else 'Side is off; pump stopped.')
-    except Exception as error:
-        logger.error('Failed updating pump health')
-        logger.error(error)
+            report = ('healthy', 'Side is off; pump stopped.' if rpm == 0 else 'Side is off.')
+        elif not known:
+            state['consecutive_stall'] = state['consecutive_healthy'] = 0
+            report = ('retrying', 'Pump state unknown: RPM or water detection missing.')
+        else:
+            pump_ok = rpm >= _PUMP_RPM_STALL_THRESHOLD and water is True
+            if pump_ok:
+                state['consecutive_stall'] = 0
+                state['consecutive_healthy'] += 1
+                if state['consecutive_healthy'] >= _PUMP_RECOVERY_DWELL_FRAMES:
+                    state['is_stalled'] = False
+            else:
+                state['consecutive_healthy'] = 0
+                state['consecutive_stall'] += 1
+                if state['consecutive_stall'] >= _PUMP_STALL_DWELL_FRAMES:
+                    state['is_stalled'] = True
+            if state['is_stalled']:
+                report = ('failed', 'Pump stall suspected while side is on. Check pump RPM and water detection.')
+            elif not pump_ok:
+                report = ('retrying', 'Waiting for circulation while side is on.')
+            else:
+                report = ('healthy', 'Side is on; pump running and water detected.')
+        # Refresh both state transitions and heartbeat, including normal off-to-on.
+        if report != state['last_report'] or now - state['last_report_at'] >= 30:
+            update_health('pump' + side.capitalize(), *report)
+            state['last_report'] = report
+            state['last_report_at'] = now
+            state['reported_healthy'] = report[0] == 'healthy'

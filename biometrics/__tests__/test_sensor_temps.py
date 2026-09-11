@@ -56,7 +56,7 @@ class TestUpdateSensorTemps(unittest.TestCase):
             def __exit__(self, *args):
                 return False
 
-        def fake_urlopen(req):
+        def fake_urlopen(req, timeout=1):
             test.posts.append(json.loads(req.data.decode('utf-8')))
             return _FakeResponse()
 
@@ -116,14 +116,12 @@ class TestUpdateSensorTemps(unittest.TestCase):
         posted = datetime.fromisoformat(self._posted_temps()['lastUpdated'])
         self.assertAlmostEqual(posted.timestamp(), record_ts, delta=1)
 
-    def test_record_without_timestamp_is_treated_as_live(self):
+    def test_record_without_timestamp_is_rejected(self):
         record = _frz_temp(ts=None)
         del record['ts']
         before = datetime.now(timezone.utc)
         service_health.update_sensor_temps(record)
-        self.assertEqual(len(self.posts), 1)
-        posted = datetime.fromisoformat(self._posted_temps()['lastUpdated'])
-        self.assertGreaterEqual(posted, before)
+        self.assertEqual(len(self.posts), 0)
 
     def test_string_timestamp_is_parsed_as_utc(self):
         # load_raw_files rewrites ts to a '%Y-%m-%d %H:%M:%S' UTC string;

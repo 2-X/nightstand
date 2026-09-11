@@ -57,7 +57,7 @@ export default function StatusPage() {
 
   const isAllHealthy = unhealthy.length === 0;
   const summaryTitle = isAllHealthy
-    ? 'Everything is running normally'
+    ? 'Reported services are running'
     : `${unhealthy.length} thing${unhealthy.length > 1 ? 's need' : ' needs'} attention`;
 
   return (
@@ -69,6 +69,7 @@ export default function StatusPage() {
         alignItems: 'stretch',
       } }
     >
+      <Typography component="a" href="/sensors" sx={ { color: palette.text.primary } }>Sensors, freshness and hardware verification</Typography>
       <Box sx={ { px: 0.5, mb: 0.5 } }>
         <Typography
           sx={ {

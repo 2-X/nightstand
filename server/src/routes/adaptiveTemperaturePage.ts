@@ -8,7 +8,7 @@ body{font:17px system-ui;background:#101820;color:#edf4f5;margin:0;padding:28px;
 section{background:#1b2a35;padding:24px;margin:20px 0;border-radius:16px}h1{font-size:28px}
 label{display:block;margin:16px 0}input,select,button{font:inherit;padding:10px;border-radius:8px;max-width:100%;box-sizing:border-box}
 button{background:#a7e5e0;color:#102128;border:0;cursor:pointer}p{line-height:1.5}.status{color:#a7e5e0}
-</style><h1>Adaptive temperature</h1>
+</style><p><a href="/sensors">Sensor readings and diagnostics</a></p><h1>Adaptive temperature</h1>
 <p>Small adjustments based on your own repeated comfort preferences. A manual temperature change holds your side for the rest of the night.</p>
 <p>Learning needs at least three nights with consistent adjustments in the same part of the night. Automatic steps are limited to 1°F every 30 minutes and stay within 2°F of your bedtime setting.</p>
 <div id="sides"></div><p id="message" role="status"></p>

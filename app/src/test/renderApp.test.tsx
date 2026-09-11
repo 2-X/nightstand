@@ -7,6 +7,6 @@ describe('renderApp', () => {
     renderApp('/status');
     // StatusPage has no heading role; once it and the mocked serverStatus
     // data resolve, the all-healthy summary line is a stable rendered marker.
-    expect(await screen.findByText(/everything is running normally/i)).toBeInTheDocument();
+    expect(await screen.findByText(/reported services are running/i)).toBeInTheDocument();
   });
 });

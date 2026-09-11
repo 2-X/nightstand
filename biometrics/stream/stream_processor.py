@@ -21,6 +21,7 @@ from biometric_processor import BiometricProcessor
 from buffer import Buffer
 from data_types import *
 import numpy as np
+from vital_quality import has_contiguous_window
 
 logger = get_logger()
 
@@ -62,12 +63,14 @@ class StreamProcessor:
         return (
             self.iteration_count > self.left_processor.breath_rate_window_seconds
             and self.iteration_count % self.left_processor.breath_rate_insertion_frequency == 0
+            and has_contiguous_window(self.buffer.piezo_buffer, self.left_processor.breath_rate_window_seconds)
         )
 
     def can_calculate_hrv(self):
         return (
             self.iteration_count > self.left_processor.hrv_window_seconds
             and self.iteration_count % self.left_processor.hrv_insertion_frequency == 0
+            and has_contiguous_window(self.buffer.piezo_buffer, self.left_processor.hrv_window_seconds)
         )
 
     def process_piezo_record(self, piezo_record: PiezoDualData):
@@ -94,7 +97,7 @@ class StreamProcessor:
             self.check_presence(left1_signal, right1_signal, left2_signal, right2_signal)
 
             # Process left side
-            if self.left_processor.present_for > self.left_processor.heart_rate_window_seconds:
+            if self.left_processor.present and self.left_processor._presence_session_seconds > self.left_processor.heart_rate_window_seconds:
                 if log:
                     logger.debug(f'Presence detected for left side @ {time.isoformat()}')
 
@@ -106,17 +109,17 @@ class StreamProcessor:
                 self.left_processor.calculate_heart_rate(epoch, left1_signal, left2_signal)
 
                 # Breath rate calculation
-                if self.can_calculate_breath_rate() and self.left_processor.present_for >= self.left_processor.breath_rate_window_seconds:
+                if self.can_calculate_breath_rate() and self.left_processor._presence_session_seconds >= self.left_processor.breath_rate_window_seconds:
                     breath_rate_signal = self.buffer.get_signal('left', self.left_processor.breath_rate_window_seconds)
                     self.left_processor.calculate_breath_rate(breath_rate_signal, epoch)
 
                 # HRV calculation
-                if self.can_calculate_hrv() and self.left_processor.present_for >= self.left_processor.hrv_window_seconds:
+                if self.can_calculate_hrv() and self.left_processor._presence_session_seconds >= self.left_processor.hrv_window_seconds:
                     hrv_signal = self.buffer.get_signal('left', self.left_processor.hrv_window_seconds)
                     self.left_processor.calculate_hrv(hrv_signal, epoch)
 
             # Process right side
-            if self.right_processor.present_for > self.right_processor.heart_rate_window_seconds:
+            if self.right_processor.present and self.right_processor._presence_session_seconds > self.right_processor.heart_rate_window_seconds:
                 if log:
                     logger.debug(f'Presence detected for right side @ {time.isoformat()}')
 
@@ -128,14 +131,13 @@ class StreamProcessor:
                 self.right_processor.calculate_heart_rate(epoch, right1_signal, right2_signal)
 
                 # Breath rate calculation
-                if self.can_calculate_breath_rate() and self.right_processor.present_for >= self.right_processor.breath_rate_window_seconds:
+                if self.can_calculate_breath_rate() and self.right_processor._presence_session_seconds >= self.right_processor.breath_rate_window_seconds:
                     breath_rate_signal = self.buffer.get_signal('right', self.right_processor.breath_rate_window_seconds)
                     self.right_processor.calculate_breath_rate(breath_rate_signal, epoch)
 
                 # HRV calculation
-                if self.can_calculate_hrv() and self.right_processor.present_for >= self.right_processor.hrv_window_seconds:
+                if self.can_calculate_hrv() and self.right_processor._presence_session_seconds >= self.right_processor.hrv_window_seconds:
                     hrv_signal = self.buffer.get_signal('right', self.right_processor.hrv_window_seconds)
                     self.right_processor.calculate_hrv(hrv_signal, epoch)
-
 
 

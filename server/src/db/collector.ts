@@ -1,3 +1,4 @@
+import { temperatureSourceFresh } from '../8sleep/temperatureFreshness.js';
 /* eslint no-use-before-define: ["error", { "functions": false }] */
 // The ONLY writer for the Phase 0 "collect everything" tables:
 // bed_state_samples, hub_state_samples, pod_events, config_audit.
@@ -257,10 +258,11 @@ function sampleHub(status: DeviceStatus, ts: number): void {
   const waterOk = parseWaterOk(status.waterLevel);
   const isPriming = status.isPriming;
   const wifiStrength = numOrNull(status.wifiStrength);
-  const ambientC = status.sensorTemps?.ambientC ?? null;
-  const heatsinkC = status.sensorTemps?.heatsinkC ?? null;
-  const leftC = status.sensorTemps?.leftC ?? null;
-  const rightC = status.sensorTemps?.rightC ?? null;
+  const temps = temperatureSourceFresh(status.sensorTemps?.lastUpdated, ts * 1000) ? status.sensorTemps : null;
+  const ambientC = temps?.ambientC ?? null;
+  const heatsinkC = temps?.heatsinkC ?? null;
+  const leftC = temps?.leftC ?? null;
+  const rightC = temps?.rightC ?? null;
 
   const prev = lastHub;
   const changed =

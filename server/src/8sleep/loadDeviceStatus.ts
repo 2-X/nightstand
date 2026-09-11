@@ -1,3 +1,4 @@
+import { temperatureSourceFresh } from './temperatureFreshness.js';
 import { z } from 'zod';
 import { DeviceStatus, Version } from '../routes/deviceStatus/deviceStatusSchema.js';
 import logger from '../logger.js';
@@ -195,7 +196,7 @@ export async function loadDeviceStatus(response: string, getGestures: boolean): 
   try {
     await servicesDB.read();
     const rawTemps = servicesDB.data?.biometrics?.sensorTemps;
-    if (rawTemps?.ambient !== null && rawTemps?.ambient !== undefined) {
+    if (temperatureSourceFresh(rawTemps?.lastUpdated) && rawTemps?.ambient !== null && rawTemps?.ambient !== undefined) {
       // Convert from raw units (centi-degrees C) to C and F
       const toC = (raw: number | null): number | null => raw !== null ? Math.round((raw / 100) * 10) / 10 : null;
       const toF = (c: number | null): number | null => c !== null ? Math.round(c * 9 / 5 + 32) : null;

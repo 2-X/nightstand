@@ -136,6 +136,13 @@ class ServerStatus {
             this.status.biometricsCalibrationRight = servicesDB.data.biometrics.jobs.calibrateRight;
             this.status.pumpHealthLeft = servicesDB.data.biometrics.jobs.pumpLeft;
             this.status.pumpHealthRight = servicesDB.data.biometrics.jobs.pumpRight;
+            for (const key of ['pumpHealthLeft', 'pumpHealthRight']) {
+                const job = this.status[key];
+                const stamp = Date.parse(job?.timestamp ?? '');
+                if (!Number.isFinite(stamp) || stamp > Date.now() || Date.now() - stamp > 45000) {
+                    this.status[key] = { ...job, status: 'retrying', message: 'Pump telemetry is missing or stale; current state is unknown.' };
+                }
+            }
             const time = moment(servicesDB.data.biometrics.jobs.stream.timestamp);
             if (moment().diff(time, 'minutes') >= 5) {
                 servicesDB.data.biometrics.jobs.stream.status = 'failed';

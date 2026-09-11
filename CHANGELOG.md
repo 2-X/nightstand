@@ -6,6 +6,16 @@ is a hard fork; for the history of the projects it descends from, see
 [jmew/free-sleep](https://github.com/jmew/free-sleep) and
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
 
+## [3.4.0] - 2026-09-10 (beta)
+
+- Add `/sensors` with source ages, unavailable readings, derived-metric freshness and 90-day hardware history; link it from Status.
+- Require fresh cover connections, surface temperatures and thermal validity before adaptive writes. Preserve Observe mode and manual priority.
+- Use established presence duration plus complete signal windows for HRV/breathing eligibility. Expire stale estimates and write unavailable values as null with per-metric source timestamps. Signal-quality rejection remains enforced.
+- Refresh pump health on normal state changes; detect commanded-on circulation faults even when TEC current is unavailable. Reject duplicate, stale and missing-timestamp frames; show missing health coverage explicitly.
+- Prevent stale temperatures from masquerading as fresh history. Align HRV summary filtering with stored values and label SDNN.
+- Analyze a full local calendar day instead of dropping pre-midnight sleep. Label heuristic sleep stages as estimates.
+- Physical control/accessory checks and independent biometric accuracy remain unverified; this release does not claim those tests passed.
+
 ## [3.3.0] - 2026-09-10 (beta)
 
 - Show source-timestamped per-side pump RPM and water detection on the adaptive-temperature page, with a stale-reading indicator.

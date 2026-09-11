@@ -1,3 +1,4 @@
+import { sensorState } from './sensorState.js';
 import settingsDB from '../db/settings.js';
 import servicesDB from '../db/services.js';
 import serverStatus from '../serverStatus.js';
@@ -29,12 +30,13 @@ const fresh = (timestamp, maximumAge) => {
 function hardwareReady(side) {
     const button = serverStatus.status.buttonMonitor;
     const monitor = serverStatus.status.frankenMonitor;
-    return !!circulation && circulation[side] && Date.now() - circulation.at <= 30000 &&
+    return sensorState.ready(side) && !!circulation && circulation[side] && Date.now() - circulation.at <= 30000 &&
         circulation.at <= Date.now() && button.status === 'healthy' && fresh(button.timestamp, 15000) &&
         settingsDB.data.features.coverButtons && monitor.status === 'healthy' && fresh(monitor.timestamp, 15000);
 }
 export function adaptiveStatus() {
-    return { fault: adaptiveStore.fault, circulation, left: { ...adaptiveStore.data.left, decision: adaptiveDecisions.left },
+    return { fault: adaptiveStore.fault, circulation, sensors: sensorState.snapshot(),
+        left: { ...adaptiveStore.data.left, decision: adaptiveDecisions.left },
         right: { ...adaptiveStore.data.right, decision: adaptiveDecisions.right }, observations: adaptiveStore.data.events.length,
         sleepInput: 'Sustained presence with fresh vitals; not a clinically validated sleep-stage detector.' };
 }

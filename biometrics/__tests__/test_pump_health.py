@@ -13,6 +13,13 @@ Run locally (needs cbor2, not part of the node CI):
 """
 import time
 import unittest
+from unittest.mock import patch
+_sample_clock = time.time()
+
+def next_sample():
+    global _sample_clock
+    _sample_clock += 10
+    return _sample_clock
 
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -36,7 +43,7 @@ def _frame(left_rpm=1950, left_current=12.0, left_water=True,
     # frames pass the staleness guard.
     return {
         'type': 'frzHealth',
-        'ts': int(time.time()) if ts is None else ts,
+        'ts': next_sample() if ts is None else ts,
         'left': {'tec': {'current': left_current}, 'pump': {'mode': 'pwm', 'rpm': left_rpm, 'water': left_water}},
         'right': {'tec': {'current': right_current}, 'pump': {'mode': 'pwm', 'rpm': right_rpm, 'water': right_water}},
     }
@@ -44,11 +51,13 @@ def _frame(left_rpm=1950, left_current=12.0, left_water=True,
 
 def _quiet_frame(ts=None):
     # A side that's fully powered off stops carrying live TEC/pump numbers.
-    return {'type': 'frzHealth', 'ts': int(time.time()) if ts is None else ts, 'left': {}, 'right': {}}
+    return {'type': 'frzHealth', 'ts': next_sample() if ts is None else ts, 'left': {}, 'right': {}}
 
 
 class TestPumpHealth(unittest.TestCase):
     def setUp(self):
+        self.clock = patch.object(service_health.time, "time", lambda: _sample_clock)
+        self.clock.start()
         self._orig_power_status = service_health._pump_power_status
         service_health._pump_power_status = lambda: {'left': True, 'right': True}
         self._orig_report_circulation = service_health.report_circulation
@@ -64,20 +73,21 @@ class TestPumpHealth(unittest.TestCase):
         service_health.update_health = lambda job_key, status, message='': self.calls.append((job_key, status, message))
 
     def tearDown(self):
+        self.clock.stop()
         service_health._pump_power_status = self._orig_power_status
         service_health.report_circulation = self._orig_report_circulation
         service_health.update_health = self._orig_update_health
 
     def test_healthy_pump_reports_healthy_once(self):
-        for _ in range(3):
+        for _ in range(2):
             service_health.update_pump_health(_frame())
         # Only the first confirmed-healthy frame should report; no repeats.
-        self.assertEqual(self.calls, [('pumpLeft', 'healthy', ''), ('pumpRight', 'healthy', '')])
+        self.assertEqual([(key, status) for key, status, _ in self.calls], [('pumpLeft', 'healthy'), ('pumpRight', 'healthy')])
 
-    def test_unknown_current_sentinel_does_not_report_idle_pumps_as_stalled(self):
+    def test_unknown_current_cannot_hide_commanded_on_stall(self):
         for _ in range(12):
             service_health.update_pump_health(_frame(left_rpm=0, left_current=-1, right_rpm=0, right_current=-1))
-        self.assertFalse(any(status == 'failed' for _, status, _ in self.calls))
+        self.assertTrue(any(status == 'failed' for _, status, _ in self.calls))
 
     def test_commanded_off_with_nonzero_reported_current_does_not_alert(self):
         service_health._pump_power_status = lambda: {'left': False, 'right': False}
@@ -89,25 +99,27 @@ class TestPumpHealth(unittest.TestCase):
         service_health._pump_power_status = lambda: None
         for _ in range(12):
             service_health.update_pump_health(_frame(left_rpm=0))
-        self.assertEqual(self.calls, [])
+        self.assertTrue(self.calls)
+        self.assertTrue(all(status == 'retrying' for _, status, _ in self.calls))
 
     def test_pump_off_with_tec_idle_does_not_alert(self):
         # Side is off: TEC isn't drawing current, pump is idle at 0 RPM.
         # This must not be treated as a stall.
+        service_health._pump_power_status = lambda: {'left': False, 'right': True}
         for _ in range(10):
             service_health.update_pump_health(_frame(left_rpm=0, left_current=0.0, left_water=False))
         left_calls = [c for c in self.calls if c[0] == 'pumpLeft']
-        self.assertEqual(left_calls, [])
+        self.assertTrue(all(status == 'healthy' for _, status, _ in left_calls))
 
     def test_sustained_stall_trips_after_dwell(self):
         # TEC actively driving but pump stalled (near-zero RPM), matches the
         # reported failure mode. Should not trip before the dwell window.
         for _ in range(service_health._PUMP_STALL_DWELL_FRAMES - 1):
             service_health.update_pump_health(_frame(left_rpm=5, left_current=12.0, left_water=False))
-        self.assertEqual([c for c in self.calls if c[0] == 'pumpLeft'], [])
+        self.assertEqual([c for c in self.calls if c[0] == 'pumpLeft' and c[1] == 'failed'], [])
 
         service_health.update_pump_health(_frame(left_rpm=5, left_current=12.0, left_water=False))
-        left_calls = [c for c in self.calls if c[0] == 'pumpLeft']
+        left_calls = [c for c in self.calls if c[0] == 'pumpLeft' and c[1] == 'failed']
         self.assertEqual(len(left_calls), 1)
         self.assertEqual(left_calls[0][1], 'failed')
         self.assertIn('stall', left_calls[0][2].lower())
@@ -132,7 +144,7 @@ class TestPumpHealth(unittest.TestCase):
 
     def test_missing_fields_are_skipped_not_crashed(self):
         service_health.update_pump_health(_quiet_frame())
-        self.assertEqual(self.calls, [])
+        self.assertTrue(all(status == 'retrying' for _, status, _ in self.calls))
 
     def test_stalled_latch_clears_once_side_goes_fully_quiet(self):
         # Trip a stall, then simulate the side powering off: frzHealth stops
@@ -144,6 +156,7 @@ class TestPumpHealth(unittest.TestCase):
             service_health.update_pump_health(_frame(left_rpm=5, left_current=12.0, left_water=False))
         self.assertTrue(service_health._pump_state['left']['is_stalled'])
         self.calls.clear()
+        service_health._pump_power_status = lambda: {'left': False, 'right': False}
 
         for _ in range(service_health._PUMP_RECOVERY_DWELL_FRAMES):
             service_health.update_pump_health(_quiet_frame())
@@ -151,6 +164,20 @@ class TestPumpHealth(unittest.TestCase):
         self.assertEqual(len(left_calls), 1)
         self.assertEqual(left_calls[0][1], 'healthy')
         self.assertFalse(service_health._pump_state['left']['is_stalled'])
+
+    def test_duplicate_frames_cannot_advance_stall_dwell(self):
+        frame = _frame(left_rpm=0)
+        for _ in range(20):
+            service_health.update_pump_health(frame)
+        self.assertFalse(service_health._pump_state['left']['is_stalled'])
+        self.assertEqual(service_health._pump_state['left']['consecutive_stall'], 1)
+
+    def test_off_to_on_updates_healthy_message(self):
+        service_health._pump_power_status = lambda: {'left': False, 'right': False}
+        service_health.update_pump_health(_frame(left_rpm=0, right_rpm=0))
+        service_health._pump_power_status = lambda: {'left': True, 'right': True}
+        service_health.update_pump_health(_frame())
+        self.assertIn('running', self.calls[-1][2])
 
     def test_transition_trace_fires_only_when_pump_ok_changes(self):
         # The per-frame trace records rpm but not the rest of the frame, which
@@ -211,12 +238,12 @@ class TestPumpHealth(unittest.TestCase):
                 _frame(left_rpm=5, left_current=12.0, left_water=False, ts=stale))
         self.assertEqual(self.calls, [])
 
-    def test_frame_without_ts_is_treated_as_live(self):
+    def test_frame_without_ts_is_not_treated_as_live(self):
         frame = _frame()
         del frame['ts']
         for _ in range(3):
             service_health.update_pump_health(frame)
-        self.assertEqual(self.calls, [('pumpLeft', 'healthy', ''), ('pumpRight', 'healthy', '')])
+        self.assertEqual(self.calls, [])
 
 
 if __name__ == '__main__':

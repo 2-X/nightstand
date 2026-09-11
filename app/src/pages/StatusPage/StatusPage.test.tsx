@@ -8,5 +8,6 @@ describe('StatusPage', () => {
   it('renders the system status page', async () => {
     renderWithProviders(<StatusPage />, { initialRoute: '/status' });
     expect(await screen.findByText('System')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Sensors, freshness and hardware verification' })).toHaveAttribute('href', '/sensors');
   });
 });

@@ -6,6 +6,30 @@
   "releases": [
     {
       "kind": "bundle",
+      "version": "3.4.0",
+      "channel": "beta",
+      "date": "2026-09-10",
+      "upstreamBase": "2.1.5",
+      "features": [
+        "agent",
+        "no-telemetry",
+        "security-hardening",
+        "franken-hardening",
+        "websocket-live-updates",
+        "biometrics",
+        "sleep-stages-score",
+        "honest-status",
+        "level-temperature-display",
+        "one-off-alarms",
+        "design-system",
+        "logs-viewer",
+        "base-control",
+        "sensor-diagnostics",
+        "source-freshness"
+      ]
+    },
+    {
+      "kind": "bundle",
       "version": "3.3.0",
       "channel": "beta",
       "date": "2026-09-10",

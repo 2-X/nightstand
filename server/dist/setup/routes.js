@@ -1,3 +1,5 @@
+import sensors from '../routes/sensors.js';
+import sensorsPage from '../routes/sensorsPage.js';
 import adaptiveTemperature from '../routes/adaptiveTemperature.js';
 import adaptiveTemperaturePage from '../routes/adaptiveTemperaturePage.js';
 import express from 'express';
@@ -43,6 +45,8 @@ export default function (app) {
     app.use('/api/', jobs);
     app.use('/api/', settings);
     app.use('/api/', services);
+    app.use('/api', sensors);
+    app.use(sensorsPage);
     app.use('/api/metrics/', movement);
     app.use('/api/metrics/', sleep);
     app.use('/api/metrics/', vitals);

@@ -32,6 +32,8 @@ model vitals {
   heart_rate     Float? // Averaged over 5 minutes
   hrv            Float? // Averaged over 5 minutes
   breathing_rate Float? // Averaged over 5 minutes
+  hrv_timestamp Int? // Actual source window end; null means unknown/unavailable
+  breathing_timestamp Int?
 
   @@unique([side, timestamp]) // Ensure no duplicate intervals
   @@index([side, timestamp])
@@ -45,6 +47,16 @@ model movement {
   total_movement  Int
   @@unique([side, timestamp]) // Ensure no duplicate intervals
   @@index([side, timestamp])
+}
+
+model sensor_samples {
+  id Int @id @default(autoincrement())
+  kind String
+  timestamp Int
+  fields String
+
+  @@unique([kind, timestamp])
+  @@index([timestamp])
 }
 
 model calibration_profiles {
@@ -143,5 +155,4 @@ model calibration_runs {
 
   @@index([side, started_at])
 }
-
 

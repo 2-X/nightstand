@@ -12,7 +12,7 @@ type BiometricsSummaryCardProps = {
 
 type TileProps = {
   title: string;
-  value: number;
+  value: number | null;
   unit: string;
 };
 
@@ -47,7 +47,7 @@ function Tile({ title, value, unit }: TileProps) {
         >
           { value || '\u2014' }
         </Typography>
-        { value > 0 && (
+        { value !== null && value > 0 && (
           <Typography sx={ { fontSize: '0.8rem', color: palette.text.tertiary } }>
             { unit }
           </Typography>
@@ -77,7 +77,7 @@ export default function VitalsSummaryCard({ startTime, endTime }: BiometricsSumm
           <Tile title="Avg HR" value={ vitalsSummary.avgHeartRate } unit="bpm" />
           <Tile title="Min HR" value={ vitalsSummary.minHeartRate } unit="bpm" />
           <Tile title="Max HR" value={ vitalsSummary.maxHeartRate } unit="bpm" />
-          <Tile title="HRV" value={ vitalsSummary.avgHRV } unit="ms" />
+          <Tile title="HRV (SDNN)" value={ vitalsSummary.avgHRV } unit="ms" />
           <Tile title="Breath" value={ vitalsSummary.avgBreathingRate } unit="brpm" />
         </Box>
       ) }
