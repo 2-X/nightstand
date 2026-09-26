@@ -130,7 +130,7 @@ export default function Navbar() {
       >
         <Toolbar>
           <div style={ { flexGrow: 1 } }>
-            <img src={ freeSleepIcon } alt="Join our Discord" width={ 45 } height={ 45 } />
+            <img src={ freeSleepIcon } alt="Nightstand" width={ 45 } height={ 45 } />
           </div>
           <Box sx={ { display: 'flex', gap: 2 } }>
             { pages.map(({ title, route }) => {

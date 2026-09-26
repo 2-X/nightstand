@@ -50,6 +50,6 @@ See the "Switching from another free-sleep fork" section in
 ## Where issues go
 
 Issues with Nightstand's own changes belong in this repository. Issues with the
-projects it descends from belong upstream: the original project keeps a
-community [Discord](https://discord.gg/JpArXnBgEj), and its fork history is
-worth reading if you want the fuller story of how local Pod control came to be.
+projects it descends from belong upstream. The original project's fork history
+is worth reading if you want the fuller story of how local Pod control came to
+be.

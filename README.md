@@ -250,10 +250,7 @@ it away:
 
 - [throwaway31265](https://github.com/throwaway31265/free-sleep) built the
   original project: the installer, the server, the app, and the biometrics
-  pipeline. If it helps you, consider supporting them via
-  [PayPal](https://paypal.me/realfreesleep) or BTC
-  (`bc1qjapkufh65gs68v2mkvrzq2ney3vnvv87jdxxg6`). Community support for the
-  original project lives in its [Discord](https://discord.gg/JpArXnBgEj).
+  pipeline.
 - [jmew](https://github.com/jmew/free-sleep) built the fork this repo is
   based on, adding presence detection, sleep stages, one-off alarms,
   adjustable base control, and the WebSocket UI.
@@ -272,8 +269,7 @@ Local control:
 
 - [free-sleep](https://github.com/throwaway31265/free-sleep), the original
   project. Nightstand is a patch set on top of it, and it has the largest
-  userbase in this space. Its community lives in the project
-  [Discord](https://discord.gg/JpArXnBgEj).
+  userbase in this space.
 - [jmew/free-sleep](https://github.com/jmew/free-sleep), the fork that added
   presence detection, sleep stages and score, one-off alarms, adjustable base
   control, and the WebSocket UI.

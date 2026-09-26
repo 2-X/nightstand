@@ -5,7 +5,7 @@ welcome to open issues and PRs, and useful fixes will get merged, but there's
 no roadmap, no SLA, and no promise that a feature request goes anywhere. If
 you want changes for the broader project, take them to
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep)
-(coordinate on their Discord first, per their CONTRIBUTING.md) or to
+(following their CONTRIBUTING.md) or to
 [jmew/free-sleep](https://github.com/jmew/free-sleep), which this fork is
 based on.
 

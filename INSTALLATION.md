@@ -286,7 +286,7 @@ http://192.168.1.50:3000/
 4. Using the free-sleep site, set a temperature. (I would suggest the highest temp on one side and the lowest temp on the other side)
 5. Physically verify the temps change (lay on the cover, use a thermometer, whatever)
 6. If the temps change, you're all set! 
-7. If it's not working, reach out in Discord and share the output of `fs-debug`
+7. If it's not working, open an issue on this repository and include the output of `fs-debug`
 
 ## 18. Add an ssh config
 - This will ask for a public key, ssh access is on port 8822 (ex: `ssh root@<POD_IP> -p 8822')
