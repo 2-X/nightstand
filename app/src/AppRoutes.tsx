@@ -38,11 +38,6 @@ export default function AppRoutes() {
 
           <Route path="changelog" element={ <ChangelogPage/> }/>
 
-          { /* Not yet linked from Settings: the channel picker and
-               per-release install need a real releases.json history,
-               which this tree does not have with only one release
-               published so far. Reachable by URL so the code
-               stays real and tested rather than a stub. */ }
           <Route path="settings/versions" element={ <VersionsPage/> }/>
 
           <Route path="settings" element={ <SettingsPage/> }/>
