@@ -21,13 +21,32 @@
 
 set -e
 
-ARCHIVE=/persistent/free-sleep-data/raw-archive
-RETENTION_HOURS=36
+# The overrides exist for tests; systemd runs this with none of them set.
+PERSIST=${ARCHIVE_RAW_PERSIST:-/persistent}
+ARCHIVE=${ARCHIVE_RAW_DIR:-/persistent/free-sleep-data/raw-archive}
+CONF=${ARCHIVE_RAW_CONF:-/persistent/free-sleep-data/raw-archive.conf}
+MIN_FREE_KB=${ARCHIVE_RAW_MIN_FREE_KB:-2097152}
+
+# 14 days by default. The server writes CONF from the retention setting.
+# CONF sits in a directory the server user can write and this script runs as
+# root, so the value is parsed as a bare number and never sourced.
+RETENTION_HOURS=336
+if [ -f "$CONF" ]; then
+  conf_hours=$(sed -n 's/^RETENTION_HOURS=\([0-9]\{1,5\}\)$/\1/p' "$CONF" 2>/dev/null | head -1)
+  if [ -n "$conf_hours" ] && [ "$conf_hours" -ge 24 ] && [ "$conf_hours" -le 1440 ]; then
+    RETENTION_HOURS=$conf_hours
+  fi
+fi
 
 mkdir -p "$ARCHIVE"
+# Root deletes files in here, so refuse a directory swapped for a link.
+if [ -L "$ARCHIVE" ]; then
+  echo "archive-raw: refusing to run, $ARCHIVE is a symlink"
+  exit 1
+fi
 
 linked=0
-for src in /persistent/*.RAW; do
+for src in "$PERSIST"/*.RAW; do
   [ -f "$src" ] || continue
   base=$(basename "$src")
   # Skip the firmware's sequencer state file
@@ -39,13 +58,32 @@ for src in /persistent/*.RAW; do
   fi
 done
 
-# Prune the archive to keep only the last RETENTION_HOURS of files.
-# 36 h x 4 files/h x 6.7 MB is about 1 GB max footprint, well under the
-# 14 GB free we have on /persistent.
-pruned=$(find "$ARCHIVE" -type f -name '*.RAW' -mmin "+$((RETENTION_HOURS * 60))" -print -delete 2>/dev/null | wc -l)
+# Prune the archive to keep only the last RETENTION_HOURS of files. The
+# archive grows by roughly 0.4 GB a day.
+pruned=$(($(find "$ARCHIVE" -type f -name '*.RAW' -mmin "+$((RETENTION_HOURS * 60))" -print -delete 2>/dev/null | wc -l)))
+
+free_kb() {
+  df -kP "$ARCHIVE" 2>/dev/null | awk 'NR == 2 { print $4 }'
+}
+
+# Keep at least MIN_FREE_KB free on the data partition by dropping the oldest
+# archived files first. Sorted by mtime: the firmware's file names are
+# sequence numbers, not times.
+floor_pruned=0
+avail=$(free_kb)
+while [ -n "$avail" ] && [ "$avail" -lt "$MIN_FREE_KB" ]; do
+  oldest=$(ls -1tr "$ARCHIVE"/*.RAW 2>/dev/null | head -1)
+  if [ -z "$oldest" ]; then
+    echo "archive-raw: WARNING free space ${avail}KB is below ${MIN_FREE_KB}KB with the archive empty; something else is filling the disk"
+    break
+  fi
+  rm -f -- "$oldest"
+  floor_pruned=$((floor_pruned + 1))
+  avail=$(free_kb)
+done
 
 # Quiet on idle, single-line summary on activity (avoids journald spam
 # but keeps the timer's output meaningful when something happens).
-if [ "$linked" -gt 0 ] || [ "$pruned" -gt 0 ]; then
-  echo "archive-raw: linked=$linked pruned=$pruned (retention=${RETENTION_HOURS}h)"
+if [ "$linked" -gt 0 ] || [ "$pruned" -gt 0 ] || [ "$floor_pruned" -gt 0 ]; then
+  echo "archive-raw: linked=$linked pruned=$pruned floor_pruned=$floor_pruned (retention=${RETENTION_HOURS}h)"
 fi
