@@ -20,12 +20,21 @@ system. That is the recovery floor: annoying, not fatal.
 1. **Losing SSH access**, the only true "locked out" scenario short of a
    firmware reset. Never: change sshd config or port 8822, delete the root or
    rewt users, change their passwords casually, or add iptables **INPUT**
-   rules. (`block_internet_access.sh` only filters OUTPUT, that's why it's
-   safe to run.)
-2. **The stock updater clobbering the fork**, the in-app update button runs
-   `scripts/update.sh`, which reinstalls from upstream `throwaway31265/main`,
-   wiping our changes. Our fork's `update.sh` has a guard at the top that
-   makes it refuse to run. Keep that guard through merges.
+   rules. (`block_internet_access.sh` does touch INPUT, but only to allow the
+   LAN classes, loopback, NTP, and Tailscale through before its final DROP;
+   a LAN-based SSH session stays reachable. A careless custom INPUT rule is
+   the real risk, not this script.)
+2. **Installing over the fork by accident**, the in-app update button runs
+   `scripts/update.sh`, which by default downloads from this fork's own repo
+   (`LTimothy/nightstand`), not upstream, so a normal update cannot silently
+   replace our changes. The one thing that deliberately installs plain
+   upstream (`throwaway31265/free-sleep`) is the separate "Revert to stock
+   upstream free-sleep" action in Settings -> Versions
+   (`scripts/revert-to-stock.sh`, `free-sleep-revert.service`), which is
+   itself backed up and health-checked the same as every other swap here.
+   There is no way back to this fork from inside a stock install afterward:
+   re-adopting it means running `scripts/migrate/switch-to-this-fork.sh`
+   again.
 3. **Filling a disk**, `/` (5.9G) hosts two full trees during deploys;
    `/persistent` (15G) holds backups, the DB, and the firmware's rolling RAW
    buffer. `deploy.sh` refuses to run below 1.5G / 2G free and prunes old
@@ -67,10 +76,13 @@ system. That is the recovery floor: annoying, not fatal.
 3. `ops/rollback.sh`, instant swap to the previous deploy.
 4. `ops/rollback.sh --list` then `--from <name>`, restore an older backup
    (code + you can hand-restore its `free-sleep.db` / `lowdb/` copies).
-5. Stock reinstall from upstream: on the pod, temporarily unblock WAN
-   (`sh scripts/unblock_internet_access.sh`), run upstream's install.sh
-   one-liner from INSTALLATION.md, re-block WAN. Loses fork changes, keeps
-   data.
+5. "Revert to stock upstream free-sleep" in Settings -> Versions (or, if the
+   app itself is unreachable, `systemctl start free-sleep-revert.service` on
+   the pod): unblocks WAN, installs `throwaway31265/free-sleep` main,
+   re-blocks WAN, backs up first and rolls back automatically if the health
+   check fails. Loses fork changes, keeps data. No way back to this fork from
+   inside the stock install; re-run `scripts/migrate/switch-to-this-fork.sh`
+   to return.
 6. Eight Sleep firmware reset (see INSTALLATION.md), full stock recovery.
 
 ## Standing state to remember

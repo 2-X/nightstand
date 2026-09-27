@@ -94,7 +94,7 @@ buffer truncates it. See `biometrics/load_raw_files.py` and
 | `capSense` (Pod 3) / `capSense2` (Pod 4/5) | Capacitance sensor readings; Pod 5's `capSense2` shape is normalized to the legacy `capSense` fields (`out`/`cen`/`in`) | ✅ yes |
 | `bedTemp` (Pod 3, v1 integer centidegrees) / `bedTemp2` (Pod 4/5, float °C, `temps[]` array) | Bed-surface temperature sensors | `bedTemp` yes, `bedTemp2` intentionally not consumed yet (Pod 5 writes `bedTemp2`, kept for a future project) |
 | `frzTemp` | `{amb, hs, left, right}`: ambient, heatsink, and per-side hub sensor temps in centidegrees C | ✅ yes: feeds the Settings page sensor-temp display |
-| `frzHealth` | `{left, right, fan}`, each side `{tec: {current}, pump: {mode, rpm, water}, temps: {flowrate}}`: see [pump/thermal telemetry](#pumpthermal-telemetry-frzhealth) below | ✅ yes, as of v3.1.0: pump-stall detection only |
+| `frzHealth` | `{left, right, fan}`, each side `{tec: {current}, pump: {mode, rpm, water}, temps: {flowrate}}`: see [pump/thermal telemetry](#pumpthermal-telemetry-frzhealth) below | ✅ yes, as of v3.0.0: pump-stall detection only |
 | `frzTherm` | `{left, right}`, each either a number or `{target, power, valid, enabled}` | 📖 documented by sleepypod/core, not yet used or verified by us |
 | `log` | Firmware's own internal log lines | not consumed |
 
@@ -102,7 +102,7 @@ buffer truncates it. See `biometrics/load_raw_files.py` and
 
 Sample decoded from this pod's own RAW archive:
 
-```
+```python
 {'type': 'frzHealth', 'ts': 1783654226, 'version': 1,
  'left':  {'tec': {'current': 11.99}, 'pump': {'mode': 'pwm', 'rpm': 1928, 'water': True}, 'temps': {'flowrate': 24.94}},
  'right': {'tec': {'current': 7.86},  'pump': {'mode': 'pwm', 'rpm': 2000, 'water': True}, 'temps': {'flowrate': 24.63}},
@@ -150,7 +150,7 @@ than a detection threshold.
 Separate from everything above, the adjustable base is controlled over
 Bluetooth LE via `bluetoothctl`, not `dac.sock`. See
 `server/src/8sleep/trimixBaseControl.ts` for the packet format (20-byte
-frames, `0xff 0xff 0xff 0xff` header, checksum byte). Not duplicated here;
+frames, `0xff 0xff 0xff 0xff` header, a 2-byte checksum). Not duplicated here;
 that file is the source of truth and already has inline documentation.
 
 ## Hardware generation detection

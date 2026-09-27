@@ -1,4 +1,4 @@
-# Nightstand Agent Notes
+# Nightstand agent notes
 
 ## Working here as (or with) an AI agent
 
@@ -19,12 +19,12 @@ If you point an agent at this repo, have it read this file and CONTRIBUTING.md
 first, and [docs/EIGHT_SLEEP_PROTOCOL.md](docs/EIGHT_SLEEP_PROTOCOL.md) before
 it touches anything hardware-adjacent.
 
-## What This Repo Is
-- Nightstand is a local controller for 8 Sleep Pods. The server runs on the Pod's embedded Linux system and exposes a local REST API. The app is a React/MUI web UI served by the server.
+## What this repo is
+- Nightstand is a local controller for Eight Sleep Pods. The server runs on the Pod's embedded Linux system and exposes a local REST API. The app is a React/MUI web UI served by the server.
 - The Pod hardware is controlled through a Unix socket called `dac.sock`; this repo calls that integration "Franken" or "Franken sock".
 - Persistent user data lives under `/persistent/free-sleep-data/` on the Pod. Local development mirrors parts of that under `server/free-sleep-data/`.
 
-## Top-Level Layout
+## Top-level layout
 - `app/`: Vite React frontend using MUI, Zustand, React Query, and Axios.
 - `server/`: Express TypeScript backend, LowDB JSON settings/schedules, Prisma SQLite metrics, node-schedule jobs, and Franken socket control.
 - `biometrics/`: Python stream processing, sleep detection, vitals calculation, and SQLite writes for biometrics.
@@ -36,7 +36,7 @@ it touches anything hardware-adjacent.
   constants used for sleep detection as hardware fact, timing margin,
   population bound, or per-bed learned).
 
-## Common Commands
+## Common commands
 - App typecheck: `cd app && npx tsc -b`
 - App lint: `cd app && npm run lint`
 - App dev server: `cd app && VITE_POD_IP=<pod-ip> npm run dev`
@@ -45,13 +45,13 @@ it touches anything hardware-adjacent.
 - Server hot reload on Pod: `fs-dev-server` per `server/README_SERVER.md`
 - Server local dev: `cd server && npm run dev:local`
 
-## Runtime Notes
+## Runtime notes
 - `server/src/config.ts` requires `DATA_FOLDER` and `ENV`; Pod runtime gets these through `server/.env.pod` via `npm start`.
 - `server/src/jobs/jobScheduler.ts` schedules jobs at import time and watches the LowDB folder for changes. Writes to settings or schedules trigger full job cancellation and recreation.
 - Schedule data is stored in `schedulesDB.json`; settings are stored in `settingsDB.json`; service health is stored in `servicesDB.json`.
 - The app imports schemas directly from `server/src/db/*Schema.ts`; schema changes must remain compatible with both app and server TypeScript settings.
 
-## Scheduling Hotspots
+## Scheduling hotspots
 - Client schedule state lives in `app/src/pages/SchedulePage/scheduleStore.tsx`.
 - Schedule save payloads are assembled in `app/src/pages/SchedulePage/SchedulePage.tsx`.
 - Server schedule writes are handled by `server/src/routes/schedules/schedules.ts`.
@@ -61,7 +61,7 @@ it touches anything hardware-adjacent.
   - `server/src/jobs/alarmScheduler.ts`
   - `server/src/jobs/primeScheduler.ts`
 
-## Franken Hotspots
+## Franken hotspots
 - Socket lifecycle: `server/src/8sleep/frankenServer.ts`
 - Socket server wrapper: `server/src/8sleep/unixSocketServer.ts`
 - Message parsing: `server/src/8sleep/messageStream.ts`
@@ -93,7 +93,7 @@ it touches anything hardware-adjacent.
   socket, go through the existing `/api/deviceStatus` or `/api/jobs`
   endpoints instead, which reuse the server's managed connection.
 
-## Review Cautions
+## Review cautions
 - Check timezone behavior with `moment-timezone`; the app sets a default timezone after settings load, and server jobs set `RecurrenceRule.tz`.
 - Prefer adding tests or small reproductions around scheduling time math before changing job timing.
 - When reviewing install/update scripts, remember they run as root or through sudo on an embedded Yocto-based system.

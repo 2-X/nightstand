@@ -1,48 +1,48 @@
 # Biometrics
 
-## Stream Processor - Calculates vitals (`stream/`)
+## Stream processor, calculates vitals (`stream/`)
 
 - `stream.py`: Monitors the latest `.RAW` file and continuously processes biometric data.
 - `stream_processor.py`: Buffers piezoelectric sensor data for presence detection and biometric calculations.
 - `biometric_processor.py`: Processes real-time piezo data to extract heart rate, HRV, and breathing rate.
 
-## Sleep Detection (`sleep_detection/`)
+## Sleep detection (`sleep_detection/`)
 
 - `calibrate_sensor_thresholds.py`: Establishes a baseline for capacitance sensors.
 - `analyze_sleep.py`: Processes raw data and detects sleep intervals.
 - `cap_data.py`: Loads and processes capacitance sensor data to detect presence.
 - `sleep_detector.py`: Merges piezo and capacitance presence data to determine sleep sessions.
 
-## Vital Signs Calculation (`vitals/`)
+## Vital signs calculation (`vitals/`)
 
 - `calculate_vitals.py`: Loads piezo data, estimates heart rate, HRV, and breathing rate.
 - `calculations.py`: Implements signal processing, filtering, and biometric estimation.
 - `run_data.py`: Manages runtime parameters for sliding window calculations.
 
-## Database Management (`db.py`)
+## Database management (`db.py`)
 
 - Handles SQLite database operations for storing sleep records and vitals.
 - Uses `sqlite3` with a persistent connection and WAL mode for performance.
 - Provides functions for inserting vitals and sleep records while avoiding duplicates.
 
-## Raw Data Handling (`load_raw_files.py`)
+## Raw data handling (`load_raw_files.py`)
 
 - Loads `.RAW` files from the pod, decodes CBOR-encoded data, and extracts piezo and capacitance sensor readings.
 - Filters data based on timestamps and sensor types.
 - Implements memory optimization techniques such as garbage collection.
 
-## Data Types (`data_types.py`)
+## Data types (`data_types.py`)
 
 - Defines structured data models (`TypedDict`) for various biometric readings.
 - Includes schemas for heart rate, HRV, breathing rate, and sensor readings.
 
-## Piezo Data Processing (`piezo_data.py`)
+## Piezo data processing (`piezo_data.py`)
 
 - Loads and processes piezo sensor data for biometric calculations.
 - Detects presence using a rolling window method based on sensor range thresholds.
 - Identifies baseline periods for calibrating the system.
 
-## Data Sources
+## Data sources
 
 - There's 2 main sensors used to measure biometrics, they're both available in /persistent/*.RAW files
 - This data is only available if the Pod cannot access the internet. You can block internet access to the pod by setting
@@ -121,12 +121,12 @@
 `biometric_processor.detect_presence()` decides per-second whether someone is on a given side:
 
 1. Compute the percentile-based range (p98 - p2) of each piezo signal, then take the max of available piezos.
-2. Cross-side `_PresenceCoordinator` arbitrates between left and right based on a dominance ratio (1.3×) and a noise floor (100,000) so mechanical transmission through the mattress doesn't read as occupancy on the empty side.
-3. Hysteresis: 3 consecutive "elevated" readings flip presence to true; **180 seconds** of "not elevated" before flipping back to false. The long timeout exists because piezos are AC-coupled, a perfectly still sleeper produces only tiny breathing-amplitude signal that can fall below threshold for a minute or more.
-4. On reset (the 180s timeout firing), all rolling buffers are wiped via `init_tracking()`. After re-detection, vitals only resume once `present_for > heart_rate_window_seconds` again.
+2. Cross-side `_PresenceCoordinator` arbitrates between left and right based on a dominance ratio (1.3×) and a noise floor (150,000) so mechanical transmission through the mattress doesn't read as occupancy on the empty side.
+3. Entry requires 5 consecutive seconds of clear dominance over the other side, not just any elevated reading. Exit is slower: **180 seconds** without a clear signal before flipping back to false, plus a shorter 30-second fast-exit for short sessions and a rolling-floor check that can still hold presence steady through ambiguous crosstalk. The long slow-exit timeout exists because piezos are AC-coupled, a perfectly still sleeper produces only tiny breathing-amplitude signal that can fall below threshold for a minute or more.
+4. On any exit, all rolling buffers are wiped via `reset()`/`init_tracking()`. After re-detection, vitals only resume once `present_for > heart_rate_window_seconds` again.
 
 Tunable in `biometric_processor.py`:
-- `no_presence_tolerance` (line ~179): 180s default.
+- `no_presence_tolerance` (line ~208): 180s default.
 - noise floor + dominance ratio in `_PresenceCoordinator`.
 
 If a deep sleeper shows up with multi-hour vitals gaps on the chart, the typical cause is repeated sub-threshold stillness re-triggering the timeout. Increase tolerance or lower the noise floor for that user.

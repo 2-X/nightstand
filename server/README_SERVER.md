@@ -1,14 +1,14 @@
-# Server Documentation
+# Server documentation
 
 ## Overview
-Express server intended to run on the 8 sleep pod.  
+Express server that runs on the Eight Sleep Pod.
 
 ## Developing
 
-### Hot Reloading (on Pod)
+### Hot reloading (on Pod)
 1. SSH into the Pod, stop the running service so it isn't holding the port
    or the `dac.sock` connection, and run the server directly:
-   ```
+   ```bash
    systemctl stop free-sleep
    cd /home/dac/free-sleep/server && npm run dev
 
@@ -17,7 +17,11 @@ Express server intended to run on the 8 sleep pod.
    ```
 2. Run the front-end app with hot reload and point it to your Pod [app/README_APP.md](../app/README_APP.md#Developing)
 
-### Hot Reloading (on computer, not your Pod)
+A shell alias for step 1, `fs-dev-server`, is set up on the Pod by
+`scripts/add_shortcuts.sh` (see [INSTALLATION.md](../INSTALLATION.md)); it
+runs the same stop-service-then-`npm run dev` sequence in one command.
+
+### Hot reloading (on computer, not your Pod)
 - `npm run dev:local`
 
 A remote-file-sync feature in your editor (VS Code's
@@ -32,12 +36,12 @@ instead of needing a separate deploy step per edit.
 ## Architecture
 The server is composed of the following key components:
 
-### 1. **Core Server (`server.ts`):**
+### 1. Core server (`server.ts`)
 - Sets up and starts an Express.js server.
 - Initializes middleware and routes.
 - Manages graceful shutdown processes for reliability.
 
-### 2. **Routes:**
+### 2. Routes
 
 Device control:
 - **`/api/deviceStatus`:** Fetches and updates the status of the device.
@@ -47,6 +51,9 @@ Device control:
 - **`/api/alarm`:** Trigger / dismiss the bed-vibration alarm.
 - **`/api/base-control`:** Adjustable-base position control (Pod 4+): get state, set head/foot %, run preset, stop.
 - **`/api/jobs`:** Manually run a scheduled job (e.g. analyze-sleep) on demand.
+- **`/api/update`:** Start an install/rollback (writes the update target, then triggers `scripts/update.sh`), plus `/api/update/rollback-info` and `/api/update/rollback` for the instant-rollback flow.
+- **`/api/calibration`:** Read the per-side capacitive-sensor calibration profile and its most recent run.
+- **`/api/changelog`:** Parsed `CHANGELOG.md` entries for the in-app changelog view (cached for the life of the process).
 
 Biometrics & sleep data:
 - **`/api/metrics/vitals`** + **`/api/metrics/vitals/summary`:** Heart rate, HRV, breathing rate (raw rows + summary stats).
@@ -58,59 +65,65 @@ Biometrics & sleep data:
 
 Operations & introspection:
 - **`/api/serverStatus`:** Health snapshot of every service (express, jobs, franken socket, biometrics, etc.).
-- **`/api/services`:** Toggle and inspect service state (e.g., enable/disable biometrics, sentry).
+- **`/api/services`:** Toggle and inspect service state (currently just enable/disable biometrics and its per-job status).
 - **`/api/logs`** + **`/api/logs/:filename`:** List log files and stream content via SSE.
 - **`/api/metrics/server`:** In-process metrics, Franken command latency p50/p95,
   timeout count, queue depth, WS client count, job exec counts, memory/uptime.
   Read-only JSON; useful for debugging on the pod (`curl localhost:3000/api/metrics/server`).
+- **`/api/storage`:** Disk usage on `/persistent` (logs, RAW archive, SQLite files).
+- **`/api/memory`:** RAM usage (`/proc/meminfo` on the Pod, `os.*` APIs elsewhere).
 
-### 3. **WebSocket, `/ws/events`:**
+### 3. WebSocket (`/ws/events`)
 - Real-time push channel for the React app. Frames are JSON envelopes
   `{ channel, payload, ts }` with channels:
   - `device-status`, full DeviceStatus snapshot whenever it changes (the
     FrankenMonitor diffs and only emits on actual change). The app uses this
     to update React Query's cache in place; no follow-up HTTP refetch.
   - `service-health`, partial server-status patch when a check transitions
-    (healthy ↔ failed). Triggers a `useServerStatus` invalidation on the client.
+    (healthy or failed). Triggers a `useServerStatus` invalidation on the client.
   - `job-event`, fired when a scheduled job starts / succeeds / fails
     (alarms, temperature changes, prime, etc.).
-- Heartbeat: server pings every 15s and drops sockets that miss two pongs.
+- Heartbeat: server pings every 15s; a client that has not answered the
+  previous ping by the next tick is dropped, so a dead connection is
+  detected within one to two heartbeat intervals.
 - Client wraps native `WebSocket` (no library); auto-reconnects with
   exponential backoff up to 30s. While disconnected, the React Query hooks
-  fall back to their 30-60s polling.
-- Adaptive polling: `FrankenMonitor` runs at 2s while ≥1 WS client is
-  connected, 10s when idle. (Pod 4+ only, Pod 3's slower path was removed.)
+  fall back to their own polling interval (per hook; mostly 30 to 60 seconds).
+- `FrankenMonitor` polls the Franken socket at a fixed 2s regardless of
+  WebSocket client count (Pod 4+ only, Pod 3's slower path was removed): this
+  loop is also where physical tap gestures are detected, so it stays fast
+  even when nobody has the app open.
 
-### 4. **Command timeouts (`Franken`):**
-- Every dac.sock command is now bounded by `FRANKEN_COMMAND_TIMEOUT_MS`
+### 4. Command timeouts (`Franken`)
+- Every dac.sock command is bounded by `FRANKEN_COMMAND_TIMEOUT_MS`
   (default 5000, env-overridable). On timeout the queued caller is rejected
   and the connection is torn down so the next call rebuilds it. Previously,
   a hung pod stalled the entire server until process restart.
 
-### 5. **Jobs Scheduler (`src/jobs/`):**
+### 5. Jobs scheduler (`src/jobs/`)
 - Schedules periodic tasks like temperature adjustments, power on/off, and device priming using the `node-schedule` library.
-- Monitors changes to the DB storage files in `src/db/`, clears all schedules and recreates them every time changes are made
+- Watches the LowDB folder (`src/db/`) and, on a change to schedules or settings, clears and recreates all jobs. Changes to `servicesDB.json` (job-status pings, sensor readings) are ignored since they never need a reschedule.
 
-
-### 6. **Database (`src/db/`):**
+### 6. Database (`src/db/`)
 Hybrid setup, different storage backends for different data shapes:
 - **LowDB (JSON files at `/persistent/free-sleep-data/lowdb/`)** for low-volume config data:
   - `schedulesDB.json`, daily schedules (power, temperature, alarms)
   - `settingsDB.json`, timezone, away mode, prime time, etc.
+  - `servicesDB.json`, service enable/disable state and per-job status
   - Schemas validated with `zod`. Files are created on first run; you do not need to create them.
-- **SQLite via Prisma (`/persistent/free-sleep-data/free-sleep.db`)** for biometric time-series:
-  - Tables: `vitals`, `movement`, `sleep_records` (schema in `prisma/schema.prisma`).
-  - Migrations in `prisma/migrations/` are applied on server startup.
+- **SQLite via Prisma (`/persistent/free-sleep-data/free-sleep.db`)** for biometric time-series and calibration:
+  - Tables: `vitals`, `movement`, `sleep_records`, `calibration_profiles`, `calibration_runs`, `water_level_events` (schema in `prisma/schema.prisma`).
+  - Migrations in `prisma/migrations/` are not applied by the server process itself. `scripts/install.sh` runs `prisma migrate deploy` on a fresh install, and `scripts/update.sh` runs it (with retries, skipped on a version downgrade) as part of every update.
   - Read paths: `loadVitalsRecords.ts`, `loadMovementRecords.ts`, `loadSleepRecords.ts`.
 
 
-### 7. **8 Sleep Integration (`src/8sleep/`):**
+### 7. Eight Sleep integration (`src/8sleep/`)
 - Contains utilities to communicate with the "Franken" device using Unix sockets.
-  - This is based off of the EXISTING code on the pod in /home/dac/app/
+  - This is based on the existing code on the Pod in `/home/dac/app/`.
 
 ---
 
-## Key Features
+## Key features
 
 ### Device control
 - The server connects to the device using a Unix socket @ `/deviceinfo/dac.sock` (varies by Pod version & firmware version, path is detected in install.sh script and saved to `/persistent/free-sleep-data/dac_sock_path.txt`)
@@ -144,13 +157,13 @@ Hybrid setup, different storage backends for different data shapes:
 
 ---
 
-## File Structure
-```
+## File structure
+```text
 server/
 ├── free-sleep-data/        # Local-dev mirror of /persistent/free-sleep-data/ on the Pod
 ├── prisma/
-│   ├── schema.prisma       # SQLite schema for vitals, movement, sleep_records
-│   └── migrations/         # Auto-applied on server start
+│   ├── schema.prisma       # SQLite schema for vitals, movement, sleep_records, calibration
+│   └── migrations/         # Applied by scripts/install.sh and scripts/update.sh, not by the server
 ├── src/
 │   ├── 8sleep/             # Franken socket client (dac.sock), command queue, monitor
 │   ├── db/                 # LowDB stores + Prisma client + read helpers
@@ -158,11 +171,12 @@ server/
 │   ├── jobs/               # node-schedule jobs + jobEvents emitter
 │   ├── metrics/            # In-process metrics (latency histograms, queue depth, WS clients)
 │   ├── routes/             # Express routes (one folder per resource group)
-│   │   ├── alarm/  baseControl/  deviceStatus/  execute/  jobs/  logs/
+│   │   ├── alarm/  baseControl/  calibration/  changelog/  deviceStatus/
+│   │   ├── execute/  jobs/  logs/  memory/  storage/  update/
 │   │   ├── metrics/        # vitals, movement, sleep, sleepStages, sleepScore, presence
 │   │   ├── metricsServer/  # /api/metrics/server
 │   │   ├── schedules/  serverStatus/  services/  settings/
-│   ├── ws/                 # WebSocket server (heartbeat + eventBus → clients)
+│   ├── ws/                 # WebSocket server (heartbeat + eventBus -> clients)
 │   ├── setup/              # Middleware + route registration
 │   ├── logger.ts           # Logging configuration
 │   ├── server.ts           # Core server entry point
@@ -260,7 +274,9 @@ sleepers who woke up more than ~1 hour before it ran.
 into `/persistent/free-sleep-data/raw-archive/` on a 1-min systemd timer.
 Hardlinks share inodes, frank's `rm` removes its filesystem entry, our
 entry keeps the data alive (no double-counting against disk until frank
-actually deletes). 36 h retention caps the archive at ~1 GB. The biometrics
+actually deletes). Retention is 14 days by default (about 5.5 GB), set in
+Settings from 2 days to 2 months, and the oldest files go first if the data
+partition drops below 2 GB free. The biometrics
 loader [`load_raw_files.py`](../biometrics/load_raw_files.py) scans both
 `/persistent/` and the archive (deduped by filename), so analyze always
 sees the previous 12 h regardless of when it runs.

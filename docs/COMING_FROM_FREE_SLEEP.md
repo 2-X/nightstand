@@ -29,8 +29,8 @@ general-purpose platform, and a few choices follow from that:
   install.
 - **Evidence-based sleep features.** Presence detection, the sleep score, and
   the temperature features are built to be inspectable and honest about their
-  limits. The changelog documents root causes, not just symptoms, including the
-  things that are known to be imperfect.
+  limits. The changelog documents root causes, including the things that are
+  known to be imperfect.
 
 ## How to move your Pod over
 

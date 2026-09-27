@@ -167,7 +167,7 @@ state at any time. There is no permanent modification to the hardware.
   [Tailscale](https://tailscale.com), encrypted and with no public exposure of
   the pod. See [INSTALLATION.md step 20](INSTALLATION.md) for setup.
 
-### Biometrics 📈
+### Biometrics
 - **The only biometrics data that has been validated is heart rate.** HRV and
   breathing rates have not been validated and may be inaccurate.
   Heart rates were validated by the original project over 33 sleep periods
