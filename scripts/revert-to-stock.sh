@@ -132,6 +132,9 @@ if [ "$HEALTHY" = yes ]; then
   # These units point at scripts that no longer exist in $LIVE.
   say "Removing fork-only systemd units (instant rollback, this revert service)"
   rm -f /etc/systemd/system/free-sleep-rollback.service /etc/systemd/system/free-sleep-revert.service
+  # Stock never installs these. They take effect at the next service start.
+  rm -f /etc/systemd/system/free-sleep.service.d/10-nightstand-limits.conf \
+    /etc/systemd/system/free-sleep-stream.service.d/10-nightstand-limits.conf
   systemctl daemon-reload >/dev/null 2>&1 || true
   exit 0
 fi
