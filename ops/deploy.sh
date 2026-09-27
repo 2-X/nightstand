@@ -246,6 +246,10 @@ elif [ "$SCHEMA_CHANGED" = "yes" ]; then
     || MIGRATION_FAILED=yes
 fi
 
+# Same as update.sh: before the start below, so the limits apply to it.
+SSH "[ ! -f $LIVE/scripts/setup_resource_limits.sh ] || bash $LIVE/scripts/setup_resource_limits.sh" \
+  || say "WARNING: failed to install service memory limits"
+
 SSH "systemctl start free-sleep"
 # jmew's biometrics stream service runs out of the same tree; if it's active,
 # bounce it so it picks up the swapped code instead of holding stale handles.
