@@ -207,6 +207,7 @@ EOF
 echo "Reloading systemd daemon and enabling the service..."
 systemctl daemon-reload
 systemctl enable free-sleep.service
+bash "$REPO_DIR/scripts/setup_resource_limits.sh" || echo "WARNING: failed to install service memory limits"
 
 echo "Starting free-sleep.service..."
 systemctl start free-sleep.service

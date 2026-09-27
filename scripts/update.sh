@@ -293,6 +293,12 @@ elif [ "$SCHEMA_CHANGED" = yes ]; then
     || MIGRATION_FAILED=yes
 fi
 
+# Before the start below, so the limits apply to the processes it starts.
+if [ -f "$LIVE/scripts/setup_resource_limits.sh" ]; then
+  bash "$LIVE/scripts/setup_resource_limits.sh" \
+    || say "WARNING: failed to install service memory limits; the services run unbounded until the next successful update"
+fi
+
 systemctl start free-sleep
 # Plain restart when the streamer was running before, since the prisma step
 # above may have stopped it and try-restart would leave a stopped unit stopped.
