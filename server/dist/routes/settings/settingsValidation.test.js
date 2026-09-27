@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it, before, after } from 'node:test';
-import { mkdtempSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:http';
@@ -102,5 +102,18 @@ describe('POST /settings one-off alarm fireAt validation', () => {
         const res = await oneOffAlarm('');
         assert.equal(res.status, 200, `expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
     });
+});
+describe('POST /settings rawArchiveRetentionDays', () => {
+    it('writes the archiver conf when the retention changes', async () => {
+        const res = await postSettings({ rawArchiveRetentionDays: 7 });
+        assert.equal(res.status, 200, `expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
+        assert.equal(readFileSync(path.join(dataFolder, 'raw-archive.conf'), 'utf8'), 'RETENTION_HOURS=168\n');
+    });
+    for (const days of [0, 61, 2.5]) {
+        it(`rejects ${days} days`, async () => {
+            const res = await postSettings({ rawArchiveRetentionDays: days });
+            assert.equal(res.status, 400, `expected 400, got ${res.status}`);
+        });
+    }
 });
 //# sourceMappingURL=settingsValidation.test.js.map

@@ -87,6 +87,12 @@ class ServerStatus {
                 description: 'Temperature adjustment schedule',
                 message: '',
             },
+            waterTank: {
+                name: 'Water tank',
+                status: 'not_started',
+                description: 'Water level in the tank',
+                message: '',
+            },
         };
     }
     static getInstance() {

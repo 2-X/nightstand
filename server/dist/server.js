@@ -3,6 +3,7 @@ import schedule from 'node-schedule';
 import logger from './logger.js';
 import { connectFranken, disconnectFranken, getFrankenQueueDepth } from './8sleep/frankenServer.js';
 import { FrankenMonitor } from './8sleep/frankenMonitor.js';
+import { initWaterLevel } from './8sleep/waterLevel.js';
 import { startPresenceAutoOff, stopPresenceAutoOff } from './8sleep/presenceAutoOffMonitor.js';
 import './jobs/jobScheduler.js';
 // Setup code
@@ -14,6 +15,8 @@ import { prisma } from './db/prisma.js';
 import { loadWifiSignalStrength } from './8sleep/wifiSignalStrength.js';
 import metrics from './metrics/metrics.js';
 import { wsServer } from './ws/wsServer.js';
+import settingsDB from './db/settings.js';
+import { syncRawArchiveConf } from './jobs/rawArchiveConf.js';
 const port = 3000;
 const app = express();
 let server;
@@ -98,7 +101,10 @@ async function initFranken() {
     serverStatus.status.franken.status = 'healthy';
     logger.info('Franken has been initialized successfully.');
 }
-const initFrankenMonitor = () => {
+const initFrankenMonitor = async () => {
+    // Loads the last recorded tank level first, so the monitor's readings
+    // compare against it rather than logging it again.
+    await initWaterLevel();
     logger.info('Starting franken monitor...');
     serverStatus.status.frankenMonitor.status = 'started';
     frankenMonitor = new FrankenMonitor();
@@ -118,12 +124,12 @@ async function startServer() {
     wsServer.attach(server);
     serverStatus.status.express.status = 'healthy';
     serverStatus.status.logger.status = 'healthy';
+    // An update or a first boot can leave the file missing or stale.
+    void syncRawArchiveConf(settingsDB.data.rawArchiveRetentionDays);
     // Initialize Franken once before listening
     if (!config.remoteDevMode) {
         void initFranken()
-            .then(() => {
-            initFrankenMonitor();
-        })
+            .then(() => initFrankenMonitor())
             .catch(error => {
             serverStatus.status.franken.status = 'failed';
             const message = error instanceof Error ? error.message : String(error);

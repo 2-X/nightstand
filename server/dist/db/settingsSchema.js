@@ -98,6 +98,7 @@ export const SettingsSchema = z.object({
     }),
     temperatureFormat: Temperatures,
     rebootDaily: z.boolean(),
+    rawArchiveRetentionDays: z.number().int().min(1).max(60),
     updateChannel: UpdateChannel,
     features: FeaturesSchema,
 }).strict();

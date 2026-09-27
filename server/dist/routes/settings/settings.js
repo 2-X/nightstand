@@ -5,6 +5,7 @@ const router = express.Router();
 import settingsDB from '../../db/settings.js';
 import { SettingsSchema } from '../../db/settingsSchema.js';
 import { wouldOrphanLevelFormat } from './settingsGuards.js';
+import { syncRawArchiveConf } from '../../jobs/rawArchiveConf.js';
 router.get('/settings', async (req, res) => {
     await settingsDB.read();
     res.json(settingsDB.data);
@@ -35,6 +36,9 @@ router.post('/settings', async (req, res) => {
     }
     _.merge(settingsDB.data, validatedUpdate);
     await settingsDB.write();
+    if (validatedUpdate.rawArchiveRetentionDays !== undefined) {
+        await syncRawArchiveConf(settingsDB.data.rawArchiveRetentionDays);
+    }
     res.status(200).json(settingsDB.data);
 });
 export default router;

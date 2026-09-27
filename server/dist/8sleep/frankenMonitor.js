@@ -11,6 +11,7 @@ import serverStatus from '../serverStatus.js';
 import { trimixBase } from './trimixBaseControl.js';
 import { BASE_PRESETS } from './basePresets.js';
 import eventBus from '../events/eventBus.js';
+import { waterLevelTracker } from './waterLevel.js';
 // Pod 4+ only: gestures and the 2s cadence are the only path. The Pod 3
 // 60s slow-poll branch was removed alongside the WebSocket initiative.
 //
@@ -197,6 +198,7 @@ export class FrankenMonitor {
                     }
                     await settingsDB.read();
                     this.processGestures(nextDeviceStatus);
+                    waterLevelTracker.observe(nextDeviceStatus.waterLevel);
                     if (this.hasStatusChanged(nextDeviceStatus)) {
                         eventBus.emit('device-status', nextDeviceStatus);
                     }
