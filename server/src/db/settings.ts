@@ -51,6 +51,7 @@ const defaultData: Settings = {
   timeZone: 'UTC',
   temperatureFormat: 'fahrenheit',
   rebootDaily: true,
+  rawArchiveRetentionDays: 14,
   updateChannel: 'stable',
   left: {
     ..._.cloneDeep(defaultSideSettings),

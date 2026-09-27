@@ -18,6 +18,8 @@ import { prisma } from './db/prisma.js';
 import { loadWifiSignalStrength } from './8sleep/wifiSignalStrength.js';
 import metrics from './metrics/metrics.js';
 import { wsServer } from './ws/wsServer.js';
+import settingsDB from './db/settings.js';
+import { syncRawArchiveConf } from './jobs/rawArchiveConf.js';
 
 const port = 3000;
 const app = express();
@@ -136,6 +138,8 @@ async function startServer() {
   wsServer.attach(server);
   serverStatus.status.express.status = 'healthy';
   serverStatus.status.logger.status = 'healthy';
+  // An update or a first boot can leave the file missing or stale.
+  void syncRawArchiveConf(settingsDB.data.rawArchiveRetentionDays);
 
   // Initialize Franken once before listening
   if (!config.remoteDevMode) {

@@ -275,6 +275,7 @@ const createSettings = (): Settings => ({
   timeZone: 'America/Los_Angeles',
   temperatureFormat: 'level',
   rebootDaily: true,
+  rawArchiveRetentionDays: 14,
   updateChannel: 'stable',
   features: { ...defaultFeatures },
   left: {

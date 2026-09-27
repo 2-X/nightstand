@@ -6,6 +6,7 @@ import Section from '../Section.tsx';
 import TimeZoneSelector from './TimeZoneSelector.tsx';
 import TemperatureFormatSelector from './TemperatureFormatSelector.tsx';
 import DailyReboot from './DailyReboot.tsx';
+import RawArchiveRetention from './RawArchiveRetention.tsx';
 import LedBrightnessSlider from './LedBrightnessSlider.tsx';
 import { useSettings } from '@api/settings.ts';
 import DeviceInfo from './DeviceInfo.tsx';
@@ -27,6 +28,7 @@ export default function DeviceSettingsSection({ updateSettings }: DeviceSettings
         <TimeZoneSelector settings={ settings } updateSettings={ updateSettings }/>
         <TemperatureFormatSelector settings={ settings } updateSettings={ updateSettings }/>
         <DailyReboot settings={ settings } updateSettings={ updateSettings }/>
+        <RawArchiveRetention settings={ settings } updateSettings={ updateSettings }/>
         <LedBrightnessSlider/>
         <ErrorBoundary componentName='Device info'>
           <DeviceInfo />
