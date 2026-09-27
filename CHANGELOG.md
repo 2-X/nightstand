@@ -6,6 +6,34 @@ is a hard fork; for the history of the projects it descends from, see
 [jmew/free-sleep](https://github.com/jmew/free-sleep) and
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
 
+## [3.3.0] - 2026-09-26
+
+- The Status page has a Water tank entry. The pod reports its tank sensor on
+  every status read, and that reading only ever showed on the temperature page
+  while the tank was low. A low tank now counts as needing attention, which
+  also lights the dot on the Status tab, and the entry shows when the tank went
+  low. A change has to hold for about 30 seconds before it counts, so water
+  moving during priming does not register.
+
+- Raw sensor recordings are kept for 14 days instead of 36 hours, and Settings
+  can set anywhere from 2 days to 2 months. The recordings take about 0.4 GB a
+  day. If the data partition drops below 2 GB free, the oldest recordings are
+  removed first.
+
+- The server and the biometrics stream now run with memory limits, and their
+  processes are the first the system stops if memory runs out. The pod's
+  heating and cooling firmware shares about 1.9 GB of memory with them, so a
+  runaway analysis job should not be able to take memory it needs. The limits
+  are installed by this update and apply from the next time each service
+  starts. Reverting to stock removes them.
+
+- Settings no longer links to community chat or donation pages. Nightstand is
+  maintained independently of the projects it builds on; for help, open an
+  issue on this repository.
+
+- The guides were checked against the current code and corrected where they
+  had drifted, most of all the API reference.
+
 ## [3.2.2] - 2026-09-25
 
 - The pump warning on the Status page no longer goes off when a side is
