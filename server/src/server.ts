@@ -4,6 +4,7 @@ import { Server } from 'http';
 import logger from './logger.js';
 import { connectFranken, disconnectFranken, getFrankenQueueDepth } from './8sleep/frankenServer.js';
 import { FrankenMonitor } from './8sleep/frankenMonitor.js';
+import { initWaterLevel } from './8sleep/waterLevel.js';
 import { startPresenceAutoOff, stopPresenceAutoOff } from './8sleep/presenceAutoOffMonitor.js';
 import './jobs/jobScheduler.js';
 
@@ -110,7 +111,10 @@ async function initFranken() {
 }
 
 
-const initFrankenMonitor = () => {
+const initFrankenMonitor = async () => {
+  // Loads the last recorded tank level first, so the monitor's readings
+  // compare against it rather than logging it again.
+  await initWaterLevel();
   logger.info('Starting franken monitor...');
   serverStatus.status.frankenMonitor.status = 'started';
   frankenMonitor = new FrankenMonitor();
@@ -136,9 +140,7 @@ async function startServer() {
   // Initialize Franken once before listening
   if (!config.remoteDevMode) {
     void initFranken()
-      .then(() => {
-        initFrankenMonitor();
-      })
+      .then(() => initFrankenMonitor())
       .catch(error => {
         serverStatus.status.franken.status = 'failed';
         const message = error instanceof Error ? error.message : String(error);

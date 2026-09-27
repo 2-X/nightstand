@@ -527,6 +527,12 @@ const createServerStatus = (): ServerStatus => ({
     description: 'Temperature automation',
     message: '',
   },
+  waterTank: {
+    name: 'Water tank',
+    status: 'healthy',
+    description: 'Water level in the tank',
+    message: '',
+  },
   analyzeSleepLeft: {
     name: 'Analyze sleep - left',
     status: 'healthy',

@@ -103,6 +103,15 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
       failed: 'Pump stall suspected: the displayed temperature on this side may not be accurate.',
     },
   },
+  waterTank: {
+    group: 'biometrics',
+    blurb: "The pod's water tank sensor. Heating and cooling need water circulating.",
+    meaning: {
+      healthy: 'The tank has enough water.',
+      failed: 'The tank is low or empty. Refill it.',
+      not_started: 'Waiting for the first reading from the pod.',
+    },
+  },
   express: {
     group: 'core',
     blurb: 'The web server this app and the pod controls run on.',

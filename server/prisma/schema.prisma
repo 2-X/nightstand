@@ -83,3 +83,13 @@ model calibration_runs {
 }
 
 
+
+// Transitions of the tank's water sensor between ok and low, not every
+// reading, so "low since" survives a restart.
+model water_level_events {
+  id        Int    @id @default(autoincrement())
+  timestamp Int
+  level     String
+
+  @@index([timestamp])
+}
