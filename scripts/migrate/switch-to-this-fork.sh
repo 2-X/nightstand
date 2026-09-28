@@ -133,6 +133,13 @@ if [ -n "$RESTORE_TARBALL" ]; then
   exit 0
 fi
 
+# Stage 5 copies these helpers to the pod, so check for them up front.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for helper in pod-installer.sh restore-original-fork.sh; do
+  [ -f "$SCRIPT_DIR/$helper" ] || fail "$helper was not found next to this script. Download it from scripts/migrate/ into $SCRIPT_DIR and run again."
+done
+command -v python3 >/dev/null 2>&1 || fail "python3 is required on this computer."
+
 # ==============================================================================
 # Stage 1, Locate (read-only)
 # ==============================================================================
@@ -458,7 +465,6 @@ printf '%s' "$BASELINE_JSON" | ssh_cmd "$SSH_PORT" "cat > /home/dac/free-sleep-m
 # Stage 5, push pod-installer.sh, start it detached, poll status
 # ==============================================================================
 say "Stage 5: pushing the installer and starting it (detached, safe if this laptop disconnects)"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ssh_cmd "$SSH_PORT" "mkdir -p /home/dac/migrate"
 scp_to_pod "$SSH_PORT" "$SCRIPT_DIR/pod-installer.sh" "/home/dac/migrate/pod-installer.sh"
 scp_to_pod "$SSH_PORT" "$SCRIPT_DIR/restore-original-fork.sh" "/home/dac/migrate/restore-original-fork.sh"

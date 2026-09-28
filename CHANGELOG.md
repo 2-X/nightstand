@@ -13,6 +13,11 @@ is a hard fork; for the history of the projects it descends from, see
   Prisma's development command, which can create new migrations or offer to
   reset the database when it finds differences.
 
+- Switching from another fork now downloads the migration tool's two helper
+  files along with it, and the tool checks for them before it changes
+  anything. Following the guide before this downloaded only the main script,
+  so the install stage could not start.
+
 - The README and install guide are reorganized around which install path
   each pod takes and what tools each one needs.
 

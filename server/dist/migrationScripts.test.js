@@ -69,6 +69,13 @@ describe('fork-switch tool scripts', () => {
                 'Stage 4: backing up the pod',
             ], 'switch-to-this-fork.sh');
         });
+        it('checks for its helper files before anything else happens', () => {
+            assertOrder(src, [
+                'was not found next to this script',
+                "Type 'switch' to proceed",
+                'Stage 5: pushing the installer',
+            ], 'switch-to-this-fork.sh');
+        });
         it('takes the iptables snapshot pre-consent (before the typed confirmation)', () => {
             assertOrder(src, [
                 'IPTABLES_SNAPSHOT_LOCAL=$(mktemp)',
