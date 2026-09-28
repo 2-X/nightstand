@@ -34,6 +34,7 @@ TAG_ZIP_URL_PREFIX="https://github.com/${NIGHTSTAND_REPO}/archive/refs/tags/v"
 # CAPABLE_FLOOR in the app's VersionsPage, which gates the same picker.
 TARGET_FILE=/persistent/free-sleep-data/update-target.json
 FLOOR_VERSION="3.0.0"
+SETTINGS_FILE=/persistent/free-sleep-data/lowdb/settingsDB.json
 
 LIVE=/home/dac/free-sleep
 PREV=/home/dac/free-sleep-prev
@@ -114,6 +115,19 @@ print("yes" if parts(sys.argv[1]) >= parts(sys.argv[2]) else "no")' "$TARGET_VER
 fi
 
 # --- resolve what to install --------------------------------------------------
+if [ -z "$TARGET_VERSION" ]; then
+  # Older settings files have no channel; they use the stable default.
+  UPDATE_CHANNEL=$(python3 -c '
+import json, sys
+try:
+    with open(sys.argv[1]) as settings_file:
+        channel = json.load(settings_file).get("updateChannel") or "stable"
+except FileNotFoundError:
+    channel = "stable"
+if channel not in ("stable", "beta"):
+    sys.exit("invalid update channel")
+print(channel)' "$SETTINGS_FILE") || fail "could not read update channel from settings"
+fi
 open_wan
 say "Current version: v$CUR_VERSION."
 IS_DOWNGRADE=no
@@ -143,9 +157,21 @@ print("yes" if parts(sys.argv[1]) < parts(sys.argv[2]) else "no")' "$TARGET_VERS
   RESOLVED_ZIP_URL="${TAG_ZIP_URL_PREFIX}${TARGET_VERSION}.zip"
   EXPECTED_VERSION="$TARGET_VERSION"
 else
-  say "Checking GitHub for the newest release..."
-  REMOTE_VERSION=$(curl -fsSL --max-time 20 "$RELEASES_URL" | python3 -c 'import json,sys;print(json.load(sys.stdin)["releases"][0]["version"])') \
-    || fail "could not fetch releases.json (check internet access and DNS)"
+  say "Checking GitHub for the newest $UPDATE_CHANNEL release..."
+  REMOTE_VERSION=$(curl -fsSL --max-time 20 "$RELEASES_URL" | python3 -c '
+import json, re, sys
+channel = sys.argv[1]
+releases = json.load(sys.stdin)["releases"]
+for release in releases:
+    if release.get("channel") == "stable" or (channel == "beta" and release.get("channel") == "beta"):
+        version = release["version"]
+        if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+            sys.exit("invalid release version")
+        print(version)
+        break
+else:
+    sys.exit("no release on the selected channel")' "$UPDATE_CHANNEL") \
+    || fail "could not resolve a release for $UPDATE_CHANNEL (check releases.json and internet access)"
 
   NEWER=$(python3 -c '
 import sys
@@ -228,10 +254,25 @@ ls -1dt "$BACKUPS"/*/ | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -rf
 
 # --- atomic swap ---------------------------------------------------------------
 say "Installing v$STAGED_VERSION (service stops now)"
+STREAM_WAS_ACTIVE=$(systemctl is-active free-sleep-stream 2>/dev/null || true)
+systemctl stop free-sleep-stream 2>/dev/null || true
 systemctl stop free-sleep
 rm -rf "$PREV"
-mv "$LIVE" "$PREV" || fail "swap failed moving live aside"
-mv "$STAGE" "$LIVE" || { mv "$PREV" "$LIVE"; systemctl start free-sleep; fail "swap failed; previous version restored"; }
+mv "$LIVE" "$PREV" || {
+  systemctl start free-sleep
+  if [ "$STREAM_WAS_ACTIVE" = active ]; then
+    systemctl restart free-sleep-stream 2>/dev/null || true
+  fi
+  fail "swap failed moving live aside"
+}
+mv "$STAGE" "$LIVE" || {
+  mv "$PREV" "$LIVE" || fail "swap failed and previous tree could not be restored; manual recovery required"
+  systemctl start free-sleep
+  if [ "$STREAM_WAS_ACTIVE" = active ]; then
+    systemctl restart free-sleep-stream 2>/dev/null || true
+  fi
+  fail "swap failed; previous version restored"
+}
 MOVED_MODULES=no
 if [ "$LOCK_SAME" = yes ]; then
   mv "$PREV/server/node_modules" "$LIVE/server/node_modules"
@@ -239,18 +280,8 @@ if [ "$LOCK_SAME" = yes ]; then
   MOVED_MODULES=yes
 fi
 
-# Whether to migrate is decided by what the database is missing, not by
-# whether schema.prisma differs from the previous version. A file comparison
-# cannot see a database an earlier update left half-migrated, so reinstalling
-# the same version could never finish the job. migrate status exits non-zero
-# exactly when a migration in this tree is unapplied, and reads a database that
-# is ahead of this code as up to date, so it never acts on a downgrade.
-#
-# It is a read, so it works while the biometrics streamer holds the file. The
-# write is what the streamer's connection blocks: that is how a release once
-# shipped with its new tables missing, because the failure was a warning and
-# the health check below cannot see a missing table.
-STREAM_WAS_ACTIVE=$(systemctl is-active free-sleep-stream 2>/dev/null || true)
+# Check the database for pending migrations even when the schema is unchanged.
+# migrate status treats a database ahead of the code as up to date, so it never acts on a downgrade.
 MIGRATION_FAILED=no
 SCHEMA_CHANGED=no
 cmp -s "$PREV/server/prisma/schema.prisma" "$LIVE/server/prisma/schema.prisma" || SCHEMA_CHANGED=yes
@@ -258,7 +289,6 @@ if [ "$IS_DOWNGRADE" = yes ]; then
   say "Downgrade: skipping prisma migrate (schema stays newer; migrations are additive by standing rule)"
 elif ! sudo -u dac bash -c "cd '$LIVE/server' && '$NPX' dotenv -e .env.pod -- npx prisma migrate status" >/dev/null 2>&1; then
   say "Database has unapplied migrations: migrate deploy + generate"
-  systemctl stop free-sleep-stream 2>/dev/null || true
   PRISMA_OK=no
   for attempt in 1 2 3; do
     if sudo -u dac bash -c "cd '$LIVE/server' && '$NPX' dotenv -e .env.pod -- npx prisma migrate deploy"; then
@@ -291,13 +321,11 @@ if [ -f "$LIVE/scripts/setup_resource_limits.sh" ]; then
     || say "WARNING: failed to install service memory limits; the services run unbounded until the next successful update"
 fi
 
-systemctl start free-sleep
-# Plain restart when the streamer was running before, since the prisma step
-# above may have stopped it and try-restart would leave a stopped unit stopped.
-if [ "$STREAM_WAS_ACTIVE" = active ]; then
-  systemctl restart free-sleep-stream 2>/dev/null || true
-else
-  systemctl try-restart free-sleep-stream 2>/dev/null || true
+if [ "$MIGRATION_FAILED" != yes ]; then
+  systemctl start free-sleep
+  if [ "$STREAM_WAS_ACTIVE" = active ]; then
+    systemctl restart free-sleep-stream 2>/dev/null || true
+  fi
 fi
 
 say "Ensuring RAW-archive retention timer is installed"
@@ -327,6 +355,7 @@ say "Health check (up to 90s)"
 HEALTHY=no
 HBODY="$STAGE.health"
 for _ in $(seq 1 30); do
+  [ "$MIGRATION_FAILED" = yes ] && break
   sleep 3
   # Log every attempt's HTTP status so a failed update log shows the shape of
   # the failure on its own (000 = no/aborted response, 503 = still starting).
@@ -363,13 +392,30 @@ say "Health check FAILED: rolling back to v$CUR_VERSION"
 say "Last 60 server log lines from the failed build (for diagnosis):"
 tail -n 60 /persistent/free-sleep-data/logs/free-sleep.log 2>/dev/null || say "  (no server log available)"
 systemctl stop free-sleep || true
+systemctl stop free-sleep-stream 2>/dev/null || true
 rm -rf "$FAILED"
-mv "$LIVE" "$FAILED"
-mv "$PREV" "$LIVE"
+mv "$LIVE" "$FAILED" || {
+  systemctl start free-sleep
+  if [ "$STREAM_WAS_ACTIVE" = active ]; then
+    systemctl restart free-sleep-stream 2>/dev/null || true
+  fi
+  fail "could not move failed tree aside; attempted to restart the tree at $LIVE; manual recovery required"
+}
+mv "$PREV" "$LIVE" || {
+  mv "$FAILED" "$LIVE" || fail "could not restore either tree; manual recovery required"
+  systemctl start free-sleep
+  if [ "$STREAM_WAS_ACTIVE" = active ]; then
+    systemctl restart free-sleep-stream 2>/dev/null || true
+  fi
+  fail "could not restore previous tree; attempted to restart the tree at $LIVE; manual recovery required"
+}
 if [ "$MOVED_MODULES" = yes ]; then
   mv "$FAILED/server/node_modules" "$LIVE/server/node_modules"
 fi
 systemctl start free-sleep
+if [ "$STREAM_WAS_ACTIVE" = active ]; then
+  systemctl restart free-sleep-stream 2>/dev/null || true
+fi
 sleep 8
 if curl -sf --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" >/dev/null; then
   fail "update failed but rollback OK (pod back on v$CUR_VERSION). Failed tree kept at $FAILED; see journalctl -u free-sleep"

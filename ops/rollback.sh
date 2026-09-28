@@ -50,6 +50,8 @@ if [ "${1:-}" = "--from" ]; then
   echo "==> Restoring code from $BK/code.tar.gz (node_modules will be reused from current live tree)"
   SSH "set -e
     [ -f '$BK/code.tar.gz' ] || { echo 'backup not found'; exit 1; }
+    STREAM_WAS_ACTIVE=\$(systemctl is-active free-sleep-stream 2>/dev/null || true)
+    systemctl stop free-sleep-stream 2>/dev/null || true
     systemctl stop free-sleep
     rm -rf /home/dac/free-sleep-restore
     mkdir /home/dac/free-sleep-restore
@@ -60,17 +62,25 @@ if [ "${1:-}" = "--from" ]; then
     mv $PREV/server/node_modules $LIVE/server/node_modules
     chown -R dac:dac $LIVE
     systemctl start free-sleep
+    if [ \"\$STREAM_WAS_ACTIVE\" = active ]; then
+      systemctl restart free-sleep-stream 2>/dev/null || true
+    fi
   "
 else
   echo "==> Swapping back to previous deploy at $PREV"
   SSH "set -e
     [ -d $PREV ] || { echo 'no previous deploy present'; exit 1; }
+    STREAM_WAS_ACTIVE=\$(systemctl is-active free-sleep-stream 2>/dev/null || true)
+    systemctl stop free-sleep-stream 2>/dev/null || true
     systemctl stop free-sleep
     rm -rf /home/dac/free-sleep-failed
     mv $LIVE /home/dac/free-sleep-failed
     mv $PREV $LIVE
     [ -d $LIVE/server/node_modules ] || mv /home/dac/free-sleep-failed/server/node_modules $LIVE/server/node_modules
     systemctl start free-sleep
+    if [ \"\$STREAM_WAS_ACTIVE\" = active ]; then
+      systemctl restart free-sleep-stream 2>/dev/null || true
+    fi
   "
 fi
 

@@ -220,7 +220,11 @@ disarm_sentinel() {
 
 restore_and_report() {
   say "Restoring their original fork via $RESTORE_SCRIPT_DEST..."
-  bash "$RESTORE_SCRIPT_DEST"
+  if ! bash "$RESTORE_SCRIPT_DEST"; then
+    write_status "install" "restore_failed" "$1; original install could not be restored"
+    say "FATAL: restore failed; leaving the sentinel armed for another attempt"
+    exit 1
+  fi
   disarm_sentinel
   write_status "install" "restored" "$1"
 }
@@ -263,7 +267,9 @@ systemctl daemon-reload
 
 say "Running prisma migrate deploy (additive by standing rule)..."
 sudo -u dac bash -c "cd '$LIVE/server' && '$NPX' dotenv -e .env.pod -- npx prisma migrate deploy && '$NPX' dotenv -e .env.pod -- npx prisma generate" \
-  || say "WARNING: prisma step failed; health check will decide"
+  || { restore_and_report "prisma migration or client generation failed"; exit 1; }
+sudo -u dac bash -c "cd '$LIVE/server' && '$NPX' dotenv -e .env.pod -- npx prisma migrate status" \
+  || { restore_and_report "database migration status failed; compare the migration histories of both forks and resolve compatibility before retrying. Do not reset the database"; exit 1; }
 
 systemctl start free-sleep || { restore_and_report "our service failed to start"; exit 1; }
 # The swap above stopped free-sleep-stream (its ExecStart lives inside the tree

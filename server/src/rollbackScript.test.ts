@@ -43,13 +43,14 @@ describe('rollback_pod.sh', () => {
     const restoreIdx = src.indexOf('Health check FAILED: swapping back');
     const rest = src.slice(restoreIdx);
     assert.match(rest, /fix_shared_node_modules/);
-    assert.match(rest, /systemctl start free-sleep/);
+    assert.match(rest, /restart_services/);
   });
 
   it('detects and relocates a shared node_modules copy after the swap', () => {
     const src = readFileSync(path.join(repoRoot, SCRIPT), 'utf8');
     assert.match(src, /fix_shared_node_modules\s*\(\)\s*{/, 'expected a fix_shared_node_modules helper');
-    assert.match(src, /cmp -s "\$LIVE\/server\/package-lock\.json" "\$PREV\/server\/package-lock\.json"/);
+    assert.match(src, /local source="\$\{1:-\$PREV\}"/);
+    assert.match(src, /cmp -s "\$LIVE\/server\/package-lock\.json" "\$source\/server\/package-lock\.json"/);
   });
 
   it('the systemd unit runs the script via bash and exists', () => {

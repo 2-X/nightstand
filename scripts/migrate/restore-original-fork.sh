@@ -93,7 +93,13 @@ systemctl stop free-sleep-stream >/dev/null 2>&1 || true
 if [ -d "$PREV" ]; then
   if [ -d "$LIVE" ]; then
     rm -rf "$ABORTED_QUARANTINE"
-    mv "$LIVE" "$ABORTED_QUARANTINE" || say "WARNING: could not move $LIVE aside; attempting restore anyway"
+    mv "$LIVE" "$ABORTED_QUARANTINE" || {
+      say "FATAL: could not move $LIVE aside. The original tree remains at $PREV; manual recovery may be required."
+      write_status "restore_failed" "could not move current tree aside; original tree preserved"
+      # Keep the marker and sentinel: moving PREV into an existing LIVE would
+      # nest it inside the failed build instead of restoring it.
+      exit 1
+    }
   fi
   mv "$PREV" "$LIVE" || {
     say "FATAL: could not move $PREV into place. Manual recovery needed:"

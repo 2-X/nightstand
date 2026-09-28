@@ -88,10 +88,25 @@ ls -1dt "$BACKUPS"/*/ | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -rf
 
 # --- atomic swap -----------------------------------------------------------------
 say "Installing stock v$STAGED_VERSION (service stops now)"
+STREAM_WAS_ACTIVE=$(systemctl is-active free-sleep-stream 2>/dev/null || true)
+systemctl stop free-sleep-stream 2>/dev/null || true
 systemctl stop free-sleep
 rm -rf "$PREV"
-mv "$LIVE" "$PREV" || fail "swap failed moving live aside"
-mv "$STAGE" "$LIVE" || { mv "$PREV" "$LIVE"; systemctl start free-sleep; fail "swap failed; fork restored"; }
+mv "$LIVE" "$PREV" || {
+  systemctl start free-sleep
+  if [ "$STREAM_WAS_ACTIVE" = active ]; then
+    systemctl restart free-sleep-stream 2>/dev/null || true
+  fi
+  fail "swap failed moving live aside"
+}
+mv "$STAGE" "$LIVE" || {
+  mv "$PREV" "$LIVE" || fail "swap failed and previous tree could not be restored; manual recovery required"
+  systemctl start free-sleep
+  if [ "$STREAM_WAS_ACTIVE" = active ]; then
+    systemctl restart free-sleep-stream 2>/dev/null || true
+  fi
+  fail "swap failed; fork restored"
+}
 MOVED_MODULES=no
 if [ "$LOCK_SAME" = yes ]; then
   mv "$PREV/server/node_modules" "$LIVE/server/node_modules"
@@ -102,6 +117,9 @@ fi
 # No prisma step: migrations are additive, so upstream's schema is already
 # a strict subset of ours.
 systemctl start free-sleep
+if [ "$STREAM_WAS_ACTIVE" = active ]; then
+  systemctl restart free-sleep-stream 2>/dev/null || true
+fi
 
 # Not gated on a populated per-side temperature: it can lag a few read
 # cycles after a cold reconnect (see pod-installer.sh's health check).
@@ -144,13 +162,30 @@ say "Health check FAILED: rolling back to this fork v$CUR_VERSION"
 say "Last 60 server log lines from the failed stock build (for diagnosis):"
 tail -n 60 /persistent/free-sleep-data/logs/free-sleep.log 2>/dev/null || say "  (no server log available)"
 systemctl stop free-sleep || true
+systemctl stop free-sleep-stream 2>/dev/null || true
 rm -rf "$FAILED"
-mv "$LIVE" "$FAILED"
-mv "$PREV" "$LIVE"
+mv "$LIVE" "$FAILED" || {
+  systemctl start free-sleep
+  if [ "$STREAM_WAS_ACTIVE" = active ]; then
+    systemctl restart free-sleep-stream 2>/dev/null || true
+  fi
+  fail "could not move failed tree aside; attempted to restart the tree at $LIVE; manual recovery required"
+}
+mv "$PREV" "$LIVE" || {
+  mv "$FAILED" "$LIVE" || fail "could not restore either tree; manual recovery required"
+  systemctl start free-sleep
+  if [ "$STREAM_WAS_ACTIVE" = active ]; then
+    systemctl restart free-sleep-stream 2>/dev/null || true
+  fi
+  fail "could not restore previous tree; attempted to restart the tree at $LIVE; manual recovery required"
+}
 if [ "$MOVED_MODULES" = yes ]; then
   mv "$FAILED/server/node_modules" "$LIVE/server/node_modules"
 fi
 systemctl start free-sleep
+if [ "$STREAM_WAS_ACTIVE" = active ]; then
+  systemctl restart free-sleep-stream 2>/dev/null || true
+fi
 sleep 8
 if curl -sf --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" >/dev/null; then
   fail "revert to stock failed but rollback OK (pod back on this fork v$CUR_VERSION). Failed tree kept at $FAILED; see journalctl -u free-sleep"

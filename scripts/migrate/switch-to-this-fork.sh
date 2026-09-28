@@ -54,7 +54,7 @@ while [ $# -gt 0 ]; do
 done
 
 say() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
-fail() { echo "" >&2; echo "ABORTED: $*" >&2; echo "Nothing was changed." >&2; exit 1; }
+fail() { echo "" >&2; echo "ABORTED: $*" >&2; exit 1; }
 
 SSH_USER=root
 SSH_PASS=""
@@ -117,18 +117,53 @@ if [ -n "$RESTORE_TARBALL" ]; then
   done
   [ -n "$SSH_PORT" ] || fail "could not reach $POD_IP over SSH on port 8822 or 22"
   say "Pushing backup tarball..."
-  scp_to_pod "$SSH_PORT" "$RESTORE_TARBALL" "/home/dac/free-sleep-restore.tar.gz"
+  scp_to_pod "$SSH_PORT" "$RESTORE_TARBALL" "/home/dac/free-sleep-restore.tar.gz" \
+    || fail "could not upload backup; live install untouched"
   say "Extracting and restarting..."
   ssh_cmd "$SSH_PORT" "
+    set -eu
+    LIVE=/home/dac/free-sleep
+    STAGE=\$(mktemp -d /home/dac/free-sleep-restore.XXXXXX)
+    report_restore_tree() {
+      if [ -d \"\$STAGE/previous\" ]; then
+        du -sh \"\$STAGE/previous\"
+        echo \"After confirming the restored install works, remove \$STAGE/previous to reclaim this space.\"
+      else
+        rm -rf \"\$STAGE\"
+      fi
+    }
+    trap report_restore_tree EXIT
+    tar xzf /home/dac/free-sleep-restore.tar.gz -C \"\$STAGE\"
+    [ -f \"\$STAGE/free-sleep/server/dist/server.js\" ] &&
+      [ -f \"\$STAGE/free-sleep/server/public/index.html\" ] &&
+      [ -f \"\$STAGE/free-sleep/server/package.json\" ] &&
+      [ -d \"\$STAGE/free-sleep/server/node_modules\" ] &&
+      [ -n \"\$(ls -A \"\$STAGE/free-sleep/server/node_modules\")\" ] || {
+        echo 'Backup is incomplete or lacks installed dependencies; live install untouched. Use the in-app Roll back if available, or supply a complete backup created with the current migration script.' >&2
+        exit 1
+      }
+    chown -R dac:dac \"\$STAGE/free-sleep\"
+    STREAM_WAS_ACTIVE=\$(systemctl is-active free-sleep-stream 2>/dev/null || true)
+    restart_services() {
+      systemctl start free-sleep || return 1
+      if [ \"\$STREAM_WAS_ACTIVE\" = active ]; then
+        systemctl restart free-sleep-stream || return 1
+      fi
+    }
+    systemctl stop free-sleep-stream 2>/dev/null || true
     systemctl stop free-sleep 2>/dev/null || true
-    rm -rf /home/dac/free-sleep-restore-tmp && mkdir -p /home/dac/free-sleep-restore-tmp
-    tar xzf /home/dac/free-sleep-restore.tar.gz -C /home/dac/free-sleep-restore-tmp
-    rm -rf /home/dac/free-sleep
-    mv /home/dac/free-sleep-restore-tmp/free-sleep /home/dac/free-sleep
-    rm -rf /home/dac/free-sleep-restore-tmp /home/dac/free-sleep-restore.tar.gz
-    chown -R dac:dac /home/dac/free-sleep
-    systemctl start free-sleep 2>/dev/null || echo 'WARNING: could not start free-sleep.service (may need a different service name)'
-  " || fail "restore failed over SSH, the tarball is still at $RESTORE_TARBALL, nothing else was touched"
+    if [ -e \"\$LIVE\" ]; then
+      mv \"\$LIVE\" \"\$STAGE/previous\" || { restart_services; exit 1; }
+    fi
+    mv \"\$STAGE/free-sleep\" \"\$LIVE\" || {
+      if [ -d \"\$STAGE/previous\" ]; then
+        mv \"\$STAGE/previous\" \"\$LIVE\" && restart_services
+      fi
+      exit 1
+    }
+    restart_services
+    rm -f /home/dac/free-sleep-restore.tar.gz
+  " || fail "restore failed over SSH. Keep $RESTORE_TARBALL and inspect the Pod state before retrying"
   say "Restore complete. Check http://$POD_IP:3000/ once it's back up."
   exit 0
 fi
@@ -313,10 +348,7 @@ LAPTOP_TIME=$(date -u +%s)
 SKEW=$(( POD_TIME > LAPTOP_TIME ? POD_TIME - LAPTOP_TIME : LAPTOP_TIME - POD_TIME ))
 if [ "$SKEW" -gt 120 ]; then
   echo "Pod clock is off by ${SKEW}s from this laptop, this can break TLS to GitHub mid-download."
-  read -r -p "Set the pod's clock from this laptop's now? [y/N] " FIX_CLOCK
-  if [ "$FIX_CLOCK" = "y" ] || [ "$FIX_CLOCK" = "Y" ]; then
-    ssh_cmd "$SSH_PORT" "date -u -s @$LAPTOP_TIME" >/dev/null 2>&1 || say "WARNING: could not set the pod's clock"
-  fi
+  say "Clock correction can be requested after the migration confirmation."
 fi
 
 # WAN state + iptables snapshot (every abort path restores exactly this).
@@ -409,6 +441,15 @@ fi
 read -r -p "Type 'switch' to proceed: " CONFIRM
 [ "$CONFIRM" = "switch" ] || fail "confirmation not given"
 
+# Clock correction requires confirmation and is skipped in dry-run mode.
+if [ "$SKEW" -gt 120 ]; then
+  read -r -p "Set the pod's clock from this laptop's now? [y/N] " FIX_CLOCK
+  if [ "$FIX_CLOCK" = "y" ] || [ "$FIX_CLOCK" = "Y" ]; then
+    LAPTOP_TIME=$(date -u +%s)
+    ssh_cmd "$SSH_PORT" "date -u -s @$LAPTOP_TIME" >/dev/null 2>&1 || say "WARNING: could not set the pod's clock"
+  fi
+fi
+
 # ==============================================================================
 # Stage 4, Backup before anything
 # ==============================================================================
@@ -420,23 +461,30 @@ LOCAL_BACKUP_TARBALL="./free-sleep-migrate-backup-${TS}.tar.gz"
 
 ssh_cmd "$SSH_PORT" "
   set -e
+  # Leave CPU and disk headroom for the hardware watchdog and running server.
+  low_priority() {
+    if command -v ionice >/dev/null 2>&1; then
+      nice -n 19 ionice -c 2 -n 7 \"\$@\"
+    else
+      nice -n 19 \"\$@\"
+    fi
+  }
   mkdir -p '$REMOTE_BACKUP_DIR'
   STAGE=/home/dac/free-sleep-backup-staging
   rm -rf \"\$STAGE\" && mkdir -p \"\$STAGE/free-sleep\"
-  cp -a /home/dac/free-sleep/. \"\$STAGE/free-sleep/\" 2>/dev/null || true
-  rm -rf \"\$STAGE/free-sleep/server/node_modules\"
+  low_priority cp -a /home/dac/free-sleep/. \"\$STAGE/free-sleep/\"
   mkdir -p \"\$STAGE/free-sleep-data\"
   if [ -f /persistent/free-sleep-data/free-sleep.db ]; then
     if command -v sqlite3 >/dev/null 2>&1; then
-      sqlite3 /persistent/free-sleep-data/free-sleep.db '.backup '\''\$STAGE/free-sleep-data/free-sleep.db'\''' && echo 'used sqlite3 .backup'
+      low_priority sqlite3 /persistent/free-sleep-data/free-sleep.db '.backup '\''\$STAGE/free-sleep-data/free-sleep.db'\''' && echo 'used sqlite3 .backup'
     else
-      cp /persistent/free-sleep-data/free-sleep.db \"\$STAGE/free-sleep-data/\" && echo 'used plain copy (sqlite3 not present)'
+      low_priority cp /persistent/free-sleep-data/free-sleep.db \"\$STAGE/free-sleep-data/\" && echo 'used plain copy (sqlite3 not present)'
     fi
   fi
-  cp -r /persistent/free-sleep-data/lowdb \"\$STAGE/free-sleep-data/\" 2>/dev/null || true
-  tar czf '$REMOTE_BACKUP_TARBALL' -C \"\$STAGE\" .
+  low_priority cp -r /persistent/free-sleep-data/lowdb \"\$STAGE/free-sleep-data/\" 2>/dev/null || true
+  low_priority tar czf '$REMOTE_BACKUP_TARBALL' -C \"\$STAGE\" .
   rm -rf \"\$STAGE\"
-  tar tzf '$REMOTE_BACKUP_TARBALL' >/dev/null
+  low_priority tar tzf '$REMOTE_BACKUP_TARBALL' >/dev/null
 " || fail "backup on the pod failed; nothing else was touched"
 
 say "Pulling the backup to this laptop..."
@@ -496,6 +544,11 @@ while [ "$ATTEMPTS" -lt 200 ]; do
   say "  [$STAGE_NAME] $OUTCOME"
   case "$OUTCOME" in
     success)
+      # Only a completed migration retires older backups; failed attempts keep all.
+      ssh_cmd "$SSH_PORT" "
+        set -o pipefail
+        ls -1t '$REMOTE_BACKUP_DIR'/migrate-*.tar.gz | tail -n +3 | xargs -r rm -f
+      " || say "WARNING: could not prune old migration backups at $REMOTE_BACKUP_DIR"
       cat <<AFTERCARE
 
 ============================== Migration complete =============================
@@ -510,6 +563,9 @@ Keep the laptop backup tarball for at least a few nights.
 =================================================================================
 AFTERCARE
       exit 0
+      ;;
+    restore_failed)
+      fail "migration and automatic restore failed. SSH recovery is required; inspect the original tree and migration log on the pod."
       ;;
     restored|failed|refused)
       fail "migration did not succeed (outcome: $OUTCOME). Your original install has been restored automatically. Details: $(printf '%s' "$STATUS_JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("message",""))' 2>/dev/null)"
