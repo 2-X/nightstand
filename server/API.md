@@ -2,6 +2,11 @@
 
 The server exposes RESTful endpoints for interaction. All responses are JSON unless noted otherwise.
 
+There is no login. Anything that can reach the pod on your network (or over
+Tailscale, if you set that up) can call every endpoint below. The server only
+checks the Origin header on HTTP requests, which doesn't stop scripts or other
+programs, so keep the pod on a network you trust.
+
 ---
 
 ## `/api/deviceStatus`

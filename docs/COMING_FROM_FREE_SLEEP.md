@@ -1,55 +1,135 @@
 # Coming from free-sleep
 
-Nightstand is a fork of free-sleep. If you already run
-[throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep),
-[jmew/free-sleep](https://github.com/jmew/free-sleep), or another fork on your
-Pod, this page explains what you would be moving to and how to move without
-losing anything.
+Nightstand is a fork of [jmew/free-sleep](https://github.com/jmew/free-sleep),
+which builds on the original
+[throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
+If your Pod already runs one of those, or another fork of free-sleep, a
+migration tool can switch it to Nightstand without reinstalling from scratch.
+This page covers what changes, what the tool does, and how to go back.
 
 ## What stays the same
 
-Nightstand keeps the free-sleep on-disk layout on purpose. The install still
-lives at `/home/dac/free-sleep`, the services are still `free-sleep.service`
-and `free-sleep-stream.service`, and your data still lives under
-`/persistent/free-sleep-data/` (the SQLite database, the lowdb JSON, and the
-logs). Nothing about the hardware changes, and the move is fully reversible
-with a firmware reset, the same as any free-sleep install.
+Nightstand keeps free-sleep's on-disk layout, so it stays compatible with
+other forks' tooling:
 
-## What is different here
+- The install lives at `/home/dac/free-sleep`.
+- The services are `free-sleep.service` and `free-sleep-stream.service`.
+- Your data stays under `/persistent/free-sleep-data/`: the SQLite database,
+  the lowdb JSON files that hold settings and schedules, and the logs.
 
-Nightstand is tuned for running one Pod well rather than being a
-general-purpose platform, and a few choices follow from that:
+Your settings, schedules, and sleep data carry over.
 
-- **Local-first, no telemetry.** There is no error-reporting integration and
-  no analytics. The Pod only reaches the internet during an update, and version
-  checks run from your browser rather than the Pod.
-- **Its own version stream and update system.** Versions start at 3.0.0
-  and are published through an in-app updater with update channels, a version
-  picker, instant rollback, and automatic health-checked rollback on a failed
-  install.
-- **Evidence-based sleep features.** Presence detection, the sleep score, and
-  the temperature features are built to be inspectable and honest about their
-  limits. The changelog documents root causes, including the things that are
-  known to be imperfect.
+## What changes
 
-## How to move your Pod over
+- **Hardware.** I maintain Nightstand on my own Pod 5. On a Pod 3 or Pod 4,
+  temperature control and scheduling are expected to work, but those models
+  write sensor data in a different format and sleep tracking has not been
+  tested there. The tool asks you to acknowledge this before it continues.
+- **Internet access.** Nightstand sends no error reports or analytics, and the
+  app checks for new versions from your browser, not from the Pod. At the end
+  of the switch, the tool turns on Nightstand's firewall rules
+  (`scripts/block_internet_access.sh`). They allow your local network and
+  block most outbound traffic, but still allow DNS, time sync, outbound UDP,
+  and HTTPS to any host, which Tailscale needs. The updater lifts the rules
+  while it downloads a release and puts them back afterward.
+- **Updates.** Versions start at 3.0.0. Settings > Software & updates offers
+  beta and stable channels, a version picker, and a roll back button. An
+  update that fails its health check restores the previous version on its
+  own.
+- **Known limits.** The numbers behind presence detection and the sleep
+  features are listed in [CALIBRATION.md](CALIBRATION.md), and the
+  [changelog](../CHANGELOG.md) notes what is still known to be imperfect.
 
-Nightstand ships a migration tool built for exactly this. It is
-safety-obsessed: it identifies your Pod read-only first, reports what it found
-and what it would do, requires a typed confirmation, and backs up your code and
-data both on the Pod and pulled to your laptop (integrity-verified in both
-places) before it changes anything. A data-compatibility dry run loads your
-existing settings and schedules through Nightstand's schemas and aborts if it
-finds a real incompatibility. A dead-man sentinel auto-restores your original
-fork within minutes if the install is interrupted.
+## Before you start
 
-See the "Switching from another free-sleep fork" section in
-[INSTALLATION.md](../INSTALLATION.md) for the exact steps. Run it with
-`--dry-run` first.
+You need:
 
-## Where issues go
+- A Mac or Linux computer with `curl`, `ssh`, `scp`, `tar`, and `python3`.
+- The Pod's root password and SSH access on port 8822 or 22 (every fork's
+  install sets this up).
+- A current install that is running normally. The tool stops if
+  `free-sleep.service` isn't active, because it can only promise to return
+  you to a working install.
+- More than 2 GB free on the Pod's `/` and `/persistent` partitions, and on
+  your computer for the backup copy.
 
-Issues with Nightstand's own changes belong in this repository. Issues with the
-projects it descends from belong upstream. The original project's fork history
-is worth reading if you want the fuller story of how local Pod control came to
-be.
+## Running it
+
+The full steps are in
+[Switching from another free-sleep fork](../INSTALLATION.md#switching-from-another-free-sleep-fork).
+The tool is three scripts that need to sit in the same folder, since it copies
+the other two to the Pod:
+
+```bash
+for f in switch-to-this-fork.sh pod-installer.sh restore-original-fork.sh; do
+  curl -fO "https://raw.githubusercontent.com/LTimothy/nightstand/main/scripts/migrate/$f"
+done
+chmod +x switch-to-this-fork.sh
+./switch-to-this-fork.sh --dry-run
+```
+
+If the report looks right, run `./switch-to-this-fork.sh` without
+`--dry-run`. It finds the Pod at `eight-pod.local` or offers to scan your
+network for it; pass `--ip <addr>` to skip that. `--help` lists the other
+options.
+
+## What the tool does
+
+`switch-to-this-fork.sh` runs on your computer and works over SSH. In order,
+it:
+
+1. Checks the Pod read-only and prints a report of what it found and what it
+   would do. With `--dry-run` it stops here.
+2. Waits for you to type `switch`. Nothing on the Pod changes before this,
+   except the clock if it offers to correct it and you agree.
+3. Backs up your code and data to `/persistent/free-sleep-backups/` on the
+   Pod, copies the backup to the folder you ran the tool from, and checks
+   both copies.
+4. Downloads the newest Nightstand release on the Pod and checks your
+   current settings and schedules against Nightstand's formats. It stops if
+   anything can't carry over, before your install is touched.
+5. Swaps the new install in, keeps your old one at
+   `/home/dac/free-sleep-prev`, checks that the new one is healthy, and turns
+   on the firewall rules described above.
+
+The work on the Pod runs in the background, so closing your computer partway
+through doesn't interrupt it.
+
+## What it risks
+
+The tool doesn't touch the firmware or temperature control, so the bed keeps
+doing what it was last told even if the web app is down. The main risk is an
+install that stops partway. For that, a timer is set on the Pod just before
+the swap. If the install hasn't finished within 12 minutes, the timer puts
+your original install back on its own, even if the tool was killed or the
+Pod lost power.
+
+If either side of the bed is on, the tool asks you to type a confirmation
+before going ahead.
+
+## Going back
+
+- **To your previous install:** Settings > Software & updates has a roll back
+  button. Right after migrating, it rolls back to your old install. Installing
+  any other Nightstand version replaces that slot, so use the laptop backup
+  after that.
+- **From the backup on your computer:** this works even if the web app is
+  down, as long as SSH works.
+  ```bash
+  ./switch-to-this-fork.sh --restore <backup-tarball> --ip <POD_IP>
+  ```
+- **To the original free-sleep:** Settings > Software & updates > Revert to
+  stock replaces Nightstand with the current throwaway31265/free-sleep and
+  keeps your data. It installs the original project, not jmew's or another
+  fork. There's no button to come back afterward; you would run the
+  migration tool again.
+- **To the Eight Sleep app:** reset the firmware as described in
+  [INSTALLATION.md](../INSTALLATION.md#how-to-revert-changes-and-go-back-to-using-your-eight-sleep-through-their-app).
+  This is the same as for any free-sleep install.
+
+## Reporting problems
+
+[Open an issue](https://github.com/LTimothy/nightstand/issues) here, including
+for code that came from upstream, and include the output of `fs-debug`. If the
+problem is also in the original project, it may be worth reporting there
+too.

@@ -1,137 +1,203 @@
 # Contributing
 
-This is a personal fork, maintained for one Pod and one household. You're
-welcome to open issues and PRs, and useful fixes will get merged, but there's
-no roadmap, no SLA, and no promise that a feature request goes anywhere. If
-you want changes for the broader project, take them to
-[throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep)
-(following their CONTRIBUTING.md) or to
-[jmew/free-sleep](https://github.com/jmew/free-sleep), which this fork is
-based on.
+Nightstand is a personal fork of
+[jmew/free-sleep](https://github.com/jmew/free-sleep), which builds on
+[throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep). I
+maintain it for my own Pod. Issues and pull requests are welcome, and I merge
+fixes that are useful to others, but there is no roadmap, and a feature
+request may not be picked up. For changes to the broader project, contribute
+to [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep)
+(see its CONTRIBUTING.md) or to
+[jmew/free-sleep](https://github.com/jmew/free-sleep).
+
+## Where to start
+
+- Open pull requests against `dev`. Work lands there, and `main` moves only
+  at a release (see
+  [Release cadence and promotion](#release-cadence-and-promotion)).
+- [AGENTS.md](AGENTS.md) is written for coding agents, and it is also the
+  shortest orientation for people: repository layout, commands, where the
+  scheduling and hardware code lives, and the hardware cautions.
+- [server/README_SERVER.md](server/README_SERVER.md) covers running the
+  server on your computer or on a Pod, and lists the API routes.
+  [app/README_APP.md](app/README_APP.md) covers the app's dev server,
+  including a demo mode that needs no Pod.
+- Read [docs/EIGHT_SLEEP_PROTOCOL.md](docs/EIGHT_SLEEP_PROTOCOL.md) before
+  changing anything that talks to the hardware.
 
 ## AI-assisted contributions
 
-Welcome, and treated no differently from any other kind. [AGENTS.md](AGENTS.md)
-is kept current as the entry point for coding agents (layout, commands,
-hardware cautions), so point your tool there first. Whatever wrote the code,
-you own the PR: you have read it, tested it, and you are the one accountable
-for review feedback and for any issues it causes. Nothing else in this
-document changes based on how the code was produced.
+Contributions written with AI tools are welcome and are reviewed like any
+other. Point your tool at [AGENTS.md](AGENTS.md) first. However the code was
+written, the person who opens the pull request is its author: you have read
+and tested it, and you respond to review feedback and to any problems it
+causes. No disclosure is needed either way.
+
+## Setup
+
+Use the Node version in `.nvmrc` (Volta users get the version pinned in
+`server/package.json`). Install dependencies in both packages. The app
+imports schema files from `server/src`, so it needs the server's dependencies
+as well:
+
+```
+(cd server && npm ci && npm run generate)
+(cd app && npm ci)
+```
+
+`npm run generate` builds the Prisma client, which the server's build and
+tests need.
+
+## Before a pull request
+
+Typecheck, lint, and test both packages. From the repository root:
+
+```
+(cd server && npx tsc --noEmit && npm run lint && npm test)
+(cd app && npx tsc -b && npm run lint && npm test)
+```
+
+CI runs the same checks, plus two more that are worth running locally when
+your change touches that area:
+
+- Biometrics (Python 3.9, with `cbor2 numpy scipy pandas watchdog pytest`
+  installed): `python -m pytest biometrics/__tests__/`
+- End-to-end tests against the demo build:
+  `cd app && npx playwright install chromium && npm run build:demo && npx playwright test`
+
+The Pod runs prebuilt code, so `server/dist/` and `server/public/` (the app's
+build output) are committed. If your change touches source, rebuild with
+`npm run build:pr` in both `server/` and `app/` and commit the output.
+Otherwise a deploy ships stale code. CI rebuilds from a clean `npm ci` and
+fails if the result differs from what is committed, so rebuild after a fresh
+`npm ci` if your installed packages may have drifted.
+
+## Tests
+
+New code comes with tests. Some older code has little coverage; it gains
+tests as it is changed, and anything added now should land with tests for its
+logic.
+
+- Server: `node:test`, with test files next to the code they cover
+  (`server/src/**/*.test.ts`). When the important part of a change is hard
+  to test directly (shell scripts, UI wiring), move the logic into a plain
+  module and test that, or at least test the invariants that would otherwise
+  break without anyone noticing. `server/src/updaterScripts.test.ts` shows
+  the pattern.
+- App: Vitest with jsdom, Testing Library, and MSW. A change to an app
+  component or page comes with a colocated `*.test.tsx` that renders it
+  against the mock data using `renderWithProviders` or `renderApp`.
+  [app/src/test/README.md](app/src/test/README.md) explains the harness.
+
+## Running your changes on a Pod
+
+The in-app updater installs published releases only. To run your own changes
+on a Pod:
+
+- `ops/deploy.sh` deploys the committed `HEAD` of your local clone over the
+  LAN, with the same backup, health check, and automatic rollback as the
+  updater (see [ops/ANTIBRICK.md](ops/ANTIBRICK.md)). `ops/deploy.sh --check`
+  runs the preflight checks without deploying.
+- `scripts/deploy-dev.sh` is the faster loop for iteration: it builds locally
+  and copies only the files whose content changed since the last deploy. It
+  has no backup or rollback step. Set `POD_HOST` to your Pod's address; the
+  script header lists the other options.
+
+Both scripts push code rather than running a full install, so a new systemd
+unit can need a one-time manual step. The RAW-file archive section of
+[server/README_SERVER.md](server/README_SERVER.md) describes the one case
+today. For hot reload of server code, run the server directly on the Pod, as
+described in the same file.
 
 ## Commit style
 
-Conventional Commits, matching the history already here:
+Conventional Commits, matching the existing history:
 
 ```
 type(scope): subject
 ```
 
-- Types: `feat`, `fix`, `ui`, `docs`, `build`, `ops`, `refactor`, `chore`, `test`.
-- Scope is optional; existing ones include `biometrics`, `schedule`, `server`,
-  `base`, `versioning`.
-- Subject is lowercase and imperative, with no trailing period.
-- Plain messages with no trailers; the body explains why, not just what.
+- Types: `feat`, `fix`, `ui`, `docs`, `build`, `ops`, `ci`, `refactor`,
+  `chore`, `test`.
+- Scope is optional. Common ones are `app`, `server`, `biometrics`, `ops`,
+  and `install`.
+- The subject is lowercase and imperative, with no trailing period.
+- No trailers. The body explains why the change is needed, not only what it
+  does.
 
 ## Versioning
 
-Semver, `MAJOR.MINOR.PATCH`, always all three parts. One source of truth:
-`server/src/serverInfo.json`.
+Semver, `MAJOR.MINOR.PATCH`, always with all three parts. The version is set
+in one place, `server/src/serverInfo.json`.
 
-- PATCH: bug fix or internal change, no new behavior.
-- MINOR: new user-facing feature, backward compatible.
-- MAJOR: breaking change to data schemas, the API, or on-pod config that
-  needs manual attention when deploying.
+- PATCH: a bug fix or internal change with no new behavior.
+- MINOR: a new user-facing feature that is backward compatible.
+- MAJOR: a breaking change to data schemas, the API, or on-Pod configuration
+  that needs manual attention when deploying.
 
-Nightstand's stream started at 3.0.0 at the hard fork from jmew's fork (which
-was at 2.1.4, tracking the original project's 2.x line). `upstreamBase` in the
-same file records the original-project release this build was made from;
-update it when a build moves to a newer base, not after every review.
+Nightstand's version stream started at 3.0.0 when it split from jmew's fork,
+which was at 2.1.4 and followed the original project's 2.x line.
+`upstreamBase` in the same file records the original-project release this
+build is based on. Change it only when a build moves to a newer base.
 
-Every release is also recorded in `releases.json` (repo root) with a channel
-of `stable` or `beta`, a `kind` of `agent` or `bundle`, and tagged in git as
-`v<version>` (e.g. `v3.2.0`).
+Every release is also recorded in `releases.json` at the repository root,
+with a `channel` of `stable` or `beta` and a `kind` of `agent` or `bundle`,
+and tagged in git as `v<version>` (for example `v3.2.0`).
 
 ## Release cadence and promotion
 
-Cut a release when a coherent, user-facing bundle of work is ready, not once
-per change. Work lands on the `dev` branch, with notes under a
-`## [Unreleased]` heading in `CHANGELOG.md`; when there's enough to justify a
-version, that heading becomes the release, `dev` is merged into `main`, and the
-merge is tagged. `main` only moves at a release, so it always matches the
-newest release: installed pods read `releases.json` and the updater from
-`main`, and pull requests should target `dev`. Beta and stable are not
-branches; each release's channel is a field in `releases.json`.
+Cut a release when a coherent set of user-facing work is ready, not after
+every change. Work lands on `dev`, with notes under a `## [Unreleased]`
+heading in `CHANGELOG.md`. When there is enough for a version, that heading
+becomes the release, `main` is fast-forwarded to `dev`, and the release
+commit is tagged.
 
-A steady trickle of one-commit releases makes the changelog noise and the
-version number meaningless, so resist it.
+`main` moves only at a release, so it always matches the newest release.
+This matters because installed Pods read `releases.json` from `main`, and
+fresh installs and older updaters download `main` itself. Beta and stable are
+not branches: each release's channel is a field in `releases.json`.
 
-Every release is born on `beta`. Promotion to `stable` is part of the ritual,
-not an afterthought: at each release, sweep the existing betas and promote any
-that have soaked at least **seven nights** on real hardware with no regressions.
-Use `scripts/promote_release.sh <version>` to flip a single entry's channel in
-`releases.json` (it prints the matching `gh release edit` command to run). Two
-rules keep the channels honest:
+Avoid a series of one-commit releases. They make the changelog noisy and the
+version number less meaningful.
 
-- **Stable floor.** The newest `stable` release must never lag behind a beta
-  that has already cleared its seven-night soak. Betas are for soaking, not for
-  parking finished work indefinitely.
-- Trivial or doc-only releases can be born `stable` directly.
+Every release starts on `beta`. Promotion to `stable` is part of the release
+ritual: at each release, review the existing betas and promote any that have
+run for at least **seven nights** on real hardware with no regressions.
+`scripts/promote_release.sh <version>` changes a single entry's channel in
+`releases.json` and prints the matching `gh release edit` command to run. Two
+rules keep the channels meaningful:
+
+- **Stable floor.** The newest `stable` release must never be older than a
+  beta that has already passed its seven nights. Beta is for testing, not for
+  holding finished work.
+- Trivial or documentation-only releases can start on `stable` directly.
 
 Downgrades and rollbacks never reverse a Prisma migration: the older server
-just runs against the newer schema. This works because migrations are
-additive, and that's a standing rule: a new migration must never drop or
-rename a column/table that an older, still-installable release reads.
+runs against the newer schema. This works because migrations are additive,
+which is a standing rule. A new migration must never drop or rename a column
+or table that an older, still-installable release reads.
 
 ## Release ritual
 
 1. Bump the version in `server/src/serverInfo.json`.
-2. Add the new release to the top of `releases.json`, copying the shape of the
-   entry below it: `kind` (`agent` or `bundle`), `version`, `date`, and channel
-   (`beta` unless there's a reason to ship straight to `stable`). A bundle also
-   carries its own `upstreamBase`, the release it was built from, and its
-   `features` list.
-3. Add a matching entry at the top of `CHANGELOG.md`.
-4. Rebuild both halves (`npm run build:pr` in `server/` and `app/`) and commit
-   the output.
+2. Add the new release to the top of `releases.json`, following the shape of
+   the entry below it: `kind` (`agent` or `bundle`), `version`, `date`, and
+   `channel` (`beta` unless there is a reason to ship straight to `stable`).
+   A bundle also carries its own `upstreamBase`, the release it was built
+   from, and its `features` list.
+3. Add a matching entry at the top of `CHANGELOG.md` (the `## [Unreleased]`
+   notes become `## [<version>] - <date>`).
+4. Rebuild both packages (`npm run build:pr` in `server/` and `app/`) and
+   commit the output.
 5. Commit everything together on `dev`, fast-forward `main` to it
    (`git switch main && git merge --ff-only dev`), then tag:
    `git tag -a v<version> -m "..."`.
 6. Push both branches and the tag: `git push origin main dev v<version>`.
 7. Create the GitHub Release: `gh release create v<version> --title
-   "v<version>" --notes-file <path>` with that version's `CHANGELOG.md`
-   section as the notes, `-R LTimothy/nightstand` if `gh`'s default-repo
-   detection picks the wrong remote (this repo has several forks configured
-   as remotes for cherry-picking). Pass `--prerelease` for a `beta`-channel
-   release; when a release is later promoted to `stable` in `releases.json`,
-   also run `gh release edit v<version> --prerelease=false` (and
-   `--latest` if it's the newest stable one) to match.
-
-## Tests
-
-New code comes with tests. The inherited tree is mostly untested and gets
-backfilled incrementally as things are touched, but anything added now should
-land with coverage for its logic. The server uses `node:test` with test files
-next to the code they cover (`src/**/*.test.ts`); when the interesting part
-of a change is hard to test directly (shell scripts, UI wiring), extract the
-logic into a plain module and test that, or at minimum gate the invariants
-that would break silently (see `src/updaterScripts.test.ts` for the pattern).
-
-The app has a jsdom plus Testing Library plus MSW harness. A change that
-touches an app component or page lands with a colocated `*.test.tsx` that
-renders it against the mock data, using `renderWithProviders` or `renderApp`,
-the same way server logic lands with a `node:test` file. See
-`app/src/test/README.md` for how the harness works.
-
-## Before a PR
-
-Lint and typecheck both halves, and run the server test suite.
-
-```
-cd server && npx tsc --noEmit && npm run lint && npm test
-cd app && npx tsc -b && npm run lint && npm test
-```
-
-The pod runs prebuilt code, so `server/dist/` and `server/public/` (the app's
-build output) are committed. If your change touches source, rebuild
-(`npm run build:pr` in both `server/` and `app/`) and commit the output,
-otherwise the deploy ships stale code.
+   "v<version>" --notes-file <path>`, with that version's `CHANGELOG.md`
+   section as the notes. Add `-R LTimothy/nightstand` if `gh` picks the
+   wrong default repository (this clone has several other forks configured
+   as remotes for cherry-picking). Pass `--prerelease` for a `beta` release.
+   When a release is later promoted to `stable` in `releases.json`, also run
+   `gh release edit v<version> --prerelease=false` (and `--latest` if it is
+   the newest stable release) to match.

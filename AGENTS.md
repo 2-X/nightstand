@@ -1,106 +1,204 @@
 # Nightstand agent notes
 
-## Working here as (or with) an AI agent
+These notes are for AI coding agents working in this repository. Read
+[CONTRIBUTING.md](CONTRIBUTING.md) as well, and read
+[docs/EIGHT_SLEEP_PROTOCOL.md](docs/EIGHT_SLEEP_PROTOCOL.md) before changing
+anything that talks to the hardware.
 
-This file is written for AI coding agents, and contributions made with them are
-welcome. The person who opens the PR is the author, full stop. You are expected
-to have read, tested, and understood what you submit, and you answer for review
-feedback and for anything it breaks. How the code was produced does not matter
-to review, and no disclosure is expected either way; what matters is that it is
-correct and that you can stand behind it.
+## Contributions made with agents
 
-The bar does not move for agent-written code: tests with every change, lint and
-typecheck clean on the files you touched, rebuilt output committed when source
-changes (see [CONTRIBUTING.md](CONTRIBUTING.md)), and the hardware cautions
-below taken seriously. This software runs under a sleeping person. Nothing
-lands that you could not explain line by line.
+Agent-written contributions are welcome and reviewed like any other. The
+person who opens the pull request is its author: they are expected to have
+read, tested, and understood it, and they answer for review feedback and for
+anything it breaks. No disclosure is needed either way.
 
-If you point an agent at this repo, have it read this file and CONTRIBUTING.md
-first, and [docs/EIGHT_SLEEP_PROTOCOL.md](docs/EIGHT_SLEEP_PROTOCOL.md) before
-it touches anything hardware-adjacent.
+The bar is the same for agent-written code. This software controls a bed that
+someone is sleeping on, so nothing should land that its author could not
+explain line by line.
+
+## Rules for every change
+
+- Base work on `dev` and open pull requests against `dev`. Do not commit to
+  or push `main`; it moves only when the maintainer cuts a release.
+- Add or update tests for the logic you change (see "Tests" in
+  CONTRIBUTING.md).
+- Before you report a change as done, run the checks in
+  [Commands](#commands) for every package you touched, and say which ones you
+  ran.
+- `server/dist/` and `server/public/` are committed build output. Never edit
+  them by hand. If you change source, run `npm run build:pr` in `server/` and
+  `app/` and commit the result.
+- Commit messages follow Conventional Commits as described in
+  CONTRIBUTING.md, with no trailers. Do not add `Co-Authored-By` or
+  "Generated with" lines.
+- Prisma migrations must be additive. Never drop or rename a column or table
+  that an older, still-installable release reads; rollbacks run the older
+  server against the newer schema.
+- Do not run commands against a live Pod (SSH, deploy scripts, API calls that
+  change state) unless the user asks for that specific action.
 
 ## What this repo is
-- Nightstand is a local controller for Eight Sleep Pods. The server runs on the Pod's embedded Linux system and exposes a local REST API. The app is a React/MUI web UI served by the server.
-- The Pod hardware is controlled through a Unix socket called `dac.sock`; this repo calls that integration "Franken" or "Franken sock".
-- Persistent user data lives under `/persistent/free-sleep-data/` on the Pod. Local development mirrors parts of that under `server/free-sleep-data/`.
 
-## Top-level layout
+- Nightstand is a local controller for Eight Sleep Pods. The server runs on
+  the Pod's embedded Linux system and exposes a local REST API. The app is a
+  React/MUI web UI served by the server.
+- The Pod hardware is controlled through a Unix socket called `dac.sock`.
+  This repo calls that integration "Franken" or "Franken sock".
+- Persistent user data lives under `/persistent/free-sleep-data/` on the
+  Pod. Local development mirrors parts of it under `server/free-sleep-data/`.
+
+## Layout
+
 - `app/`: Vite React frontend using MUI, Zustand, React Query, and Axios.
-- `server/`: Express TypeScript backend, LowDB JSON settings/schedules, Prisma SQLite metrics, node-schedule jobs, and Franken socket control.
-- `biometrics/`: Python stream processing, sleep detection, vitals calculation, and SQLite writes for biometrics.
-- `scripts/`: Pod install/update/reset/service helper scripts.
-- `docs/`: user-facing screenshots, hardware teardown/install docs,
-  [EIGHT_SLEEP_PROTOCOL.md](docs/EIGHT_SLEEP_PROTOCOL.md) (reverse-engineered
-  hardware protocol reference, see below), and
-  [CALIBRATION.md](docs/CALIBRATION.md) (catalog classifying the numeric
+  Unit tests sit next to components; Playwright tests are in `app/e2e/`.
+- `server/`: Express TypeScript backend with LowDB JSON settings and
+  schedules, Prisma SQLite metrics, node-schedule jobs, and Franken socket
+  control. `server/prisma/` holds the schema and migrations.
+- `biometrics/`: Python stream processing, sleep detection, vitals
+  calculation, and SQLite writes for biometrics. Tests are in
+  `biometrics/__tests__/`; see [biometrics/BIOMETRICS.md](biometrics/BIOMETRICS.md).
+- `scripts/`: Pod install, update, reset, and service helper scripts, plus
+  maintainer tools such as `promote_release.sh` and `deploy-dev.sh`.
+- `ops/`: LAN deployment (`deploy.sh`, `rollback.sh`) and the safety rules in
+  [ops/ANTIBRICK.md](ops/ANTIBRICK.md).
+- `docs/`: user-facing screenshots, hardware teardown and install docs,
+  [EIGHT_SLEEP_PROTOCOL.md](docs/EIGHT_SLEEP_PROTOCOL.md) (the
+  reverse-engineered hardware protocol reference, see below), and
+  [CALIBRATION.md](docs/CALIBRATION.md) (a catalog classifying the numeric
   constants used for sleep detection as hardware fact, timing margin,
-  population bound, or per-bed learned).
+  population bound, or per-bed learned value).
+- `releases.json` and `CHANGELOG.md`: the release manifest that installed
+  Pods read, and the user-facing changelog. Both change only as part of a
+  release, except for notes under `## [Unreleased]` in the changelog.
 
-## Common commands
-- App typecheck: `cd app && npx tsc -b`
-- App lint: `cd app && npm run lint`
-- App dev server: `cd app && VITE_POD_IP=<pod-ip> npm run dev`
-- Server typecheck without writing `dist`: `cd server && npx tsc --noEmit`
-- Server lint: `cd server && npm run lint`
-- Server hot reload on Pod: `fs-dev-server` per `server/README_SERVER.md`
-- Server local dev: `cd server && npm run dev:local`
+## Commands
+
+Setup (the app imports schemas from `server/src`, so it needs the server's
+dependencies too):
+
+- `cd server && npm ci && npm run generate` (the Prisma client is needed for
+  the server's build and tests)
+- `cd app && npm ci`
+
+Server, from `server/`:
+
+- Typecheck without writing `dist`: `npx tsc --noEmit`
+- Lint: `npm run lint`
+- Test: `npm test` (`node:test`, files matching `src/**/*.test.ts`)
+- Build into `server/dist/`: `npm run build:pr`
+- Local dev: `npm run dev:local`, after pointing `DATA_FOLDER` and
+  `DATABASE_URL` in `server/.env.local` at your machine
+- Hot reload on a Pod: `fs-dev-server`, per
+  [server/README_SERVER.md](server/README_SERVER.md)
+
+App, from `app/`:
+
+- Typecheck: `npx tsc -b`
+- Lint: `npm run lint`
+- Test: `npm test` (Vitest)
+- Build into `server/public/`: `npm run build:pr`
+- Dev server against a Pod: `VITE_POD_IP=<pod-ip> npm run dev`
+- Dev server with mock data and no Pod: `VITE_ENV=demo npx vite`
+- End-to-end: `npx playwright install chromium`, then
+  `npm run build:demo && npx playwright test`
+
+Biometrics, from the repository root (Python 3.9, as in CI):
+
+- `python -m pytest biometrics/__tests__/`
 
 ## Runtime notes
-- `server/src/config.ts` requires `DATA_FOLDER` and `ENV`; Pod runtime gets these through `server/.env.pod` via `npm start`.
-- `server/src/jobs/jobScheduler.ts` schedules jobs at import time and watches the LowDB folder for changes. Writes to settings or schedules trigger full job cancellation and recreation.
-- Schedule data is stored in `schedulesDB.json`; settings are stored in `settingsDB.json`; service health is stored in `servicesDB.json`.
-- The app imports schemas directly from `server/src/db/*Schema.ts`; schema changes must remain compatible with both app and server TypeScript settings.
 
-## Scheduling hotspots
-- Client schedule state lives in `app/src/pages/SchedulePage/scheduleStore.tsx`.
-- Schedule save payloads are assembled in `app/src/pages/SchedulePage/SchedulePage.tsx`.
-- Server schedule writes are handled by `server/src/routes/schedules/schedules.ts`.
+- `server/src/config.ts` requires `DATA_FOLDER` and `ENV`. On the Pod,
+  `npm start` supplies them from `server/.env.pod`.
+- `server/src/jobs/jobScheduler.ts` schedules jobs at import time, once the
+  system clock is valid, and watches the LowDB folder. A write to settings or
+  schedules cancels and recreates every job; writes to `servicesDB.json` are
+  ignored.
+- Schedules are stored in `schedulesDB.json`, settings in `settingsDB.json`,
+  and service health in `servicesDB.json`.
+- The app imports schemas directly from `server/src/db/*Schema.ts`, so schema
+  changes must compile under both the app's and the server's TypeScript
+  settings.
+- The server does not apply Prisma migrations. `scripts/install.sh` and
+  `scripts/update.sh` apply them with `prisma migrate deploy`.
+
+## Scheduling code
+
+- Client schedule state: `app/src/pages/SchedulePage/scheduleStore.tsx`.
+- Schedule save payloads are assembled in
+  `app/src/pages/SchedulePage/SchedulePage.tsx`.
+- Server schedule writes: `server/src/routes/schedules/schedules.ts`.
 - Scheduled jobs are created in:
   - `server/src/jobs/powerScheduler.ts`
   - `server/src/jobs/temperatureScheduler.ts`
   - `server/src/jobs/alarmScheduler.ts`
   - `server/src/jobs/primeScheduler.ts`
 
-## Franken hotspots
+## Franken code
+
 - Socket lifecycle: `server/src/8sleep/frankenServer.ts`
 - Socket server wrapper: `server/src/8sleep/unixSocketServer.ts`
 - Message parsing: `server/src/8sleep/messageStream.ts`
 - Hardware command map: `server/src/8sleep/deviceApi.ts`
 - Device status parsing: `server/src/8sleep/loadDeviceStatus.ts`
-- Startup initializes Franken from `server/src/server.ts`; health is surfaced through `server/src/serverStatus.ts`.
+- `server/src/server.ts` connects Franken at startup; its health is reported
+  through `server/src/serverStatus.ts`.
 
-## Reverse-engineered hardware protocol
-- **[docs/EIGHT_SLEEP_PROTOCOL.md](docs/EIGHT_SLEEP_PROTOCOL.md)** is the
-  consolidated reference for the `dac.sock` command table, `DEVICE_STATUS`
-  fields, and the RAW biometrics telemetry record types (`frzHealth`,
-  `frzTemp`, `bedTemp2`, etc.), cross-referenced against other independent
-  reverse-engineering projects (8rp, sleepypod/core, opensleep, ninesleep),
-  each entry tagged with whether *we* verified it or are trusting a source.
-  Check it before assuming a command does what its name implies.
-- **Read-only commands (`DEVICE_STATUS`/14, `HELLO`/0) are safe to probe
-  freely.** State-changing commands are not: the pod is a physical device
-  with a person potentially asleep on it. Before relying on a command from
-  an external doc, prefer testing it live against real hardware over
-  trusting the source blindly: e.g. `STOP_PRIME`/17 is documented by 8rp but
-  did not visibly interrupt an active priming cycle when tested against a
-  Pod 5 (see the protocol doc), a UI feature was built on that assumption,
-  then reverted once the test came back negative. If you can't test safely,
-  say so explicitly rather than shipping unverified.
-- **A single unix socket connection matters.** `dac.sock` expects exactly
-  one active consumer; opening a second ad-hoc connection while the real
-  server has one open can evict/destroy the live one (see the comments in
-  `unixSocketServer.ts`). Don't script a raw probe against a running pod's
-  socket, go through the existing `/api/deviceStatus` or `/api/jobs`
-  endpoints instead, which reuse the server's managed connection.
+## Other subsystems
+
+- Live updates to the app: `server/src/ws/wsServer.ts` (WebSocket at
+  `/ws/events`), fed by `server/src/events/eventBus.ts`.
+- Adjustable base control over Bluetooth:
+  `server/src/8sleep/trimixBaseControl.ts`.
+- Presence-based auto-off: `server/src/8sleep/presenceAutoOffMonitor.ts`.
+- Calibration status: `server/src/routes/calibration/`.
+- In-app updates: `server/src/routes/update/`, which starts `scripts/update.sh`
+  on the Pod through a systemd service.
+- The systemd units and sudoers rules behind Update, Roll back, Revert to
+  stock, Reboot, and the biometrics toggle all come from
+  `scripts/setup_services.sh`, which every install and update path runs. A new
+  control that needs sudo gets its rule there.
+  `server/src/setupServicesScript.test.ts` fails if a `sudo` call in
+  `server/src/jobs/` has no matching rule.
+
+## Hardware protocol and safety
+
+- [docs/EIGHT_SLEEP_PROTOCOL.md](docs/EIGHT_SLEEP_PROTOCOL.md) is the
+  reference for the `dac.sock` command table, `DEVICE_STATUS` fields, and the
+  RAW biometrics record types (`frzHealth`, `frzTemp`, `bedTemp2`, and
+  others). It is cross-checked against other independent reverse-engineering
+  projects (8rp, sleepypod/core, opensleep, ninesleep), and each entry says
+  whether it was verified on this project's hardware or taken from a source.
+  Check it before assuming a command does what its name suggests.
+- Read-only commands (`DEVICE_STATUS`/14, `HELLO`/0) are safe. State-changing
+  commands are not: the Pod is a physical device that may have someone
+  asleep on it. A command documented elsewhere is not verified until it has
+  been tested on real hardware. For example, `STOP_PRIME`/17 is documented by
+  8rp, but it did not interrupt an active prime when tested on a Pod 5, and a
+  UI feature built on it was reverted. If you cannot test a hardware
+  assumption safely, say so rather than shipping it unverified.
+- Never open your own connection to `dac.sock`. The server is the listener
+  on that socket and the Pod's firmware connects to it as a client, so an
+  extra connection can be taken for the firmware's or can replace a pending
+  firmware connection (see `handleConnection` in `unixSocketServer.ts`). Read
+  state with `GET /api/deviceStatus` and send commands through the API
+  (`/api/deviceStatus` or `/api/execute`), which use the server's managed
+  connection.
 
 ## Review cautions
-- Check timezone behavior with `moment-timezone`; the app sets a default timezone after settings load, and server jobs set `RecurrenceRule.tz`.
-- Prefer adding tests or small reproductions around scheduling time math before changing job timing.
-- When reviewing install/update scripts, remember they run as root or through sudo on an embedded Yocto-based system.
 
+- Check timezone behavior with `moment-timezone`. The app sets a default
+  timezone after settings load, and server jobs set `RecurrenceRule.tz`.
+- Add tests or small reproductions around scheduling time math before
+  changing job timing.
+- Install and update scripts run as root or through sudo on an embedded
+  Yocto-based system. Review them with that in mind.
 
-# Code smells
-- Any complicated functions should have concise, short comments explaining what the function does
-- Do not write obscure code with abbreviated variable names <= 2 characters
-- Scalability is important, don't write one off hacks. Ensure new files and code are placed in appropriate locations.
+## Code style
 
+Carried over from free-sleep's own agent notes:
+
+- Give complicated functions a short comment explaining what they do.
+- Avoid obscure code and variable names of two characters or fewer.
+- Avoid one-off hacks, and put new files and code where they belong in the
+  existing structure.

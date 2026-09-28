@@ -83,7 +83,8 @@ Response is newline-delimited `key = value` text, values as strings.
 
 Separate from `dac.sock`, this is the CBOR record stream the pod firmware
 writes to `/persistent/*.RAW` (piezo/capacitance/health telemetry), which
-free-sleep's biometrics archiver hardlinks into
+the RAW archiver (from [jmew/free-sleep](https://github.com/jmew/free-sleep))
+hardlinks into
 `/persistent/free-sleep-data/raw-archive/` before the firmware's rolling
 buffer truncates it. See `biometrics/load_raw_files.py` and
 `biometrics/stream/stream.py`.
@@ -174,6 +175,9 @@ far, but treat them as best-effort.
   checked `dac.sock` client implementation.
 - Hardware-generation detection heuristics: a Discord thread linked inline
   in `loadDeviceStatus.ts`.
+- [jmew/free-sleep](https://github.com/jmew/free-sleep/commit/3ffaa0d), the
+  RAW-file archive that keeps overnight data past the firmware's rolling
+  buffer.
 
 Add new findings here with a source and verification status, worth knowing
 whether something was tested or just copied from a doc.

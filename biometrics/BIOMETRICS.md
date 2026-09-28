@@ -1,136 +1,240 @@
 # Biometrics
 
-## Stream processor, calculates vitals (`stream/`)
+These notes are for anyone working on the Python code in `biometrics/`, which
+turns the Pod's sensor data into presence, vitals (heart rate, HRV, and
+breathing rate), and sleep records. Limits come first, then what runs and
+when, then the code and the sensor data.
 
-- `stream.py`: Monitors the latest `.RAW` file and continuously processes biometric data.
-- `stream_processor.py`: Buffers piezoelectric sensor data for presence detection and biometric calculations.
-- `biometric_processor.py`: Processes real-time piezo data to extract heart rate, HRV, and breathing rate.
+The pipeline, including the vitals code built on HeartPy, comes from the
+original [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
+Presence detection, sleep stages, and the sleep score come from
+[jmew/free-sleep](https://github.com/jmew/free-sleep). Smaller pieces are
+credited below where they are described.
 
-## Sleep detection (`sleep_detection/`)
+## Limits
 
-- `calibrate_sensor_thresholds.py`: Establishes a baseline for capacitance sensors.
-- `analyze_sleep.py`: Processes raw data and detects sleep intervals.
-- `cap_data.py`: Loads and processes capacitance sensor data to detect presence.
-- `sleep_detector.py`: Merges piezo and capacitance presence data to determine sleep sessions.
+- **Accuracy.** Biometrics in free-sleep and its forks, this one included, is
+  still early. Heart rate is the only measurement that has been compared with
+  a reference device: the original project's comparison, summarized in the
+  main [README](../README.md#biometrics). That comparison used the original
+  project's code, so it does not cover later changes in the forks. HRV,
+  breathing rate, and sleep stages have not been checked and may be
+  inaccurate.
+- **Accepted ranges.** Readings outside these ranges are discarded rather than
+  stored: heart rate 40 to 90 bpm, breathing rate 8 to 20 breaths per minute,
+  and HRV (SDNN) 8 to 200 ms. A sleeper whose heart rate stays above 90 bpm
+  gets no heart rate readings.
+- **Two sleepers.** Movement on one side reaches the other side's sensor
+  through the mattress. Presence detection tries to tell the two apart (see
+  [Presence detection](#presence-detection)) but can still be fooled, and any
+  vitals written while it is wrong belong to the other person.
+- **Still sleepers.** The piezo sensors respond to changes in pressure, not to
+  steady weight. A very still sleeper can fall below the detection threshold,
+  which leaves gaps in vitals.
+- **Pod models.** Pod 3 has two piezo sensors per side; Pod 4 and Pod 5 have
+  one. Newer Pods also write capacitance data in a different format. This fork
+  is developed on a Pod 5, and Pod 3 and Pod 4 get less testing.
+- **Tuning.** Several thresholds were tuned on one or a few beds.
+  [docs/CALIBRATION.md](../docs/CALIBRATION.md) lists which constants are
+  hardware facts and which are per-bed estimates.
 
-## Vital signs calculation (`vitals/`)
+## What runs and when
 
-- `calculate_vitals.py`: Loads piezo data, estimates heart rate, HRV, and breathing rate.
-- `calculations.py`: Implements signal processing, filtering, and biometric estimation.
-- `run_data.py`: Manages runtime parameters for sliding window calculations.
+Biometrics is off by default. The main [README](../README.md#biometrics)
+explains how to install it and turn it on or off. Every job below does
+nothing while it is off.
 
-## Database management (`db.py`)
+- **Live stream.** `stream/stream.py` runs as `free-sleep-stream.service`. Once
+  a second it decides whether someone is on each side and reports that to the
+  server (`/api/metrics/presence`). While someone is present, it writes a row
+  of heart rate, HRV, and breathing rate to the `vitals` table about once a
+  minute. Breathing rate needs 30 seconds of presence before it has a value,
+  and HRV needs 5 minutes; until then the row stores 0, which means no
+  reading.
+- **Daily sleep analysis.** At 12:00 in the Pod's time zone, the server runs
+  `sleep_detection/analyze_sleep.py` for each side over the previous 12 hours
+  and writes the `sleep_records` and `movement` tables. A side in away mode is
+  skipped.
+- **Calibration.** Each evening (left at 18:30, right at 19:00) the server runs
+  `sleep_detection/calibrate_sensor_thresholds.py`. It looks back over the
+  previous 6 hours for a stretch when the bed was empty, learns the
+  capacitance baseline that the daily analysis uses, and records an empty-bed
+  piezo floor. It skips the run if someone is on the bed. It is scheduled
+  together with daily priming, so it only runs when daily priming is on.
+- **Manual runs.** The Status page can run the sleep analysis or calibration
+  for either side (`POST /api/jobs`). A manual calibration skips the
+  occupied-bed check, on the assumption that the person running it knows the
+  bed is empty.
+- **Sleep stages and score** are computed by the server when the app asks for
+  them (`server/src/routes/metrics/sleepStages.ts` and `sleepScore.ts`). Stages
+  come from fixed rules over 5-minute buckets of heart rate, HRV, and
+  movement. There is no machine learning, and the stages have not been
+  compared with a sleep study.
 
-- Handles SQLite database operations for storing sleep records and vitals.
-- Uses `sqlite3` with a persistent connection and WAL mode for performance.
-- Provides functions for inserting vitals and sleep records while avoiding duplicates.
+## Code
 
-## Raw data handling (`load_raw_files.py`)
+### Live stream (`stream/`)
 
-- Loads `.RAW` files from the pod, decodes CBOR-encoded data, and extracts piezo and capacitance sensor readings.
-- Filters data based on timestamps and sensor types.
-- Implements memory optimization techniques such as garbage collection.
+- `stream.py`: Reads sensor records from the firmware's local NATS JetStream
+  stream. If NATS isn't available (older firmware, `nats-py` not installed, or
+  no stream), it falls back to watching `/persistent` and reading the newest
+  `.RAW` file. The NATS reader is adapted from
+  [SFenton/free-sleep](https://github.com/SFenton/free-sleep/commit/86aba76).
+- `stream_processor.py`: Buffers piezo data and hands each side's signal to
+  presence detection and the vitals calculations.
+- `buffer.py`: The rolling sample buffers for the heart rate, breathing, and
+  HRV windows.
+- `biometric_processor.py`: Presence detection, plus heart rate, HRV, and
+  breathing rate for one side. This is where the live vitals are computed.
+- `presence_floor.py`: Helpers for the rolling-floor check in presence
+  detection.
 
-## Data types (`data_types.py`)
+### Sleep detection (`sleep_detection/`)
 
-- Defines structured data models (`TypedDict`) for various biometric readings.
-- Includes schemas for heart rate, HRV, breathing rate, and sensor readings.
+- `analyze_sleep.py`: Loads RAW data for a time range and detects sleep
+  intervals and movement.
+- `calibrate_sensor_thresholds.py`: Learns empty-bed baselines for the
+  capacitance and piezo sensors.
+- `cap_data.py`: Loads capacitance data and detects presence from it.
+- `sleep_detector.py`: Combines piezo and capacitance presence into sleep
+  sessions.
 
-## Piezo data processing (`piezo_data.py`)
+### Vitals (`vitals/`)
 
-- Loads and processes piezo sensor data for biometric calculations.
-- Detects presence using a rolling window method based on sensor range thresholds.
-- Identifies baseline periods for calibrating the system.
+- `calculate_vitals.py`: A standalone script that recomputes heart rate, HRV,
+  and breathing rate for a time range from RAW files. No scheduled job runs
+  it.
+- `calculations.py` and `run_data.py`: Signal filtering, the sliding-window
+  estimates, and their runtime parameters, used by `calculate_vitals.py`.
+- `cleaning.py`: Outlier interpolation, shared with the live stream.
 
-## Data sources
+`heart/` is an adapted copy of [HeartPy](https://github.com/paulvangentcom/heartrate_analysis_python)
+by Paul van Gent, used for heart rate, HRV, and breathing rate. See
+[heart/README.md](heart/README.md).
 
-- There's 2 main sensors used to measure biometrics, they're both available in /persistent/*.RAW files
-- This data is only available if the Pod cannot access the internet. You can block internet access to the pod by setting
-  up firewall rules
-- The raw files are encoded in cbor & can be loaded with `load_raw_files.py`
+### Reading RAW files (`load_raw_files.py`)
 
-### 1. Capacitance sensor data
+- Loads `.RAW` files, decodes the CBOR records, and pulls out piezo and
+  capacitance readings, filtered by time range and record type. Frees memory
+  between files.
+- Reads each record with a small parser (`_read_raw_record`) instead of
+  `cbor2.load()`, which skips records when cbor2's C extension is installed.
+  Adapted from throwaway31265/free-sleep pull requests
+  [#46](https://github.com/throwaway31265/free-sleep/pull/46) by seanpasino and
+  [#50](https://github.com/throwaway31265/free-sleep/pull/50) by alexuser.
+- Reads archived RAW files as well as live ones, using the RAW archive from
+  [jmew/free-sleep](https://github.com/jmew/free-sleep/commit/3ffaa0d) (see
+  [Where the data comes from](#where-the-data-comes-from)).
 
-- This measures pressure in 1 second intervals. There's 3 sensors for each side
+### Other modules
 
-- Sample:
+- `db.py`: Writes vitals, sleep records, and movement to SQLite, skipping
+  duplicates. Keeps one `sqlite3` connection open, in WAL mode.
+- `calibration.py`: Reads and writes the calibration results
+  (`calibration_profiles` and `calibration_runs` tables). All calibration
+  writes go through it.
+- `data_types.py`: `TypedDict` models for the raw records and measurements.
+- `piezo_data.py`: Loads piezo data for the daily jobs, detects presence over a
+  rolling window, and finds empty-bed periods for calibration.
+
+## Where the data comes from
+
+The live stream reads records from NATS when it can. The daily jobs read the
+`.RAW` files in `/persistent`, which hold the same records CBOR-encoded.
+
+The firmware keeps only a short rolling window of RAW files, roughly the last
+75 minutes, and removes files after uploading them to Eight Sleep. To keep a
+full night available, `scripts/archive-raw.sh` runs on a systemd timer
+(installed by `install.sh`) and hardlinks each new file into
+`/persistent/free-sleep-data/raw-archive/`, which keeps 14 days by default.
+RAW files are most reliably available when the Pod can't reach the internet;
+[INSTALLATION.md](../INSTALLATION.md) covers the firewall rules that block
+its access.
+
+Each record in a RAW file is a CBOR map of `seq` and `data`, where `data` is
+another CBOR-encoded record. On disk, `ts` is in Unix seconds and piezo
+samples are packed 32-bit integers. The examples below show records after
+`load_raw_files.py` has decoded them, with `ts` as a UTC string.
+
+### Capacitance sensor
+
+One reading a second, from 3 sensors per side. Pod 5 (and Pod 4, per
+[docs/EIGHT_SLEEP_PROTOCOL.md](../docs/EIGHT_SLEEP_PROTOCOL.md)) writes
+`capSense2` records with 8 values per side instead, which `load_raw_files.py`
+maps onto the `out`, `cen`, and `in` fields below. That mapping was worked out
+on a Pod 5.
 
 ```json
 {
   "type": "capSense",
   "ts": "2025-01-10 11:00:22",
-  "left": {
-    "out": 387,
-    "cen": 381,
-    "in": 505,
-    "status": "good"
-  },
-  "right": {
-    "out": 1076,
-    "cen": 1075,
-    "in": 1074,
-    "status": "good"
-  },
+  "left":  { "out": 387,  "cen": 381,  "in": 505,  "status": "good" },
+  "right": { "out": 1076, "cen": 1075, "in": 1074, "status": "good" },
   "seq": 1610679
 }
 ```
 
-### 2. Piezo sensor data
+### Piezo sensor
 
-- Measures pressure ~500× per second.
-- Sensor count per side varies by hardware:
-  - **Pod 3**: 2 piezos per side (head + foot). Records contain `left1`, `left2`, `right1`, `right2`.
-  - **Pod 4 / Pod 5 / Pod 8**: 1 piezo per side. Records contain only `left1` and `right1`.
-- `StreamProcessor` auto-detects which case it's in: `sensor_count = 2 if 'left2' in piezo_record else 1`. The dual-piezo presence-detection code (`max(range(signal1), range(signal2))`) is a no-op on single-piezo hardware.
+About 500 samples a second per sensor, delivered as one record a second. The
+number of sensors per side depends on the Pod:
+
+- **Pod 3**: 2 per side (head and foot). Records contain `left1`, `left2`,
+  `right1`, and `right2`.
+- **Pod 4 and Pod 5**: 1 per side. Records contain only `left1` and `right1`.
+
+`StreamProcessor` sets `sensor_count` to 2 when a record contains `left2` and
+to 1 otherwise. With one sensor, presence detection uses that sensor's signal
+alone.
+
+A Pod 3 record, with each array shortened (they hold about 500 samples):
 
 ```json
 {
+  "type": "piezo-dual",
+  "ts": "2025-01-10 11:00:22",
+  "seq": 1610681,
   "adc": 1,
   "freq": 500,
   "gain": 400,
-  "left1": [
-    -163532,
-    -161494
-    //  ...500 more
-  ],
-  "left2": [
-    -59995,
-    -63199
-    //  ...500 more
-  ],
-  "right1": [
-    81464,
-    80593
-    //  ...500 more
-  ],
-  "right2": [
-    722955,
-    723792
-    //  ...500 more
-  ],
-  "seq": 1610681,
-  "ts": "2025-01-10 11:00:22",
-  "type": "piezo-dual"
+  "left1": [-163532, -161494, ...],
+  "left2": [-59995, -63199, ...],
+  "right1": [81464, 80593, ...],
+  "right2": [722955, 723792, ...]
 }
 ```
 
----
+## Presence detection
 
-## Presence detection notes
+`biometric_processor.detect_presence()` runs once a second for each side:
 
-`biometric_processor.detect_presence()` decides per-second whether someone is on a given side:
+1. It takes the range (98th percentile minus 2nd percentile) of each piezo
+   signal on that side, and the larger of the two on a Pod 3.
+2. `_PresenceCoordinator` compares the two sides. A side below the noise floor
+   (150,000) counts as empty. If both sides are above it, one side must be at
+   least 1.3 times the other to count as the only occupied side, so movement
+   carried through the mattress doesn't register on the empty side.
+3. Entry needs 5 consecutive seconds in which this side is clearly the
+   occupied one.
+4. Exit is slower. Presence ends after 180 seconds without a clear signal. The
+   piezo sensors only respond to change, so a still sleeper can produce only a
+   small breathing signal that stays below the threshold for a minute or more;
+   the long timeout covers that. Sessions shorter than 60 seconds can end
+   after 30 seconds instead, and once an exit has started, 3 seconds of clear
+   signal are needed to cancel it.
+5. When both sides are above the floor and neither is clearly dominant, the
+   exit timer normally pauses. The rolling-floor check (`presence_floor.py`)
+   lets it keep running when this side's recent low-end signal has dropped
+   well below the level it held while occupied, which is what crosstalk from
+   the other side looks like. It is set to favor staying present, so it only
+   partly solves the problem.
+6. On any exit, the side's rolling buffers are cleared (`reset()` and
+   `init_tracking()`). After the next entry, vitals resume once `present_for`
+   passes `heart_rate_window_seconds`.
 
-1. Compute the percentile-based range (p98 - p2) of each piezo signal, then take the max of available piezos.
-2. Cross-side `_PresenceCoordinator` arbitrates between left and right based on a dominance ratio (1.3×) and a noise floor (150,000) so mechanical transmission through the mattress doesn't read as occupancy on the empty side.
-3. Entry requires 5 consecutive seconds of clear dominance over the other side, not just any elevated reading. Exit is slower: **180 seconds** without a clear signal before flipping back to false, plus a shorter 30-second fast-exit for short sessions and a rolling-floor check that can still hold presence steady through ambiguous crosstalk. The long slow-exit timeout exists because piezos are AC-coupled, a perfectly still sleeper produces only tiny breathing-amplitude signal that can fall below threshold for a minute or more.
-4. On any exit, all rolling buffers are wiped via `reset()`/`init_tracking()`. After re-detection, vitals only resume once `present_for > heart_rate_window_seconds` again.
-
-Tunable in `biometric_processor.py`:
-- `no_presence_tolerance` (line ~208): 180s default.
-- noise floor + dominance ratio in `_PresenceCoordinator`.
-
-If a deep sleeper shows up with multi-hour vitals gaps on the chart, the typical cause is repeated sub-threshold stillness re-triggering the timeout. Increase tolerance or lower the noise floor for that user.
-
-
-
-
+The main settings are `no_presence_tolerance` (180 seconds) in
+`BiometricProcessor.__init__`, and `NOISE_THRESHOLD` and `DOMINANCE_RATIO` in
+`_PresenceCoordinator`. If a still sleeper shows gaps of hours in their
+vitals, a likely cause is a signal below the noise floor running out the exit
+timer. Raising the tolerance, or lowering the noise floor for that bed, may
+help.
