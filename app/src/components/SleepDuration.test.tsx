@@ -9,7 +9,7 @@ vi.mock('@api/sleepStages.ts', () => ({ useSleepStages: () => ({ data: {
   totals: { light: 23400, deep: 0, rem: 0, awake: 1800 }, percentages: { light: 93, deep: 0, rem: 0, awake: 7 },
 } }) }));
 
-it('labels detected bed presence separately from classified sleep and excludes unclassified gaps', () => {
+it('leads with classified sleep and labels bed presence separately without duplicating sleep duration', () => {
   render(<>
     <SleepFitnessCard
       sleepRecord={ {
@@ -18,8 +18,7 @@ it('labels detected bed presence separately from classified sleep and excludes u
       } }/>
     <SleepStagesCard startTime="2026-09-28T00:00:00Z" endTime="2026-09-28T07:30:00Z"/>
   </>);
-  expect(screen.getByText('Detected time in bed')).toBeInTheDocument();
-  expect(screen.getByText('7h 30m')).toBeInTheDocument();
-  expect(screen.getByText('Estimated time asleep')).toBeInTheDocument();
-  expect(screen.getByText('6h 30m')).toBeInTheDocument();
+  expect(screen.getByText(/7h 30m in bed/)).toBeInTheDocument();
+  expect(screen.getAllByText('6h 30m asleep')).toHaveLength(1);
+  expect(screen.getByText('Within your 6.5 to 9 hour range')).toBeInTheDocument();
 });

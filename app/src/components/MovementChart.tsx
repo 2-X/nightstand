@@ -130,7 +130,7 @@ export default function MovementAreaChart({
         xAxis={ [{
           scaleType: 'time',
           data: xData,
-          valueFormatter: (v) => moment(v as number).format('HH:mm'),
+          valueFormatter: (v) => moment(v as number).format('h:mm A'),
           min: xData[0],
           max: xData[xData.length - 1],
           tickMinStep: 60 * 60 * 1000,

@@ -28,6 +28,9 @@ import PageContainer from '../../PageContainer';
 import WeekStrip from './WeekStrip';
 import WeeklyScheduleBars from './WeeklyScheduleBars';
 import { recordForNight, recordsInWeek } from './sleepContext';
+import MissingNightCard, { MissingNightState } from './MissingNightCard';
+import useAnalyzeSleep from '@lib/useAnalyzeSleep';
+import { SLEEP_ANALYSIS_HOUR, SLEEP_ANALYSIS_MINUTE } from '../../../../../server/src/sleepAnalysisSchedule';
 
 const METRICS = [
   { key: 'heart_rate', label: 'Heart rate', unit: 'bpm', summary: 'avgHeartRate' },
@@ -91,23 +94,48 @@ function NightVitals({ record, side, timeZone }: { record: SleepRecord; side: Si
 }
 
 // Keep explicit date selection across side changes.
-function SleepContext({ side, timeZone }: { side: Side; timeZone: string }) {
+function SleepContext({ side, timeZone, sleeper }: { side: Side; timeZone: string; sleeper: string }) {
   const [weekDate, setWeekDate] = useState<string>();
   const [chosenDate, setChosenDate] = useState<string>();
   const [view, setView] = useState('night');
   const { data, isPending, isError, refetch } = useSleepRecords({ side });
   const sideRecords = isError ? [] : data?.filter(record => record.side === side) ?? [];
   const newest = [...sideRecords].sort((left, right) => Date.parse(right.left_bed_at) - Date.parse(left.left_bed_at))[0];
-  const initialWeek = moment.tz(newest?.left_bed_at, timeZone).startOf('isoWeek').format('YYYY-MM-DD');
+  const { data: services } = useServices();
+  const job = services?.biometrics.jobs?.[side === 'left' ? 'analyzeSleepLeft' : 'analyzeSleepRight'];
+  const analysis = useAnalyzeSleep();
+  const today = moment.tz(timeZone);
+  const todayDate = today.format('YYYY-MM-DD');
+  const latestMissing = !recordForNight(sideRecords, todayDate, timeZone);
+  const jobIsToday = !!job?.timestamp && moment.tz(job.timestamp, timeZone).isSame(today, 'day');
+  const analysisTime = today.clone().startOf('day').hour(SLEEP_ANALYSIS_HOUR).minute(SLEEP_ANALYSIS_MINUTE);
+  const currentState: MissingNightState = services?.biometrics.enabled === false ? 'off'
+    : analysis.isPending ? 'analyzing'
+      : analysis.error || (job?.status === 'failed' && jobIsToday) ? 'failed'
+        : (today.isBefore(analysisTime) && !jobIsToday) || job?.status === 'not_started'
+          || (job?.status === 'waiting_for_data' && !jobIsToday) ? 'pending' : 'empty';
+  const completedToday = jobIsToday && (job?.status === 'healthy' || job?.status === 'waiting_for_data');
+  const showLatestAnalysis = !chosenDate && !weekDate && latestMissing
+    && ((completedToday && currentState === 'empty')
+      || (newest?.sleep_period_seconds !== 0 && ['pending', 'analyzing', 'failed'].includes(currentState)));
+  const initialWeek = moment.tz(showLatestAnalysis ? todayDate : newest?.left_bed_at, timeZone).startOf('isoWeek').format('YYYY-MM-DD');
   const weekStart = useMemo(() => moment.tz(weekDate ?? initialWeek, timeZone).startOf('day'), [weekDate, initialWeek, timeZone]);
   const weekEnd = weekStart.clone().add(6, 'days');
-  const { data: services } = useServices();
+  const weekTitle = `${weekStart.format('MMM D')} - ${weekEnd.format('MMM D')}`;
   const records = isError ? [] : recordsInWeek(sideRecords, weekStart, timeZone);
   const latest = [...records].sort((left, right) => Date.parse(right.left_bed_at) - Date.parse(left.left_bed_at))[0];
-  const defaultDate = latest ? moment.tz(latest.left_bed_at, timeZone) : moment.min(moment.tz(timeZone), weekEnd);
-  const selectedDate = chosenDate ?? defaultDate.format('YYYY-MM-DD');
+  const defaultDate = latest ? moment.tz(latest.left_bed_at, timeZone) : moment.min(today, weekEnd);
+  const selectedDate = chosenDate ?? (showLatestAnalysis ? todayDate : defaultDate.format('YYYY-MM-DD'));
   const selected = recordForNight(records, selectedDate, timeZone);
-  const job = services?.biometrics.jobs[side === 'left' ? 'analyzeSleepLeft' : 'analyzeSleepRight'];
+  const isLatestDate = selectedDate === todayDate;
+  const missingState: MissingNightState = selected?.sleep_period_seconds === 0 ? 'zero'
+    : services?.biometrics.enabled === false ? 'off' : isLatestDate ? currentState : 'empty';
+  const fallback = !selected && isLatestDate
+    && (['pending', 'analyzing', 'failed'].includes(missingState) || (missingState === 'empty' && completedToday)) ? newest : undefined;
+  const displayed = selected?.sleep_period_seconds === 0 ? undefined : selected ?? fallback;
+  const nightTitle = (wakeDate: string) => moment.tz(wakeDate, timeZone).format('[Woke] ddd, MMM D');
+  const phoneZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const podZoneLabel = timeZone.split('/').slice(-1)[0]?.replace(/_/g, ' ') ?? timeZone;
   const changeWeek = (amount: number) => {
     setWeekDate(weekStart.clone().add(amount, 'week').format('YYYY-MM-DD'));
     setChosenDate(undefined);
@@ -117,7 +145,7 @@ function SleepContext({ side, timeZone }: { side: Side; timeZone: string }) {
     <>
       <Box sx={ { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }>
         <IconButton aria-label="Previous week" onClick={ () => changeWeek(-1) }><NavigateBeforeIcon/></IconButton>
-        <Typography>{ weekStart.format('MMM D') } - { weekEnd.format('MMM D') }</Typography>
+        <Typography>{ weekTitle }</Typography>
         <IconButton
           aria-label="Next week"
           disabled={ weekStart.isSameOrAfter(moment.tz(timeZone).startOf('isoWeek')) }
@@ -128,22 +156,22 @@ function SleepContext({ side, timeZone }: { side: Side; timeZone: string }) {
         timeZone={ timeZone }
         selectedDate={ selectedDate }
         records={ records }
+        currentNightState={ currentState }
         onSelectDay={ date => {
           setChosenDate(date);
           setWeekDate(weekStart.format('YYYY-MM-DD'));
         } }/>
-      <Typography variant="body2" color="text.secondary">
-        { side === 'left' ? 'Left' : 'Right' } side · Wake date { moment.tz(selectedDate, timeZone).format('ddd, MMM D') } · { timeZone }
-      </Typography>
       <Tabs value={ view } onChange={ (_, next: string) => setView(next) } aria-label="Sleep period" variant="fullWidth">
         <Tab value="night" label="Night" id="sleep-night" aria-controls="sleep-panel"/>
         <Tab value="week" label="Week" id="sleep-week" aria-controls="sleep-panel"/>
       </Tabs>
-      { services?.biometrics.enabled === false && (
-        <Alert severity="info">
-          Biometrics is disabled. Existing recordings remain available; enable it in Settings &gt; Sleep data to collect new data.
-        </Alert>
-      ) }
+      <Box>
+        <Typography component="h2" variant="h6">{ view === 'week' ? weekTitle : nightTitle(selectedDate) }</Typography>
+        <Typography variant="body2" color="text.secondary">{ sleeper } · Dates show when you woke</Typography>
+        { phoneZone !== timeZone && (
+          <Typography variant="body2" color="text.secondary">Times shown in Pod time ({ podZoneLabel })</Typography>
+        ) }
+      </Box>
       <Box role="tabpanel" id="sleep-panel" aria-labelledby={ `sleep-${view}` }>
         { isPending ? <CircularProgress aria-label="Loading sleep records"/> : isError ? (
           <Alert severity="error" action={ <Button onClick={ () => refetch() }>Retry</Button> }>Sleep records could not be loaded.</Alert>
@@ -159,31 +187,42 @@ function SleepContext({ side, timeZone }: { side: Side; timeZone: string }) {
               <WeeklyScheduleBars records={ records } weekStart={ weekStart } timeZone={ timeZone }/>
             </ErrorBoundary>
           </Box>
-        ) : selected ? (
-          <Box
-            sx={ {
-              display: 'grid', gap: 2, alignItems: 'start',
-              gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.1fr) minmax(0, 1fr)' },
-            } }>
-            <Box sx={ { display: 'grid', gap: 2, minWidth: 0 } }>
-              <ErrorBoundary componentName="Night summary">
-                <SleepFitnessCard sleepRecord={ selected } timeZone={ timeZone }/>
-              </ErrorBoundary>
-              <ErrorBoundary componentName="Sleep stages">
-                <SleepStagesCard startTime={ selected.entered_bed_at } endTime={ selected.left_bed_at } timeZone={ timeZone }/>
-              </ErrorBoundary>
-            </Box>
-            <ErrorBoundary key={ `${side}-${selected.id}` } componentName="Night measurements">
-              <NightVitals record={ selected } side={ side } timeZone={ timeZone }/>
-            </ErrorBoundary>
-          </Box>
         ) : (
-          <Alert severity="info">
-            No recording for { moment.tz(selectedDate, timeZone).format('MMM D') }. Missing data does not mean zero sleep.
-            { job?.status === 'failed'
-              ? ' The latest analysis failed; inspect it in Settings > Device.'
-              : ' This night may not have been analyzed yet. Analysis runs at noon in the Pod timezone.' }
-          </Alert>
+          <>
+            { (!selected || selected.sleep_period_seconds === 0 || services?.biometrics.enabled === false) && (
+              <MissingNightCard
+                state={ missingState }
+                canAnalyze={ analysis.canAnalyze }
+                onAnalyze={ () => void analysis.analyze() }/>
+            ) }
+            { fallback && displayed && (
+              <Box sx={ { mb: 2 } }>
+                <Typography variant="body2" color="text.secondary">Most recent recording</Typography>
+                <Typography component="h2" variant="h6">
+                  { nightTitle(moment.tz(displayed.left_bed_at, timeZone).format('YYYY-MM-DD')) }
+                </Typography>
+              </Box>
+            ) }
+            { displayed && (
+              <Box
+                sx={ {
+                  display: 'grid', gap: 2, alignItems: 'start',
+                  gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.1fr) minmax(0, 1fr)' },
+                } }>
+                <Box sx={ { display: 'grid', gap: 2, minWidth: 0 } }>
+                  <ErrorBoundary componentName="Night summary">
+                    <SleepFitnessCard sleepRecord={ displayed } timeZone={ timeZone }/>
+                  </ErrorBoundary>
+                  <ErrorBoundary componentName="Sleep stages">
+                    <SleepStagesCard startTime={ displayed.entered_bed_at } endTime={ displayed.left_bed_at } timeZone={ timeZone }/>
+                  </ErrorBoundary>
+                </Box>
+                <ErrorBoundary key={ `${side}-${displayed.id}` } componentName="Night measurements">
+                  <NightVitals record={ displayed } side={ side } timeZone={ timeZone }/>
+                </ErrorBoundary>
+              </Box>
+            ) }
+          </>
         ) }
       </Box>
     </>
@@ -196,12 +235,16 @@ export default function SleepPage() {
   return (
     <ErrorBoundary componentName="Sleep page">
       <PageContainer sx={ { mb: 12, gap: 2, alignItems: 'stretch' } }>
-        <Typography component="h1" variant="h4">Sleep</Typography>
+        <Typography component="h1" variant="h1">Sleep</Typography>
         <SideControl/>
         { isError ? (
           <Alert severity="error" action={ <Button onClick={ () => refetch() }>Retry</Button> }>Pod settings could not be loaded.</Alert>
         ) : settings ? (
-          <SleepContext key={ settings.timeZone } side={ side } timeZone={ settings.timeZone }/>
+          <SleepContext
+            key={ settings.timeZone }
+            side={ side }
+            timeZone={ settings.timeZone }
+            sleeper={ settings[side].name || `${side === 'left' ? 'Left' : 'Right'} side` }/>
         ) : <CircularProgress aria-label="Loading Pod timezone"/> }
       </PageContainer>
     </ErrorBoundary>

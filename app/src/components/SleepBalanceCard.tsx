@@ -10,7 +10,9 @@ export default function SleepBalanceCard({ records, weekStart, timeZone }: Props
   const recorded = recordsInWeek(records, weekStart, timeZone);
   const nights = new Set(recorded.map(record => moment.tz(record.left_bed_at, timeZone).format('YYYY-MM-DD'))).size;
   const total = recorded.reduce((seconds, record) => seconds + record.sleep_period_seconds, 0);
-  const balance = total - nights * 8 * 3600;
+  const average = nights ? total / nights : 0;
+  const belowRange = average < 6.5 * 3600;
+  const aboveRange = average > 9 * 3600;
   return (
     <GlassCard label="Sleep balance">
       <Typography>{ nights } of 7 nights recorded</Typography>
@@ -20,7 +22,8 @@ export default function SleepBalanceCard({ records, weekStart, timeZone }: Props
             { formatSleepDuration(total / nights) } average
           </Typography>
           <Typography variant="body2">
-            { formatSleepDuration(Math.abs(balance / nights)) } { balance >= 0 ? 'above' : 'below' } an 8-hour reference per recorded night.
+            { belowRange ? `${formatSleepDuration(6.5 * 3600 - average)} below`
+              : aboveRange ? `${formatSleepDuration(average - 9 * 3600)} above` : 'Within' } your 6.5 to 9 hour range per recorded night.
           </Typography>
         </>
       ) }

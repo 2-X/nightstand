@@ -18,14 +18,7 @@ type Props = {
   timeZone?: string;
 };
 
-// Visual config - colors picked to read clearly on a dark glass card and
-// preserve the deep→light blue ramp of typical sleep-stage visualizations.
-const STAGE_COLOR: Record<SleepStage, string> = {
-  awake: '#e8eaed', // near-white "interruption" segments
-  rem:   '#7da6ff', // light blue
-  light: '#3b6cd6', // medium blue
-  deep:  '#1f4ed8', // deep blue
-};
+const STAGE_COLOR: Record<SleepStage, string> = palette.stage;
 // Y-axis position for each stage (0 = top, 1 = bottom)
 const STAGE_Y: Record<SleepStage, number> = {
   awake: 0.10,
@@ -40,29 +33,7 @@ const STAGE_LABEL: Record<SleepStage, string> = {
   deep:  'Deep',
 };
 
-const TARGET_HOURS = [6.5, 9]; // "in range" band displayed under Time slept
-const TARGET_GREEN = '#22c55e';
-const TARGET_YELLOW = '#eab308';
-const TARGET_RED = '#ef4444';
-
-// Stage-percentage dot color. FLOOR-based, not a two-sided band - there's
-// no real downside to "more deep sleep than typical", and our heuristic
-// classifier tends to over-classify Deep on some nights, so the previous
-// two-sided check was red-flagging perfectly good sleep (e.g. 47 % deep
-// → red). Healthy adult ranges per the literature: deep ~13-23 %, REM
-// ~20-25 %. We give a fairly lenient floor so a slightly-off night still
-// shows yellow, not red.
-const STAGE_HEALTH: Record<'rem' | 'deep', { good: number; warn: number }> = {
-  rem:  { good: 15, warn: 10 }, // green ≥ 15 %, yellow ≥ 10 %, red < 10 %
-  deep: { good: 13, warn: 7 }, // green ≥ 13 %, yellow ≥ 7 %,  red < 7 %
-};
-
-function stageDotColor(stage: 'rem' | 'deep', pct: number): string {
-  const { good, warn } = STAGE_HEALTH[stage];
-  if (pct >= good) return TARGET_GREEN;
-  if (pct >= warn) return TARGET_YELLOW;
-  return TARGET_RED;
-}
+const TARGET_HOURS = [6.5, 9];
 
 function formatHM(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -94,12 +65,10 @@ function StatBlock({
   label,
   duration,
   pct,
-  dotColor,
 }: {
   label: string;
   duration: string;
   pct: string;
-  dotColor: string;
 }) {
   return (
     <Box sx={ { minWidth: 0 } }>
@@ -127,8 +96,6 @@ function StatBlock({
         >
           { duration }
         </Typography>
-        { /* Both are spans: this Typography holds the dot, and a Typography
-             defaults to a <p>, which cannot legally contain a <div>. */ }
         <Typography
           component="span"
           sx={ {
@@ -145,7 +112,6 @@ function StatBlock({
           } }
         >
           { pct }
-          <Box component="span" sx={ { width: 5, height: 5, borderRadius: '50%', backgroundColor: dotColor } }/>
         </Typography>
       </Box>
     </Box>
@@ -266,12 +232,12 @@ export default function SleepStagesCard({ startTime, endTime, timeZone }: Props)
     : 0, [data]);
 
   if (!sleepScoreEnabled) return null;
-  const totalDuration = formatHM(totalDurationSeconds);
   const totalHours = totalDurationSeconds / 3600;
   const inRange = totalHours >= TARGET_HOURS[0] && totalHours <= TARGET_HOURS[1];
 
   return (
-    <GlassCard label="SLEEP">
+    <GlassCard>
+      <Typography component="h2" variant="h6" sx={ { mb: 2 } }>Sleep stages</Typography>
       { isFetching && <CircularProgress sx={ { display: 'block', mx: 'auto', my: 4 } } /> }
 
       { !isFetching && data && data.epochs.length > 0 && (
@@ -281,13 +247,11 @@ export default function SleepStagesCard({ startTime, endTime, timeZone }: Props)
               label="Deep sleep"
               duration={ formatHM(data.totals.deep) }
               pct={ `${data.percentages.deep}%` }
-              dotColor={ stageDotColor('deep', data.percentages.deep) }
             />
             <StatBlock
               label="REM"
               duration={ formatHM(data.totals.rem) }
               pct={ `${data.percentages.rem}%` }
-              dotColor={ stageDotColor('rem', data.percentages.rem) }
             />
           </Box>
 
@@ -330,38 +294,9 @@ export default function SleepStagesCard({ startTime, endTime, timeZone }: Props)
             <LegendItem color={ STAGE_COLOR.deep } label={ STAGE_LABEL.deep } />
           </Box>
 
-          <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 0.5 } }>
-            <Typography sx={ { fontSize: '1.05rem', fontWeight: 600, color: palette.text.primary } }>
-              Estimated time asleep
-            </Typography>
-            <Box sx={ { textAlign: 'right' } }>
-              <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.75 } }>
-                <Typography
-                  sx={ {
-                    fontSize: '1.4rem',
-                    fontWeight: 500,
-                    color: palette.text.primary,
-                    fontVariantNumeric: 'tabular-nums',
-                  } }
-                >
-                  { totalDuration }
-                </Typography>
-                <Box
-                  sx={ {
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    backgroundColor: inRange ? TARGET_GREEN : palette.accent.orange,
-                  } }
-                />
-              </Box>
-              <Typography sx={ { fontSize: '0.8rem', color: palette.text.tertiary, mt: 0.25 } }>
-                { inRange
-                  ? `In range (${TARGET_HOURS[0]}\u2013${TARGET_HOURS[1]})`
-                  : `Out of range (${TARGET_HOURS[0]}\u2013${TARGET_HOURS[1]})` }
-              </Typography>
-            </Box>
-          </Box>
+          <Typography variant="body2" color="text.secondary">
+            { inRange ? 'Within' : 'Outside' } your { TARGET_HOURS[0] } to { TARGET_HOURS[1] } hour range
+          </Typography>
         </>
       ) }
 

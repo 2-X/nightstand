@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test('Monday opens the latest recorded night and expanded charts fill their panel', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-09-28T19:00:00Z') });
   await page.goto('/sleep');
-  await expect(page.getByText(/Wake date Sun, Sep 27/)).toBeVisible();
+  await expect(page.getByText(/Woke Sun, Sep 27/)).toBeVisible();
   const hrv = page.getByRole('button', { name: /^HRV/ });
   await expect(hrv).toContainText(/\d+ ms/);
   const value = (await hrv.textContent())!.match(/(\d+) ms/)![1];

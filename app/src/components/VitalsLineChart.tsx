@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import moment from 'moment-timezone';
 import { VitalsRecord } from '@api/vitals.ts';
 import MetricChartCard from '@design/MetricChartCard';
+import { palette } from '@design/tokens';
 import TimeSeriesChart, { TimeSeriesPoint } from '@design/TimeSeriesChart';
 import { vitalsRecordsToPoints, VitalsMetric as Metric } from '@lib/vitalsPoints.ts';
 type VitalsLineChartProps = {
@@ -74,12 +75,12 @@ export default function VitalsLineChart({ vitalsRecords, metric, sevenDayAvg, ti
 
   if (points.length === 0) return null;
 
-  // A single night's data reads fine as bare times ("11 pm", "3 am"), but
+  // A single night's data reads fine as bare times, but
   // once the window covers more than one day, identical hour labels repeat
-  // ("7 am, 7 am, 7 am") with nothing to tell the days apart.
+  // with nothing to tell the days apart.
   const spanMs =
     points[points.length - 1].timestamp.getTime() - points[0].timestamp.getTime();
-  const timeFormat = spanMs > 24 * 60 * 60 * 1000 ? 'ddd h a' : 'h a';
+  const timeFormat = spanMs > 24 * 60 * 60 * 1000 ? 'ddd h:mm A' : 'h:mm A';
 
   return (
     <MetricChartCard
@@ -91,8 +92,9 @@ export default function VitalsLineChart({ vitalsRecords, metric, sevenDayAvg, ti
     >
       <TimeSeriesChart
         data={ points }
+        lineColor={ palette.lamp }
         targetRange={ cfg.targetRange }
-        xValueFormatter={ (d) => (timeZone ? moment.tz(d, timeZone) : moment(d)).format(timeFormat).toLowerCase() }
+        xValueFormatter={ (d) => (timeZone ? moment.tz(d, timeZone) : moment(d)).format(timeFormat) }
         yValueFormatter={ (n) => Math.round(n).toString() }
       />
     </MetricChartCard>

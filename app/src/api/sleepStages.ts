@@ -36,6 +36,9 @@ export const useSleepStages = ({ side, startTime, endTime }: Args, enabled = tru
       });
       return response.data;
     },
+    gcTime: 60 * 60 * 1000,
+    staleTime: 60 * 60 * 1000,
+    retry: 1,
     enabled: enabled && !!startTime && !!endTime,
   });
 };

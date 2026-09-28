@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import moment from 'moment-timezone';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
-import { getSettings } from '../../../mocks/mockData';
+import { getSettings, getServices } from '../../../mocks/mockData';
 import { useAppStore } from '@state/appStore';
 import type { SleepRecord } from '@api/sleepSchema';
 import SleepPage from './SleepPage';
@@ -17,12 +17,16 @@ const record = (id: number, morning: string, hours: number): SleepRecord => ({
 let records: SleepRecord[];
 let requests: URL[];
 beforeEach(() => {
-  vi.spyOn(moment, 'now').mockReturnValue(Date.parse('2026-09-24T18:00:00Z'));
+  vi.spyOn(moment, 'now').mockReturnValue(Date.parse('2026-09-24T20:00:00Z'));
   moment.tz.setDefault('UTC');
   records = [record(1, '2026-09-22', 6), record(2, '2026-09-23', 8)];
   requests = [];
+  const services = structuredClone(getServices());
+  services.biometrics.jobs.analyzeSleepLeft.timestamp = '2026-09-23T19:00:00Z';
+  services.biometrics.jobs.analyzeSleepRight.timestamp = '2026-09-23T19:00:00Z';
   useAppStore.setState({ side: 'left' });
   server.use(
+    http.get('*/services', () => HttpResponse.json(services)),
     http.get('*/settings', () => HttpResponse.json({ ...getSettings(), timeZone: 'America/Los_Angeles' })),
     http.get('*/metrics/sleep', ({ request }) => {
       const url = new URL(request.url); requests.push(url);
@@ -42,7 +46,7 @@ describe('Sleep selection and period', () => {
     await screen.findByText('8h 0m');
     act(() => useAppStore.getState().setSide('right'));
     await waitFor(() => expect(requests.some(url => url.searchParams.get('side') === 'right')).toBe(true));
-    expect(await screen.findByText(/No recording for/)).toBeInTheDocument();
+    expect(await screen.findByText(/Nothing recorded|Not ready yet/)).toBeInTheDocument();
     expect(screen.queryByText('8h 0m')).not.toBeInTheDocument();
   });
   it('clears an empty day and preserves an explicit older night across refetch', async () => {
@@ -54,7 +58,7 @@ describe('Sleep selection and period', () => {
     await act(() => queryClient.invalidateQueries({ queryKey: ['useSleepRecords'] }));
     expect(screen.getByText('6h 0m')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Monday, September 21/ }));
-    expect(await screen.findByText(/No recording for/)).toBeInTheDocument();
+    expect(await screen.findByText(/Nothing recorded|Not ready yet/)).toBeInTheDocument();
     expect(screen.queryByText('6h 0m')).not.toBeInTheDocument();
   });
   it('uses one Monday-Sunday Pod week and clears an empty previous week', async () => {
@@ -66,7 +70,7 @@ describe('Sleep selection and period', () => {
     expect(within(strip).getByRole('button', { name: /Sunday, September 27/ })).toBeDisabled();
     records = [];
     await user.click(screen.getByRole('button', { name: 'Previous week' }));
-    expect(await screen.findByText(/No recording for/)).toBeInTheDocument();
+    expect(await screen.findByText(/Nothing recorded|Not ready yet/)).toBeInTheDocument();
     expect(screen.queryByText('8h 0m')).not.toBeInTheDocument();
     expect(screen.getByText('Sep 14 - Sep 20')).toBeInTheDocument();
   });
@@ -121,12 +125,12 @@ describe('Sleep selection and period', () => {
   });
 });
 
-it('opens the most recent recording from the previous week on Monday', async () => {
+it('shows the latest prior-week recording below the selected pending Monday', async () => {
   vi.mocked(moment.now).mockReturnValue(Date.parse('2026-09-28T18:00:00Z'));
   records = [record(5, '2026-09-27', 7)];
   renderWithProviders(<SleepPage />);
   expect(await screen.findByText('7h 0m')).toBeInTheDocument();
-  expect(screen.getByText('Sep 21 - Sep 27')).toBeInTheDocument();
+  expect(screen.getByText('Sep 28 - Oct 4')).toBeInTheDocument();
 });
 it('uses unique accordion region ids', async () => {
   const { container } = renderWithProviders(<SleepPage />, { initialRoute: '/sleep?metric=heart_rate' });
@@ -183,7 +187,31 @@ it('pins an explicitly chosen date week when changing to a side with older data'
   await screen.findByText('8h 0m');
   await user.click(screen.getByRole('button', { name: /Tuesday, September 22/ }));
   act(() => useAppStore.getState().setSide('right'));
-  await screen.findByText(/No recording for/);
+  await screen.findByText(/Nothing recorded|Not ready yet/);
   expect(screen.getByText('Sep 21 - Sep 27')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Tuesday, September 22/ })).toHaveAttribute('aria-pressed', 'true');
+});
+
+
+it('labels Night with the selected wake date and Week with the full date range', async () => {
+  const { user } = renderWithProviders(<SleepPage/>);
+  await screen.findByText('8h 0m');
+  await user.click(screen.getByRole('button', { name: /Monday, September 21/ }));
+  expect(screen.getByRole('heading', { name: 'Woke Mon, Sep 21' })).toBeInTheDocument();
+  expect(screen.getByText('Nothing recorded')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: /Tuesday, September 22/ }));
+  expect(screen.getByRole('heading', { name: 'Woke Tue, Sep 22' })).toBeInTheDocument();
+  const tabs = screen.getByRole('tablist', { name: 'Sleep period' });
+  const heading = screen.getByRole('heading', { name: 'Woke Tue, Sep 22' });
+  expect(tabs.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await user.click(screen.getByRole('tab', { name: 'Week' }));
+  expect(screen.getByRole('heading', { name: 'Sep 21 - Sep 27' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: /^Woke/ })).not.toBeInTheDocument();
+  expect(screen.getByText('In bed / out of bed, by wake date')).toBeInTheDocument();
+  await user.click(screen.getByRole('tab', { name: 'Night' }));
+  expect(screen.getByRole('heading', { name: 'Woke Tue, Sep 22' })).toBeInTheDocument();
+  await user.click(screen.getByRole('tab', { name: 'Week' }));
+  await user.click(screen.getByRole('button', { name: 'Previous week' }));
+  expect(screen.getByRole('heading', { name: 'Sep 14 - Sep 20' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: /^Woke/ })).not.toBeInTheDocument();
 });

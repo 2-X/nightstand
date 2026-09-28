@@ -24,7 +24,7 @@ describe('Sleep balance coverage', () => {
     renderWithProviders(<SleepBalanceCard records={ [{ ...base, sleep_period_seconds: 0 }] } weekStart={ weekStart } timeZone={ timeZone }/>);
     expect(screen.getByText('1 of 7 nights recorded')).toBeInTheDocument();
     expect(screen.getByText('0h 0m average')).toBeInTheDocument();
-    expect(screen.getByText(/8h 0m below/)).toBeInTheDocument();
+    expect(screen.getByText(/6h 30m below/)).toBeInTheDocument();
   });
   it('counts multiple sessions on the same local day as one recorded night', () => {
     renderWithProviders(<SleepBalanceCard
@@ -46,5 +46,5 @@ it('reports the average deficit per recorded night', () => {
     ] }
     weekStart={ weekStart }
     timeZone={ timeZone }/>);
-  expect(screen.getByText(/1h 30m below an 8-hour reference per recorded night/)).toBeInTheDocument();
+  expect(screen.getByText(/Within your 6.5 to 9 hour range per recorded night/)).toBeInTheDocument();
 });

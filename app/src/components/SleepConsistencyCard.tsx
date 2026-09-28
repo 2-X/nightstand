@@ -19,11 +19,10 @@ type Props = {
 const DAY_LETTERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 // Hours within ±this of the average bedtime/waketime are considered
-// "in range" and color the bar green.
+// within the usual timing band.
 const TOLERANCE_HOURS = 0.5;
 
-const TARGET_GREEN = '#22c55e';
-const TARGET_GREEN_BAND = 'rgba(34,197,94,0.18)';
+const USUAL_TIMING_BAND = `${palette.lamp}18`;
 
 /** Hours-since-midnight, with morning hours pushed past 24 so a bedtime
  *  of 11:30pm sorts before a waketime of 7:30am on a single linear axis. */
@@ -42,7 +41,7 @@ function formatShiftedHour(h: number, timeZone: string): string {
   const norm = ((h % 24) + 24) % 24;
   const hr = Math.floor(norm);
   const mn = Math.round((norm - hr) * 60);
-  return moment.tz(timeZone).startOf('day').hour(hr).minute(mn).format('h:mma').toLowerCase();
+  return moment.tz(timeZone).startOf('day').hour(hr).minute(mn).format('h:mm A');
 }
 
 // `times` is filtered to records-present-only, so we need to map a day index
@@ -86,10 +85,6 @@ export default function SleepConsistencyCard({ weekRecords, weekStart, timeZone 
     const yMin = Math.min(...times.map((t) => t.bedH), avgBed - TOLERANCE_HOURS) - 0.5;
     const yMax = Math.max(...times.map((t) => t.wakeH), avgWake + TOLERANCE_HOURS) + 0.5;
 
-    const inRange = (t: { bedH: number; wakeH: number }) =>
-      Math.abs(t.bedH - avgBed) <= TOLERANCE_HOURS &&
-      Math.abs(t.wakeH - avgWake) <= TOLERANCE_HOURS;
-
     return {
       days,
       matchedRecords,
@@ -98,13 +93,12 @@ export default function SleepConsistencyCard({ weekRecords, weekStart, timeZone 
       avgWake,
       yMin,
       yMax,
-      inRange,
     };
   }, [weekRecords, weekStart, timeZone]);
 
   if (!view) {
     return (
-      <GlassCard label="CONSISTENCY">
+      <GlassCard label="Sleep consistency">
         <Typography sx={ { ...typography.caption, color: palette.text.tertiary, textAlign: 'center', py: 4 } }>
           No sleep records in this week
         </Typography>
@@ -112,7 +106,7 @@ export default function SleepConsistencyCard({ weekRecords, weekStart, timeZone 
     );
   }
 
-  const { days, matchedRecords, times, avgBed, avgWake, yMin, yMax, inRange } = view;
+  const { days, matchedRecords, times, avgBed, avgWake, yMin, yMax } = view;
 
   // SVG carries only the bars and bands - text labels are rendered as HTML
   // alongside the SVG so the SVG's `preserveAspectRatio="none"` stretch
@@ -156,14 +150,6 @@ export default function SleepConsistencyCard({ weekRecords, weekStart, timeZone 
 
   return (
     <GlassCard>
-      { /* Header stats: WEEKLY AVERAGE asleep / awake. Explicitly labeled
-           "AVG" (was just "ASLEEP" / "AWAKE") because the previous labels
-           read as today's times and clashed with the per-night Bedtime /
-           Wake time on the fitness card right above. They're computed from
-           bed-entry / bed-exit timestamps across the week, not detected
-           sleep windows \u2014 so the weekly average will always be slightly
-           earlier (bedtime) and later (waketime) than the fitness card's
-           per-night detected onset/offset. */ }
       <Box sx={ { display: 'flex', gap: { xs: 3, sm: 5 }, mb: 1.5 } }>
         <Box>
           <Typography sx={ { ...typography.sectionLabel, color: palette.text.tertiary, mb: 0.25 } }>
@@ -190,20 +176,20 @@ export default function SleepConsistencyCard({ weekRecords, weekStart, timeZone 
               preserveAspectRatio="none"
               style={ { display: 'block', width: '100%', height: '100%', touchAction: 'pan-y' } }
             >
-              { /* Translucent green bands at the average bedtime + waketime */ }
+              { /* Subtle bands at the average bedtime + waketime */ }
               <rect
                 x={ 0 }
                 y={ bedBandTop }
                 width={ VB_W }
                 height={ Math.max(2, bedBandBot - bedBandTop) }
-                fill={ TARGET_GREEN_BAND }
+                fill={ USUAL_TIMING_BAND }
               />
               <rect
                 x={ 0 }
                 y={ wakeBandTop }
                 width={ VB_W }
                 height={ Math.max(2, wakeBandBot - wakeBandTop) }
-                fill={ TARGET_GREEN_BAND }
+                fill={ USUAL_TIMING_BAND }
               />
 
               { /* Dashed guide lines at the edges of each band */ }
@@ -214,7 +200,7 @@ export default function SleepConsistencyCard({ weekRecords, weekStart, timeZone 
                   x2={ VB_W }
                   y1={ y }
                   y2={ y }
-                  stroke="rgba(34,197,94,0.5)"
+                  stroke={ palette.text.secondary }
                   strokeWidth={ 1 }
                   strokeDasharray="4 4"
                 />
@@ -228,7 +214,6 @@ export default function SleepConsistencyCard({ weekRecords, weekStart, timeZone 
                 const top = yOf(t.bedH);
                 const bot = yOf(t.wakeH);
                 const x = xOf(i) - barWidth / 2;
-                const fill = inRange(t) ? TARGET_GREEN : '#ffffff';
                 return (
                   <rect
                     key={ i }
@@ -236,7 +221,7 @@ export default function SleepConsistencyCard({ weekRecords, weekStart, timeZone 
                     y={ top }
                     width={ barWidth }
                     height={ Math.max(4, bot - top) }
-                    fill={ fill }
+                    fill={ palette.lamp }
                     rx={ barWidth / 2 }
                     ry={ barWidth / 2 }
                   />
@@ -281,12 +266,15 @@ export default function SleepConsistencyCard({ weekRecords, weekStart, timeZone 
           <Box sx={ { flex: 1, display: 'flex' } }>
             { days.map((day, i) => {
               const isToday = i === todayIdx;
-              const label = isToday ? 'Today' : DAY_LETTERS[(day.isoWeekday() - 1)];
+              const label = DAY_LETTERS[(day.isoWeekday() - 1)];
               return (
                 <Typography
                   key={ i }
+                  aria-label={ isToday ? `${day.format('dddd')}, today` : day.format('dddd') }
                   sx={ {
                     flex: 1,
+                    minWidth: 0,
+                    whiteSpace: 'nowrap',
                     textAlign: 'center',
                     fontSize: '0.8rem',
                     fontWeight: isToday ? 600 : 400,

@@ -14,6 +14,6 @@ describe('SleepPage empty records robustness', () => {
     renderWithProviders(<SleepPage />, { initialRoute: '/data/sleep' });
 
     await screen.findByText('Sleep');
-    expect(await screen.findByText(/No recording for/)).toBeInTheDocument();
+    expect(await screen.findByText(/Nothing recorded|Not ready yet/)).toBeInTheDocument();
   });
 });
