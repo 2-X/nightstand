@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useState, useId } from 'react';
 import {
-  Box, Button, CircularProgress, Dialog, DialogActions, DialogContent,
+  Alert, ButtonBase, Button, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogContentText, DialogTitle, Stack, Typography,
 } from '@mui/material';
 import RestorePageIcon from '@mui/icons-material/RestorePage';
@@ -14,7 +15,8 @@ type Props = {
 
 export default function RollbackRow({ runningVersion, rollbackVersion }: Props) {
   const [open, setOpen] = useState(false);
-  const { phase, start, reset } = useUpdateProgress(runningVersion);
+  const titleId = useId();
+  const { phase, error, start, reset } = useUpdateProgress(runningVersion);
 
   const rollback = () => start(() => postRollback());
 
@@ -23,13 +25,14 @@ export default function RollbackRow({ runningVersion, rollbackVersion }: Props) 
     // dialog still bubbles its clicks up the React tree, so nesting it inside
     // the row would feed every click back into the row's own open handler.
     <>
-      <Box
+      <ButtonBase
         onClick={ () => setOpen(true) }
         sx={ {
           display: 'flex',
           alignItems: 'center',
           gap: 1.5,
-          cursor: 'pointer',
+          textAlign: 'left',
+          justifyContent: 'flex-start',
           mx: -2.5,
           px: 2.5,
           py: 1.5,
@@ -41,22 +44,23 @@ export default function RollbackRow({ runningVersion, rollbackVersion }: Props) 
         <Typography sx={ { fontSize: '1rem' } }>
           Roll back to v{ rollbackVersion } (instant, no download)
         </Typography>
-      </Box>
+      </ButtonBase>
 
-      <Dialog open={ open } onClose={ () => phase !== 'updating' && setOpen(false) }>
-        <DialogTitle>
+      <Dialog aria-labelledby={ titleId } open={ open } onClose={ () => { if (phase !== 'updating') { reset(); setOpen(false); } } }>
+        <DialogTitle id={ titleId }>
           { phase === 'idle' && `Roll back to v${rollbackVersion}?` }
           { phase === 'updating' && 'Rolling back...' }
+          { phase === 'failed' && 'Request failed' }
           { phase === 'timed_out' && 'Still not done' }
         </DialogTitle>
         <DialogContent>
+          { phase === 'failed' && <Alert severity="error">{ error }</Alert> }
           { phase === 'idle' && (
             <DialogContentText>
-              This swaps to the exact tree that was running before the current install: seconds,
-              fully offline, no download. The pod verifies it's healthy afterward; if that check
-              fails, it swaps back and v{ runningVersion } keeps running. This uses up the
-              instant-rollback slot, so a second rollback isn't available until you install
-              something new.
+              Restore the previous installation, v{ rollbackVersion }, without a download.
+              Settings and sleep data are kept; database migrations are not reversed.
+              The app, schedules, and alarms pause during restart. If checks fail, the script
+              attempts to restore v{ runningVersion }; recovery may require SSH.
             </DialogContentText>
           ) }
           { phase === 'updating' && (
@@ -68,10 +72,19 @@ export default function RollbackRow({ runningVersion, rollbackVersion }: Props) 
             </Stack>
           ) }
           { phase === 'timed_out' && (
-            <DialogContentText>
-              The pod hasn't reported a version change after 10 minutes. Check the log on the pod:
-              <code> /persistent/free-sleep-data/logs/free-sleep-rollback.log</code>
-            </DialogContentText>
+            <Stack spacing={ 1.5 }>
+              <DialogContentText>
+                  Rollback to v{ rollbackVersion } is not confirmed after 10 minutes.
+                  Check the logs and current status before trying again.
+              </DialogContentText>
+              <Typography variant="body2">
+                Last reported running version: { runningVersion ? `v${runningVersion}` : 'unavailable' }.
+              </Typography>
+              <Stack direction="row" useFlexGap flexWrap="wrap" spacing={ 1 }>
+                <Button component={ Link } to="/settings/logs?file=free-sleep-rollback.log">Open update logs</Button>
+                <Button component={ Link } to="/settings/system">System status</Button>
+              </Stack>
+            </Stack>
           ) }
         </DialogContent>
         <DialogActions>
@@ -81,7 +94,7 @@ export default function RollbackRow({ runningVersion, rollbackVersion }: Props) 
               <Button variant="contained" onClick={ rollback }>Roll back now</Button>
             </>
           ) }
-          { phase === 'timed_out' && (
+          { (phase === 'timed_out' || phase === 'failed') && (
             <Button onClick={ () => { reset(); setOpen(false); } }>Close</Button>
           ) }
         </DialogActions>

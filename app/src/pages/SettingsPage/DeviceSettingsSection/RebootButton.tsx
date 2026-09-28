@@ -1,61 +1,44 @@
-import { Button } from '@mui/material';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogTitle from '@mui/material/DialogTitle';
-import Slide from '@mui/material/Slide';
-import { TransitionProps } from '@mui/material/transitions';
-import { useState, forwardRef, type ReactElement, type Ref } from 'react';
-
+import { useState } from 'react';
+import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material';
+import { Link } from 'react-router-dom';
 import { postJobs } from '@api/jobs.ts';
 
-
-const Transition = forwardRef(function Transition(
-  props: TransitionProps & {
-    children: ReactElement<any, any>;
-  },
-  ref: Ref<unknown>,
-) {
-  return <Slide direction="up" ref={ ref } { ...props } />;
-});
-
-// eslint-disable-next-line react/no-multi-comp
 export default function RebootButton() {
   const [open, setOpen] = useState(false);
-
-  const handleClickOpen = () => {
-    setOpen(true);
+  const [pending, setPending] = useState(false);
+  const [requested, setRequested] = useState(false);
+  const [error, setError] = useState(false);
+  const restart = async () => {
+    setPending(true);
+    setError(false);
+    try {
+      await postJobs(['reboot']);
+      setRequested(true);
+    } catch {
+      setError(true);
+    } finally {
+      setPending(false);
+    }
   };
-
-  const handleClose = () => {
-    setOpen(false);
-  };
-
-  const reboot = () => {
-    postJobs(['reboot'])
-      .catch(error => {
-        console.error(error);
-      });
-  };
-
-  return (
-    <>
-      <Button variant="outlined" onClick={ handleClickOpen } size='small' sx={ { width: '150px' } }>
-        Reboot pod now
-      </Button>
-      <Dialog
-        open={ open }
-        slots={ {
-          transition: Transition,
-        } }
-        keepMounted
-        onClose={ handleClose }
-      >
-        <DialogTitle>Reboot pod now?</DialogTitle>
-        <DialogActions>
-          <Button onClick={ handleClose }>Cancel</Button>
-          <Button onClick={ reboot }>Confirm</Button>
-        </DialogActions>
-      </Dialog>
-    </>
-  );
+  return <>
+    <Button variant="outlined" size="small" onClick={ () => { setOpen(true); setError(false); setRequested(false); } }>Restart Pod</Button>
+    <Dialog open={ open } onClose={ () => !pending && setOpen(false) } aria-labelledby="restart-title" fullWidth maxWidth="xs">
+      <DialogTitle id="restart-title">Restart Pod?</DialogTitle>
+      <DialogContent>
+        <Typography>
+          The app, schedules and alarms pause while the Pod restarts.
+          Wait for it to reconnect before sending more commands.
+        </Typography>
+        { requested && <Typography role="status" sx={ { mt: 2 } }>Restart requested. Completion has not been confirmed.</Typography> }
+        { error && <Alert severity="error" sx={ { mt: 2 } }>Could not confirm the restart. Check System status before retrying.</Alert> }
+        { (requested || error) && <Button component={ Link } to="/settings/system">System status</Button> }
+      </DialogContent>
+      <DialogActions>
+        <Button disabled={ pending } onClick={ () => setOpen(false) }>{ requested ? 'Close' : 'Cancel' }</Button>
+        { !requested && <Button variant="contained" disabled={ pending } onClick={ () => void restart() }>
+          { pending ? 'Requesting restart...' : 'Restart Pod' }
+        </Button> }
+      </DialogActions>
+    </Dialog>
+  </>;
 }

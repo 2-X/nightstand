@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 const destinations = [
-  { name: 'Schedule', path: '/schedules', heading: 'Power on' },
+  { name: 'Schedule', path: '/schedules', heading: 'Schedule' },
   { name: 'Sleep', path: '/sleep', heading: 'Sleep' },
   { name: 'Settings', path: '/settings', heading: 'Settings' },
 ];
@@ -11,7 +11,7 @@ for (const destination of destinations) {
     await page.goto('/');
     await page.getByRole('navigation', { name: 'Primary mobile' }).getByRole('link', { name: destination.name }).click();
     await expect(page).toHaveURL(new RegExp(`${destination.path}$`));
-    await expect(page.getByText(destination.heading, { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: destination.heading, exact: true })).toBeVisible();
   });
 }
 
@@ -34,8 +34,8 @@ test('four named destinations fit 320px and selection follows Back and nested pa
 
 test('legacy side URLs select their named side and data opens Sleep', async ({ page }) => {
   await page.goto('/right');
-  await expect(page.getByRole('button', { name: /^Right/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('group', { name: 'Bed side' }).getByRole('button', { name: /^Right/ })).toHaveAttribute('aria-pressed', 'true');
   await page.goto('/data');
   await expect(page).toHaveURL(/\/sleep$/);
-  await expect(page.getByText('Sleep', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Sleep', exact: true })).toBeVisible();
 });

@@ -1,11 +1,5 @@
-import Alert from '@mui/material/Alert';
+import { Typography } from '@mui/material';
 
 export default function PrimingNotification() {
-  return (
-
-    <Alert severity="info">
-      Device is currently priming.
-    </Alert>
-  );
+  return <Typography role="status" variant="body2" color="text.secondary">Priming in progress</Typography>;
 }
-

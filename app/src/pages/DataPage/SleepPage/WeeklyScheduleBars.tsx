@@ -1,237 +1,35 @@
-import { useMemo } from 'react';
 import moment from 'moment-timezone';
 import { Box, Typography } from '@mui/material';
+import type { SleepRecord } from '@api/sleepSchema';
+import GlassCard from '@design/GlassCard';
+import { recordForNight } from './sleepContext';
 
-import { useAppStore } from '@state/appStore.tsx';
-import { useSleepRecords } from '@api/sleep.ts';
-import MetricChartCard from '@design/MetricChartCard';
-import { palette } from '@design/tokens';
+type Props = { records: SleepRecord[]; weekStart: moment.Moment; timeZone: string };
 
-// Default sleep target window (overnight), shown as a translucent green band.
-// Could become a per-user setting later - keep static for now.
-const TARGET_BEDTIME_HOUR = 22.5; // 10:30 pm
-const TARGET_WAKE_HOUR = 8.5; // 8:30 am next morning
-
-// Y-axis spans 8 pm → 11 am next morning (15 hours of "nighttime" view).
-const VIEW_START_HOUR = 20;
-const VIEW_HOURS = 15; // 8pm → 11am next day
-
-// Convert a moment to its position on our 8pm→11am axis as a fraction [0..1].
-// Same-day evenings (>= 20) → 0..0.27ish. Next-morning hours (< 11) → 0.27..1.
-function hourToFraction(m: moment.Moment): number {
-  const h = m.hour() + m.minute() / 60;
-  const adjusted = h < VIEW_START_HOUR ? h + 24 : h;
-  return Math.max(0, Math.min(1, (adjusted - VIEW_START_HOUR) / VIEW_HOURS));
-}
-
-// Render a decimal 24-hour value (e.g. 22.5) as a 12-hour clock label
-// ("10:30pm"). The stored constants are 24h, but the labels are shown to the
-// user in 12-hour form.
-function formatClockLabel(hour24: number): string {
-  const h = Math.floor(hour24);
-  const minutes = String(Math.round((hour24 % 1) * 60)).padStart(2, '0');
-  const suffix = h >= 12 ? 'pm' : 'am';
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${minutes}${suffix}`;
-}
-
-const TARGET_GREEN = '#22c55e';
-const OUT_OF_TARGET_WHITE = 'rgba(255,255,255,0.85)';
-
-function formatTime(m: moment.Moment | undefined): string {
-  if (!m) return '\u2014';
-  const s = m.format('h:mma');
-  // Compact lowercase form: "10:30am" rather than "10:30 AM"
-  return s;
-}
-
-export default function WeeklyScheduleBars() {
-  const { side } = useAppStore();
-
-  // Pull sleep records for the past 7 nights + today (we look back enough
-  // days to anchor the Mon-Today week and pick the right record per day).
-  // Computed once per mount, not on every render: useSleepRecords keys its
-  // query on this params object, so recomputing "now" on every render would
-  // generate a new query key (and a new network request) every render.
-  const { startTime, endTime } = useMemo(() => ({
-    startTime: moment().subtract(8, 'days').toISOString(),
-    endTime: moment().add(1, 'day').toISOString(),
-  }), []);
-  const { data: records } = useSleepRecords({ side, startTime, endTime });
-
-  const { dayBars, latest } = useMemo(() => {
-    if (!records || records.length === 0) return { dayBars: [], latest: undefined as any };
-
-    // Show the trailing 7 days ending today: Mon..Sun order with the last
-    // slot being "Today" (whatever weekday that is). We anchor on today and
-    // walk back 6 days.
-    const days: moment.Moment[] = [];
-    for (let i = 6; i >= 0; i--) days.push(moment().startOf('day').subtract(i, 'days'));
-
-    // For each day, find the sleep record that ENDED on that day (the night
-    // before counts toward the morning's day).
-    const bars = days.map((day) => {
-      const matching = records.find((r) => moment(r.left_bed_at).isSame(day, 'day'));
-      if (!matching) return { day, bedtime: undefined, wake: undefined };
-      return {
-        day,
-        bedtime: moment(matching.entered_bed_at),
-        wake: moment(matching.left_bed_at),
-      };
-    });
-
-    const latestRecord = records[records.length - 1];
-    return { dayBars: bars, latest: latestRecord };
-  }, [records]);
-
-  // Header stat values. Latest record drives "ASLEEP / AWAKE".
-  const asleep = latest ? formatTime(moment(latest.entered_bed_at)) : '\u2014';
-  const awake = latest ? formatTime(moment(latest.left_bed_at)) : '\u2014';
-
-  if (!dayBars.length) return null;
-
-  // Target band fractions
-  const targetTopFrac = hourToFraction(
-    moment().hour(Math.floor(TARGET_BEDTIME_HOUR)).minute((TARGET_BEDTIME_HOUR % 1) * 60),
-  );
-  const targetBottomFrac = hourToFraction(
-    moment().hour(Math.floor(TARGET_WAKE_HOUR)).minute((TARGET_WAKE_HOUR % 1) * 60).add(1, 'day'),
-  );
-
+export default function WeeklyScheduleBars({ records, weekStart, timeZone }: Props) {
   return (
-    <MetricChartCard
-      title="WEEKLY SCHEDULE"
-      stats={ [
-        { label: 'ASLEEP', value: asleep },
-        { label: 'AWAKE', value: awake },
-      ] }
-    >
-      <Box
-        sx={ {
-          position: 'relative',
-          height: 220,
-          mt: 1,
-          mb: 0.5,
-          mx: -0.5,
-        } }
-      >
-        { /* Target window band (translucent green) */ }
-        <Box
-          sx={ {
-            position: 'absolute',
-            top: `${targetTopFrac * 100}%`,
-            bottom: `${(1 - targetBottomFrac) * 100}%`,
-            left: 0,
-            right: 36,
-            backgroundColor: 'rgba(34, 197, 94, 0.10)',
-            borderTop: `1px dashed ${TARGET_GREEN}`,
-            borderBottom: `1px dashed ${TARGET_GREEN}`,
-          } }
-        />
-        { /* Target labels on the right */ }
-        <Typography
-          sx={ {
-            position: 'absolute',
-            top: `${targetTopFrac * 100}%`,
-            right: 0,
-            transform: 'translateY(-50%)',
-            fontSize: '0.7rem',
-            color: palette.text.tertiary,
-          } }
-        >
-          { formatClockLabel(TARGET_BEDTIME_HOUR) }
-        </Typography>
-        <Typography
-          sx={ {
-            position: 'absolute',
-            top: `${targetBottomFrac * 100}%`,
-            right: 0,
-            transform: 'translateY(-50%)',
-            fontSize: '0.7rem',
-            color: palette.text.tertiary,
-          } }
-        >
-          { formatClockLabel(TARGET_WAKE_HOUR) }
-        </Typography>
-
-        { /* Day bars */ }
-        <Box
-          sx={ {
-            display: 'flex',
-            justifyContent: 'space-around',
-            alignItems: 'stretch',
-            position: 'absolute',
-            inset: 0,
-            paddingRight: '36px',
-          } }
-        >
-          { dayBars.map((bar, i) => {
-            const isToday = i === dayBars.length - 1;
-            if (!bar.bedtime || !bar.wake) {
-              return <Box key={ i } sx={ { flex: 1 } }/>;
-            }
-            const top = hourToFraction(bar.bedtime) * 100;
-            const bottom = (1 - hourToFraction(bar.wake)) * 100;
-            // "In target" = bedtime within 30 min of target AND wake within 30 min of target.
-            const bedHour = bar.bedtime.hour() + bar.bedtime.minute() / 60;
-            const wakeHour = bar.wake.hour() + bar.wake.minute() / 60;
-            const adjustedBed = bedHour < VIEW_START_HOUR ? bedHour + 24 : bedHour;
-            const adjustedWake = wakeHour < VIEW_START_HOUR ? wakeHour + 24 : wakeHour;
-            const inTarget =
-              Math.abs(adjustedBed - TARGET_BEDTIME_HOUR) <= 0.75 &&
-              Math.abs(adjustedWake - (TARGET_WAKE_HOUR + 24)) <= 0.75;
-            const color = inTarget ? TARGET_GREEN : OUT_OF_TARGET_WHITE;
-            return (
-              <Box
-                key={ i }
-                sx={ {
-                  flex: 1,
-                  position: 'relative',
-                  display: 'flex',
-                  justifyContent: 'center',
-                } }
-              >
-                <Box
-                  sx={ {
-                    position: 'absolute',
-                    top: `${top}%`,
-                    bottom: `${bottom}%`,
-                    width: 14,
-                    backgroundColor: color,
-                    borderRadius: 1.25,
-                    boxShadow: isToday ? `0 0 0 1px ${color}` : 'none',
-                  } }
-                />
-              </Box>
-            );
-          }) }
-        </Box>
-      </Box>
-
-      { /* Day labels under the bars */ }
-      <Box sx={ { display: 'flex', justifyContent: 'space-around', paddingRight: '36px', mt: 0.5 } }>
-        { dayBars.map((bar, i) => {
-          const isToday = i === dayBars.length - 1;
-          // The bars are a trailing 7-day window ending today, so each label
-          // must come from that slot's actual date. A fixed Mon..Sun list
-          // only lines up when today happens to be Sunday.
-          const label = isToday ? 'Today' : bar.day.format('ddd');
-          return (
-            <Typography
-              key={ i }
-              sx={ {
-                flex: 1,
-                textAlign: 'center',
-                fontSize: '0.85rem',
-                color: isToday ? palette.text.primary : palette.text.tertiary,
-                fontWeight: isToday ? 600 : 400,
-              } }
-            >
-              { label }
+    <GlassCard label="Weekly timing">
+      <Typography variant="body2" color="text.secondary" sx={ { mb: 1 } }>In bed / out of bed, by wake date</Typography>
+      { Array.from({ length: 7 }, (_, index) => {
+        const day = weekStart.clone().add(index, 'days');
+        const record = recordForNight(records, day.format('YYYY-MM-DD'), timeZone);
+        return (
+          <Box
+            key={ day.format('YYYY-MM-DD') }
+            sx={ {
+              display: 'flex', justifyContent: 'space-between', gap: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider',
+            } }>
+            <Typography variant="body2">{ day.format('ddd D') }</Typography>
+            <Typography variant="body2" color={ record ? 'text.primary' : 'text.secondary' }>
+              { record ? (
+                <>
+                  { moment.tz(record.entered_bed_at, timeZone).format('h:mm A') } / { moment.tz(record.left_bed_at, timeZone).format('h:mm A') }
+                </>
+              ) : 'No recording' }
             </Typography>
-          );
-        }) }
-      </Box>
-    </MetricChartCard>
+          </Box>
+        );
+      }) }
+    </GlassCard>
   );
 }

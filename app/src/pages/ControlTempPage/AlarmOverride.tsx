@@ -1,172 +1,74 @@
 import { Dispatch, SetStateAction, useState } from 'react';
-import {
-  Box,
-  Button,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  InputAdornment,
-  TextField,
-  Typography,
-  useMediaQuery,
-  useTheme,
-} from '@mui/material';
-import AccessTime from '@mui/icons-material/AccessTime';
+import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Typography } from '@mui/material';
 import moment from 'moment-timezone';
 import { postSettings, useSettings } from '@api/settings.ts';
 import { useAppStore } from '@state/appStore.tsx';
 
-export interface AlarmOverrideProps {
+interface AlarmOverrideProps {
   open: boolean;
   alarmTimeLocalOverride: string;
   scheduledAlarmTimeHhMm: string;
-
+  nightStart: string;
+  nightEnd: string;
+  scope: string;
   setAlarmTimeLocalOverride: Dispatch<SetStateAction<string>>;
   setOverrideOpen: Dispatch<SetStateAction<boolean>>;
 }
 
-export default function AlarmOverride({
-  open,
-  setOverrideOpen,
-  alarmTimeLocalOverride,
-  scheduledAlarmTimeHhMm,
-  setAlarmTimeLocalOverride,
-}: AlarmOverrideProps) {
-  const theme = useTheme();
-  const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
+export default function AlarmOverride({ open, setOverrideOpen, alarmTimeLocalOverride, scheduledAlarmTimeHhMm,
+  setAlarmTimeLocalOverride, nightStart, nightEnd, scope }: AlarmOverrideProps) {
   const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
   const { data: settings, refetch } = useSettings();
   const side = useAppStore(state => state.side);
-
-  const handleSave = () => {
-    if (!settings) return null;
-    const now = moment.tz(settings.timeZone);
-    const noonToday = now.clone().hour(12).minute(0).second(0).millisecond(0);
-    const targetDay = now.isSameOrAfter(noonToday) ? now.clone().add(1, 'day') : now;
-
-
-    const [hour, minute] = alarmTimeLocalOverride.split(':').map(Number);
-    const expiresAt = moment.tz(
-      {
-        year: targetDay.year(),
-        month: targetDay.month(), // 0-based
-        date: targetDay.date(),
-        hour,
-        minute,
-        second: 0,
-        millisecond: 0,
-      },
-      settings.timeZone
-    ).add(2, 'minutes').format();
+  const time = alarmTimeLocalOverride || scheduledAlarmTimeHhMm;
+  const start = moment.tz(nightStart, settings?.timeZone || 'UTC');
+  const [hour, minute] = time.split(':').map(Number);
+  const replacement = start.clone().hour(hour).minute(minute).second(0).millisecond(0);
+  if (time < start.format('HH:mm')) replacement.add(1, 'day');
+  const valid = /^([01]\d|2[0-3]):[0-5]\d$/.test(time) && replacement.isAfter(moment())
+    && replacement.isBetween(start, moment(nightEnd), undefined, '[)');
+  const handleCancel = () => { setAlarmTimeLocalOverride(''); setOverrideOpen(false); };
+  const handleSave = async () => {
+    if (!settings || !valid) return;
     setIsSaving(true);
-
-    postSettings({
-      [side]: {
-        scheduleOverrides: {
-          alarm: {
-            disabled: false,
-            timeOverride: alarmTimeLocalOverride,
-            expiresAt: expiresAt,
-          }
-        }
-      }
-    })
-      .then(() => {
-        setAlarmTimeLocalOverride('');
-        setOverrideOpen(false);
-        return refetch();
-      })
-      .catch(error => {
-        console.error(error);
-      })
-      .finally(() => {
-        setIsSaving(false);
-      });
+    setError('');
+    try {
+      await postSettings({ [side]: { scheduleOverrides: { alarm: {
+        disabled: false, timeOverride: time, expiresAt: nightEnd,
+      } } } });
+      await refetch();
+      handleCancel();
+    } catch {
+      setError('Could not save the alarm change. Try again.');
+    } finally { setIsSaving(false); }
   };
-
-  const handleCancel = () => {
-    setAlarmTimeLocalOverride('');
-    setOverrideOpen(false);
-  };
-
-  return (
-    <Dialog
-      open={ open }
-      fullScreen={ isSmallScreen }
-      PaperProps={ {
-        sx: isSmallScreen
-          ? {
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            textAlign: 'center',
-            maxWidth: '85vw',
-            maxHeight: '35vh',
-            borderRadius: '10px',
-            margin: 0,
-            p: 4,
-          }
-          : {
-            p: 4,
-            width: '50%',
-            height: '225px',
-          },
-      } }
-    >
-      <Typography variant="h5" textAlign="center">
-        Override alarm for tonight?
+  return <Dialog open={ open } onClose={ () => !isSaving && handleCancel() } fullWidth maxWidth="xs" aria-labelledby="alarm-override-title">
+    <DialogTitle id="alarm-override-title">Change this night's recurring alarms</DialogTitle>
+    <DialogContent>
+      <Typography variant="body2" sx={ { mb: 1 } }>{ scope }</Typography>
+      <Typography variant="body2" sx={ { mb: 2 } }>
+        Replaces all recurring alarms still to come this night with one alarm. One-off alarms are unchanged.
       </Typography>
-
-      <DialogActions
-        sx={ {
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-        } }
-      >
-        <TextField
-          label="Alarm"
-          type="time"
-          value={ alarmTimeLocalOverride || scheduledAlarmTimeHhMm }
-          onChange={ (e) => setAlarmTimeLocalOverride(e.target.value) }
-          variant="standard"
-          sx={ {
-            width: '110px',
-            '& input::-webkit-calendar-picker-indicator': {
-              opacity: 0,
-              display: 'none',
-            },
-          } }
-          InputProps={ {
-            endAdornment: (
-              <InputAdornment position="end" sx={ { cursor: 'pointer' } }>
-                <AccessTime sx={ { color: theme.palette.grey[500] } } fontSize="small" />
-              </InputAdornment>
-            ),
-          } }
-        />
-
-        <br />
-
-        { isSaving ? (
-          <CircularProgress size={ 10 } />
-        ) : (
-          <Box display="flex" gap={ 1 }>
-            <Button variant="contained" color="error" size="small" onClick={ handleCancel }>
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              size="small"
-              onClick={ handleSave }
-              disabled={ !alarmTimeLocalOverride || alarmTimeLocalOverride === scheduledAlarmTimeHhMm }
-            >
-              Save
-            </Button>
-          </Box>
-        ) }
-      </DialogActions>
-    </Dialog>
-  );
+      <TextField
+        label="Alarm"
+        type="time"
+        value={ time }
+        onChange={ event => setAlarmTimeLocalOverride(event.target.value) }
+        disabled={ isSaving }
+        error={ !valid }
+        helperText={ valid ? replacement.format('ddd, MMM D · h:mm A') : 'Choose a future time before this night ends.' }
+        fullWidth />
+      { error && <Alert severity="error" sx={ { mt: 2 } }>{ error }</Alert> }
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={ handleCancel } disabled={ isSaving }>Cancel</Button>
+      <Button
+        variant="contained"
+        disabled={ isSaving || !valid || !alarmTimeLocalOverride || time === scheduledAlarmTimeHhMm }
+        onClick={ () => void handleSave() }>
+        { isSaving ? 'Saving...' : 'Save' }
+      </Button>
+    </DialogActions>
+  </Dialog>;
 }

@@ -48,5 +48,6 @@ describe('AlarmDismissal on a failed dismiss', () => {
 
     // The dismiss failed, so the dialog must still be open.
     expect(screen.getByRole('button', { name: 'Dismiss Alarm' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/Could not dismiss/);
   });
 });

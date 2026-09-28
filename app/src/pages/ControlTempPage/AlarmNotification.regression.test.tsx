@@ -1,0 +1,82 @@
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { renderWithProviders } from '@test/renderWithProviders';
+import { server } from '@test/setup';
+import { getSchedules, getSettings } from '../../mocks/mockData';
+import AlarmNotification from './AlarmNotification';
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-28T22:00:00Z'));
+  const settings = structuredClone(getSettings());
+  settings.timeZone = 'UTC';
+  settings.left.scheduleOverrides.alarm = { disabled: false, timeOverride: '', expiresAt: '' };
+  server.use(http.get('*/settings', () => HttpResponse.json(settings)));
+});
+afterEach(() => vi.useRealTimers());
+
+function alarms(times: Array<[string, boolean]>, powerOff = '09:00') {
+  const schedules = structuredClone(getSchedules());
+  const day = schedules.left.monday;
+  day.power = { ...day.power, enabled: true, on: '21:00', off: powerOff };
+  day.alarms = times.map(([time, enabled]) => ({ ...day.alarm, time, enabled }));
+  day.alarm = day.alarms[0];
+  server.use(http.get('*/schedules', () => HttpResponse.json(schedules)));
+}
+
+it('shows the next enabled secondary alarm and preserves 24-hour dialog input', async () => {
+  alarms([['07:00', false], ['23:00', true], ['08:00', true]]);
+  renderWithProviders(<AlarmNotification />);
+  fireEvent.click(await screen.findByRole('button', { name: '11:00 PM' }));
+  expect(await screen.findByLabelText('Alarm')).toHaveValue('23:00');
+  expect(screen.getByText(/replaces all recurring alarms/i)).toBeInTheDocument();
+});
+
+it('disabling the night expires after all its alarms, on the correct overnight date', async () => {
+  alarms([['23:00', true], ['08:00', true]]);
+  let payload: any;
+  server.use(http.post('*/settings', async ({ request }) => {
+    payload = await request.json();
+    return HttpResponse.json(getSettings());
+  }));
+  renderWithProviders(<AlarmNotification />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Disable' }));
+  fireEvent.click(await screen.findByRole('button', { name: /disable tonight/i }));
+  await waitFor(() => expect(payload?.left.scheduleOverrides.alarm.disabled).toBe(true));
+  expect(payload.left.scheduleOverrides.alarm.expiresAt).toBe('2026-09-29T09:00:00Z');
+});
+
+it('keeps a later replacement visible after the original alarm time has passed', async () => {
+  vi.setSystemTime(new Date('2026-09-29T07:30:00Z'));
+  alarms([['07:00', true]]);
+  const settings = structuredClone(getSettings());
+  settings.timeZone = 'UTC';
+  settings.left.scheduleOverrides.alarm = { disabled: false, timeOverride: '08:00', expiresAt: '2026-09-29T09:00:00Z' };
+  server.use(http.get('*/settings', () => HttpResponse.json(settings)));
+  renderWithProviders(<AlarmNotification />);
+  expect(await screen.findByRole('button', { name: '8:00 AM' })).toBeInTheDocument();
+});
+
+
+it('keeps alarms visible inside a full-day power window', async () => {
+  alarms([['23:00', true]], '21:00');
+  renderWithProviders(<AlarmNotification />);
+  expect(await screen.findByRole('button', { name: '11:00 PM' })).toBeInTheDocument();
+});
+
+it('does not carry a completed full-day override into the next night', async () => {
+  vi.setSystemTime(new Date('2026-09-29T22:00:00Z'));
+  const schedules = structuredClone(getSchedules());
+  for (const day of Object.values(schedules.left)) {
+    day.power = { ...day.power, enabled: true, on: '21:00', off: '21:00' };
+    day.alarms = [{ ...day.alarm, time: '23:00', enabled: true }];
+    day.alarm = day.alarms[0];
+  }
+  const settings = structuredClone(getSettings());
+  settings.timeZone = 'UTC';
+  settings.left.scheduleOverrides.alarm = { disabled: true, timeOverride: '', expiresAt: '2026-09-29T21:00:00Z' };
+  server.use(http.get('*/settings', () => HttpResponse.json(settings)), http.get('*/schedules', () => HttpResponse.json(schedules)));
+  renderWithProviders(<AlarmNotification />);
+  expect(await screen.findByRole('button', { name: '11:00 PM' })).toBeInTheDocument();
+});

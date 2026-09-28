@@ -15,71 +15,78 @@ type TemperatureButtonsProps = {
 
 const DEBOUNCE_MS = 400;
 export default function TemperatureButtons({ refetch, currentTargetTemp }: TemperatureButtonsProps) {
-  const { side, setIsUpdating, isUpdating } = useAppStore();
+  const { side, setIsUpdating } = useAppStore();
   const { deviceStatus, setDeviceStatus, beginEdit, endEdit } = useControlTempStore();
   const { data: settings } = useSettings();
   const theme = useTheme();
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Tracks whether the current debounced burst has incremented the edit
-  // counter. We open the gate on the first tap of a burst and close it once
-  // the POST settles, so server pushes can't clobber the optimistic value.
   const editOpenRef = useRef(false);
+  const inFlight = useRef(false);
+  const ready = useRef(false);
+  const mounted = useRef(true);
+  const savedTarget = useRef(currentTargetTemp);
+  useEffect(() => {
+    if (!editOpenRef.current && !inFlight.current) savedTarget.current = currentTargetTemp;
+  }, [currentTargetTemp]);
 
   const postUpdate = useCallback(async () => {
+    if (inFlight.current || !ready.current || !mounted.current) return;
+    inFlight.current = true;
+    ready.current = false;
+    const target = useControlTempStore.getState().deviceStatus?.[side]?.targetTemperatureF;
     setIsUpdating(true);
     try {
-      // Read the latest value from the store, not the render-time closure:
-      // this runs on a debounced timer scheduled during the click, before the
-      // optimistic setDeviceStatus has re-rendered, so the closed-over snapshot
-      // lags one tap behind and would POST (then refetch) the pre-click temp.
-      const latestTargetF = useControlTempStore.getState().deviceStatus?.[side]?.targetTemperatureF;
-      await postDeviceStatus({
-        [side]: { targetTemperatureF: latestTargetF },
-      });
-      await new Promise(r => setTimeout(r, 1_500));
-      // Drop the edit gate before refetch so the canonical server response
-      // (which now reflects our write) is allowed into the cache.
-      if (editOpenRef.current) {
-        editOpenRef.current = false;
-        endEdit();
-      }
-      await refetch?.();
-    } catch (err) {
-      console.error(err);
-      // The write failed, so the optimistic store value is now a lie. Revert
-      // it to the last known server value. A plain refetch is not enough here:
-      // the server value did not change, so it would not re-sync into the store.
-      setDeviceStatus({ [side]: { targetTemperatureF: currentTargetTemp } });
-      if (editOpenRef.current) {
-        editOpenRef.current = false;
-        endEdit();
+      await postDeviceStatus({ [side]: { targetTemperatureF: target } });
+      if (target !== undefined) savedTarget.current = target;
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    } catch (error) {
+      console.error(error);
+      if (mounted.current && !ready.current && !debounceTimer.current) {
+        setDeviceStatus({ [side]: { targetTemperatureF: savedTarget.current } });
       }
     } finally {
-      setIsUpdating(false);
+      inFlight.current = false;
+      if (mounted.current && ready.current) {
+        void postUpdate();
+      } else if (!debounceTimer.current) {
+        if (editOpenRef.current) {
+          editOpenRef.current = false;
+          endEdit();
+        }
+        if (mounted.current) await refetch?.();
+        setIsUpdating(false);
+      }
     }
-  }, [side, refetch, setIsUpdating, endEdit, setDeviceStatus, currentTargetTemp]);
+  }, [side, refetch, setIsUpdating, endEdit, setDeviceStatus]);
 
   const scheduleUpdate = useCallback(() => {
+    ready.current = false;
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(postUpdate, DEBOUNCE_MS);
+    debounceTimer.current = setTimeout(() => {
+      debounceTimer.current = null;
+      ready.current = true;
+      void postUpdate();
+    }, DEBOUNCE_MS);
   }, [postUpdate]);
 
-  // If the user navigates away mid-burst, release the edit gate so the
-  // counter doesn't leak.
   useEffect(() => {
+    mounted.current = true;
     return () => {
+      mounted.current = false;
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      debounceTimer.current = null;
+      if (!inFlight.current) setIsUpdating(false);
       if (editOpenRef.current) {
         editOpenRef.current = false;
         endEdit();
       }
     };
-  }, [endEdit]);
+  }, [endEdit, setIsUpdating]);
 
   const isInAwayMode = settings?.[side].awayMode;
   if (isInAwayMode) return null;
 
-  const disabled = isUpdating || isInAwayMode;
+  const disabled = isInAwayMode;
   const borderColor = theme.palette.grey[800];
   const iconColor = theme.palette.grey[500];
 
@@ -91,15 +98,11 @@ export default function TemperatureButtons({ refetch, currentTargetTemp }: Tempe
   const isLevel = settings?.temperatureFormat === 'level';
   const handleClick = (direction: 1 | -1) => {
     if (!deviceStatus) return;
-    const currentF = deviceStatus[side].targetTemperatureF;
+    const currentF = useControlTempStore.getState().deviceStatus![side].targetTemperatureF;
     const rawNextF = isLevel
       ? levelToFahrenheit(fahrenheitToLevel(currentF) + direction)
       : currentF + direction;
-    // Clamp to the supported range. The +/- disable guards read the server
-    // value, which lags the optimistic display by the debounce plus settle, so
-    // a fast tap burst would otherwise push the displayed value past the bounds
-    // and POST an out-of-range temperature. Clamping here keeps it in range no
-    // matter how fast the taps land.
+    // Clamp rapid taps to the supported range.
     const nextF = Math.min(MAX_TEMP_F, Math.max(MIN_TEMP_F, rawNextF));
     if (nextF === currentF) return;
     if (!editOpenRef.current) {
@@ -128,32 +131,34 @@ export default function TemperatureButtons({ refetch, currentTargetTemp }: Tempe
   return (
     <Box
       sx={ {
-        top: '75%',
-        position: 'absolute',
+        position: 'relative',
+        mt: -2,
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        gap: '100px',
+        gap: '48px',
         width: '100%',
         marginLeft: 'auto',
         marginRight: 'auto',
       } }
     >
       <Button
+        aria-label="Decrease temperature"
         variant="outlined"
         color="primary"
         sx={ buttonStyle }
         onClick={ () => handleClick(-1) }
-        disabled={ disabled || currentTargetTemp <= MIN_TEMP_F }
+        disabled={ disabled || (deviceStatus?.[side]?.targetTemperatureF ?? MIN_TEMP_F) <= MIN_TEMP_F }
       >
         <Remove sx={ { color: iconColor } }/>
       </Button>
       <Button
+        aria-label="Increase temperature"
         variant="outlined"
         sx={ buttonStyle }
 
         onClick={ () => handleClick(1) }
-        disabled={ disabled || currentTargetTemp >= MAX_TEMP_F }
+        disabled={ disabled || (deviceStatus?.[side]?.targetTemperatureF ?? MAX_TEMP_F) >= MAX_TEMP_F }
       >
         <Add sx={ { color: iconColor } }/>
       </Button>

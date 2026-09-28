@@ -28,3 +28,8 @@ describe('RollbackRow', () => {
     expect(rolledBack).toBe(false);
   });
 });
+
+it('exposes recovery as a keyboard-accessible button', () => {
+  renderWithProviders(<RollbackRow runningVersion="3.0.0" rollbackVersion="2.9.0"/>);
+  expect(screen.getByRole('button', { name: 'Roll back to v2.9.0 (instant, no download)' })).toBeInTheDocument();
+});

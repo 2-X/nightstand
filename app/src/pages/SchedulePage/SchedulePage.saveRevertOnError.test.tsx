@@ -51,6 +51,7 @@ describe('SchedulePage save revert on failed save', () => {
     // the Save button must still be rendered - the user can retry rather
     // than believing the save silently succeeded and their edit being
     // stranded only in the local store.
+    expect(screen.getByRole('alert')).toHaveTextContent(/Could not save/);
     expect(useScheduleStore.getState().changesPresent).toBe(true);
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
   });

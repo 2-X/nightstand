@@ -15,6 +15,7 @@ import { palette, typography } from '@design/tokens';
 type Props = {
   startTime: string;
   endTime: string;
+  timeZone?: string;
 };
 
 // Visual config - colors picked to read clearly on a dark glass card and
@@ -252,7 +253,7 @@ function StagesChart({ epochs, periodStart, periodEnd }: {
   );
 }
 
-export default function SleepStagesCard({ startTime, endTime }: Props) {
+export default function SleepStagesCard({ startTime, endTime, timeZone }: Props) {
   const { side } = useAppStore();
   const sleepScoreEnabled = useSleepScoreEnabled();
   const { data, isFetching } = useSleepStages({ side, startTime, endTime }, sleepScoreEnabled);
@@ -260,16 +261,9 @@ export default function SleepStagesCard({ startTime, endTime }: Props) {
   const periodStart = moment(startTime).unix();
   const periodEnd = moment(endTime).unix();
 
-  // "Time slept" = total time in the period MINUS the time classified as
-  // awake. So lying in bed scrolling on the phone after the alarm doesn't
-  // count toward your sleep total. Falls back to period length when stage
-  // data is missing.
-  const totalDurationSeconds = useMemo(() => {
-    const period = Math.max(0, periodEnd - periodStart);
-    if (!data) return period;
-    const awake = data.totals.awake || 0;
-    return Math.max(0, period - awake);
-  }, [data, periodEnd, periodStart]);
+  const totalDurationSeconds = useMemo(() => data
+    ? data.totals.light + data.totals.rem + data.totals.deep
+    : 0, [data]);
 
   if (!sleepScoreEnabled) return null;
   const totalDuration = formatHM(totalDurationSeconds);
@@ -312,7 +306,7 @@ export default function SleepStagesCard({ startTime, endTime }: Props) {
                   key={ i }
                   sx={ { fontSize: '0.75rem', color: palette.text.tertiary, fontVariantNumeric: 'tabular-nums' } }
                 >
-                  { moment.unix(t).format('h:mm A') }
+                  { (timeZone ? moment.unix(t).tz(timeZone) : moment.unix(t)).format('h:mm A') }
                 </Typography>
               );
             }) }
@@ -338,7 +332,7 @@ export default function SleepStagesCard({ startTime, endTime }: Props) {
 
           <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 0.5 } }>
             <Typography sx={ { fontSize: '1.05rem', fontWeight: 600, color: palette.text.primary } }>
-              Time slept
+              Estimated time asleep
             </Typography>
             <Box sx={ { textAlign: 'right' } }>
               <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.75 } }>

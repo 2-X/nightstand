@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useId } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
+  Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogContentText, DialogTitle, Stack, Typography,
 } from '@mui/material';
 import semver from 'semver';
@@ -21,11 +22,12 @@ type Props = {
 
 export default function ReleaseRow({ release, runningVersion, body, offerReinstall = false }: Props) {
   const [open, setOpen] = useState(false);
+  const titleId = useId();
   const isRunning = release.version === runningVersion;
   const isReinstall = isRunning && offerReinstall;
   // A reinstall never changes the running version, so it is done when the
   // database is, not when the version moves.
-  const { phase, start, reset } = useUpdateProgress(runningVersion, isReinstall ? migrationsApplied : undefined);
+  const { phase, error, start, reset } = useUpdateProgress(runningVersion, isReinstall ? migrationsApplied : undefined);
 
   const isDowngrade = !!runningVersion && !!semver.valid(runningVersion) && semver.lt(release.version, runningVersion);
 
@@ -33,7 +35,7 @@ export default function ReleaseRow({ release, runningVersion, body, offerReinsta
 
   return (
     <Box sx={ { py: 1.5, borderBottom: `1px solid ${palette.border.subtle}` } }>
-      <Box sx={ { display: 'flex', alignItems: 'center', gap: 1, mb: body ? 1 : 0 } }>
+      <Box sx={ { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, mb: body ? 1 : 0 } }>
         <Typography sx={ { fontWeight: 600 } }>v{ release.version }</Typography>
         <Typography variant="caption" color="text.secondary">{ release.date }</Typography>
         <Chip label={ release.channel } size="small" variant="outlined"/>
@@ -45,15 +47,23 @@ export default function ReleaseRow({ release, runningVersion, body, offerReinsta
           </Button>
         ) }
       </Box>
-      { body && <MarkdownBody markdown={ body }/> }
+      { body && (
+        <details>
+          <summary>Release notes</summary>
+          <MarkdownBody markdown={ body }/>
+          <Button component={ Link } to={ `/changelog#release-v${release.version}` } size="small">View in changelog</Button>
+        </details>
+      ) }
 
-      <Dialog open={ open } onClose={ () => phase !== 'updating' && setOpen(false) }>
-        <DialogTitle>
+      <Dialog aria-labelledby={ titleId } open={ open } onClose={ () => { if (phase !== 'updating') { reset(); setOpen(false); } } }>
+        <DialogTitle id={ titleId }>
           { phase === 'idle' && `${isReinstall ? 'Reinstall' : 'Install'} v${release.version}?` }
           { phase === 'updating' && 'Installing...' }
+          { phase === 'failed' && 'Request failed' }
           { phase === 'timed_out' && 'Still not done' }
         </DialogTitle>
         <DialogContent>
+          { phase === 'failed' && <Alert severity="error">{ error }</Alert> }
           { phase === 'idle' && (
             <DialogContentText>
               { isReinstall
@@ -61,12 +71,10 @@ export default function ReleaseRow({ release, runningVersion, body, offerReinsta
                   'undone. Your data is kept, and the new updater applies what is missing.'
                 : isDowngrade
                   ? `This downgrades from v${runningVersion} to v${release.version}. Your data is kept ` +
-                  '(databases aren\'t rewritten). Installing any version replaces the instant-rollback slot, ' +
-                  'so you won\'t be able to instantly roll back to what\'s running now afterward.'
+                  'Database migrations are not reversed. The running installation becomes the rollback slot.'
                   : `The pod will download v${release.version}, back itself up, install, and verify its own ` +
-                  'health. It rolls back automatically if the new build fails health checks.' }
-              { ' ' }Temperature control keeps running throughout; the app will be unreachable for a few
-              seconds during the switch.
+                  'health. It attempts rollback if the new build fails health checks.' }
+              { ' ' }The app, schedules, and alarms pause during restart. Recovery may require SSH.
             </DialogContentText>
           ) }
           { phase === 'updating' && (
@@ -78,14 +86,20 @@ export default function ReleaseRow({ release, runningVersion, body, offerReinsta
             </Stack>
           ) }
           { phase === 'timed_out' && (
-            <DialogContentText>
-              { isReinstall
-                ? 'The database changes still are not applied after 10 minutes. The reinstall may have ' +
-                  'rolled back (the running version keeps running) or the download may be slow.'
-                : 'The pod hasn\'t reported the new version after 10 minutes. It may have rolled back ' +
-                  '(the previous version keeps running) or the download may be slow.' }
-              { ' ' }Check the log on the pod: <code>/persistent/free-sleep-data/logs/free-sleep-update.log</code>
-            </DialogContentText>
+            <Stack spacing={ 1.5 }>
+              <DialogContentText>
+                { isReinstall ? `Reinstallation and database changes for v${release.version} are not confirmed`
+                  : `Installation of v${release.version} is not confirmed` }
+                { ' ' }after 10 minutes. The Pod may still be working or may have rolled back.
+              </DialogContentText>
+              <Typography variant="body2">
+                Last reported running version: { runningVersion ? `v${runningVersion}` : 'unavailable' }.
+              </Typography>
+              <Stack direction="row" useFlexGap flexWrap="wrap" spacing={ 1 }>
+                <Button component={ Link } to="/settings/logs?file=free-sleep-update.log">Open update logs</Button>
+                <Button component={ Link } to="/settings/system">System status</Button>
+              </Stack>
+            </Stack>
           ) }
         </DialogContent>
         <DialogActions>
@@ -95,7 +109,7 @@ export default function ReleaseRow({ release, runningVersion, body, offerReinsta
               <Button variant="contained" onClick={ install }>{ isReinstall ? 'Reinstall now' : 'Install now' }</Button>
             </>
           ) }
-          { phase === 'timed_out' && (
+          { (phase === 'timed_out' || phase === 'failed') && (
             <Button onClick={ () => { reset(); setOpen(false); } }>Close</Button>
           ) }
         </DialogActions>

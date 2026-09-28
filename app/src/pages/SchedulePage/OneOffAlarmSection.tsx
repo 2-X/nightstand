@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
   CircularProgress,
@@ -47,6 +48,10 @@ export default function OneOffAlarmSection() {
   const [pattern, setPattern] = useState<Pattern>('rise');
   const [duration, setDuration] = useState(30);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => { setSaved(false); }, [enabled, fireAtLocal, intensity, pattern, duration, side]);
 
   // Sync from server when settings load or side changes.
   useEffect(() => {
@@ -71,6 +76,8 @@ export default function OneOffAlarmSection() {
     (!enabled || (!!fireAtLocal && !isInPast));
 
   const handleSave = async () => {
+    setSaveError('');
+    setSaved(false);
     setSaving(true);
     try {
       await postSettings({
@@ -85,8 +92,10 @@ export default function OneOffAlarmSection() {
         },
       });
       await refetch();
+      setSaved(true);
     } catch (err) {
       console.error(err);
+      setSaveError('Could not save the one-off alarm. Your changes are still here. Try again.');
     } finally {
       setSaving(false);
     }
@@ -98,6 +107,8 @@ export default function OneOffAlarmSection() {
 
   return (
     <GlassCard>
+      { saveError && <Alert severity="error">{ saveError }</Alert> }
+      { saved && <Typography role="status" variant="body2">One-off alarm saved for the { side } side.</Typography> }
       <Box sx={ { display: 'flex', alignItems: 'center', gap: 1.25, mb: 2 } }>
         <AlarmOnIcon sx={ { color: palette.text.primary } } />
         <Typography sx={ { fontSize: '1.1rem', fontWeight: 600, color: palette.text.primary } }>
@@ -106,12 +117,15 @@ export default function OneOffAlarmSection() {
       </Box>
 
       <Typography sx={ { color: palette.text.secondary, fontSize: '0.85rem', mb: 2 } }>
-        Fires once at the chosen time and disables itself afterwards. Independent of the recurring alarm above.
+        Fires once for the { side } side, then disables itself. Saved separately from the recurring schedule.
       </Typography>
 
       <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 } }>
         <Typography sx={ { color: palette.text.primary } }>Enabled</Typography>
-        <Switch checked={ enabled } onChange={ (e) => setEnabled(e.target.checked) } />
+        <Switch
+          slotProps={ { input: { 'aria-label': 'Enable one-off alarm' } } }
+          checked={ enabled }
+          onChange={ (e) => setEnabled(e.target.checked) } />
       </Box>
 
       { enabled && (

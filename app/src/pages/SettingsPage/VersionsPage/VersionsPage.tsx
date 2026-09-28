@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Accordion, AccordionDetails, AccordionSummary,
   Alert, AlertTitle, Box, Chip, ToggleButton, ToggleButtonGroup, Typography,
@@ -38,7 +38,9 @@ const CAPABLE_FLOOR = '3.0.0';
 export default function VersionsPage() {
   const { data: deviceStatus } = useDeviceStatus();
   const { data: settings, refetch: refetchSettings } = useSettings();
-  const { data: releases } = useReleases();
+  const { data: releases, isError: releasesFailed } = useReleases();
+  const [channelError, setChannelError] = useState<string>();
+  const [savingChannel, setSavingChannel] = useState(false);
   const { data: localChangelog } = useChangelog();
   const { data: remoteChangelog } = useRemoteChangelog();
   const { data: rollbackInfo } = useRollbackInfo();
@@ -53,22 +55,15 @@ export default function VersionsPage() {
   const channel: UpdateChannelType = settings?.updateChannel ?? 'stable';
   const capable = !!running && semver.valid(running) && semver.gte(running, CAPABLE_FLOOR);
 
-  const whatsNew = entriesNewerThan(remoteChangelog, running);
+  const eligibleVersions = new Set(releases?.releases
+    .filter(release => channel === 'beta' || release.channel === 'stable')
+    .map(release => release.version));
+  const whatsNew = entriesNewerThan(remoteChangelog, running)
+    .filter(entry => eligibleVersions.has(entry.version));
 
-  let updateAvailable =
+  const updateAvailable =
     !!latestVersion && !!running && !!semver.valid(running) && !!semver.valid(latestVersion) &&
     semver.gt(latestVersion, running);
-  // Demo builds always show the alert so visitors see the flow, but if the
-  // real releases.json fetch (from GitHub) doesn't actually have anything
-  // newer than the mock's running version, showing its real (older) version
-  // number would read as a bug ("latest is v3.2.0" while running v3.2.0).
-  // Synthesize a plausible next version for display only in that case.
-  let displayLatestVersion = latestVersion;
-  if (import.meta.env.VITE_ENV === 'demo' && !updateAvailable) {
-    updateAvailable = true;
-    displayLatestVersion = (running && semver.valid(running) && semver.inc(running, 'minor')) || latestVersion;
-  }
-
   const bodyByVersion = useMemo(() => {
     const map = new Map<string, string>();
     for (const entry of remoteChangelog ?? []) map.set(entry.version, entry.body);
@@ -91,11 +86,12 @@ export default function VersionsPage() {
         }
       </Box>
 
+      { releasesFailed && <Alert severity="warning">Release information is unavailable. Try again when your browser can reach GitHub.</Alert> }
       { updateAvailable && (
         <Alert severity="info">
           <AlertTitle>Update available</AlertTitle>
           <Typography variant="body2" sx={ { mb: 1 } }>
-            This pod is running v{ running }. The latest build on your channel is v{ displayLatestVersion }.
+            This pod is running v{ running }. The latest build on your channel is v{ latestVersion }.
           </Typography>
           { whatsNew.length > 0 && (
             <Accordion
@@ -128,19 +124,26 @@ export default function VersionsPage() {
         <ToggleButtonGroup
           value={ channel }
           exclusive
+          disabled={ savingChannel }
           size="small"
           onChange={ (_e, value: UpdateChannelType | null) => {
             if (!value) return;
-            postSettings({ updateChannel: value }).then(() => refetchSettings());
+            setChannelError(undefined);
+            setSavingChannel(true);
+            postSettings({ updateChannel: value })
+              .then(() => refetchSettings())
+              .catch(() => setChannelError('Could not save the update channel. Try selecting it again.'))
+              .finally(() => setSavingChannel(false));
           } }
         >
           { UPDATE_CHANNELS.map(c => (
             <ToggleButton key={ c } value={ c }>{ c }</ToggleButton>
           )) }
         </ToggleButtonGroup>
+        { channelError && <Alert severity="error" sx={ { mt: 1 } }>{ channelError }</Alert> }
         <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mt: 1 } }>
           Beta sees every release as soon as it ships. Stable only sees releases that have been
-          promoted after a few days' soak.
+          promoted after at least seven nights of use.
         </Typography>
       </Section>
 
@@ -152,7 +155,7 @@ export default function VersionsPage() {
       ) }
 
       { capable && rollbackInfo?.available && rollbackInfo.version && (
-        <Section title="Instant rollback">
+        <Section title="Previous installation">
           <RollbackRow runningVersion={ running } rollbackVersion={ rollbackInfo.version }/>
         </Section>
       ) }
@@ -176,9 +179,9 @@ export default function VersionsPage() {
         </Section>
       ) }
 
-      <Section title="Danger zone">
+      <Section title="Restore upstream">
         <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mb: 1 } }>
-          Undo Nightstand entirely and go back to plain upstream free-sleep.
+          Replace Nightstand with the current upstream free-sleep build.
         </Typography>
         <RevertToStockRow runningVersion={ running }/>
       </Section>

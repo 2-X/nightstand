@@ -1,6 +1,7 @@
 import _ from 'lodash';
-import { useEffect } from 'react';
-import { Box } from '@mui/material';
+import { useEffect, useRef, useState } from 'react';
+import { Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, CircularProgress, Typography } from '@mui/material';
+import ExpandMore from '@mui/icons-material/ExpandMore';
 import { DeepPartial } from 'ts-essentials';
 import moment from 'moment-timezone';
 
@@ -13,7 +14,7 @@ import PageContainer from '../PageContainer.tsx';
 import SaveButton from './SaveButton.tsx';
 import SideControl from '../../components/SideControl.tsx';
 import PowerScheduleSection from './PowerScheduleSection.tsx';
-import TemperatureAdjustmentsAccordion from './TemperatureAdjustmentsAccordion.tsx';
+import ScheduleTimeline from './ScheduleTimeline';
 import { DayOfWeek, Schedules } from '@api/schedulesSchema.ts';
 import { postSchedules } from '@api/schedules';
 import { useAppStore } from '@state/appStore.tsx';
@@ -44,47 +45,54 @@ const getAdjustedDayOfWeek = (timeZone?: string): DayOfWeek => {
 
 export default function SchedulePage() {
   const { setIsUpdating, side } = useAppStore();
-  const { data: schedules, refetch } = useSchedules();
+  const { data: schedules, refetch, isError: schedulesError } = useSchedules();
   const {
     selectedSchedule,
     setOriginalSchedules,
     selectedDays,
     selectedDay,
     reloadScheduleData,
-    selectDay
+    selectDay,
   } = useScheduleStore();
-  const { data: settings } = useSettings();
+  const { data: settings, refetch: refetchSettings, isError: settingsError } = useSettings();
   const format = settings?.temperatureFormat ?? 'fahrenheit';
-  // TODO: Add changes lost notification using changesPresent when user tries to switch tab before saving
+  const [saveError, setSaveError] = useState('');
+  const changesPresent = useScheduleStore(state => state.changesPresent);
+  const titleDay = selectedDay.charAt(0).toUpperCase() + selectedDay.slice(1);
+  const nextDay = LOWERCASE_DAYS[(LOWERCASE_DAYS.indexOf(selectedDay) + 1) % 7];
+  const sideLabel = side === 'left' ? 'Left' : 'Right';
+  const affectedDays = _.uniq([selectedDay, ...Object.keys(selectedDays).filter(day => selectedDays[day as DayOfWeek])]);
 
+  const initializedSide = useRef<typeof side | undefined>(undefined);
   useEffect(() => {
-    const day = getAdjustedDayOfWeek(settings?.timeZone);
-    selectDay(LOWERCASE_DAYS.indexOf(day));
-  }, [settings?.timeZone]);
-
-  useEffect(() => {
-    if (!schedules) return;
+    if (!schedules || !settings) return;
+    const current = useScheduleStore.getState();
+    if (initializedSide.current === side && current.changesPresent) return;
+    const day = initializedSide.current !== undefined ? current.selectedDay : getAdjustedDayOfWeek(settings.timeZone);
+    initializedSide.current = side;
     setOriginalSchedules(schedules);
-    const day = getAdjustedDayOfWeek(settings?.timeZone);
     selectDay(LOWERCASE_DAYS.indexOf(day));
-    reloadScheduleData();
-  }, [schedules, settings?.timeZone]);
+  }, [schedules, settings?.timeZone, side]);
 
-  useEffect(() => {
-    reloadScheduleData();
-  }, [side]);
+  // The store survives navigation, so discard unsaved edits when leaving.
+  useEffect(() => () => reloadScheduleData(), [reloadScheduleData]);
 
-  // Discard any in-progress edits when the page unmounts (user navigates to
-  // another tab). The store is a Zustand singleton that survives unmount, so
-  // without this the user would come back and see their unsaved changes
-  // still pending - which the user explicitly does not want here.
-  useEffect(() => {
-    return () => {
-      reloadScheduleData();
-    };
-  }, [reloadScheduleData]);
+  const confirmDiscard = () => {
+    if (!useScheduleStore.getState().changesPresent) return true;
+    if (!window.confirm(`Discard changes to ${titleDay}, ${side} side?`)) return false;
+    useScheduleStore.setState({ changesPresent: false });
+    return true;
+  };
+
+  const showInvalidRow = () => {
+    const row = document.querySelector<HTMLElement>('[data-invalid="true"]');
+    row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    row?.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true });
+  };
 
   const handleSave = async () => {
+    if (!useScheduleStore.getState().isValid()) return;
+    setSaveError('');
     setIsUpdating(true);
 
     const daysList: DayOfWeek[] = _.uniq(_.keys(_.pickBy(selectedDays, value => value))) as DayOfWeek[];
@@ -101,13 +109,36 @@ export default function SchedulePage() {
         return new Promise((resolve) => setTimeout(resolve, 1_000));
       })
       .then(() => refetch())
+      .then(result => {
+        if (result.data) {
+          const current = useScheduleStore.getState();
+          useScheduleStore.setState({ originalSchedules: result.data });
+          // A save may finish after navigation or after another edit.
+          if (useAppStore.getState().side === side && current.selectedDay === selectedDay
+            && current.selectedSchedule === selectedSchedule && current.selectedDays === selectedDays) reloadScheduleData();
+        }
+      })
       .catch(error => {
         console.error(error);
+        setSaveError('Could not save the schedule. Your edits are still here. Try again.');
       })
       .finally(() => {
         setIsUpdating(false);
       });
   };
+
+  // Editing requires schedules and the Pod timezone.
+  if (!settings || !schedules) return <PageContainer>
+    <Typography component="h1" variant="h5">Schedule</Typography>
+    { schedulesError || settingsError ? <Alert
+      severity="error"
+      action={ <Button
+        onClick={ () => {
+          void refetch();
+          void refetchSettings();
+        } }>Retry</Button> }>Could not load the schedule and Pod timezone.</Alert>
+      : <CircularProgress aria-label="Loading schedule and Pod timezone"/> }
+  </PageContainer>;
 
   return (
     <PageContainer
@@ -118,22 +149,46 @@ export default function SchedulePage() {
         mb: 15,
       } }
     >
-      <SideControl/>
-
-      <DayTabs/>
-      <ErrorBoundary componentName='Scheduling chart'>
-        <TemperatureScheduleChart />
-      </ErrorBoundary>
-
-      <PowerScheduleSection format={ format }/>
-      <Box sx={ { mt: 2, display: 'flex', justifyContent: 'space-between', width: '100%', mb: 2 } }>
+      <Typography component="h1" variant="h5" sx={ { alignSelf: 'flex-start', mb: 1 } }>Schedule</Typography>
+      <SideControl beforeSideChange={ confirmDiscard }/>
+      <DayTabs beforeDayChange={ confirmDiscard }/>
+      <Box sx={ { width: '100%', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 2 } }>
+        <Box>
+          <Typography variant="subtitle1">
+            { titleDay } night{ selectedSchedule && selectedSchedule.power.off < selectedSchedule.power.on
+              ? ` to ${nextDay.charAt(0).toUpperCase() + nextDay.slice(1)} morning` : '' }
+          </Typography>
+          <Typography variant="caption" color="text.secondary">{ sideLabel } side · { settings?.timeZone }</Typography>
+        </Box>
         <EnabledSwitch/>
-        <SaveButton onSave={ handleSave }/>
       </Box>
-      <TemperatureAdjustmentsAccordion format={ format }/>
+      { selectedSchedule ? <ScheduleTimeline key={ `${side}-${selectedDay}` } format={ format }/> : <PowerScheduleSection format={ format }/> }
       <AlarmAccordion/>
-      { settings?.features.oneOffAlarms && <OneOffAlarmSection/> }
       <ApplyToOtherDaysAccordion/>
+      <Accordion sx={ { width: '100%' } }>
+        <AccordionSummary expandIcon={ <ExpandMore/> }>Temperature chart</AccordionSummary>
+        <AccordionDetails>
+          <ErrorBoundary componentName="Scheduling chart"><TemperatureScheduleChart/></ErrorBoundary>
+        </AccordionDetails>
+      </Accordion>
+      { settings?.features.oneOffAlarms && <Accordion sx={ { width: '100%', mt: 2 } } slotProps={ { transition: { unmountOnExit: true } } }>
+        <AccordionSummary expandIcon={ <ExpandMore/> }>Add one-time alarm</AccordionSummary>
+        <AccordionDetails><OneOffAlarmSection/></AccordionDetails>
+      </Accordion> }
+      { changesPresent && <Box
+        sx={ {
+          position: 'sticky', bottom: 80, mt: 2, width: '100%', p: 1, bgcolor: 'background.paper',
+          border: 1, borderColor: 'divider', borderRadius: 2, zIndex: 2,
+        } }>
+        <Typography role="status" variant="body2">
+          Unsaved · { sideLabel } side · { affectedDays.map(day => day.charAt(0).toUpperCase() + day.slice(1)).join(', ') }
+        </Typography>
+        { saveError && <Alert severity="error" sx={ { my: 1 } }>{ saveError }</Alert> }
+        <Box sx={ { display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1, gap: 1 } }>
+          { !useScheduleStore.getState().isValid() && <Button size="small" color="error" onClick={ showInvalidRow }>Check invalid time</Button> }
+          <SaveButton onSave={ handleSave }/>
+        </Box>
+      </Box> }
 
     </PageContainer>
   );

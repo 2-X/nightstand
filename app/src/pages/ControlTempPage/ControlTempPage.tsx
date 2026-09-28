@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
 import Button from '@mui/material/Button';
-import { Box, CircularProgress, Typography } from '@mui/material';
+import { Alert, Box, CircularProgress, Typography } from '@mui/material';
 import { palette } from '@design/tokens';
 
 import AlarmDismissal from './AlarmDismissal.tsx';
-import AlarmNotification from './AlarmNotification.tsx';
+import UpcomingNight from './UpcomingNight.tsx';
 import AwayNotification from './AwayNotification.tsx';
 import Clock from '@components/Clock.tsx';
+import BedTabs from '@components/BedTabs';
 import ErrorBoundary from '@components/ErrorBoundary.tsx';
 import LastNightChip from './LastNightChip.tsx';
 import PageContainer from '../PageContainer.tsx';
@@ -20,15 +21,12 @@ import { useAppStore } from '@state/appStore.tsx';
 import { useControlTempStore } from './controlTempStore.tsx';
 import { useDeviceStatus } from '@api/deviceStatus';
 import { useSettings } from '@api/settings.ts';
-import { useTheme } from '@mui/material/styles';
-
 
 export default function ControlTempPage() {
   const { isError, refetch, data: deviceStatus } = useDeviceStatus();
-  const syncFromServer = useControlTempStore(state => state.syncFromServer);
+  const syncFromServer = useControlTempStore((state) => state.syncFromServer);
   const { data: settings } = useSettings();
   const { isUpdating, side } = useAppStore();
-  const theme = useTheme();
 
   const sideStatus = deviceStatus?.[side];
   const isOn = sideStatus?.isOn || false;
@@ -43,14 +41,7 @@ export default function ControlTempPage() {
   }, [deviceStatus, syncFromServer]);
 
   return (
-    <PageContainer
-      sx={ {
-        maxWidth: '500px',
-        [theme.breakpoints.up('md')]: {
-          maxWidth: '400px',
-        },
-      } }
-    >
+    <PageContainer sx={ { maxWidth: '840px', alignItems: 'center' } }>
       <Box
         sx={ {
           display: 'flex',
@@ -62,61 +53,74 @@ export default function ControlTempPage() {
         } }
       >
         <Typography
+          component="h1"
           sx={ {
-            fontSize: '2rem',
+            fontSize: '1.75rem',
             fontWeight: 600,
             letterSpacing: '-0.02em',
             color: palette.text.primary,
           } }
         >
-          Temperature
+          Bed
         </Typography>
-        <ErrorBoundary componentName='Clock'>
-          <Clock/>
+        <ErrorBoundary componentName="Clock">
+          <Clock />
         </ErrorBoundary>
       </Box>
 
-      <Slider
-        isOn={ isOn }
-        currentTargetTemp={ sideStatus?.targetTemperatureF || 55 }
-        refetch={ refetch }
-        currentTemperatureF={ sideStatus?.currentTemperatureF || 55 }
-        format={ settings?.temperatureFormat ?? 'fahrenheit' }
-      />
+      <SideControl showTemp />
+      <BedTabs />
+      <Box
+        sx={ {
+          display: 'grid',
+          width: '100%',
+          gap: 3,
+          gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'repeat(2, minmax(0, 1fr))' },
+          alignItems: 'start',
+        } }
+      >
+        <Box sx={ { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 } }>
+          { !sideStatus && !isError && (
+            <Typography role="status">
+              { deviceStatus ? 'Bed status unavailable. Refresh to try again.' : 'Loading bed status...' }
+            </Typography>
+          ) }
+          { sideStatus && (
+            <Slider
+              isOn={ isOn }
+              currentTargetTemp={ sideStatus?.targetTemperatureF || 55 }
+              refetch={ refetch }
+              currentTemperatureF={ sideStatus?.currentTemperatureF || 55 }
+              format={ settings?.temperatureFormat ?? 'fahrenheit' }
+            />
+          ) }
 
-      { isError ? (
-        <Button
-          variant="contained"
-          onClick={ () => refetch() }
-          disabled={ isUpdating }
-        >
-          Try again
-        </Button>
-      ) : (
-        <PowerButton isOn={ sideStatus?.isOn || false } refetch={ refetch }/>
-      ) }
-
-      <Box sx={ { display: 'flex', flexDirection: 'column', gap: 1, width: '100%' } }>
-        <ErrorBoundary componentName='Schedule override banner'>
-          <ScheduleOverrideBanner/>
-        </ErrorBoundary>
-        {
-          deviceStatus?.isPriming && (
-            <PrimingNotification/>
-          )
-        }
-        <ErrorBoundary componentName='Alarm notification'>
-          <AlarmNotification/>
-        </ErrorBoundary>
-        <AwayNotification settings={ settings }/>
-        <WaterNotification/>
-        <ErrorBoundary componentName='Last night chip'>
-          <LastNightChip/>
-        </ErrorBoundary>
+          { isError && <Alert severity="error">Could not load bed status.</Alert> }
+          { isError || (deviceStatus && !sideStatus) ? (
+            <Button variant="contained" onClick={ () => refetch() } disabled={ isUpdating }>
+              Try again
+            </Button>
+          ) : (
+            sideStatus && <PowerButton isOn={ sideStatus.isOn } refetch={ refetch } />
+          ) }
+        </Box>
+        <Box sx={ { display: 'flex', flexDirection: 'column', gap: 1, width: '100%' } }>
+          <ErrorBoundary componentName="Schedule override banner">
+            <ScheduleOverrideBanner />
+          </ErrorBoundary>
+          { deviceStatus?.isPriming && <PrimingNotification /> }
+          <ErrorBoundary componentName="Alarm notification">
+            <UpcomingNight />
+          </ErrorBoundary>
+          <AwayNotification settings={ settings } />
+          <WaterNotification />
+          <ErrorBoundary componentName="Last night chip">
+            <LastNightChip />
+          </ErrorBoundary>
+        </Box>
       </Box>
-      <AlarmDismissal refetch={ refetch }/>
-      { isUpdating && <CircularProgress/> }
-      <SideControl showTemp={ true }/>
+      <AlarmDismissal refetch={ refetch } />
+      { isUpdating && <CircularProgress /> }
     </PageContainer>
   );
 }

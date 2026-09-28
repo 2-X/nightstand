@@ -1,215 +1,208 @@
-import { useEffect, useState } from 'react';
+/* eslint-disable react/no-multi-comp */
+import { useMemo, useState } from 'react';
 import moment from 'moment-timezone';
+import { useSearchParams } from 'react-router-dom';
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
-import { Alert, Box, Typography } from '@mui/material';
-import { useResizeDetector } from 'react-resize-detector';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import {
+  Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button,
+  CircularProgress, IconButton, Tab, Tabs, Typography,
+} from '@mui/material';
+import VitalsLineChart from '@components/VitalsLineChart';
+import SleepStagesCard from '@components/SleepStagesCard';
+import SleepBalanceCard from '@components/SleepBalanceCard';
+import SleepFitnessCard from '@components/SleepFitnessCard';
+import SleepConsistencyCard from '@components/SleepConsistencyCard';
+import SideControl from '@components/SideControl';
+import ErrorBoundary from '@components/ErrorBoundary';
+import { useAppStore, Side } from '@state/appStore';
+import { useSleepRecords } from '@api/sleep';
+import { useSettings } from '@api/settings';
+import { useServices } from '@api/services';
+import { useVitalsRecords, useVitalsSummary } from '@api/vitals';
+import type { SleepRecord } from '@api/sleepSchema';
+import type { VitalsMetric } from '@lib/vitalsPoints';
+import { vitalsRecordsToPoints } from '@lib/vitalsPoints';
+import PageContainer from '../../PageContainer';
+import WeekStrip from './WeekStrip';
+import WeeklyScheduleBars from './WeeklyScheduleBars';
+import { recordForNight, recordsInWeek } from './sleepContext';
 
-import VitalsLineChart from '@components/VitalsLineChart.tsx';
-import PageContainer from '../../PageContainer.tsx';
-import VitalsSummaryCard from '@components/VitalsSummaryCard.tsx';
-import SleepStagesCard from '@components/SleepStagesCard.tsx';
-import SleepBalanceCard from '@components/SleepBalanceCard.tsx';
-import SleepFitnessCard from '@components/SleepFitnessCard.tsx';
-import SleepConsistencyCard from '@components/SleepConsistencyCard.tsx';
-import SideControl from '@components/SideControl.tsx';
-import WeekStrip from './WeekStrip.tsx';
-import WeeklyScheduleBars from './WeeklyScheduleBars.tsx';
-import { SleepRecord } from '../../../../../server/src/db/sleepRecordsSchema.ts';
-import { useAppStore } from '@state/appStore.tsx';
-import { useSleepRecords } from '@api/sleep.ts';
-import { useVitalsRecords, useVitalsSummary } from '@api/vitals.ts';
-import ErrorBoundary from '@components/ErrorBoundary.tsx';
-import { palette } from '@design/tokens';
+const METRICS = [
+  { key: 'heart_rate', label: 'Heart rate', unit: 'bpm', summary: 'avgHeartRate' },
+  { key: 'breathing_rate', label: 'Breathing rate', unit: 'breaths/min', summary: 'avgBreathingRate' },
+  { key: 'hrv', label: 'HRV', unit: 'ms', summary: 'avgHRV' },
+] as const;
 
-
-const NoData = () => {
-  return (
-    <Alert severity="info">
-      No data available for the selected time range
-    </Alert>
-  );
-};
-
-
-// eslint-disable-next-line react/no-multi-comp
-export default function SleepPage() {
-  const { ref } = useResizeDetector();
-  const { side } = useAppStore();
-  const [startTime, setStartTime] = useState(moment().subtract(7, 'days'));
-  const [endTime, setEndTime] = useState(moment().add(2, 'day'));
-  const [selectedSleepRecord, setSelectedSleepRecord] = useState<SleepRecord | undefined>(undefined);
-
-  // Fetch sleep records for the selected week
-  const { data: sleepRecords } = useSleepRecords({
-    side,
-    startTime: startTime.toISOString(),
-    endTime: endTime.toISOString()
+function NightVitals({ record, side, timeZone }: { record: SleepRecord; side: Side; timeZone: string }) {
+  const [params, setParams] = useSearchParams();
+  const metric = params.get('metric');
+  const query = { side, startTime: record.entered_bed_at, endTime: record.left_bed_at };
+  const { data: vitals, isPending, isError, refetch } = useVitalsRecords(query);
+  const { data: weekSummary } = useVitalsSummary({
+    side, startTime: moment.tz(record.left_bed_at, timeZone).subtract(7, 'days').toISOString(), endTime: record.left_bed_at,
   });
-
-  const { data: vitalsRecords } = useVitalsRecords({
-    side,
-    startTime: selectedSleepRecord?.entered_bed_at,
-    endTime: selectedSleepRecord?.left_bed_at
-  },
-  selectedSleepRecord !== undefined
+  const selectMetric = (next: VitalsMetric, expanded: boolean) => {
+    const nextParams = new URLSearchParams(params);
+    if (expanded) nextParams.set('metric', next);
+    else nextParams.delete('metric');
+    setParams(nextParams, { replace: true });
+  };
+  return (
+    <Box sx={ { minWidth: 0 } }>
+      <Typography component="h2" variant="h6" sx={ { mb: 1 } }>Night measurements</Typography>
+      { METRICS.map(item => {
+        const points = vitalsRecordsToPoints(vitals ?? [], item.key);
+        const value = points.length ? points.reduce((sum, point) => sum + point.value, 0) / points.length : undefined;
+        return (
+          <Accordion
+            key={ item.key }
+            expanded={ metric === item.key }
+            onChange={ (_, expanded) => selectMetric(item.key, expanded) }
+            slotProps={ { transition: { mountOnEnter: true, unmountOnExit: true } } }
+            disableGutters>
+            <AccordionSummary expandIcon={ <ExpandMoreIcon/> } id={ `metric-${item.key}` } aria-controls={ `detail-${item.key}` }>
+              <Box sx={ { display: 'flex', justifyContent: 'space-between', width: '100%', gap: 1 } }>
+                <Typography>{ item.label }</Typography>
+                <Typography color="text.secondary" variant="body2">
+                  { Number.isFinite(value) && value! > 0 ? `${Math.round(value!)} ${item.unit}` : 'No estimate' }
+                </Typography>
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails>
+              <ErrorBoundary componentName={ item.label }>
+                { isPending ? <CircularProgress size={ 24 } aria-label="Loading measurements"/> : isError ? (
+                  <Alert severity="error" action={ <Button onClick={ () => refetch() }>Retry</Button> }>Measurements could not be loaded.</Alert>
+                ) : vitalsRecordsToPoints(vitals ?? [], item.key).length ? (
+                  <VitalsLineChart
+                    vitalsRecords={ vitals }
+                    metric={ item.key }
+                    sevenDayAvg={ weekSummary?.[item.summary] }
+                    timeZone={ timeZone }/>
+                ) : <Typography color="text.secondary">No { item.label.toLowerCase() } estimate for this recording.</Typography> }
+              </ErrorBoundary>
+            </AccordionDetails>
+          </Accordion>
+        );
+      }) }
+    </Box>
   );
+}
 
-  // Vitals summary across the 7 days leading up to (and including) the
-  // selected night. Drives the "7 DAY AVERAGE" stat on each VitalsLineChart.
-  const sevenDayWindow = selectedSleepRecord
-    ? {
-      side,
-      startTime: moment(selectedSleepRecord.left_bed_at).subtract(7, 'days').toISOString(),
-      endTime: selectedSleepRecord.left_bed_at,
-    }
-    : undefined;
-  const { data: weekVitalsSummary } = useVitalsSummary(sevenDayWindow);
-
-  useEffect(() => {
-    // Default to last record selected
-    if (sleepRecords?.length) {
-      setSelectedSleepRecord(sleepRecords[sleepRecords.length - 1]);
-    }
-  }, [sleepRecords]);
-
-  // Function to move to the previous week
-  const handlePrevWeek = () => {
-    const newStartTime = startTime.clone().subtract(1, 'week');
-    setStartTime(newStartTime);
-    const newEndTime = endTime.clone().subtract(1, 'week');
-    setEndTime(newEndTime);
+// Keep explicit date selection across side changes.
+function SleepContext({ side, timeZone }: { side: Side; timeZone: string }) {
+  const [weekDate, setWeekDate] = useState<string>();
+  const [chosenDate, setChosenDate] = useState<string>();
+  const [view, setView] = useState('night');
+  const { data, isPending, isError, refetch } = useSleepRecords({ side });
+  const sideRecords = isError ? [] : data?.filter(record => record.side === side) ?? [];
+  const newest = [...sideRecords].sort((left, right) => Date.parse(right.left_bed_at) - Date.parse(left.left_bed_at))[0];
+  const initialWeek = moment.tz(newest?.left_bed_at, timeZone).startOf('isoWeek').format('YYYY-MM-DD');
+  const weekStart = useMemo(() => moment.tz(weekDate ?? initialWeek, timeZone).startOf('day'), [weekDate, initialWeek, timeZone]);
+  const weekEnd = weekStart.clone().add(6, 'days');
+  const { data: services } = useServices();
+  const records = isError ? [] : recordsInWeek(sideRecords, weekStart, timeZone);
+  const latest = [...records].sort((left, right) => Date.parse(right.left_bed_at) - Date.parse(left.left_bed_at))[0];
+  const defaultDate = latest ? moment.tz(latest.left_bed_at, timeZone) : moment.min(moment.tz(timeZone), weekEnd);
+  const selectedDate = chosenDate ?? defaultDate.format('YYYY-MM-DD');
+  const selected = recordForNight(records, selectedDate, timeZone);
+  const job = services?.biometrics.jobs[side === 'left' ? 'analyzeSleepLeft' : 'analyzeSleepRight'];
+  const changeWeek = (amount: number) => {
+    setWeekDate(weekStart.clone().add(amount, 'week').format('YYYY-MM-DD'));
+    setChosenDate(undefined);
   };
 
-  // Function to move to the next week
-  const handleNextWeek = () => {
-    const newStartTime = startTime.clone().add(1, 'week');
-    setStartTime(newStartTime);
-    const newEndTime = endTime.clone().add(1, 'week');
-    setEndTime(newEndTime);
-  };
-  // The displayed end of the visible week is `endTime - 2 days` (see the
-  // formatter and WeekStrip below). Compare against that so the chevron shows
-  // as soon as the user is viewing a week prior to the current one.
-  const displayedEnd = endTime.clone().subtract(2, 'day');
-  const isNextDisabled = displayedEnd.isSameOrAfter(moment(), 'week');
+  return (
+    <>
+      <Box sx={ { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }>
+        <IconButton aria-label="Previous week" onClick={ () => changeWeek(-1) }><NavigateBeforeIcon/></IconButton>
+        <Typography>{ weekStart.format('MMM D') } - { weekEnd.format('MMM D') }</Typography>
+        <IconButton
+          aria-label="Next week"
+          disabled={ weekStart.isSameOrAfter(moment.tz(timeZone).startOf('isoWeek')) }
+          onClick={ () => changeWeek(1) }><NavigateNextIcon/></IconButton>
+      </Box>
+      <WeekStrip
+        weekStart={ weekStart }
+        timeZone={ timeZone }
+        selectedDate={ selectedDate }
+        records={ records }
+        onSelectDay={ date => {
+          setChosenDate(date);
+          setWeekDate(weekStart.format('YYYY-MM-DD'));
+        } }/>
+      <Typography variant="body2" color="text.secondary">
+        { side === 'left' ? 'Left' : 'Right' } side · Wake date { moment.tz(selectedDate, timeZone).format('ddd, MMM D') } · { timeZone }
+      </Typography>
+      <Tabs value={ view } onChange={ (_, next: string) => setView(next) } aria-label="Sleep period" variant="fullWidth">
+        <Tab value="night" label="Night" id="sleep-night" aria-controls="sleep-panel"/>
+        <Tab value="week" label="Week" id="sleep-week" aria-controls="sleep-panel"/>
+      </Tabs>
+      { services?.biometrics.enabled === false && (
+        <Alert severity="info">
+          Biometrics is disabled. Existing recordings remain available; enable it in Settings &gt; Sleep data to collect new data.
+        </Alert>
+      ) }
+      <Box role="tabpanel" id="sleep-panel" aria-labelledby={ `sleep-${view}` }>
+        { isPending ? <CircularProgress aria-label="Loading sleep records"/> : isError ? (
+          <Alert severity="error" action={ <Button onClick={ () => refetch() }>Retry</Button> }>Sleep records could not be loaded.</Alert>
+        ) : view === 'week' ? (
+          <Box sx={ { display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } } }>
+            <ErrorBoundary componentName="Sleep balance">
+              <SleepBalanceCard records={ records } weekStart={ weekStart } timeZone={ timeZone }/>
+            </ErrorBoundary>
+            <ErrorBoundary componentName="Sleep consistency">
+              <SleepConsistencyCard weekRecords={ records } weekStart={ weekStart } timeZone={ timeZone }/>
+            </ErrorBoundary>
+            <ErrorBoundary componentName="Weekly schedule">
+              <WeeklyScheduleBars records={ records } weekStart={ weekStart } timeZone={ timeZone }/>
+            </ErrorBoundary>
+          </Box>
+        ) : selected ? (
+          <Box
+            sx={ {
+              display: 'grid', gap: 2, alignItems: 'start',
+              gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.1fr) minmax(0, 1fr)' },
+            } }>
+            <Box sx={ { display: 'grid', gap: 2, minWidth: 0 } }>
+              <ErrorBoundary componentName="Night summary">
+                <SleepFitnessCard sleepRecord={ selected } timeZone={ timeZone }/>
+              </ErrorBoundary>
+              <ErrorBoundary componentName="Sleep stages">
+                <SleepStagesCard startTime={ selected.entered_bed_at } endTime={ selected.left_bed_at } timeZone={ timeZone }/>
+              </ErrorBoundary>
+            </Box>
+            <ErrorBoundary key={ `${side}-${selected.id}` } componentName="Night measurements">
+              <NightVitals record={ selected } side={ side } timeZone={ timeZone }/>
+            </ErrorBoundary>
+          </Box>
+        ) : (
+          <Alert severity="info">
+            No recording for { moment.tz(selectedDate, timeZone).format('MMM D') }. Missing data does not mean zero sleep.
+            { job?.status === 'failed'
+              ? ' The latest analysis failed; inspect it in Settings > Device.'
+              : ' This night may not have been analyzed yet. Analysis runs at noon in the Pod timezone.' }
+          </Alert>
+        ) }
+      </Box>
+    </>
+  );
+}
 
+export default function SleepPage() {
+  const { side } = useAppStore();
+  const { data: settings, isError, refetch } = useSettings();
   return (
     <ErrorBoundary componentName="Sleep page">
-      <PageContainer containerProps={ { ref } } sx={ { mb: 15, gap: 2.5, mt: 0, alignItems: 'stretch' } }>
-        { /* Page-level title in the same Apple-style as Settings/Status. No back
-             arrow, Sleep is a top-level tab now. */ }
-        <Typography
-          sx={ {
-            fontSize: '2rem',
-            fontWeight: 600,
-            letterSpacing: '-0.02em',
-            color: palette.text.primary,
-            px: 0.5,
-            mt: 1,
-          } }
-        >
-          Sleep
-        </Typography>
-
+      <PageContainer sx={ { mb: 12, gap: 2, alignItems: 'stretch' } }>
+        <Typography component="h1" variant="h4">Sleep</Typography>
         <SideControl/>
-        <Box
-          sx={ {
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            width: '70%',
-            color: palette.text.primary,
-            fontSize: '0.95rem',
-            mt: 0.5,
-            mx: 'auto',
-          } }>
-          <NavigateBeforeIcon onClick={ handlePrevWeek } sx={ { cursor: 'pointer', fontSize: 22 } }/>
-          <Typography sx={ { fontSize: '0.95rem', color: palette.text.primary, fontWeight: 500 } }>
-            { startTime.format('MMM D') } &ndash; { displayedEnd.format('MMM D') }
-          </Typography>
-          <Box sx={ { width: 22, display: 'flex', justifyContent: 'center' } }>
-            { !isNextDisabled && (
-              <NavigateNextIcon onClick={ handleNextWeek } sx={ { cursor: 'pointer', fontSize: 22 } }/>
-            ) }
-          </Box>
-        </Box>
-        <ErrorBoundary componentName="Week strip">
-          <WeekStrip
-            selectedDate={ displayedEnd }
-            selectedRecord={ selectedSleepRecord }
-            onSelectDay={ (day, record) => {
-              if (record) {
-                setSelectedSleepRecord(record);
-              }
-              const weekStart = day.clone().startOf('isoWeek').subtract(1, 'day');
-              const weekEnd = day.clone().endOf('isoWeek').add(2, 'day');
-              setStartTime(weekStart);
-              setEndTime(weekEnd);
-            } }
-          />
-        </ErrorBoundary>
-        {
-          sleepRecords?.length === 0 && <NoData/>
-        }
-        { /* Sleep stages chart replaces the old SleepBarChart at the top. */ }
-        { selectedSleepRecord && (
-          <ErrorBoundary componentName="Sleep stages">
-            <SleepStagesCard
-              startTime={ selectedSleepRecord.entered_bed_at }
-              endTime={ selectedSleepRecord.left_bed_at }
-            />
-          </ErrorBoundary>
-        ) }
-        <Box sx={ { width: '100%', display: 'flex', flexDirection: 'column', gap: 2.5 } }>
-          {
-            selectedSleepRecord &&
-            (
-              <>
-                <ErrorBoundary componentName="Sleep fitness card">
-                  <SleepFitnessCard sleepRecord={ selectedSleepRecord } />
-                </ErrorBoundary>
-                <ErrorBoundary componentName="Sleep consistency">
-                  <SleepConsistencyCard
-                    weekRecords={ sleepRecords }
-                    weekStart={ displayedEnd.clone().startOf('isoWeek') }
-                  />
-                </ErrorBoundary>
-                <VitalsSummaryCard
-                  startTime={ selectedSleepRecord.entered_bed_at }
-                  endTime={ selectedSleepRecord.left_bed_at }
-                />
-                <ErrorBoundary componentName="Heart rate chart">
-                  <VitalsLineChart
-                    vitalsRecords={ vitalsRecords }
-                    metric="heart_rate"
-                    sevenDayAvg={ weekVitalsSummary?.avgHeartRate }
-                  />
-                </ErrorBoundary>
-                <ErrorBoundary componentName="Breathing rate chart">
-                  <VitalsLineChart
-                    vitalsRecords={ vitalsRecords }
-                    metric="breathing_rate"
-                    sevenDayAvg={ weekVitalsSummary?.avgBreathingRate }
-                  />
-                </ErrorBoundary>
-                <ErrorBoundary componentName="HRV chart">
-                  <VitalsLineChart
-                    vitalsRecords={ vitalsRecords }
-                    metric="hrv"
-                    sevenDayAvg={ weekVitalsSummary?.avgHRV }
-                  />
-                </ErrorBoundary>
-              </>
-            )
-          }
-          <ErrorBoundary componentName="Weekly schedule bars">
-            <WeeklyScheduleBars/>
-          </ErrorBoundary>
-          <ErrorBoundary componentName="Sleep balance">
-            <SleepBalanceCard/>
-          </ErrorBoundary>
-        </Box>
+        { isError ? (
+          <Alert severity="error" action={ <Button onClick={ () => refetch() }>Retry</Button> }>Pod settings could not be loaded.</Alert>
+        ) : settings ? (
+          <SleepContext key={ settings.timeZone } side={ side } timeZone={ settings.timeZone }/>
+        ) : <CircularProgress aria-label="Loading Pod timezone"/> }
       </PageContainer>
     </ErrorBoundary>
   );

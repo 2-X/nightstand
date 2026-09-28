@@ -9,7 +9,7 @@ test('testing an alarm reports no errors', async ({ page }) => {
   const alarmResponse = page.waitForResponse((r) => r.url().endsWith('/api/alarm'));
 
   await page.goto('/schedules');
-  await page.getByRole('button', { name: /^Vibration alarms?$/ }).click();
+  await page.getByRole('button', { name: /Alarm options/ }).click();
   await page.getByRole('button', { name: 'Test alarm' }).first().click();
 
   expect((await alarmResponse).status()).toBe(200);

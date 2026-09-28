@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import axios from './api';
 import { server } from '@test/setup';
 import { useUpdateProgress, migrationsApplied } from './useUpdateProgress';
 
@@ -82,4 +83,25 @@ describe('useUpdateProgress', () => {
     expect(result.current.phase).toBe('timed_out');
     expect(reload).not.toHaveBeenCalled();
   });
+});
+
+for (const status of [400, 500]) {
+  it(`surfaces HTTP ${status} as a dismissible failure without polling`, async () => {
+    server.use(http.post('*/update', () => HttpResponse.json({ error: 'Update refused' }, { status })));
+    deviceVersion('3.2.1');
+    const { result } = renderHook(() => useUpdateProgress('3.2.0'));
+    await act(async () => { await result.current.start(() => axios.post('/update', {})); });
+    expect(result.current.phase).toBe('failed');
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_100); });
+    expect(reload).not.toHaveBeenCalled();
+    act(() => result.current.reset());
+    expect(result.current.phase).toBe('idle');
+  });
+}
+it('keeps polling after an ambiguous transport disconnect', async () => {
+  server.use(http.post('*/update', () => HttpResponse.error()));
+  deviceVersion('3.2.0');
+  const { result } = renderHook(() => useUpdateProgress('3.2.0'));
+  await act(async () => { await result.current.start(() => axios.post('/update', {})); });
+  expect(result.current.phase).toBe('updating');
 });

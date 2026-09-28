@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import axios from './api';
+import { isAxiosError } from 'axios';
 
-export type UpdatePhase = 'idle' | 'updating' | 'timed_out';
+export type UpdatePhase = 'idle' | 'updating' | 'timed_out' | 'failed';
 
 const UPDATE_TIMEOUT_MS = 10 * 60 * 1000;
 const POLL_INTERVAL_MS = 5_000;
@@ -28,6 +29,7 @@ export async function migrationsApplied() {
 // its own isComplete instead.
 export function useUpdateProgress(runningVersion: string | undefined, isComplete?: () => Promise<boolean>) {
   const [phase, setPhase] = useState<UpdatePhase>('idle');
+  const [error, setError] = useState<string>();
   // Captured when the action starts, so a mid-action refresh of deviceStatus
   // elsewhere in the app can't move the goalposts the poller compares against.
   const startVersionRef = useRef(runningVersion);
@@ -37,6 +39,7 @@ export function useUpdateProgress(runningVersion: string | undefined, isComplete
   useEffect(() => {
     if (phase !== 'updating') return;
     const startedAt = Date.now();
+    let cancelled = false;
     const poll = setInterval(async () => {
       if (Date.now() - startedAt > UPDATE_TIMEOUT_MS) {
         setPhase('timed_out');
@@ -46,26 +49,32 @@ export function useUpdateProgress(runningVersion: string | undefined, isComplete
         const done = isCompleteRef.current
           ? await isCompleteRef.current()
           : await versionMovedOff(startVersionRef.current);
-        if (done) window.location.reload();
+        if (done && !cancelled) window.location.reload();
       } catch {
         // expected while the service restarts mid-action
       }
     }, POLL_INTERVAL_MS);
-    return () => clearInterval(poll);
+    return () => { cancelled = true; clearInterval(poll); };
   }, [phase]);
 
   const start = async (action: () => Promise<unknown>) => {
     startVersionRef.current = runningVersion;
+    setError(undefined);
     setPhase('updating');
     try {
       await action();
-    } catch {
-      // the service restart can drop this request on the floor; the poller
-      // decides whether the action actually went through
+    } catch (failure) {
+      // A response is a definitive rejection; a lost connection can mean the
+      // service already restarted, so only that ambiguous case keeps polling.
+      if (isAxiosError(failure) && !failure.response) return;
+      const data = isAxiosError(failure) ? failure.response?.data : undefined;
+      const detail = data?.error ?? data?.message;
+      setError(typeof detail === 'string' ? detail : 'Unable to start this operation. Please try again.');
+      setPhase('failed');
     }
   };
 
-  const reset = () => setPhase('idle');
+  const reset = () => { setError(undefined); setPhase('idle'); };
 
-  return { phase, start, reset };
+  return { phase, error, start, reset };
 }

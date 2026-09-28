@@ -1,20 +1,14 @@
 import _ from 'lodash';
 import { create } from 'zustand';
-import { AlarmSchedule, DailySchedule, DayOfWeek, Schedules } from '@api/schedulesSchema.ts';
+import { AlarmSchedule, DailySchedule, DayOfWeek, Schedules, MAX_ALARMS_PER_DAY } from '@api/schedulesSchema.ts';
 import { DeepPartial } from 'ts-essentials';
 import { AccordionExpanded } from './SchedulePage.types.ts';
 import { DaysSelected } from './SchedulePage.types.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { LOWERCASE_DAYS } from './days';
+import { scheduleIsValid } from './scheduleValidation';
 
 
-
-type Validations = {
-  powerOffTimeIsValid: boolean;
-  alarmTimeIsValid: boolean;
-  // TODO: Validate temperature adjustments
-  // temperatureAdjustmentsValid: boolean,
-};
 
 export const DEFAULT_DAYS_SELECTED: DaysSelected = {
   sunday: false,
@@ -24,12 +18,6 @@ export const DEFAULT_DAYS_SELECTED: DaysSelected = {
   thursday: false,
   friday: false,
   saturday: false,
-};
-
-const DEFAULT_VALIDATIONS: Validations = {
-  powerOffTimeIsValid: true,
-  alarmTimeIsValid: true,
-  // temperatureAdjustmentsValid: true,
 };
 
 type ScheduleStore = {
@@ -43,8 +31,6 @@ type ScheduleStore = {
   setAccordionExpanded: (accordion: AccordionExpanded) => void;
   accordionExpanded: AccordionExpanded;
 
-  validations: Validations;
-  setValidations: (newValidations: DeepPartial<Validations>) => void;
   isValid: () => boolean;
 
   selectedSchedule: DailySchedule | undefined;
@@ -82,7 +68,6 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
     set({
       selectedDays: { ...DEFAULT_DAYS_SELECTED },
       accordionExpanded: undefined,
-      validations: { ...DEFAULT_VALIDATIONS },
       selectedSchedule,
       selectedAlarmIndex: 0,
       changesPresent: false,
@@ -103,17 +88,8 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
     get().accordionExpanded === accordionExpanded ? set({ accordionExpanded: undefined }) : set({ accordionExpanded });
   },
 
-  validations: {
-    powerOffTimeIsValid: true,
-    alarmTimeIsValid: true,
-  },
-  setValidations: (newValidations) => {
-    const { validations } = get();
-    set({ validations: _.merge(validations, newValidations) });
-  },
   isValid: () => {
-    const { validations } = get();
-    return _.every(validations);
+    return scheduleIsValid(get().selectedSchedule);
   },
   changesPresent: false,
   checkForChanges: () => {
@@ -176,6 +152,7 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
     const { selectedSchedule, getEditedAlarms, checkForChanges } = get();
     if (!selectedSchedule) return;
     const alarms = _.cloneDeep(getEditedAlarms());
+    if (alarms.length >= MAX_ALARMS_PER_DAY) return;
     alarms.push({ ...alarms[alarms.length - 1], enabled: true });
     set({
       selectedSchedule: {

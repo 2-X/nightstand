@@ -6,6 +6,6 @@ import ControlTempPage from './ControlTempPage';
 describe('ControlTempPage', () => {
   it('renders the temperature control', async () => {
     renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
-    expect(await screen.findByText('Temperature')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Bed' })).toBeInTheDocument();
   });
 });

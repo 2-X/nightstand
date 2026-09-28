@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
+  Alert,
   Dialog,
   DialogActions,
+  DialogTitle,
   Button,
   useMediaQuery,
   useTheme,
@@ -14,7 +16,7 @@ import { useControlTempStore } from './controlTempStore.tsx';
 
 
 type AlarmDismissalProps = {
-  refetch: any;
+  refetch: () => Promise<unknown>;
 }
 
 const pulse = keyframes`
@@ -29,10 +31,11 @@ const pulse = keyframes`
 
 
 export default function AlarmDismissal({ refetch }: AlarmDismissalProps) {
-  const { side, setIsUpdating } = useAppStore();
+  const { side, setIsUpdating, isUpdating } = useAppStore();
   const deviceStatus = useControlTempStore(state => state.deviceStatus);
 
   const [dismissed, setDismissed] = useState(false);
+  const [error, setError] = useState('');
   const isAlarmVibrating = deviceStatus?.[side]?.isAlarmVibrating || false;
 
   const theme = useTheme();
@@ -48,6 +51,7 @@ export default function AlarmDismissal({ refetch }: AlarmDismissalProps) {
 
 
   const handleDismiss = () => {
+    setError('');
     setIsUpdating(true);
     postDeviceStatus({
       [side]: {
@@ -67,6 +71,7 @@ export default function AlarmDismissal({ refetch }: AlarmDismissalProps) {
       })
       .catch(error => {
         console.error(error);
+        setError('Could not dismiss the alarm. Try again.');
       })
       .finally(() => {
         setIsUpdating(false);
@@ -76,25 +81,13 @@ export default function AlarmDismissal({ refetch }: AlarmDismissalProps) {
   return (
     <Dialog
       open={ dismissed ? false : isAlarmVibrating }
-      fullScreen={ isSmallScreen }
-      PaperProps={ {
-        sx: isSmallScreen
-          ? {
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            textAlign: 'center',
-            maxWidth: '85vw',
-            maxHeight: '35vh',
-            borderRadius: '10px',
-            margin: 0,
-          }
-          : {
-            width: '50%',
-            height: '200px'
-          },
-      } }
+      fullScreen={ false }
+      fullWidth
+      maxWidth="xs"
+      aria-labelledby="active-alarm-title"
+      PaperProps={ { sx: { p: isSmallScreen ? 2 : 3 } } }
     >
+      <DialogTitle id="active-alarm-title">{ side === 'left' ? 'Left' : 'Right' } side alarm</DialogTitle>
       <DialogActions
         sx={ {
           display: 'flex',
@@ -104,9 +97,15 @@ export default function AlarmDismissal({ refetch }: AlarmDismissalProps) {
           height: '100%',
         } }
       >
-        <AlarmIcon fontSize="large" sx={ { mb: 4,animation: `${pulse} 2s infinite`, } }/>
+        <AlarmIcon
+          fontSize="large"
+          sx={ {
+            mb: 2, animation: `${pulse} 2s infinite`, '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
+          } }/>
+        { error && <Alert severity="error">{ error }</Alert> }
         <Button
           onClick={ handleDismiss }
+          disabled={ isUpdating }
           color="error"
           variant="contained"
         >

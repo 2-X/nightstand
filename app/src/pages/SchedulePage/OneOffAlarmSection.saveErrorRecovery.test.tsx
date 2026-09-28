@@ -35,5 +35,6 @@ describe('OneOffAlarmSection save error recovery', () => {
     // enabled state - not remain stuck in the saving spinner.
     const savedAgain = await screen.findByRole('button', { name: 'Save one-off alarm' }) as HTMLButtonElement;
     await waitFor(() => expect(savedAgain.disabled).toBe(false), { timeout: 3000 });
+    expect(screen.getByRole('alert')).toHaveTextContent(/Could not save/);
   });
 });

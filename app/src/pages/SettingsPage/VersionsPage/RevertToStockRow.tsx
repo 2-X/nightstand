@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useState, useId } from 'react';
 import {
-  Box, Button, CircularProgress, Dialog, DialogActions, DialogContent,
+  Alert, ButtonBase, Button, CircularProgress, Dialog, DialogActions, DialogContent,
   DialogContentText, DialogTitle, Stack, Typography,
 } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
@@ -13,7 +14,8 @@ type Props = {
 
 export default function RevertToStockRow({ runningVersion }: Props) {
   const [open, setOpen] = useState(false);
-  const { phase, start, reset } = useUpdateProgress(runningVersion);
+  const titleId = useId();
+  const { phase, error, start, reset } = useUpdateProgress(runningVersion);
 
   const revert = () => start(() => postRevertToStock());
 
@@ -22,13 +24,14 @@ export default function RevertToStockRow({ runningVersion }: Props) {
     // dialog still bubbles its clicks up the React tree, so nesting it inside
     // the row would feed every click back into the row's own open handler.
     <>
-      <Box
+      <ButtonBase
         onClick={ () => setOpen(true) }
         sx={ {
           display: 'flex',
           alignItems: 'center',
           gap: 1.5,
-          cursor: 'pointer',
+          textAlign: 'left',
+          justifyContent: 'flex-start',
           mx: -2.5,
           px: 2.5,
           py: 1.5,
@@ -37,33 +40,33 @@ export default function RevertToStockRow({ runningVersion }: Props) {
       >
         <WarningAmberIcon sx={ { color: 'text.secondary' } }/>
         <Typography sx={ { fontSize: '1rem' } }>
-          Revert to stock upstream free-sleep
+          Restore upstream free-sleep
         </Typography>
-      </Box>
+      </ButtonBase>
 
-      <Dialog open={ open } onClose={ () => phase !== 'updating' && setOpen(false) }>
-        <DialogTitle>
-          { phase === 'idle' && 'Revert to stock upstream?' }
-          { phase === 'updating' && 'Reverting to stock...' }
+      <Dialog aria-labelledby={ titleId } open={ open } onClose={ () => { if (phase !== 'updating') { reset(); setOpen(false); } } }>
+        <DialogTitle id={ titleId }>
+          { phase === 'idle' && 'Restore upstream free-sleep?' }
+          { phase === 'updating' && 'Restoring upstream...' }
+          { phase === 'failed' && 'Request failed' }
           { phase === 'timed_out' && 'Still not done' }
         </DialogTitle>
         <DialogContent>
+          { phase === 'failed' && <Alert severity="error">{ error }</Alert> }
           { phase === 'idle' && (
             <DialogContentText component="div">
               <Typography variant="body2" sx={ { mb: 1.5 } }>
-                This backs up the current install and replaces it with plain
-                throwaway31265/free-sleep, the project Nightstand is built on. Every
-                Nightstand feature goes away: the update system, presence-detection
-                fixes, the design, all of it. Your settings, schedules, and data are
-                preserved and not rewritten.
+                Download the current throwaway31265/free-sleep main build and replace Nightstand.
+                This is an application change, not a factory firmware reset. Nightstand features
+                are removed; settings and sleep data remain on the Pod.
               </Typography>
               <Typography variant="body2" sx={ { mb: 1.5 } }>
-                The pod verifies stock is healthy afterward; if that check fails, it swaps
-                back and Nightstand keeps running.
+                The script checks the server and hardware connection and attempts rollback if those
+                checks fail. Schedules and alarms pause during restart. Recovery may require SSH.
               </Typography>
               <Typography variant="body2" fontWeight={ 600 }>
                 There is no button to come back. Once stock is running, getting back
-                requires re-running the adoption tool from a computer.
+                requires the migration tool from a computer with SSH access.
               </Typography>
             </DialogContentText>
           ) }
@@ -71,25 +74,34 @@ export default function RevertToStockRow({ runningVersion }: Props) {
             <Stack spacing={ 2 } alignItems="center" sx={ { py: 2 } }>
               <CircularProgress/>
               <Typography variant="body2" color="text.secondary">
-                Reverting to stock upstream. This page reloads by itself when done.
+                Restoring upstream free-sleep. This page reloads by itself when done.
               </Typography>
             </Stack>
           ) }
           { phase === 'timed_out' && (
-            <DialogContentText>
-              The pod hasn't reported a version change after 10 minutes. Check the log on the pod:
-              <code> /persistent/free-sleep-data/logs/free-sleep-revert.log</code>
-            </DialogContentText>
+            <Stack spacing={ 1.5 }>
+              <DialogContentText>
+                  Restoring upstream free-sleep is not confirmed after 10 minutes.
+                  Check the logs and current status before trying again.
+              </DialogContentText>
+              <Typography variant="body2">
+                Last reported running version: { runningVersion ? `v${runningVersion}` : 'unavailable' }.
+              </Typography>
+              <Stack direction="row" useFlexGap flexWrap="wrap" spacing={ 1 }>
+                <Button component={ Link } to="/settings/logs?file=free-sleep-revert.log">Open update logs</Button>
+                <Button component={ Link } to="/settings/system">System status</Button>
+              </Stack>
+            </Stack>
           ) }
         </DialogContent>
         <DialogActions>
           { phase === 'idle' && (
             <>
               <Button onClick={ () => setOpen(false) }>Cancel</Button>
-              <Button color="error" variant="contained" onClick={ revert }>Revert to stock</Button>
+              <Button color="error" variant="contained" onClick={ revert }>Restore upstream</Button>
             </>
           ) }
-          { phase === 'timed_out' && (
+          { (phase === 'timed_out' || phase === 'failed') && (
             <Button onClick={ () => { reset(); setOpen(false); } }>Close</Button>
           ) }
         </DialogActions>

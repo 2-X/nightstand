@@ -5,6 +5,7 @@ import { Box, Typography } from '@mui/material';
 import { SleepRecord } from '../../../server/src/db/sleepRecordsSchema.ts';
 import GlassCard from '@design/GlassCard';
 import { palette, typography } from '@design/tokens';
+import { recordForNight } from '../pages/DataPage/SleepPage/sleepContext';
 
 type Props = {
   /** Records covering at least the visible week. Records outside the week
@@ -12,6 +13,7 @@ type Props = {
   weekRecords?: SleepRecord[];
   /** Monday (start of isoWeek) of the week to render. */
   weekStart: moment.Moment;
+  timeZone?: string;
 };
 
 const DAY_LETTERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -25,8 +27,8 @@ const TARGET_GREEN_BAND = 'rgba(34,197,94,0.18)';
 
 /** Hours-since-midnight, with morning hours pushed past 24 so a bedtime
  *  of 11:30pm sorts before a waketime of 7:30am on a single linear axis. */
-function shiftedHour(iso: string): number {
-  const m = moment(iso);
+function shiftedHour(iso: string, timeZone: string): number {
+  const m = moment.tz(iso, timeZone);
   const h = m.hour() + m.minute() / 60;
   return h < 12 ? h + 24 : h;
 }
@@ -36,11 +38,11 @@ function avg(nums: number[]): number {
 }
 
 /** Format a shifted hour back to a "9:30am" / "11:30pm" label. */
-function formatShiftedHour(h: number): string {
+function formatShiftedHour(h: number, timeZone: string): string {
   const norm = ((h % 24) + 24) % 24;
   const hr = Math.floor(norm);
   const mn = Math.round((norm - hr) * 60);
-  return moment().startOf('day').hour(hr).minute(mn).format('h:mma').toLowerCase();
+  return moment.tz(timeZone).startOf('day').hour(hr).minute(mn).format('h:mma').toLowerCase();
 }
 
 // `times` is filtered to records-present-only, so we need to map a day index
@@ -54,14 +56,14 @@ function present(matched: (SleepRecord | undefined)[], dayIdx: number): number {
   return count;
 }
 
-export default function SleepConsistencyCard({ weekRecords, weekStart }: Props) {
+export default function SleepConsistencyCard({ weekRecords, weekStart, timeZone = weekStart.tz() ?? 'UTC' }: Props) {
   const view = useMemo(() => {
     const days = Array.from({ length: 7 }, (_, i) => weekStart.clone().add(i, 'day'));
 
     // A sleep record "belongs" to the day it ENDED on (the morning the user
     // woke up) - same convention WeekStrip uses.
     const matchedRecords = days.map((day) =>
-      weekRecords?.find((r) => moment(r.left_bed_at).isSame(day, 'day')),
+      recordForNight(weekRecords ?? [], day.format('YYYY-MM-DD'), timeZone),
     );
 
     const present = matchedRecords
@@ -73,8 +75,8 @@ export default function SleepConsistencyCard({ weekRecords, weekStart }: Props) 
     }
 
     const times = present.map(({ record }) => ({
-      bedH: shiftedHour(record!.entered_bed_at),
-      wakeH: shiftedHour(record!.left_bed_at),
+      bedH: shiftedHour(record!.entered_bed_at, timeZone),
+      wakeH: shiftedHour(record!.left_bed_at, timeZone),
     }));
 
     const avgBed = avg(times.map((t) => t.bedH));
@@ -98,7 +100,7 @@ export default function SleepConsistencyCard({ weekRecords, weekStart }: Props) 
       yMax,
       inRange,
     };
-  }, [weekRecords, weekStart]);
+  }, [weekRecords, weekStart, timeZone]);
 
   if (!view) {
     return (
@@ -129,7 +131,7 @@ export default function SleepConsistencyCard({ weekRecords, weekStart }: Props) 
   const yOf = (h: number) => PAD_TOP + ((h - yMin) / (yMax - yMin)) * plotH;
   const xOf = (i: number) => (i + 0.5) * (VB_W / 7);
 
-  const todayIdx = days.findIndex((d) => d.isSame(moment(), 'day'));
+  const todayIdx = days.findIndex((d) => d.isSame(moment.tz(timeZone), 'day'));
 
   const bedBandTop = yOf(avgBed - TOLERANCE_HOURS);
   const bedBandBot = yOf(avgBed + TOLERANCE_HOURS);
@@ -165,15 +167,15 @@ export default function SleepConsistencyCard({ weekRecords, weekStart }: Props) 
       <Box sx={ { display: 'flex', gap: { xs: 3, sm: 5 }, mb: 1.5 } }>
         <Box>
           <Typography sx={ { ...typography.sectionLabel, color: palette.text.tertiary, mb: 0.25 } }>
-            AVG ASLEEP
+            Average in bed
           </Typography>
-          <Typography sx={ headerValueSx }>{ formatShiftedHour(avgBed) }</Typography>
+          <Typography sx={ headerValueSx }>{ formatShiftedHour(avgBed, timeZone) }</Typography>
         </Box>
         <Box>
           <Typography sx={ { ...typography.sectionLabel, color: palette.text.tertiary, mb: 0.25 } }>
-            AVG AWAKE
+            Average out of bed
           </Typography>
-          <Typography sx={ headerValueSx }>{ formatShiftedHour(avgWake) }</Typography>
+          <Typography sx={ headerValueSx }>{ formatShiftedHour(avgWake, timeZone) }</Typography>
         </Box>
       </Box>
 
@@ -253,7 +255,7 @@ export default function SleepConsistencyCard({ weekRecords, weekStart }: Props) 
                 whiteSpace: 'nowrap',
               } }
             >
-              { formatShiftedHour(avgBed) }
+              { formatShiftedHour(avgBed, timeZone) }
             </Typography>
             <Typography
               sx={ {
@@ -265,7 +267,7 @@ export default function SleepConsistencyCard({ weekRecords, weekStart }: Props) 
                 whiteSpace: 'nowrap',
               } }
             >
-              { formatShiftedHour(avgWake) }
+              { formatShiftedHour(avgWake, timeZone) }
             </Typography>
           </Box>
         </Box>

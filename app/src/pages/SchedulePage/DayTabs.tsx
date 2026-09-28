@@ -5,7 +5,7 @@ import { LOWERCASE_DAYS } from './days.ts';
 
 const formatDayLabel = (day: string) => `${day[0].toUpperCase()}${day.slice(1)}`;
 
-export default function DayTabs() {
+export default function DayTabs({ beforeDayChange }: { beforeDayChange?: () => boolean }) {
   const { selectDay, selectedDayIndex } = useScheduleStore();
   const { isUpdating } = useAppStore();
 
@@ -13,7 +13,7 @@ export default function DayTabs() {
     <Paper sx={ { width: '100%' } }>
       <Tabs
         value={ selectedDayIndex || 0 }
-        onChange={ (_, index) => selectDay(index) }
+        onChange={ (_, index) => { if (!beforeDayChange || beforeDayChange()) selectDay(index); } }
         aria-label="Days of the week"
         sx={ {
           width: '100%',

@@ -1,31 +1,14 @@
-import {
-  useBaseStatus,
-  useSetBasePosition,
-  useSetBasePreset,
-  useStopBase,
-} from '@api/baseControl';
+import { useBaseStatus, useSetBasePosition, useSetBasePreset, useStopBase } from '@api/baseControl';
 import BedVisualization from '@components/BedVisualization';
-import PresetGlyph from '@components/PresetGlyph';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
-import {
-  Box,
-  Button,
-  CircularProgress,
-  IconButton,
-  Stack,
-  Typography,
-} from '@mui/material';
-import { useTheme } from '@mui/material/styles';
+import { Alert, Box, Button, CircularProgress, IconButton, Paper, Stack, Typography } from '@mui/material';
 import { useAppStore } from '@state/appStore';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import PageContainer from '../PageContainer';
+import BedTabs from '@components/BedTabs';
 
-interface BasePosition {
-  head: number;
-  feet: number;
-}
-
+interface BasePosition { head: number; feet: number }
 const presets = {
   flat: { head: 0, feet: 0 },
   sleep: { head: 1, feet: 5 },
@@ -33,455 +16,182 @@ const presets = {
   read: { head: 40, feet: 0 },
 };
 
-const presetTimes = {
-  flat: '0 • 0',
-  sleep: '1 • 5',
-  relax: '30 • 15',
-  read: '40 • 0',
-};
-
-const presetIcons = {
-  flat: (isActive: boolean) => (
-    <PresetGlyph label="Flat" headDeg={ presets.flat.head } feetDeg={ presets.flat.feet } active={ isActive } />
-  ),
-  sleep: (isActive: boolean) => (
-    <PresetGlyph label="Sleep" headDeg={ presets.sleep.head } feetDeg={ presets.sleep.feet } active={ isActive } />
-  ),
-  relax: (isActive: boolean) => (
-    <PresetGlyph label="Relax" headDeg={ presets.relax.head } feetDeg={ presets.relax.feet } active={ isActive } />
-  ),
-  read: (isActive: boolean) => (
-    <PresetGlyph label="Read" headDeg={ presets.read.head } feetDeg={ presets.read.feet } active={ isActive } />
-  ),
-};
-
 export default function BaseControlPage() {
-  const theme = useTheme();
   const { isUpdating } = useAppStore();
+  const { data: baseStatus, dataUpdatedAt, isLoading, isError } = useBaseStatus();
+  const positionMutation = useSetBasePosition();
+  const presetMutation = useSetBasePreset();
+  const stopMutation = useStopBase();
   const [position, setPosition] = useState<BasePosition>({ head: 0, feet: 0 });
-  const [isOptimisticallyMoving, setIsOptimisticallyMoving] = useState(false);
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const [optimisticMovementStartTime, setOptimisticMovementStartTime] =
-    useState<number | null>(null);
-  const [movingToPreset, setMovingToPreset] = useState<string | null>(null);
+  const [requested, setRequested] = useState(false);
+  const [queued, setQueued] = useState(false);
+  const [stopFailed, setStopFailed] = useState(false);
+  const [feedback, setFeedback] = useState('');
+  const [error, setError] = useState('');
+  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconcile = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const generation = useRef(0);
+  const statusRef = useRef(baseStatus);
+  statusRef.current = baseStatus;
 
-  const { data: baseStatus, isLoading } = useBaseStatus();
-  const setBasePositionMutation = useSetBasePosition();
-  const setBasePresetMutation = useSetBasePreset();
-  const stopBaseMutation = useStopBase();
+  // Superseding actions invalidate both the queued move and stale async results.
+  const cancelPending = useCallback(() => {
+    generation.current += 1;
+    if (debounce.current) clearTimeout(debounce.current);
+    if (reconcile.current) clearTimeout(reconcile.current);
+    debounce.current = null;
+    reconcile.current = null;
+  }, []);
+  useEffect(() => cancelPending, [cancelPending]);
 
-  // Update local state when base status changes - always sync with backend
   useEffect(() => {
-    if (baseStatus) {
-      setPosition((prev) => {
-        // Only update if the position has actually changed
-        if (prev.head !== baseStatus.head || prev.feet !== baseStatus.feet) {
-          return { head: baseStatus.head, feet: baseStatus.feet };
-        }
-        return prev;
-      });
-    }
+    if (baseStatus) setPosition({ head: baseStatus.head, feet: baseStatus.feet });
   }, [baseStatus?.head, baseStatus?.feet]);
 
-  // Stop optimistic movement when backend reports movement has stopped
   useEffect(() => {
-    if (baseStatus && !baseStatus.isMoving && isOptimisticallyMoving) {
-      // Only stop if we've been optimistically moving for at least 2 seconds
-      // This prevents stopping too early if the backend hasn't started reporting movement yet
-      if (
-        optimisticMovementStartTime &&
-        Date.now() - optimisticMovementStartTime > 2000
-      ) {
-        setIsOptimisticallyMoving(false);
-        setOptimisticMovementStartTime(null);
-        setMovingToPreset(null);
+    if (baseStatus?.isMoving === false) setStopFailed(false);
+  }, [baseStatus?.isMoving, dataUpdatedAt]);
+
+  const reconcileStationary = (token: number) => {
+    reconcile.current = setTimeout(() => {
+      if (token !== generation.current) return;
+      setRequested(false);
+      const status = statusRef.current;
+      if (status) setPosition({ head: status.head, feet: status.feet });
+      setFeedback(status?.isMoving ? '' : 'No movement reported. Position shown is the last reported position.');
+    }, 2500);
+  };
+
+  const sendPosition = async (next: BasePosition, token: number) => {
+    if (token !== generation.current) return;
+    setQueued(false);
+    try {
+      await positionMutation.mutateAsync({ ...next, feedRate: 50 });
+      if (token === generation.current) {
+        setStopFailed(false);
+        reconcileStationary(token);
       }
+    } catch {
+      if (token !== generation.current) return;
+      setRequested(false);
+      setError('Could not send the position. Check the connection and try again.');
     }
-  }, [
-    baseStatus?.isMoving,
-    isOptimisticallyMoving,
-    optimisticMovementStartTime,
-  ]);
-
-  const debouncedApplyPosition = useCallback(
-    async (newPosition: BasePosition) => {
-      setIsOptimisticallyMoving(true);
-      setOptimisticMovementStartTime(Date.now());
-
-      try {
-        await setBasePositionMutation.mutateAsync({
-          ...newPosition,
-          feedRate: 50,
-        });
-      } catch (error) {
-        setIsOptimisticallyMoving(false);
-        setOptimisticMovementStartTime(null);
-        throw error;
-      }
-    },
-    [setBasePositionMutation],
-  );
-
-  const updatePosition = useCallback(
-    (newPosition: BasePosition) => {
-      setPosition(newPosition);
-
-      // Clear existing timer
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-
-      // Set new debounced timer
-      debounceTimerRef.current = setTimeout(() => {
-        debouncedApplyPosition(newPosition);
-      }, 500);
-    },
-    [debouncedApplyPosition],
-  );
-
-  const pillButtonStyle = {
-    color: '#fff',
-    fontSize: '18px',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: '50%',
-    width: '36px',
-    height: '36px',
-    '&:hover': {
-      backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    },
-    '&:disabled': {
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-      color: 'rgba(255, 255, 255, 0.3)',
-    },
   };
 
-  const presetButtonStyle = {
-    color: '#fff',
-    justifyContent: 'space-between',
-    py: 1,
-    px: 2.5,
-    textTransform: 'none',
-    fontSize: '15px',
-    fontWeight: 'normal',
-    width: '100%',
-    minWidth: '320px',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: '20px',
-    border: 'none',
-    '&:hover': {
-      backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    },
-    '&:disabled': {
-      backgroundColor: 'rgba(255, 255, 255, 0.05)',
-      color: 'rgba(255, 255, 255, 0.5)',
-    },
+  const updatePosition = (next: BasePosition) => {
+    cancelPending();
+    setPosition(next);
+    setRequested(true);
+    setQueued(true);
+    setError('');
+    setFeedback('');
+    const token = generation.current;
+    debounce.current = setTimeout(() => { void sendPosition(next, token); }, 500);
   };
-
-  const handleHeadIncrement = () =>
-    updatePosition({ ...position, head: Math.min(45, position.head + 1) });
-
-  const handleHeadDecrement = () =>
-    updatePosition({ ...position, head: Math.max(0, position.head - 1) });
-
-  const handleFeetIncrement = () =>
-    updatePosition({ ...position, feet: Math.min(30, position.feet + 1) });
-
-  const handleFeetDecrement = () =>
-    updatePosition({ ...position, feet: Math.max(0, position.feet - 1) });
 
   const handleStop = async () => {
-    // Stop optimistic movement immediately when stop is requested
-    setIsOptimisticallyMoving(false);
-    setOptimisticMovementStartTime(null);
-    setMovingToPreset(null);
-
-    await stopBaseMutation.mutateAsync();
-  };
-
-  const isMoving = baseStatus?.isMoving || false;
-  const isActuallyMoving = isOptimisticallyMoving || isMoving;
-
-  const handlePresetClick = async (preset: keyof typeof presets) => {
-    // If clicking on the preset we're currently moving to, stop movement
-    if (movingToPreset === preset && isActuallyMoving) {
-      await handleStop();
-      return;
-    }
-
-    // Start optimistic movement state
-    setIsOptimisticallyMoving(true);
-    setOptimisticMovementStartTime(Date.now());
-    setMovingToPreset(preset);
-
+    cancelPending();
+    const token = generation.current;
+    setQueued(false);
+    setError('');
+    setRequested(true);
+    setFeedback('');
     try {
-      // Don't optimistically update local state - let backend report the changes
-      await setBasePresetMutation.mutateAsync(preset);
-    } catch (error) {
-      // If command fails, stop optimistic movement
-      setIsOptimisticallyMoving(false);
-      setOptimisticMovementStartTime(null);
-      setMovingToPreset(null);
-      throw error;
+      await stopMutation.mutateAsync();
+      if (token !== generation.current) return;
+      setRequested(false);
+      setStopFailed(false);
+      setFeedback('Stop requested. Check the reported position.');
+    } catch {
+      if (token !== generation.current) return;
+      setRequested(false);
+      setStopFailed(true);
+      setError('Could not confirm Stop. Try Stop again.');
     }
   };
 
-  // Determine which preset matches current position
-  const getActivePreset = () => {
-    return (
-      Object.entries(presets).find(
-        ([, preset]) =>
-          preset.head === position.head && preset.feet === position.feet,
-      )?.[0] || null
-    );
+  const handlePreset = async (preset: keyof typeof presets) => {
+    cancelPending();
+    const token = generation.current;
+    setQueued(false);
+    setRequested(true);
+    setError('');
+    setFeedback('');
+    try {
+      await presetMutation.mutateAsync(preset);
+      if (token === generation.current) {
+        setStopFailed(false);
+        reconcileStationary(token);
+      }
+    } catch {
+      if (token !== generation.current) return;
+      setRequested(false);
+      setError('Could not send the preset. Check the connection and try again.');
+    }
   };
 
-  const activePreset = getActivePreset();
-
-  const isMutating =
-    setBasePositionMutation.isPending ||
-    setBasePresetMutation.isPending ||
-    stopBaseMutation.isPending;
+  const moving = !!baseStatus?.isMoving;
+  const showStop = requested || moving || stopFailed;
+  const pending = positionMutation.isPending || presetMutation.isPending || stopMutation.isPending;
+  const unavailable = isLoading || isError || baseStatus?.isConfigured === false || !baseStatus;
 
   return (
-    <PageContainer
-      sx={ {
-        maxWidth: '500px',
-        [theme.breakpoints.up('md')]: {
-          maxWidth: '400px',
-        },
-        bgcolor: '#000',
-        color: '#fff',
-        minHeight: '100vh',
-        justifyContent: 'flex-start',
-      } }
-    >
-      <Typography
-        component="h1"
-        sx={ {
-          color: '#fff',
-          mb: 4,
-          fontSize: '2rem',
-          fontWeight: 600,
-          letterSpacing: '-0.02em',
-          alignSelf: 'flex-start',
-        } }
-      >
-        Elevation
-      </Typography>
-
-      { /* Bed Visualization */ }
-      <Box sx={ { mb: 2, mt: -1, display: 'flex', justifyContent: 'center' } }>
-        <BedVisualization
-          headPosition={ position.head }
-          feetPosition={ position.feet }
-        />
+    <PageContainer sx={ { maxWidth: '500px', width: '100%', justifyContent: 'flex-start', gap: 2 } }>
+      <Typography component="h1" variant="h5" sx={ { alignSelf: 'flex-start' } }>Bed</Typography>
+      <BedTabs/>
+      { isLoading && <CircularProgress size={ 24 } aria-label="Loading base position" /> }
+      { isError && <Alert severity="error">Could not load the base position.</Alert> }
+      { baseStatus?.isConfigured === false && <Alert severity="info">
+        No adjustable base was reported by this Pod. Check the connection in Settings &gt; Device.
+      </Alert> }
+      { error && <Alert severity="error" sx={ { width: '100%' } }>{ error }</Alert> }
+      <Box sx={ { width: '100%', maxWidth: 280 } }>
+        <BedVisualization headPosition={ baseStatus?.head ?? 0 } feetPosition={ baseStatus?.feet ?? 0 } />
       </Box>
-
-      { /* Head and Feet Controls - always side-by-side; the inner row of
-          buttons + number is ~120px so two of them fit comfortably even on
-          a 390px iPhone. */ }
-      <Stack
-        direction="row"
-        spacing={ { xs: 2, sm: 5 } }
-        sx={ { mb: 2.5, alignItems: 'center', justifyContent: 'center' } }
-      >
-        { /* Head Control */ }
-        <Box sx={ { textAlign: 'center' } }>
-          <Typography
-            sx={ {
-              color: '#888',
-              mb: 1,
-              fontSize: '11px',
-              fontWeight: 600,
-              letterSpacing: '0.12em',
-            } }
-          >
-            HEAD
-          </Typography>
-          <Stack
-            direction="row"
-            alignItems="center"
-            spacing={ { xs: 1.5, sm: 2 } }
-          >
-            <IconButton
-              onClick={ handleHeadDecrement }
-              disabled={ position.head <= 0 }
-              sx={ pillButtonStyle }
-            >
-              <RemoveIcon />
-            </IconButton>
-            <Typography
-              sx={ {
-                color: '#fff',
-                fontWeight: 500,
-                minWidth: { xs: 36, sm: 44 },
-                fontSize: { xs: '2rem', sm: '2.4rem' },
-                textAlign: 'center',
-                fontVariantNumeric: 'tabular-nums',
-                lineHeight: 1,
-              } }
-            >
-              { position.head }
-            </Typography>
-            <IconButton
-              onClick={ handleHeadIncrement }
-              disabled={ position.head >= 45 }
-              sx={ pillButtonStyle }
-            >
-              <AddIcon />
-            </IconButton>
-          </Stack>
-        </Box>
-
-        { /* Feet Control */ }
-        <Box sx={ { textAlign: 'center' } }>
-          <Typography
-            sx={ {
-              color: '#888',
-              mb: 1,
-              fontSize: '11px',
-              fontWeight: 600,
-              letterSpacing: '0.12em',
-            } }
-          >
-            FEET
-          </Typography>
-          <Stack
-            direction="row"
-            alignItems="center"
-            spacing={ { xs: 1.5, sm: 2 } }
-          >
-            <IconButton
-              onClick={ handleFeetDecrement }
-              disabled={ position.feet <= 0 }
-              sx={ pillButtonStyle }
-            >
-              <RemoveIcon />
-            </IconButton>
-            <Typography
-              sx={ {
-                color: '#fff',
-                fontWeight: 500,
-                minWidth: { xs: 36, sm: 44 },
-                fontSize: { xs: '2rem', sm: '2.4rem' },
-                textAlign: 'center',
-                fontVariantNumeric: 'tabular-nums',
-                lineHeight: 1,
-              } }
-            >
-              { position.feet }
-            </Typography>
-            <IconButton
-              onClick={ handleFeetIncrement }
-              disabled={ position.feet >= 30 }
-              sx={ pillButtonStyle }
-            >
-              <AddIcon />
-            </IconButton>
-          </Stack>
-        </Box>
+      <Typography role="status" variant="body2" color="text.secondary">
+        { moving ? 'Base is moving...' : requested ? 'Movement requested. Waiting for feedback.' : feedback || 'Reported position' }
+      </Typography>
+      <Stack direction="row" spacing={ 2 } sx={ { width: '100%', justifyContent: 'center' } }>
+        { (['head', 'feet'] as const).map(axis => (
+          <Box key={ axis } sx={ { textAlign: 'center', minWidth: 0 } }>
+            <Typography variant="body2">{ axis === 'head' ? 'Head' : 'Feet' } angle</Typography>
+            <Stack direction="row" alignItems="center">
+              <IconButton
+                aria-label={ `Decrease ${axis} angle` }
+                disabled={ unavailable || isUpdating || pending || position[axis] <= 0 }
+                onClick={ () => updatePosition({ ...position, [axis]: Math.max(0, position[axis] - 1) }) }>
+                <RemoveIcon />
+              </IconButton>
+              <Typography sx={ { minWidth: 40, fontSize: '1.5rem', fontVariantNumeric: 'tabular-nums' } }>{ position[axis] }°</Typography>
+              <IconButton
+                aria-label={ `Increase ${axis} angle` }
+                disabled={ unavailable || isUpdating || pending || position[axis] >= (axis === 'head' ? 45 : 30) }
+                onClick={ () => updatePosition({ ...position, [axis]: Math.min(axis === 'head' ? 45 : 30, position[axis] + 1) }) }>
+                <AddIcon />
+              </IconButton>
+            </Stack>
+          </Box>
+        )) }
       </Stack>
-
-      { /* Loading indicator */ }
-      { isLoading && (
-        <Box sx={ { display: 'flex', justifyContent: 'center', mb: 2 } }>
-          <CircularProgress size={ 24 } sx={ { color: '#fff' } } />
-        </Box>
-      ) }
-
-      { /* Movement status */ }
-      { isActuallyMoving && !isMutating && (
-        <Box sx={ { textAlign: 'center', mb: 2 } }>
-          <Typography variant="body2" sx={ { color: '#fff' } }>
-            Base is moving...
-          </Typography>
-        </Box>
-      ) }
-
-      { /* Preset Buttons */ }
-      <Stack spacing={ 1 } sx={ { mb: 2 } }>
-        { Object.entries(presetTimes).map(([preset, time]) => {
-          const IconComponent = presetIcons[preset as keyof typeof presetIcons];
-          const isActive = activePreset === preset;
-          const canStop = movingToPreset === preset && isActuallyMoving;
-
-          return (
+      { showStop && <Button variant="contained" color="error" fullWidth onClick={ () => void handleStop() } disabled={ stopMutation.isPending }>
+        { stopMutation.isPending ? 'Stopping...' : 'Stop Movement' }
+      </Button> }
+      <Box sx={ { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1, width: '100%' } }>
+        { Object.entries(presets).map(([name, preset]) => {
+          const active = baseStatus?.head === preset.head && baseStatus?.feet === preset.feet;
+          return <Paper key={ name } variant="outlined" sx={ { borderColor: active ? 'primary.main' : 'divider' } }>
             <Button
-              key={ preset }
-              variant="text"
-              onClick={ () => handlePresetClick(preset as keyof typeof presets) }
-              disabled={
-                isUpdating || (!canStop && (isActuallyMoving || isMutating))
-              }
-              sx={ {
-                ...presetButtonStyle,
-                backgroundColor: canStop
-                  ? 'rgba(220, 53, 69, 0.2)' // Red background when it's a stop button
-                  : isActive
-                    ? 'rgba(255, 255, 255, 0.2)'
-                    : 'rgba(255, 255, 255, 0.1)',
-                color: canStop
-                  ? '#dc3545'
-                  : isActive
-                    ? '#fff'
-                    : 'rgba(255, 255, 255, 0.7)',
-                '&:hover': {
-                  backgroundColor: canStop
-                    ? 'rgba(220, 53, 69, 0.3)'
-                    : 'rgba(255, 255, 255, 0.2)',
-                },
-              } }
-            >
-              <Box sx={ { display: 'flex', alignItems: 'center' } }>
-                <Box sx={ { mr: 2 } }>{ IconComponent(isActive || canStop) }</Box>
-                { canStop
-                  ? 'Stop'
-                  : preset.charAt(0).toUpperCase() + preset.slice(1) }
-              </Box>
-              <Typography
-                sx={ { color: canStop ? '#dc3545' : isActive ? '#fff' : '#888' } }
-              >
-                { canStop ? 'Moving...' : time }
-              </Typography>
+              fullWidth
+              aria-pressed={ active }
+              disabled={ unavailable || isUpdating || pending || moving || (requested && !queued) }
+              onClick={ () => void handlePreset(name as keyof typeof presets) }
+              sx={ { flexDirection: 'column', py: 1.5 } }>
+              <Typography component="span">{ name.charAt(0).toUpperCase() + name.slice(1) }</Typography>
+              <Typography component="span" variant="caption" color="text.secondary">Head { preset.head }° · Feet { preset.feet }°</Typography>
             </Button>
-          );
+          </Paper>;
         }) }
-      </Stack>
-
-      { /* Floating Stop Button for manual adjustments */ }
-      { isActuallyMoving && !movingToPreset && (
-        <Box
-          sx={ {
-            position: 'fixed',
-            bottom: { xs: 100, md: 120 }, // Position above navigation bar
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 1000,
-          } }
-        >
-          <Button
-            variant="contained"
-            color="error"
-            onClick={ handleStop }
-            disabled={ stopBaseMutation.isPending }
-            size="large"
-            sx={ {
-              borderRadius: '24px',
-              px: 4,
-              py: 1.5,
-              fontSize: '16px',
-              fontWeight: 'bold',
-              boxShadow: 3,
-              '&:disabled': {
-                bgcolor: '#666',
-                color: '#ccc',
-              },
-            } }
-          >
-            { stopBaseMutation.isPending ? 'Stopping...' : 'Stop Movement' }
-          </Button>
-        </Box>
-      ) }
+      </Box>
     </PageContainer>
   );
 }

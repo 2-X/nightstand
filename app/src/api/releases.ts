@@ -2,11 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { z } from 'zod';
 import currentServerInfo from '../../../server/src/serverInfo.json';
-import { UPDATE_CHANNELS, UpdateChannelType } from './settingsSchema.ts';
+// Keep the release manifest independent of the full device-settings schema:
+// the small updater overlay also runs against upstream settings.
+const RELEASE_CHANNELS = ['stable', 'beta'] as const;
 
 const releaseFields = {
   version: z.string(),
-  channel: z.enum(UPDATE_CHANNELS),
+  channel: z.enum(RELEASE_CHANNELS),
   date: z.string(),
   artifacts: z.record(z.string(), z.string()).optional(),
 };
@@ -35,11 +37,10 @@ export type ReleasesManifest = z.infer<typeof ReleasesManifestSchema>;
 
 // Fetched raw from GitHub, same reasoning as serverInfo.ts and the remote
 // changelog fetch: the pod itself has no WAN, so this only ever resolves
-// from the browser. Failure is non-fatal: callers fall back to the plain
-// serverInfo.json "latest main" comparison.
+// from the browser. Without it, callers cannot offer a channel-safe target.
 const RELEASES_URL = 'https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json';
 
-const CHANNEL_RANK: Record<UpdateChannelType, number> = { stable: 0, beta: 1 };
+const CHANNEL_RANK: Record<typeof RELEASE_CHANNELS[number], number> = { stable: 0, beta: 1 };
 
 export const useReleases = () => useQuery<ReleasesManifest>({
   queryKey: ['useReleases'],
@@ -56,7 +57,7 @@ export const useReleases = () => useQuery<ReleasesManifest>({
 // promoted to stable. Undefined when the manifest hasn't loaded.
 export const latestForChannel = (
   manifest: ReleasesManifest | undefined,
-  channel: UpdateChannelType
+  channel: typeof RELEASE_CHANNELS[number]
 ): Release | undefined => {
   if (!manifest) return undefined;
   const rank = CHANNEL_RANK[channel];

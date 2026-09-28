@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import _ from 'lodash';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
@@ -15,7 +15,9 @@ const loaded = async () => {
 // These render tests drive the module-singleton Zustand stores through the real
 // page. Reset the singletons (and the persisted side) up front so the suite is
 // deterministic regardless of what ran before it in the same worker.
+afterEach(() => vi.restoreAllMocks());
 beforeEach(() => {
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
   localStorage.removeItem('side');
   useAppStore.setState({ side: 'left', isUpdating: false });
   useScheduleStore.setState({ originalSchedules: undefined, changesPresent: false });
@@ -30,6 +32,7 @@ describe('side switch with unsaved edits (full page)', () => {
     const { user } = renderWithProviders(<SchedulePage />, { initialRoute: '/schedules' });
     await loaded();
 
+    act(() => useScheduleStore.getState().selectDay(2));
     const day = useScheduleStore.getState().selectedDay;
     const orig = _.cloneDeep(useScheduleStore.getState().originalSchedules) as any;
 
@@ -47,6 +50,7 @@ describe('side switch with unsaved edits (full page)', () => {
     );
 
     const afterRight = useScheduleStore.getState();
+    expect(afterRight.selectedDay).toBe('tuesday');
     expect(afterRight.selectedSchedule).toEqual(orig.right[day]); // no leak of the '03:33' edit
     expect(afterRight.changesPresent).toBe(false);
 
@@ -98,4 +102,18 @@ describe('Apply to other days save targeting (full page)', () => {
 
     await waitFor(() => expect(useAppStore.getState().isUpdating).toBe(false), { timeout: 3000 });
   });
+});
+
+it('keeps unsaved edits when a day or side discard is canceled', async () => {
+  const { user } = renderWithProviders(<SchedulePage />, { initialRoute: '/schedules' });
+  await loaded();
+  useScheduleStore.getState().selectDay(1);
+  useScheduleStore.getState().updateSelectedAlarm({ time: '03:33' });
+  vi.mocked(window.confirm).mockReturnValue(false);
+  await user.click(await screen.findByRole('button', { name: /Right side/ }));
+  expect(window.confirm).toHaveBeenCalledWith('Discard changes to Monday, left side?');
+  expect(useAppStore.getState().side).toBe('left');
+  await user.click(screen.getByRole('tab', { name: /Tue/ }));
+  expect(useScheduleStore.getState().selectedDay).toBe('monday');
+  expect(useScheduleStore.getState().selectedSchedule?.alarm.time).toBe('03:33');
 });

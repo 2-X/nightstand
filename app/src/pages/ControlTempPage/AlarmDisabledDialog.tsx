@@ -1,141 +1,48 @@
 import { Dispatch, SetStateAction, useState } from 'react';
-import {
-  Box,
-  Button,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  Typography,
-  useMediaQuery,
-  useTheme,
-} from '@mui/material';
-import moment from 'moment-timezone';
+import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material';
 import { postSettings, useSettings } from '@api/settings.ts';
 import { useAppStore } from '@state/appStore.tsx';
 
-
-export interface AlarmDisabledDialogProps {
+interface AlarmDisabledDialogProps {
   open: boolean;
   setOpen: Dispatch<SetStateAction<boolean>>;
-  scheduledAlarmTimeHhMm: string;
+  nightEnd: string;
+  scope: string;
   alarmDisabled: boolean;
 }
 
-export default function AlarmDisabledDialog({
-  open,
-  setOpen,
-  scheduledAlarmTimeHhMm,
-  alarmDisabled,
-}: AlarmDisabledDialogProps) {
-  const theme = useTheme();
-  const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
+export default function AlarmDisabledDialog({ open, setOpen, nightEnd, scope, alarmDisabled }: AlarmDisabledDialogProps) {
   const [isSaving, setIsSaving] = useState(false);
-  const { data: settings, refetch } = useSettings();
+  const [error, setError] = useState('');
+  const { refetch } = useSettings();
   const side = useAppStore(state => state.side);
-
-  const handleSave = () => {
-    if (!settings) return null;
-    const now = moment.tz(settings.timeZone);
-    const noonToday = now.clone().hour(12).minute(0).second(0).millisecond(0);
-    const targetDay = now.isSameOrAfter(noonToday) ? now.clone().add(1, 'day') : now;
-
-
-    const [hour, minute] = scheduledAlarmTimeHhMm.split(':').map(Number);
-    const expiresAt = moment.tz(
-      {
-        year: targetDay.year(),
-        month: targetDay.month(),
-        date: targetDay.date(),
-        hour,
-        minute,
-        second: 0,
-        millisecond: 0,
-      },
-      settings.timeZone
-    ).add(2, 'minutes').format();
+  const handleSave = async () => {
     setIsSaving(true);
-    const disabled = !alarmDisabled;
-    postSettings({
-      [side]: {
-        scheduleOverrides: {
-          alarm: {
-            disabled: disabled,
-            timeOverride: '',
-            expiresAt: disabled ? expiresAt : '',
-          }
-        }
-      }
-    })
-      .then(() => {
-        setOpen(false);
-        return refetch();
-      })
-      .catch(error => {
-        console.error(error);
-      })
-      .finally(() => {
-        setIsSaving(false);
-      });
+    setError('');
+    try {
+      await postSettings({ [side]: { scheduleOverrides: { alarm: {
+        disabled: !alarmDisabled, timeOverride: '', expiresAt: alarmDisabled ? '' : nightEnd,
+      } } } });
+      await refetch();
+      setOpen(false);
+    } catch {
+      setError('Could not save the alarm change. Try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
-
-  const handleCancel = () => {
-    setOpen(false);
-  };
-
-  return (
-    <Dialog
-      open={ open }
-      fullScreen={ isSmallScreen }
-      PaperProps={ {
-        sx: isSmallScreen
-          ? {
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            textAlign: 'center',
-            maxWidth: '85vw',
-            maxHeight: '35vh',
-            borderRadius: '10px',
-            margin: 0,
-            p: 4,
-          }
-          : {
-            p: 4,
-            width: '50%',
-            height: '150px',
-          },
-      } }
-    >
-      <Typography variant="h5" textAlign="center">
-        { alarmDisabled ? 'Enable' : 'Disable' } alarm for tonight?
-      </Typography>
-
-      <DialogActions
-        sx={ {
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-        } }
-      >
-
-        { isSaving ? (
-          <CircularProgress size={ 10 }/>
-        ) : (
-          <Box display="flex" gap={ 1 }>
-            <Button variant="contained" color="error" size="small" onClick={ handleCancel }>
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              size="small"
-              onClick={ handleSave }
-            >
-              Yes
-            </Button>
-          </Box>
-        ) }
-      </DialogActions>
-    </Dialog>
-  );
+  return <Dialog open={ open } onClose={ () => !isSaving && setOpen(false) } fullWidth maxWidth="xs" aria-labelledby="alarm-disable-title">
+    <DialogTitle id="alarm-disable-title">{ alarmDisabled ? 'Restore recurring alarms?' : 'Skip recurring alarms for this night?' }</DialogTitle>
+    <DialogContent>
+      <Typography variant="body2" sx={ { mb: 1 } }>{ scope }</Typography>
+      <Typography variant="body2">Applies to all remaining recurring alarms for this night. One-off alarms are unchanged.</Typography>
+      { error && <Alert severity="error" sx={ { mt: 2 } }>{ error }</Alert> }
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={ () => setOpen(false) } disabled={ isSaving }>Cancel</Button>
+      <Button variant="contained" disabled={ isSaving } onClick={ () => void handleSave() }>
+        { isSaving ? 'Saving...' : alarmDisabled ? 'Restore tonight' : 'Disable tonight' }
+      </Button>
+    </DialogActions>
+  </Dialog>;
 }

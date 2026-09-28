@@ -1,11 +1,9 @@
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import Navbar from './Navbar';
-import BedTabs from './BedTabs';
 import Box from '@mui/material/Box';
 
 
 export default function Layout() {
-  const { pathname } = useLocation();
   return (
     <Box
       id="Layout"
@@ -24,7 +22,6 @@ export default function Layout() {
       } }
     >
       { /* Renders current route */ }
-      { ['/', '/temperature', '/elevation'].includes(pathname) && <BedTabs/> }
       <Outlet/>
       <Navbar/>
     </Box>

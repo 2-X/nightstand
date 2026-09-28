@@ -25,7 +25,7 @@ describe('ControlTempPage temperature revert on failed save', () => {
     const { user } = renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
 
     // Demo left side target is 84F, which is level +1.
-    const heading = await screen.findByRole('heading', { level: 2 });
+    const heading = await screen.findByRole('heading', { name: '+1' });
     await waitFor(() => expect(heading).toHaveTextContent('+1'));
 
     // Make the next save fail.

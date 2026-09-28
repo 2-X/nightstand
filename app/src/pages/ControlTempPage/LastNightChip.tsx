@@ -47,15 +47,19 @@ export default function LastNightChip() {
     <Box display="flex" justifyContent="center" sx={ { width: '100%' } }>
       <Chip
         icon={ <BedIcon sx={ { color: `${scoreColor(score.score)} !important`, fontSize: 18 } }/> }
-        label={ `Last night · ${score.score}` }
+        label={ `Last night: estimated score ${score.score}. View Sleep` }
         clickable
-        onClick={ () => navigate('/data/sleep') }
+        onClick={ () => navigate('/sleep') }
         sx={ {
+          maxWidth: '100%',
+          height: 'auto',
+          minHeight: 32,
           backgroundColor: 'rgba(255,255,255,0.04)',
-          border: `1px solid ${scoreColor(score.score)}40`,
-          color: scoreColor(score.score),
+          border: 'none',
+          color: 'text.secondary',
           fontWeight: 600,
           '& .MuiChip-icon': { color: scoreColor(score.score) },
+          '& .MuiChip-label': { whiteSpace: 'normal', py: 0.5 },
         } }
       />
     </Box>

@@ -4,7 +4,6 @@ import { http, HttpResponse } from 'msw';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import { useAppStore } from '@state/appStore.tsx';
-import { useScheduleStore } from './scheduleStore';
 import SchedulePage from './SchedulePage';
 
 describe('SchedulePage', () => {
@@ -51,32 +50,5 @@ describe('SchedulePage save', () => {
     // here, the next test starts mid-save with every control still disabled
     // (pointer-events: none) from this test's leftover in-flight save.
     await waitFor(() => expect(useAppStore.getState().isUpdating).toBe(false), { timeout: 3000 });
-  });
-});
-
-describe('SchedulePage discard on unmount', () => {
-  it('drops unsaved edits when the page unmounts', async () => {
-    const { unmount } = renderWithProviders(<SchedulePage />, { initialRoute: '/schedules' });
-    // Wait for the schedule to finish loading (Power on renders once it has).
-    await screen.findByText('Power on');
-
-    // Mark a pending edit directly in the store. Driving it through the UI
-    // switch races the data-load effect, which can overwrite the toggle mid
-    // load on a slow runner; the behavior under test here is the store reset
-    // on unmount, not the toggle path (the save test above covers that). The
-    // waitFor guards against a still-settling load effect clearing the flag
-    // before we unmount.
-    await waitFor(() => {
-      useScheduleStore.setState({ changesPresent: true });
-      expect(useScheduleStore.getState().changesPresent).toBe(true);
-    });
-
-    unmount();
-
-    // The page's unmount cleanup calls reloadScheduleData, dropping the pending
-    // edit. Assert the store directly, without remounting: a fresh mount would
-    // reset changesPresent on its own, so only a post-unmount check actually
-    // proves the cleanup ran (this fails if that cleanup effect is removed).
-    expect(useScheduleStore.getState().changesPresent).toBe(false);
   });
 });

@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 export type PresenceSide = {
   present: boolean;
   lastUpdatedAt?: string;
+  stateChangedAt?: string;
+  lastPresenceAt?: string;
 };
 
 export type PresenceData = {

@@ -9,8 +9,6 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { AccordionExpanded } from '../SchedulePage.types.ts';
 import { useScheduleStore } from '../scheduleStore.tsx';
-import AlarmEnabledSwitch from './AlarmEnabledSwitch.tsx';
-import AlarmTime from './AlarmTime.tsx';
 import AlarmVibrationSlider from './AlarmVibrationSlider.tsx';
 import AlarmDuration from './AlarmDuration.tsx';
 import AlarmPattern from './AlarmPattern.tsx';
@@ -62,7 +60,7 @@ export default function AlarmAccordion() {
     >
       <AccordionSummary expandIcon={ <ExpandMoreIcon/> } >
         <Typography sx={ { display: 'flex', alignItems: 'center', gap: 3 } }>
-          <AlarmIcon /> { alarms.length > 1 ? 'Vibration alarms' : 'Vibration alarm' }
+          <AlarmIcon /> Alarm options
         </Typography>
       </AccordionSummary>
       <Box sx={ { width: '100%', pb: 2 } }>
@@ -84,10 +82,6 @@ export default function AlarmAccordion() {
             size="small"
             onClick={ addAlarm }
           />
-        </Row>
-        <Row>
-          <AlarmEnabledSwitch/>
-          { alarmEnabled && <AlarmTime/> }
         </Row>
         {
           alarmEnabled &&

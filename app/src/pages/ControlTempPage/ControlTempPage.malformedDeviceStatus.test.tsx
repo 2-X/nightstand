@@ -30,9 +30,9 @@ describe('ControlTempPage malformed deviceStatus robustness', () => {
     );
 
     renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
-    expect(await screen.findByText('Temperature')).toBeInTheDocument();
-    // Missing side data means isOn defaults to false rather than throwing.
-    expect(await screen.findByText('Off')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Turn on' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Bed' })).toBeInTheDocument();
+    // An unknown side state must not look like a confirmed powered-off bed.
+    expect(await screen.findByText('Bed status unavailable. Refresh to try again.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Turn on' })).not.toBeInTheDocument();
   });
 });

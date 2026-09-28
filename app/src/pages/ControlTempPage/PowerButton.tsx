@@ -94,7 +94,7 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
   if (isInAwayMode) return null;
 
   return (
-    <Box sx={ { mt: -6, display: 'flex', flexDirection: 'column', gap: 2 } }>
+    <Box sx={ { mt: 0, display: 'flex', flexDirection: 'column', gap: 2 } }>
       <Button variant="outlined" disabled={ disabled } onClick={ () => handleOnClick(!isOn) }>
         { isOn ? 'Turn off' : 'Turn on' }
       </Button>

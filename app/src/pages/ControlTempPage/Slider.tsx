@@ -98,7 +98,7 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
   return (
     <div
       ref={ ref }
-      style={ { position: 'relative', display: 'inline-block', width: '100%', maxWidth: '400px' } }
+      style={ { position: 'relative', display: 'inline-block', width: '100%', maxWidth: '240px' } }
     >
       { /* Circular Slider */ }
       <div className={ `${styles.Slider} ${disabled && styles.Disabled} ${isHeating && styles.Heating}` }>
@@ -152,7 +152,7 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
       </div>
       {
         isOn && (
-          <TemperatureButtons refetch={ refetch } currentTargetTemp={ currentTargetTemp }/>
+          <TemperatureButtons key={ side } refetch={ refetch } currentTargetTemp={ currentTargetTemp }/>
         ) }
     </div>
   );

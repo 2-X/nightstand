@@ -1,7 +1,8 @@
 import { Alert, AlertTitle, Box, Chip, Typography } from '@mui/material';
-import { useServerInfo } from '@api/serverInfo.ts';
+import { useDeviceStatus } from '@api/deviceStatus.ts';
+import { useLatestVersion } from '@api/useLatestVersion.ts';
+import semver from 'semver';
 import { useRollbackInfo } from '@api/update.ts';
-import currentServerInfo from '../../../server/src/serverInfo.json';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import UpdateFreeSleepButton from '../pages/SettingsPage/DeviceSettingsSection/UpdateFreeSleepButton.tsx';
 import RollbackRow from '../pages/SettingsPage/VersionsPage/RollbackRow.tsx';
@@ -9,32 +10,36 @@ import RevertToStockRow from '../pages/SettingsPage/VersionsPage/RevertToStockRo
 
 
 export default function VersionStatus() {
-  const { data: serverInfo, isLoading, isError } = useServerInfo();
+  const { data: deviceStatus, isLoading, isError } = useDeviceStatus();
+  const latestVersion = useLatestVersion();
+  const runningVersion = deviceStatus?.freeSleep?.version;
+  const known = !!latestVersion && !!runningVersion && !!semver.valid(latestVersion) && !!semver.valid(runningVersion);
+  const updateAvailable = known && semver.gt(latestVersion, runningVersion);
   const { data: rollbackInfo } = useRollbackInfo();
-  if (isError || isLoading) return null;
+  if (isError || isLoading || !runningVersion) return null;
 
   return (
     <>
       {
-        serverInfo?.updateAvailable && (
+        updateAvailable && (
           <>
             <Alert severity="info">
               <AlertTitle>
                 Nightstand update available!
               </AlertTitle>
               <Typography variant="body2">
-                Latest version: { serverInfo.version }
+                Latest version: { latestVersion }
               </Typography>
               <Typography variant="body2" sx={ { mb: 1 } }>
-                Current version: { currentServerInfo.version }
+                Current version: { runningVersion }
               </Typography>
-              <UpdateFreeSleepButton runningVersion={ currentServerInfo.version }/>
+              <UpdateFreeSleepButton runningVersion={ runningVersion }/>
             </Alert>
           </>
         )
       }
       {
-        !serverInfo?.updateAvailable && (
+        known && !updateAvailable && (
           <Chip
             icon={ <CheckCircleIcon/> }
             label="Up to date"
@@ -52,10 +57,10 @@ export default function VersionStatus() {
         )
       }
       { rollbackInfo?.available && rollbackInfo.version && (
-        <RollbackRow runningVersion={ currentServerInfo.version } rollbackVersion={ rollbackInfo.version }/>
+        <RollbackRow runningVersion={ runningVersion } rollbackVersion={ rollbackInfo.version }/>
       ) }
       <Box sx={ { mt: 1 } }>
-        <RevertToStockRow runningVersion={ currentServerInfo.version }/>
+        <RevertToStockRow runningVersion={ runningVersion }/>
       </Box>
     </>
   );

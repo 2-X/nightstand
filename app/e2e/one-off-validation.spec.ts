@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test('one-off alarm Save is disabled until a future fire-at time is set', async ({ page }) => {
   await page.goto('/schedules');
+  await page.getByRole('button', { name: 'Add one-time alarm' }).first().click();
 
   // Scope to the One-off alarm GlassCard: the smallest container that has
   // both the section title and its Save button. Its Enabled switch has no

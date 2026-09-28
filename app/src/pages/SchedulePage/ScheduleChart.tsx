@@ -219,10 +219,11 @@ export default function TemperatureScheduleChart() {
           max: xData[xData.length - 1],
           tickMinStep: 60 * 60 * 1000,
           tickNumber: 4,
-          label: '°F',
+          label: 'Time',
           tickLabelStyle: { fill: axisColor },
         }] }
         yAxis={ [{
+          label: format === 'level' ? 'Level' : format === 'celsius' ? '°C' : '°F',
           min: yMin,
           max: yMax,
           tickLabelStyle: { fill: axisColor },
