@@ -51,6 +51,13 @@ describe('setup_resource_limits.sh', () => {
         assert.ok(install > 0, 'update.sh must run setup_resource_limits.sh');
         assert.ok(start > install, 'the limits must be written before free-sleep starts');
     });
+    it('is installed by ops/deploy.sh before the server starts', () => {
+        const src = readFileSync(path.join(repoRoot, 'ops/deploy.sh'), 'utf8');
+        const install = src.indexOf('scripts/setup_resource_limits.sh');
+        const start = src.indexOf('SSH "systemctl start free-sleep"');
+        assert.ok(install > 0, 'deploy.sh must run setup_resource_limits.sh');
+        assert.ok(start > install, 'the limits must be written before free-sleep starts');
+    });
     it('is installed by install.sh', () => {
         const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
         assert.match(src, /scripts\/setup_resource_limits\.sh/);
