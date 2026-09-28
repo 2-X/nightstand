@@ -5,6 +5,6 @@ import { renderApp } from './renderWithProviders';
 describe('renderApp', () => {
   it('renders the real route tree at a given path', async () => {
     renderApp('/status');
-    expect(await screen.findByRole('heading', { name: 'System' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'System status' })).toBeInTheDocument();
   });
 });

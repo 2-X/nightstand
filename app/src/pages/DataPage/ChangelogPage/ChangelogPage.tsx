@@ -1,10 +1,8 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Accordion, AccordionDetails, AccordionSummary, Box, Chip, Stack, Typography } from '@mui/material';
-import HistoryIcon from '@mui/icons-material/History';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import PageContainer from '../../PageContainer.tsx';
-import Header from '../Header.tsx';
+import { SubpageShell } from '../Header.tsx';
 import MarkdownBody from '@components/MarkdownBody.tsx';
 import { useChangelog, useRemoteChangelog, entriesNewerThan } from '@api/changelog.ts';
 import { useDeviceStatus } from '@api/deviceStatus.ts';
@@ -34,8 +32,7 @@ export default function ChangelogPage() {
   ];
 
   return (
-    <PageContainer>
-      <Header title="Changelog" icon={ <HistoryIcon/> }/>
+    <SubpageShell title="Changelog">
       <Stack spacing={ 1 } sx={ { width: '100%' } }>
         { entries.length === 0 && <Typography variant="body2" color="text.secondary">No changelog entries available.</Typography> }
         { entries.map(entry => (
@@ -64,6 +61,6 @@ export default function ChangelogPage() {
           </Accordion>
         )) }
       </Stack>
-    </PageContainer>
+    </SubpageShell>
   );
 }

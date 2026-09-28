@@ -44,7 +44,7 @@ export default function LedBrightnessSlider() {
 
     <Box sx={ { display: 'flex', flexDirection: 'column', gap: 1, width: '90%' } }>
       <Typography sx={ { } }>
-        LED Brightness
+        LED brightness
       </Typography>
       <Slider
         value={ settingsCopy?.ledBrightness || 0 }

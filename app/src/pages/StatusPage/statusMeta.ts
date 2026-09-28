@@ -1,4 +1,4 @@
-import { ServerStatusKey, Status } from '@api/serverStatusSchema.ts';
+import { ServerStatusKey, ServerStatus, Status, StatusInfo, StatusInfoSchema } from '@api/serverStatusSchema.ts';
 
 export type StatusGroup = 'schedules' | 'biometrics' | 'core';
 
@@ -32,7 +32,7 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
   },
   rebootSchedule: {
     group: 'schedules',
-    blurb: 'Restarts the pod once a day to keep things running smoothly, if enabled in Settings.',
+    blurb: 'Restarts the Pod once a day to keep things running smoothly, if enabled in Settings.',
     meaning: { healthy: 'The nightly reboot is scheduled.' },
   },
   temperatureSchedule: {
@@ -42,7 +42,7 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
   },
   biometricsInstallation: {
     group: 'biometrics',
-    blurb: 'Whether the biometrics add-on (heart rate, HRV, sleep stages) is installed on the pod.',
+    blurb: 'Whether the biometrics add-on (heart rate, HRV, sleep stages) is installed on the Pod.',
     meaning: { healthy: 'Installed and available.' },
   },
   biometricsStream: {
@@ -110,26 +110,26 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
   },
   waterTank: {
     group: 'biometrics',
-    blurb: "The pod's water tank sensor. Heating and cooling need water circulating.",
+    blurb: "The Pod's water tank sensor. Heating and cooling need water circulating.",
     meaning: {
       healthy: 'The tank has enough water.',
       failed: 'The tank is low or empty. Refill it.',
-      not_started: 'Waiting for the first reading from the pod.',
+      not_started: 'Waiting for the first reading from the Pod.',
     },
   },
   express: {
     group: 'core',
-    blurb: 'The web server this app and the pod controls run on.',
+    blurb: 'The web server this app and the Pod controls run on.',
     meaning: { healthy: 'Responding normally.' },
   },
   franken: {
     group: 'core',
-    blurb: "The low-level connection this app uses to talk to the pod's heating and cooling hardware.",
+    blurb: "The low-level connection this app uses to talk to the Pod's heating and cooling hardware.",
     meaning: { healthy: 'Connected to the hardware.' },
   },
   frankenMonitor: {
     group: 'core',
-    blurb: 'Watches for physical taps on the pod and keeps the hardware connection alive.',
+    blurb: 'Watches for physical taps on the Pod and keeps the hardware connection alive.',
     meaning: { healthy: 'Watching for taps and monitoring the connection.' },
   },
   jobs: {
@@ -149,7 +149,7 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
   },
   systemDate: {
     group: 'core',
-    blurb: "Whether the pod's clock is correct. Scheduling depends on this.",
+    blurb: "Whether the Pod's clock is correct. Scheduling depends on this.",
     meaning: { healthy: 'The clock is correct.' },
   },
 };
@@ -167,8 +167,35 @@ export const GENERIC_MEANING: Record<Status, string> = {
 
 export const GROUP_LABELS: Record<StatusGroup, string> = {
   schedules: 'Schedules',
-  biometrics: 'Biometrics & sensors',
+  biometrics: 'Sleep tracking',
   core: 'Core services',
 };
 
 export const needsAttention = (status?: Status) => status === 'failed' || status === 'retrying' || status === 'restarting';
+
+export function usableStatusKeys(data?: ServerStatus): ServerStatusKey[] {
+  return data ? (Object.keys(data) as ServerStatusKey[])
+    .filter(key => !!STATUS_META[key] && StatusInfoSchema.safeParse(data[key]).success) : [];
+}
+
+export const CORE_KEYS = (Object.keys(STATUS_META) as ServerStatusKey[]).filter(key => STATUS_META[key].group === 'core');
+
+export function coreServicesReady(data?: ServerStatus): boolean {
+  return CORE_KEYS.every(key => StatusInfoSchema.safeParse(data?.[key]).success && data?.[key]?.status === 'healthy');
+}
+
+export function waitingCoreKeys(data?: ServerStatus): ServerStatusKey[] {
+  return CORE_KEYS.filter(key => !StatusInfoSchema.safeParse(data?.[key]).success || data?.[key]?.status !== 'healthy');
+}
+
+export function overdueCoreKeys(data: ServerStatus | undefined, podNow: number | undefined): ServerStatusKey[] {
+  const startedAt = Date.parse(data?.express?.timestamp ?? '');
+  if (!Number.isFinite(startedAt) || podNow === undefined || podNow - startedAt < 120_000) return [];
+  return CORE_KEYS.filter(key => data?.[key]?.status === 'not_started');
+}
+
+export function statusName(key: ServerStatusKey, info?: StatusInfo): string {
+  if (key === 'express') return 'Web server';
+  if (key === 'franken') return 'Hardware link';
+  return info?.name ?? key;
+}

@@ -41,6 +41,9 @@ export default function AppRoutes() {
 
           <Route path="settings/versions" element={ <VersionsPage/> }/>
 
+          <Route path="settings/people" element={ <Navigate to="/settings/bed" replace/> }/>
+          <Route path="settings/automation" element={ <Navigate to="/settings/bed" replace/> }/>
+          <Route path="settings/sleep-data" element={ <Navigate to="/settings/features" replace/> }/>
           <Route path="settings" element={ <SettingsPage/> }/>
           <Route path="settings/:category" element={ <SettingsPage/> }/>
           <Route path="schedules" element={ <SchedulePage/> }/>

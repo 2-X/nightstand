@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 test('cancelling the revert-to-stock dialog closes it without reverting', async ({ page }) => {
   await page.goto('/settings/versions');
 
+  await page.getByRole('button', { name: 'Recovery', exact: true }).click();
   await page.getByText('Restore upstream free-sleep').click();
 
   // The page also has an Update dialog that stays mounted (keepMounted) and

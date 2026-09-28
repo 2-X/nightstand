@@ -32,7 +32,7 @@ describe('SideSettings error handling', () => {
       }),
     );
 
-    const { user } = renderWithProviders(<SettingsPage/>, { initialRoute: '/settings/people' });
+    const { user } = renderWithProviders(<SettingsPage/>, { initialRoute: '/settings/bed' });
 
     // Wait for the Side settings section (rendered after settings load).
     await screen.findByText('Side settings');

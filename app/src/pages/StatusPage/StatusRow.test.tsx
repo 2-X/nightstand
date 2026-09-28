@@ -36,3 +36,9 @@ describe('manual diagnostic jobs', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Request accepted');
   });
 });
+
+
+it('labels the Web server timestamp as its startup time', () => {
+  renderWithProviders(<StatusRow job="express" statusInfo={ { ...status, name: 'Express' } } divider={ false }/>);
+  expect(screen.getByText(/^Started .+/)).toBeVisible();
+});

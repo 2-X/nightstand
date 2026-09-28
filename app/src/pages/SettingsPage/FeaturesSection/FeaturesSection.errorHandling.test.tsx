@@ -25,9 +25,9 @@ describe('FeaturesSection error handling', () => {
       }),
     );
 
-    const { user } = renderWithProviders(<FeaturesSection group="automation" />);
+    const { user } = renderWithProviders(<FeaturesSection />);
 
-    const toggle = await screen.findByRole('switch', { name: 'One-off alarms' }) as HTMLInputElement;
+    const toggle = await screen.findByRole('switch', { name: 'One-time alarm' }) as HTMLInputElement;
     // Default mock oneOffAlarms is true.
     expect(toggle.checked).toBe(true);
 

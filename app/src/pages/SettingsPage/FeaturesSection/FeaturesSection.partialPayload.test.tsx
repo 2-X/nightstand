@@ -27,13 +27,13 @@ describe('FeaturesSection partial payload handling', () => {
       http.get('*/api/settings', () => HttpResponse.json(settingsWithoutFeatures)),
     );
 
-    renderWithProviders(<FeaturesSection group="automation" />);
+    renderWithProviders(<FeaturesSection />);
 
-    expect(await screen.findByText('Features')).toBeInTheDocument();
+    expect(await screen.findByRole('switch', { name: 'Biometrics' })).toBeInTheDocument();
 
     // Unknown feature state degrades to off and untouchable rather than
     // guessing a value the user might then save back.
-    const toggle = await screen.findByRole('switch', { name: 'One-off alarms' }) as HTMLInputElement;
+    const toggle = await screen.findByRole('switch', { name: 'One-time alarm' }) as HTMLInputElement;
     expect(toggle.checked).toBe(false);
     expect(toggle.disabled).toBe(true);
   });
@@ -43,9 +43,9 @@ describe('FeaturesSection partial payload handling', () => {
       http.get('*/api/settings', () => HttpResponse.json({})),
     );
 
-    renderWithProviders(<FeaturesSection group="automation" />);
+    renderWithProviders(<FeaturesSection />);
 
-    expect(await screen.findByText('Features')).toBeInTheDocument();
+    expect(await screen.findByRole('switch', { name: 'Biometrics' })).toBeInTheDocument();
   });
 
   it('does not crash when the services payload is missing biometrics', async () => {
@@ -55,9 +55,9 @@ describe('FeaturesSection partial payload handling', () => {
       http.get('*/api/services', () => HttpResponse.json(servicesWithoutBiometrics)),
     );
 
-    renderWithProviders(<FeaturesSection group="sleep" />);
+    renderWithProviders(<FeaturesSection />);
 
-    expect(await screen.findByText('Features')).toBeInTheDocument();
+    expect(await screen.findByRole('switch', { name: 'Biometrics' })).toBeInTheDocument();
 
     // No biometrics service means nothing to install against, so the toggle
     // reads off and stays disabled.

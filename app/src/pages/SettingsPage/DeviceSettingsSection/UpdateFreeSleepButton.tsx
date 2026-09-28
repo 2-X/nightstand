@@ -7,10 +7,11 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import Slide from '@mui/material/Slide';
 import { TransitionProps } from '@mui/material/transitions';
-import { useState, useId, forwardRef, type ReactElement, type Ref } from 'react';
+import { useEffect, useState, useId, useRef, forwardRef, type ReactElement, type Ref } from 'react';
 import { postUpdate } from '@api/update.ts';
 import { useLatestVersion } from '@api/useLatestVersion.ts';
 import { useUpdateProgress } from '@api/useUpdateProgress.ts';
+import { UpdateOutcome } from '@state/updateAttentionStore';
 import semver from 'semver';
 
 const Transition = forwardRef(function Transition(
@@ -22,22 +23,31 @@ const Transition = forwardRef(function Transition(
   return <Slide direction="up" ref={ ref } { ...props } />;
 });
 
-// Triggers the pod's self-updater (scripts/update.sh via
+// Triggers the Pod's self-updater (scripts/update.sh via
 // free-sleep-update.service) to install the latest published build. The pod
 // downloads it, backs itself up, swaps, health-checks, and rolls back on its
 // own if the new build fails.
 // eslint-disable-next-line react/no-multi-comp
-export default function UpdateFreeSleepButton({ runningVersion }: { runningVersion: string }) {
+export default function UpdateFreeSleepButton({ runningVersion, onProblem, onStart, retry = false }: {
+  runningVersion: string; onProblem?: (outcome: UpdateOutcome, startVersion: string) => void; onStart?: () => void; retry?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const titleId = useId();
+  const startVersion = useRef(runningVersion);
   const latestVersion = useLatestVersion();
   const [targetVersion, setTargetVersion] = useState<string>();
   const { phase, error, start, reset } = useUpdateProgress(runningVersion);
 
+  useEffect(() => { if (phase === 'failed' || phase === 'timed_out') onProblem?.(phase, startVersion.current); }, [phase, onProblem]);
+
   const isNewer = (target?: string) => !!target && !!semver.valid(target) && !!semver.valid(runningVersion)
     && semver.gt(target, runningVersion);
   const startUpdate = () => {
-    if (targetVersion && isNewer(targetVersion)) start(() => postUpdate({ targetVersion }));
+    if (targetVersion && isNewer(targetVersion)) {
+      startVersion.current = runningVersion;
+      onStart?.();
+      void start(() => postUpdate({ targetVersion }));
+    }
   };
 
   return (
@@ -47,9 +57,9 @@ export default function UpdateFreeSleepButton({ runningVersion }: { runningVersi
         disabled={ !isNewer(latestVersion) }
         onClick={ () => { reset(); setTargetVersion(latestVersion); setOpen(true); } }
         size="small"
-        sx={ { width: '150px' } }
+        sx={ { width: '100%', minHeight: 48, fontSize: 15 } }
       >
-        Update
+        { retry ? 'Try again' : `Update${latestVersion ? ` to ${latestVersion}` : ''}` }
       </Button>
       <Dialog
         open={ open }
@@ -67,21 +77,27 @@ export default function UpdateFreeSleepButton({ runningVersion }: { runningVersi
           { phase === 'timed_out' && 'Still not done' }
         </DialogTitle>
         <DialogContent>
-          { phase === 'failed' && <Alert severity="error">{ error }</Alert> }
+          { phase === 'failed' && <Alert severity="error">
+            The Pod did not accept the update request. Nothing was installed.
+            { error && <Typography variant="body2">{ error }</Typography> }
+          </Alert> }
           { phase === 'idle' && (
-            <DialogContentText>
-              Install v{ targetVersion } from GitHub. The updater backs up the current
-              code and attempts rollback to v{ runningVersion } if its checks fail.
-              The app, schedules, and alarms pause while the server restarts.
-              Usually takes 2 to 5 minutes; recovery may require SSH.
-            </DialogContentText>
+            <>
+              <DialogContentText>
+                The Pod restarts to finish, and schedules and alarms pause for 2 to 5 minutes.
+                If the checks fail, it attempts to go back to v{ runningVersion } on its own.
+              </DialogContentText>
+              <details><summary>If it doesn't come back</summary>
+                <Typography variant="body2">Recovery may require SSH. Check the update logs and system status before trying again.</Typography>
+              </details>
+            </>
           ) }
           { phase === 'updating' && (
             <Stack spacing={ 2 } alignItems="center" sx={ { py: 2 } }>
               <CircularProgress/>
               <Typography variant="body2" color="text.secondary">
                 Installing { targetVersion }. This page reloads by itself
-                when the pod comes back on the new version.
+                when the Pod comes back on the new version.
               </Typography>
             </Stack>
           ) }
@@ -108,6 +124,7 @@ export default function UpdateFreeSleepButton({ runningVersion }: { runningVersi
               <Button variant="contained" disabled={ !isNewer(targetVersion) } onClick={ startUpdate }>Update now</Button>
             </>
           ) }
+          { phase === 'failed' && <Button onClick={ startUpdate }>Try again</Button> }
           { (phase === 'timed_out' || phase === 'failed') && (
             <Button onClick={ () => { reset(); setOpen(false); } }>Close</Button>
           ) }

@@ -11,7 +11,7 @@ import RevertToStockRow from './RevertToStockRow';
 
 const release = { kind: 'agent', version: '3.2.0', channel: 'stable', date: '2026-09-28' } as const;
 const cases = [
-  { name: 'update', open: 'Update', title: 'Update to v3.2.0?', confirm: 'Update now', log: 'update',
+  { name: 'update', open: 'Update to 3.2.0', title: 'Update to v3.2.0?', confirm: 'Update now', log: 'update',
     render: (runningVersion: string) => <UpdateFreeSleepButton runningVersion={ runningVersion }/> },
   { name: 'release install', open: 'Install', title: 'Install v3.2.0?', confirm: 'Install now', log: 'update',
     render: (runningVersion: string) => <ReleaseRow runningVersion={ runningVersion } release={ release } body={ undefined }/> },
@@ -19,7 +19,7 @@ const cases = [
     title: 'Roll back to v2.9.0?', confirm: 'Roll back now', log: 'rollback',
     render: (runningVersion: string) => <RollbackRow runningVersion={ runningVersion } rollbackVersion="2.9.0"/> },
   { name: 'upstream restore', open: 'Restore upstream free-sleep',
-    title: 'Restore upstream free-sleep?', confirm: 'Restore upstream', log: 'revert',
+    title: 'Restore upstream free-sleep?', confirm: 'Switch to upstream', log: 'revert',
     render: (runningVersion: string) => <RevertToStockRow runningVersion={ runningVersion }/> },
 ];
 

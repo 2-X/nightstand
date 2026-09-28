@@ -12,8 +12,9 @@ describe('RawArchiveRetention', () => {
       <RawArchiveRetention settings={ { ...getSettings(), rawArchiveRetentionDays: 14 } } updateSettings={ updateSettings }/>,
     );
 
-    expect(screen.getByRole('button', { name: '2 weeks' })).toHaveAttribute('aria-pressed', 'true');
-    await userEvent.click(screen.getByRole('button', { name: '1 month' }));
+    expect(screen.getByRole('combobox', { name: 'Keep raw sensor recordings' })).toHaveTextContent('2 weeks');
+    await userEvent.click(screen.getByRole('combobox', { name: 'Keep raw sensor recordings' }));
+    await userEvent.click(screen.getByRole('option', { name: '1 month' }));
     expect(updateSettings).toHaveBeenCalledWith({ rawArchiveRetentionDays: 30 });
   });
 });

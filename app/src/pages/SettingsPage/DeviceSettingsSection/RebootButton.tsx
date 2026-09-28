@@ -26,7 +26,7 @@ export default function RebootButton() {
       <DialogTitle id="restart-title">Restart Pod?</DialogTitle>
       <DialogContent>
         <Typography>
-          The app, schedules and alarms pause while the Pod restarts.
+          The app, schedules and alarms pause while the Pod restarts. Takes about a minute.
           Wait for it to reconnect before sending more commands.
         </Typography>
         { requested && <Typography role="status" sx={ { mt: 2 } }>Restart requested. Completion has not been confirmed.</Typography> }

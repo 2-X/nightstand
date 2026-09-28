@@ -8,19 +8,31 @@ import {
   Typography,
 } from '@mui/material';
 import { Link, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import { useAppStore } from '@state/appStore.tsx';
-import { useServerStatus } from '@api/serverStatus.ts';
+import { useUpdateAttentionStore } from '@state/updateAttentionStore';
+import { useDeviceStatus } from '@api/deviceStatus';
 import { useEventStreamStore } from '@api/eventStream.ts';
-import { needsAttention } from '../pages/StatusPage/statusMeta';
+import { useStatusSummary } from '../pages/StatusPage/useStatusSummary';
 import { PAGES, primaryRoute } from './pages';
 
 export default function Navbar() {
   const { pathname } = useLocation();
   const { isUpdating } = useAppStore();
   const wsState = useEventStreamStore((s) => s.state);
-  const { data: status } = useServerStatus(30_000);
-  const unhealthy =
-    status && Object.values(status).some((info) => needsAttention(info?.status));
+  const { attention } = useStatusSummary();
+  const unhealthy = attention.length > 0;
+  const updateAttention = useUpdateAttentionStore(state => state.updateAttention);
+  const updateStartVersion = useUpdateAttentionStore(state => state.updateStartVersion);
+  const setUpdateAttention = useUpdateAttentionStore(state => state.setUpdateAttention);
+  const { data: deviceStatus } = useDeviceStatus();
+  const runningVersion = deviceStatus?.freeSleep?.version;
+  useEffect(() => {
+    if (runningVersion && updateStartVersion && runningVersion !== updateStartVersion) setUpdateAttention(false);
+  }, [runningVersion, updateStartVersion, setUpdateAttention]);
+  const settingsAttention = !!unhealthy || updateAttention;
+  const settingsLabel = ['Settings', updateAttention ? 'update needs attention' : '', unhealthy ? 'system needs attention' : '']
+    .filter(Boolean).join(', ');
   const selected = primaryRoute(pathname);
   return (
     <>
@@ -73,9 +85,10 @@ export default function Navbar() {
               component={ Link }
               to={ page.route }
               aria-current={ selected === page.route ? 'page' : undefined }
+              aria-label={ page.route === '/settings' && settingsAttention ? settingsLabel : undefined }
               variant={ selected === page.route ? 'outlined' : 'text' }
             >
-              <Badge color="error" variant="dot" invisible={ !(page.route === '/settings' && unhealthy) }>
+              <Badge color={ unhealthy ? 'error' : 'warning' } variant="dot" invisible={ !(page.route === '/settings' && settingsAttention) }>
                 { page.title }
               </Badge>
             </Button>
@@ -109,8 +122,9 @@ export default function Navbar() {
             value={ page.route }
             label={ page.title }
             aria-current={ selected === page.route ? 'page' : undefined }
+            aria-label={ page.route === '/settings' && settingsAttention ? settingsLabel : undefined }
             icon={
-              <Badge color="error" variant="dot" invisible={ !(page.route === '/settings' && unhealthy) }>
+              <Badge color={ unhealthy ? 'error' : 'warning' } variant="dot" invisible={ !(page.route === '/settings' && settingsAttention) }>
                 { page.icon }
               </Badge>
             }

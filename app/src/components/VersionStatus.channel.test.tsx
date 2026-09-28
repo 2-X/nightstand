@@ -19,11 +19,11 @@ for (const running of ['3.1.0', '3.2.0', '3.3.0']) {
     const { queryClient } = renderWithProviders(<VersionStatus/>);
     await waitFor(() => expect(queryClient.getQueryData(['useReleases'])).toEqual(manifest));
     if (running === '3.1.0') {
-      expect(await screen.findByRole('button', { name: 'Update' })).toBeEnabled();
+      expect(await screen.findByRole('button', { name: 'Update to 3.2.0' })).toBeEnabled();
       expect(screen.getByText('Latest version: 3.2.0')).toBeInTheDocument();
       expect(screen.getByText('Current version: 3.1.0')).toBeInTheDocument();
     } else {
-      expect(screen.queryByRole('button', { name: 'Update' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Update to 3.2.0' })).not.toBeInTheDocument();
     }
   });
 }
@@ -32,6 +32,6 @@ for (const running of ['3.2.0', '3.3.0']) {
     server.use(http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json', () => HttpResponse.json(manifest)));
     const { queryClient } = renderWithProviders(<UpdateFreeSleepButton runningVersion={ running }/>);
     await waitFor(() => expect(queryClient.getQueryData(['useReleases'])).toEqual(manifest));
-    expect(screen.getByRole('button', { name: 'Update' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Update to 3.2.0' })).toBeDisabled();
   });
 }

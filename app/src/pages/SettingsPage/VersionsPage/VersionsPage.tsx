@@ -1,14 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useUpdateAttentionStore, type UpdateOutcome } from '@state/updateAttentionStore';
 import {
   Accordion, AccordionDetails, AccordionSummary,
-  Alert, AlertTitle, Box, Chip, ToggleButton, ToggleButtonGroup, Typography,
+  Alert, Box, Button, Chip, Drawer, FormControlLabel, Radio, RadioGroup, Typography,
 } from '@mui/material';
 import semver from 'semver';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import SystemUpdateAltIcon from '@mui/icons-material/SystemUpdateAlt';
+import { Link } from 'react-router-dom';
+import moment from 'moment-timezone';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import PageContainer from '../../PageContainer.tsx';
-import Header from '../../DataPage/Header.tsx';
+import { SubpageShell } from '../../DataPage/Header.tsx';
 import Section from '../Section.tsx';
 import MarkdownBody from '@components/MarkdownBody.tsx';
 import UpdateFreeSleepButton from '../DeviceSettingsSection/UpdateFreeSleepButton.tsx';
@@ -32,13 +34,20 @@ import currentServerInfo from '../../../../../server/src/serverInfo.json';
 // a stale cached page can't show a picker that won't work. 3.0.0 is this
 // stream's first release and ships both the target protocol and the rollback
 // service, so it is the floor. Keep it in step with FLOOR_VERSION in
-// scripts/update.sh, which gates the same picker from the pod side.
+// scripts/update.sh, which gates the same picker from the Pod side.
 const CAPABLE_FLOOR = '3.0.0';
 
 export default function VersionsPage() {
   const { data: deviceStatus } = useDeviceStatus();
   const { data: settings, refetch: refetchSettings } = useSettings();
-  const { data: releases, isError: releasesFailed } = useReleases();
+  const { data: releases, isError: releasesFailed, refetch: checkReleases, dataUpdatedAt, isFetching } = useReleases();
+  const [channelOpen, setChannelOpen] = useState(false);
+  const updateProblem = useUpdateAttentionStore(state => state.updateAttention);
+  const setUpdateProblem = useUpdateAttentionStore(state => state.setUpdateAttention);
+  const updateOutcome = useUpdateAttentionStore(state => state.updateOutcome);
+  const reportProblem = useCallback((outcome: UpdateOutcome, startVersion: string) =>
+    setUpdateProblem(true, outcome, startVersion), [setUpdateProblem]);
+  const clearProblem = useCallback(() => setUpdateProblem(false), [setUpdateProblem]);
   const [channelError, setChannelError] = useState<string>();
   const [savingChannel, setSavingChannel] = useState(false);
   const { data: localChangelog } = useChangelog();
@@ -72,13 +81,12 @@ export default function VersionsPage() {
   }, [remoteChangelog, localChangelog]);
 
   return (
-    <PageContainer sx={ { mb: 15, pt: 3, gap: 2, alignItems: 'stretch' } }>
-      <Header title="Software & updates" icon={ <SystemUpdateAltIcon/> }/>
+    <SubpageShell title="Software">
 
       <Box sx={ { display: 'flex', gap: 1, alignItems: 'center' } }>
         <Typography variant="body2">Nightstand</Typography>
         { running && <Chip label={ `v${running}` } size="small"/> }
-        { branch && <Chip label={ branch } size="small"/> }
+        { branch && branch !== 'main' && <Chip label={ branch } size="small"/> }
         {
           latestVersion && !updateAvailable && (
             <Chip icon={ <CheckCircleIcon/> } label="Up to date" color="success" variant="filled" size="small"/>
@@ -88,10 +96,9 @@ export default function VersionsPage() {
 
       { releasesFailed && <Alert severity="warning">Release information is unavailable. Try again when your browser can reach GitHub.</Alert> }
       { updateAvailable && (
-        <Alert severity="info">
-          <AlertTitle>Update available</AlertTitle>
+        <Section title={ `Version ${latestVersion} is ready` }>
           <Typography variant="body2" sx={ { mb: 1 } }>
-            This pod is running v{ running }. The latest build on your channel is v{ latestVersion }.
+            This Pod is running v{ running }. The latest build on your channel is v{ latestVersion }.
           </Typography>
           { whatsNew.length > 0 && (
             <Accordion
@@ -116,75 +123,115 @@ export default function VersionsPage() {
               </AccordionDetails>
             </Accordion>
           ) }
-          <UpdateFreeSleepButton runningVersion={ running ?? currentServerInfo.version }/>
-        </Alert>
-      ) }
-
-      <Section title="Update channel">
-        <ToggleButtonGroup
-          value={ channel }
-          exclusive
-          disabled={ savingChannel }
-          size="small"
-          onChange={ (_e, value: UpdateChannelType | null) => {
-            if (!value) return;
-            setChannelError(undefined);
-            setSavingChannel(true);
-            postSettings({ updateChannel: value })
-              .then(() => refetchSettings())
-              .catch(() => setChannelError('Could not save the update channel. Try selecting it again.'))
-              .finally(() => setSavingChannel(false));
-          } }
-        >
-          { UPDATE_CHANNELS.map(c => (
-            <ToggleButton key={ c } value={ c }>{ c }</ToggleButton>
-          )) }
-        </ToggleButtonGroup>
-        { channelError && <Alert severity="error" sx={ { mt: 1 } }>{ channelError }</Alert> }
-        <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mt: 1 } }>
-          Beta sees every release as soon as it ships. Stable only sees releases that have been
-          promoted after at least seven nights of use.
-        </Typography>
-      </Section>
-
-      { !capable && (
-        <Alert severity="warning">
-          Update to v{ CAPABLE_FLOOR } or later to unlock picking a specific version and instant
-          rollback.
-        </Alert>
-      ) }
-
-      { capable && rollbackInfo?.available && rollbackInfo.version && (
-        <Section title="Previous installation">
-          <RollbackRow runningVersion={ running } rollbackVersion={ rollbackInfo.version }/>
+          <UpdateFreeSleepButton
+            runningVersion={ running ?? currentServerInfo.version }
+            onProblem={ reportProblem }
+            onStart={ clearProblem }
+            retry={ updateProblem && updateOutcome === 'failed' }
+          />
+          <Typography variant="body2" color="text.secondary" sx={ { mt: 1 } }>
+            About 5 minutes. Schedules and alarms pause while the Pod restarts.
+          </Typography>
         </Section>
       ) }
 
-      { capable && releases && (
-        <Section title="All releases">
-          <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mb: 1 } }>
+      { !updateAvailable && latestVersion && running && semver.valid(running) && !releasesFailed && <Section>
+        <Typography>You're on the latest version.</Typography>
+        { dataUpdatedAt > 0 && <Typography variant="body2" color="text.secondary">
+          Checked { moment(dataUpdatedAt).format('h:mm A') }
+        </Typography> }
+        <Button disabled={ isFetching } onClick={ () => void checkReleases() }>Check again</Button>
+      </Section> }
+      { updateProblem && <Alert severity="warning">
+        { updateOutcome === 'failed' ? 'The Pod did not accept the update request. Nothing was installed.'
+          : 'The last update did not finish. Check its progress before trying recovery.' }
+        <Button onClick={ () => setUpdateProblem(false) }>Dismiss update notice</Button>
+        <Button component={ Link } to="/settings/logs?file=free-sleep-update.log">Open update logs</Button>
+        { updateOutcome !== 'failed' && capable && rollbackInfo?.available && rollbackInfo.version && (
+          <RollbackRow runningVersion={ running } rollbackVersion={ rollbackInfo.version }/>
+        ) }
+      </Alert> }
+      <Button onClick={ () => setChannelOpen(true) } sx={ { justifyContent: 'space-between', minHeight: 48 } }>
+        Updates <Box component="span" sx={ { display: 'flex', alignItems: 'center', gap: 1 } }>
+          { channel === 'stable' ? 'Stable' : 'Beta' }<ChevronRightIcon/>
+        </Box>
+      </Button>
+      <Button component={ Link } to="/changelog" endIcon={ <ChevronRightIcon/> } sx={ { justifyContent: 'space-between', minHeight: 48 } }>
+        Release notes
+      </Button>
+      <Drawer anchor="bottom" open={ channelOpen } onClose={ () => setChannelOpen(false) }>
+        <Box sx={ { p: 3, width: '100%', maxWidth: 720, mx: 'auto' } }>
+          <Typography variant="h2">Updates</Typography>
+          <Typography variant="body2" color="text.secondary" sx={ { my: 2 } }>
+            Beta gets every release right away. Stable waits for a week of real use.
+          </Typography>
+          <RadioGroup
+            aria-label="Update channel"
+            value={ channel }
+            onChange={ (_event, value) => {
+              setChannelError(undefined);
+              setSavingChannel(true);
+              postSettings({ updateChannel: value as UpdateChannelType })
+                .then(() => refetchSettings()).then(() => setChannelOpen(false))
+                .catch(() => setChannelError('Could not save the update channel. Try selecting it again.'))
+                .finally(() => setSavingChannel(false));
+            } }>
+            { UPDATE_CHANNELS.map(value => <FormControlLabel
+              key={ value }
+              value={ value }
+              disabled={ savingChannel }
+              control={ <Radio/> }
+              label={ value === 'stable' ? 'Stable' : 'Beta' }
+              sx={ { minHeight: 48 } }
+            />) }
+          </RadioGroup>
+          { channelError && <Alert severity="error">{ channelError }</Alert> }
+          <Button onClick={ () => setChannelOpen(false) }>Done</Button>
+        </Box>
+      </Drawer>
+      <Accordion disableGutters slotProps={ { transition: { unmountOnExit: true } } }>
+        <AccordionSummary expandIcon={ <ExpandMoreIcon/> }>Recovery</AccordionSummary>
+        <AccordionDetails sx={ { display: 'flex', flexDirection: 'column', gap: 2 } }>
+          { !capable && (
+            <Typography variant="body2" color="text.secondary">
+          Update to v{ CAPABLE_FLOOR } or later to unlock picking a specific version and instant
+          rollback.
+            </Typography>
+          ) }
+
+          { capable && rollbackInfo?.available && rollbackInfo.version && (
+            <Section title="Previous installation">
+              <RollbackRow runningVersion={ running } rollbackVersion={ rollbackInfo.version }/>
+            </Section>
+          ) }
+
+          { capable && releases && (
+            <Section title="Install a specific version">
+              <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mb: 1 } }>
             Downgrading keeps your data (databases aren't rewritten). Installing any version
             replaces the instant-rollback slot above. Versions below v{ CAPABLE_FLOOR } can't be
             installed from here.
-          </Typography>
-          { releases.releases.map(release => (
-            <ReleaseRow
-              key={ release.version }
-              release={ release }
-              runningVersion={ running }
-              body={ bodyByVersion.get(release.version) }
-              offerReinstall={ offerReinstall }
-            />
-          )) }
-        </Section>
-      ) }
+              </Typography>
+              { releases.releases.map(release => (
+                <ReleaseRow
+                  key={ release.version }
+                  release={ release }
+                  runningVersion={ running }
+                  body={ bodyByVersion.get(release.version) }
+                  offerReinstall={ offerReinstall }
+                />
+              )) }
+            </Section>
+          ) }
 
-      <Section title="Restore upstream">
-        <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mb: 1 } }>
+          <Section title="Switch to upstream">
+            <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mb: 1 } }>
           Replace Nightstand with the current upstream free-sleep build.
-        </Typography>
-        <RevertToStockRow runningVersion={ running }/>
-      </Section>
-    </PageContainer>
+            </Typography>
+            <RevertToStockRow runningVersion={ running }/>
+          </Section>
+        </AccordionDetails>
+      </Accordion>
+    </SubpageShell>
   );
 }

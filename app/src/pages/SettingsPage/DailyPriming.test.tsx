@@ -4,7 +4,7 @@ import { renderWithProviders } from '@test/renderWithProviders';
 import { getSettings } from '../../mocks/mockData';
 import DailyPriming from './DailyPriming';
 
-const RESTART = 'Restart the pod an hour before priming';
+const RESTART = 'Restart the Pod an hour before priming';
 
 describe('DailyPriming', () => {
   it('turns the daily restart off through the settings update', async () => {

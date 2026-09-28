@@ -1,4 +1,4 @@
-import { ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import { FormControl, InputLabel, MenuItem, Select, Typography } from '@mui/material';
 import { DeepPartial } from 'ts-essentials';
 
 import { Settings } from '@api/settingsSchema.ts';
@@ -22,21 +22,18 @@ export default function RawArchiveRetention({ settings, updateSettings }: RawArc
 
   return (
     <>
-      <Typography variant="body2">Keep raw sensor recordings</Typography>
-      <ToggleButtonGroup
-        color="primary"
-        exclusive
-        size="small"
-        value={ settings?.rawArchiveRetentionDays ?? 14 }
-        disabled={ isUpdating }
-        onChange={ (_event, next) => {
-          if (next) updateSettings({ rawArchiveRetentionDays: next });
-        } }
-      >
-        { OPTIONS.map(({ days, label }) => (
-          <ToggleButton key={ days } value={ days }>{ label }</ToggleButton>
-        )) }
-      </ToggleButtonGroup>
+      <FormControl fullWidth>
+        <InputLabel id="raw-retention-label">Keep raw sensor recordings</InputLabel>
+        <Select
+          labelId="raw-retention-label"
+          label="Keep raw sensor recordings"
+          value={ settings?.rawArchiveRetentionDays ?? 14 }
+          disabled={ isUpdating || !settings }
+          onChange={ (event) => updateSettings({ rawArchiveRetentionDays: Number(event.target.value) }) }
+        >
+          { OPTIONS.map(({ days, label }) => <MenuItem key={ days } value={ days }>{ label }</MenuItem>) }
+        </Select>
+      </FormControl>
       <Typography color='text.secondary'>
         Sleep analysis and calibration read these recordings. They take about 0.4 GB a day,
         and the oldest are removed first if storage runs low.

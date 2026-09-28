@@ -14,26 +14,35 @@ type GroupCardProps = {
   label: string;
   keys: ServerStatusKey[];
   data: ServerStatus;
+  attentionKeys?: ServerStatusKey[];
 };
 
-export default function GroupCard({ label, keys, data }: GroupCardProps) {
-  const [expanded, setExpanded] = useState<boolean | undefined>();
+export default function GroupCard({ label, keys, data, attentionKeys = [] }: GroupCardProps) {
+  const [expanded, setExpanded] = useState<{ issues: string; value: boolean }>();
   const nonHealthy = keys.filter(key => data[key]?.status !== 'healthy')
     .sort((left, right) => STATUS_ORDER[data[left]!.status] - STATUS_ORDER[data[right]!.status]);
-  const attention = keys.filter(key => needsAttention(data[key]?.status));
+  const attention = keys.filter(key => needsAttention(data[key]?.status) || attentionKeys.includes(key));
+  const issues = attention.map(key => `${key}:${data[key]?.status}`).join(',');
+  const counts = (['healthy', 'not_started', 'started', 'waiting_for_data', 'retrying', 'restarting', 'failed'] as Status[])
+    .map(status => {
+      const count = keys.filter(key => data[key]?.status === status).length;
+      const label = { healthy: 'healthy', not_started: 'starting', started: 'running', waiting_for_data: 'waiting for data',
+        retrying: 'retrying', restarting: 'restarting', failed: 'failed' }[status];
+      return count ? `${count} ${label}` : '';
+    }).filter(Boolean).join(', ');
   const healthy = keys.filter(key => data[key]?.status === 'healthy');
   if (keys.length === 0) return null;
   return (
     <Accordion
       disableGutters
-      expanded={ expanded ?? attention.length > 0 }
-      onChange={ (_event, value) => setExpanded(value) }
+      expanded={ expanded?.issues === issues ? expanded.value : attention.length > 0 }
+      onChange={ (_event, value) => setExpanded({ issues, value }) }
       sx={ sx.glassAccordion }
       slotProps={ { transition: { unmountOnExit: true } } }
     >
       <AccordionSummary expandIcon={ <ExpandMoreIcon/> }>
         <Typography variant="body2">
-          { label } · { healthy.length } healthy{ attention.length > 0 ? `, ${attention.length} needing attention` : '' }
+          { label } · { counts }
         </Typography>
       </AccordionSummary>
       <AccordionDetails>

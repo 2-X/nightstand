@@ -49,12 +49,12 @@ const statusMeta: Record<
     label: 'Healthy',
   },
 };
-export default function StatusChip({ info }: { info: StatusInfo }) {
+export default function StatusChip({ info, optional = false }: { info: StatusInfo; optional?: boolean }) {
   const meta = statusMeta[info.status];
   return (
     <Chip
       icon={ meta.icon as any }
-      label={ meta.label }
+      label={ optional ? 'Not installed (optional)' : meta.label }
       color={ meta.color }
       variant={ meta.color === 'default' ? 'outlined' : 'filled' }
       size="small"

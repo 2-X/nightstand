@@ -173,7 +173,7 @@ const createSleepScore = (startTime: string, endTime: string): SleepScore => {
     components: {
       duration: { score: durationScore, weight: 0.35, value: `${durationHours.toFixed(1)}h`, available: true },
       continuity: { score: continuityScore, weight: 0.25, value: '1 awakening', available: true },
-      hrv: { score: hrvScore, weight: 0.2, value: '63ms', available: true },
+      hrv: { score: hrvScore, weight: 0.2, value: '63 ms', available: true },
       restingHr: { score: restingHrScore, weight: 0.2, value: '52bpm', available: true },
     },
   };
@@ -482,7 +482,7 @@ const createServerStatus = (): ServerStatus => ({
   },
   frankenMonitor: {
     name: 'Franken monitor',
-    status: 'not_started',
+    status: 'healthy',
     description: 'Handles gestures and monitoring the status',
     message: '',
   },

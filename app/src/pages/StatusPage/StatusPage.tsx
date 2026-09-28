@@ -1,45 +1,54 @@
 import moment from 'moment-timezone';
-import { Alert, Box, Button, CircularProgress, Typography } from '@mui/material';
-import { useServerStatus } from '@api/serverStatus.ts';
-import { ServerStatusKey, StatusInfo } from '@api/serverStatusSchema.ts';
-import { Link } from 'react-router-dom';
-import PageContainer from '../PageContainer.tsx';
+import { Alert, AlertTitle, Button, CircularProgress, Typography } from '@mui/material';
+import { useStatusSummary } from './useStatusSummary';
+import { StatusInfo } from '@api/serverStatusSchema.ts';
+import { SubpageShell } from '../DataPage/Header.tsx';
 import GroupCard from './GroupCard.tsx';
-import { GROUP_LABELS, STATUS_META, StatusGroup, needsAttention } from './statusMeta.ts';
+import {
+  GROUP_LABELS, STATUS_META, StatusGroup, waitingCoreKeys, statusName,
+} from './statusMeta.ts';
 
-const GROUPS: StatusGroup[] = ['schedules', 'biometrics', 'core'];
+const GROUPS: StatusGroup[] = ['core', 'schedules', 'biometrics'];
 
 export default function StatusPage() {
-  const { data, isLoading, isError, refetch, dataUpdatedAt } = useServerStatus(30_000);
-  const keys = data ? (Object.keys(data) as ServerStatusKey[]).filter(key => !!data[key]) : [];
-  const attention = keys.filter(key => needsAttention((data![key] as StatusInfo).status));
+  const { data, isLoading, isError, refetch, dataUpdatedAt, keys, coreReady, overdue, attention, now } = useStatusSummary();
+  const waitingNames = waitingCoreKeys(data).map(key => statusName(key, data?.[key])).join(', ');
+  const overdueNames = overdue.map(key => statusName(key, data?.[key])).join(', ');
+  const stale = dataUpdatedAt > 0 && now - dataUpdatedAt > 60_000;
   const activity = keys.filter(key => ['started', 'waiting_for_data'].includes((data![key] as StatusInfo).status));
 
+  const impact = attention.some(key => key === 'waterTank') ? 'Heating and cooling need water. Check the tank below.'
+    : attention.some(key => key.startsWith('pumpHealth')) ? 'A pump may be stalled. Temperature readings may be inaccurate.'
+      : attention.some(key => STATUS_META[key].group === 'schedules') ? 'Some scheduled changes may not run. Review the affected service below.'
+        : attention.some(key => key === 'biometricsStream') ? 'Sleep tracking stopped. New sleep data may not be recorded.'
+          : 'Review the affected service below for its impact and next step.';
+
   return (
-    <PageContainer sx={ { mb: 15, pt: 3, gap: 2, alignItems: 'stretch' } }>
-      <Button component={ Link } to="/settings/device" sx={ { alignSelf: 'flex-start' } }>Back to Device</Button>
-      <Box>
-        <Typography variant="h5" component="h1">System</Typography>
-        { dataUpdatedAt > 0 && (
-          <Typography variant="caption" color="text.secondary">
-            { isError ? 'Last received' : 'Updated' } { moment(dataUpdatedAt).format('h:mm:ss A') }
-          </Typography>
-        ) }
-      </Box>
+    <SubpageShell title="System status" backTo="/settings/device" backLabel="Back to Pod and diagnostics">
       { isLoading && <CircularProgress aria-label="Loading system status" sx={ { mx: 'auto' } }/> }
-      { isError && (
-        <Alert severity="error" action={ <Button color="inherit" onClick={ () => void refetch() }>Retry</Button> }>
-          { data ? 'Could not refresh system status. These are the last received readings.' : 'Could not load system status.' }
+      { (isError || stale) && (
+        <Alert severity="warning" action={ <Button color="inherit" onClick={ () => void refetch() }>Check again</Button> }>
+          Can't reach the Pod.{ dataUpdatedAt > 0
+            ? ` Showing the last check at ${moment(dataUpdatedAt).format('h:mm A')}.` : ' No status check is available yet.' }
         </Alert>
       ) }
       { data && (
         <>
-          <Typography variant="body2">
-            { attention.length > 0
-              ? `${attention.length} ${attention.length === 1 ? 'item needs' : 'items need'} attention`
-              : 'No reported service errors' }
-            { activity.length > 0 ? `; ${activity.length} collecting data or running.` : '.' }
+          { !isError && !stale && keys.length === 0 && <Alert severity="info">No status checks are available yet.</Alert> }
+          { !isError && !stale && keys.length > 0 && <Alert severity={ attention.length ? 'warning' : coreReady ? 'success' : 'info' }>
+            <AlertTitle>{ attention.length ? 'Some services need attention'
+              : coreReady ? 'Everything is running' : 'Waiting for core services' }</AlertTitle>
+            { !attention.length && !coreReady && <Typography variant="body2">Waiting for { waitingNames }.</Typography> }
+            { overdue.length > 0 && <Typography variant="body2">
+              { overdueNames } { overdue.length === 1 ? 'has' : 'have' } not started. Check the service below or open Logs.
+            </Typography> }
+            { attention.some(key => !overdue.includes(key)) && <Typography variant="body2">{ impact }</Typography> }
+          </Alert> }
+          <Typography variant="body2" color="text.secondary">
+            { dataUpdatedAt > 0 && `Checked ${moment(dataUpdatedAt).format('h:mm A')}` }
+            <Button onClick={ () => void refetch() }>Check again</Button>
           </Typography>
+          { attention.length > 0 && <Typography variant="h2">Needs attention ({ attention.length })</Typography> }
           { [...GROUPS].sort((left, right) => {
             const rank = (group: StatusGroup) => attention.some(key => STATUS_META[key].group === group) ? 0
               : activity.some(key => STATUS_META[key].group === group) ? 1 : 2;
@@ -50,10 +59,11 @@ export default function StatusPage() {
               label={ GROUP_LABELS[group] }
               keys={ keys.filter(key => STATUS_META[key].group === group) }
               data={ data }
+              attentionKeys={ attention }
             />
           )) }
         </>
       ) }
-    </PageContainer>
+    </SubpageShell>
   );
 }

@@ -3,7 +3,7 @@
 const LOG_DESCRIPTIONS: Array<{ pattern: RegExp; description: string }> = [
   {
     pattern: /^free-sleep-stream\d*\.log$/,
-    description: 'The biometrics stream process: reads live sensor data from both sides continuously. Usually the busiest log on the pod.',
+    description: 'The biometrics stream process: reads live sensor data from both sides continuously. Usually the busiest log on the Pod.',
   },
   {
     pattern: /^free-sleep-update\d*\.log$/,

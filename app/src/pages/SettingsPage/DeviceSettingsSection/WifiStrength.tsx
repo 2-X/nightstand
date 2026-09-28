@@ -20,7 +20,7 @@ export default function WifiStrength() {
     <Chip
       icon={ icon }
       color={ color }
-      label={ `WiFi Strength ${deviceStatus.wifiStrength}%` }
+      label={ `Wi-Fi strength ${deviceStatus.wifiStrength}%` }
       size='small'
       sx={ { mb: 1 } }
     />

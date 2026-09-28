@@ -5,11 +5,9 @@ import {
   Paper, Typography, Box, MenuItem, Select, FormControl, InputLabel,
   Alert, Button, Menu, TextField, IconButton, Tooltip, Chip,
 } from '@mui/material';
-import PageContainer from '../../PageContainer.tsx';
 import { useTheme } from '@mui/material/styles';
 import axios from 'axios';
-import Header from '../Header.tsx';
-import TextSnippetIcon from '@mui/icons-material/TextSnippet';
+import { SubpageShell } from '../Header.tsx';
 import DownloadIcon from '@mui/icons-material/Download';
 import ClearAllIcon from '@mui/icons-material/ClearAll';
 import PauseIcon from '@mui/icons-material/Pause';
@@ -169,19 +167,7 @@ export default function LogsPage() {
   }, [logs, filterText, severity]);
 
   return (
-    <PageContainer
-      sx={ {
-        [theme.breakpoints.up('sm')]: {
-          width: '95%',
-          padding: 0,
-          paddingTop: 6,
-          paddingBottom: 6,
-          maxWidth: '100%',
-          height: '100%',
-        },
-      } }
-    >
-      <Header title="Logs" icon={ <TextSnippetIcon /> } backTo="/settings/device" backLabel="Back to Device"/>
+    <SubpageShell title="Logs" backTo="/settings/device" backLabel="Back to Pod and diagnostics">
       { requestedFile && filesLoaded && !listError && !logFiles.includes(requestedFile) && (
         <Alert severity="info">The requested log is unavailable. Choose from the listed files.</Alert>
       ) }
@@ -362,6 +348,6 @@ export default function LogsPage() {
           <div ref={ logsEndRef } />
         </Box>
       </Paper>
-    </PageContainer>
+    </SubpageShell>
   );
 }

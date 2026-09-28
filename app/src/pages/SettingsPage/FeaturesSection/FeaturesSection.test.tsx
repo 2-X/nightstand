@@ -15,9 +15,9 @@ describe('FeaturesSection', () => {
       }),
     );
 
-    const { user } = renderWithProviders(<FeaturesSection group="automation" />);
+    const { user } = renderWithProviders(<FeaturesSection />);
 
-    const toggle = await screen.findByRole('switch', { name: 'One-off alarms' });
+    const toggle = await screen.findByRole('switch', { name: 'One-time alarm' });
     await user.click(toggle);
 
     // Default mock oneOffAlarms is true, so the first click posts false.
@@ -33,7 +33,7 @@ describe('FeaturesSection', () => {
       }),
     );
 
-    const { user } = renderWithProviders(<FeaturesSection group="automation" />);
+    const { user } = renderWithProviders(<FeaturesSection />);
 
     const toggle = await screen.findByRole('switch', { name: 'Presence auto-off' });
     expect(toggle).toBeChecked();

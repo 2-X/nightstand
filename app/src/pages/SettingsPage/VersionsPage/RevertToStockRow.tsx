@@ -56,7 +56,7 @@ export default function RevertToStockRow({ runningVersion }: Props) {
           { phase === 'idle' && (
             <DialogContentText component="div">
               <Typography variant="body2" sx={ { mb: 1.5 } }>
-                Download the current throwaway31265/free-sleep main build and replace Nightstand.
+                Download the current build from the upstream free-sleep project and replace Nightstand.
                 This is an application change, not a factory firmware reset. Nightstand features
                 are removed; settings and sleep data remain on the Pod.
               </Typography>
@@ -98,7 +98,7 @@ export default function RevertToStockRow({ runningVersion }: Props) {
           { phase === 'idle' && (
             <>
               <Button onClick={ () => setOpen(false) }>Cancel</Button>
-              <Button color="error" variant="contained" onClick={ revert }>Restore upstream</Button>
+              <Button color="error" variant="contained" onClick={ revert }>Switch to upstream</Button>
             </>
           ) }
           { (phase === 'timed_out' || phase === 'failed') && (

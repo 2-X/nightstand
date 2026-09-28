@@ -6,9 +6,10 @@ import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, 
 import StatusChip from './StatusChip.tsx';
 import { postJobs, JobSchema, Jobs } from '@api/jobs.ts';
 import { useCalibration } from '@api/calibration.ts';
+import { Link } from 'react-router-dom';
 import { useId, useState } from 'react';
 import { palette } from '@design/tokens';
-import { STATUS_META, GENERIC_MEANING } from './statusMeta.ts';
+import { STATUS_META, GENERIC_MEANING, statusName } from './statusMeta.ts';
 import CalibrationSubline from './CalibrationSubline.tsx';
 
 type StatusRowProps = {
@@ -61,9 +62,9 @@ export default function StatusRow({ job, statusInfo, divider }: StatusRowProps) 
     <Box sx={ { pt: divider ? 1.5 : 0, pb: 1.5, borderTop: divider ? `1px solid ${palette.border.subtle}` : 'none' } }>
       <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 } }>
         <Typography sx={ { fontSize: '0.95rem', fontWeight: 600, color: palette.text.primary, flex: 1, minWidth: 0 } }>
-          { statusInfo.name }
+          { statusName(job, statusInfo) }
         </Typography>
-        <StatusChip info={ statusInfo } />
+        <StatusChip info={ statusInfo } optional={ job === 'biometricsInstallation' && statusInfo.status === 'not_started' } />
       </Box>
 
       <Typography sx={ { fontSize: '0.8rem', color: palette.text.tertiary, mt: 0.5, lineHeight: 1.4 } }>
@@ -73,7 +74,7 @@ export default function StatusRow({ job, statusInfo, divider }: StatusRowProps) 
       <Typography
         sx={ {
           fontSize: '0.8rem',
-          color: statusInfo.status === 'failed' ? palette.accent.red : palette.text.secondary,
+          color: statusInfo.status === 'failed' ? palette.status.error : palette.text.secondary,
           mt: 0.5,
           whiteSpace: 'pre-wrap',
           wordBreak: 'break-word',
@@ -82,11 +83,15 @@ export default function StatusRow({ job, statusInfo, divider }: StatusRowProps) 
         { statusInfo.status === 'failed' && statusInfo.message ? `Error: ${statusInfo.message}` : meaning }
       </Typography>
 
+      { (job === 'franken' || job === 'express') && <Typography variant="caption" color="text.secondary">{ statusInfo.name }</Typography> }
+      { job === 'biometricsInstallation' && statusInfo.status === 'not_started' && (
+        <Button component={ Link } to="/settings/features">Set up in Features</Button>
+      ) }
       { calibrationSide && <CalibrationSubline view={ calibration?.[calibrationSide] }/> }
 
       { timestamp && (
         <Typography sx={ { fontSize: '0.7rem', color: palette.text.tertiary, mt: 0.25, opacity: 0.7 } }>
-          { timestamp }
+          { job === 'express' ? `Started ${timestamp}` : timestamp }
         </Typography>
       ) }
 

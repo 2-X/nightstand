@@ -28,7 +28,7 @@ export default function DailyPriming({ settings, updateSettings }: PrimePodSched
               onChange={ (event) => updateSettings({ primePodDaily: { enabled: event.target.checked } }) }
             />
           }
-          label="Prime daily?"
+          label="Prime daily"
         />
         <TextField
           label="Prime time"
@@ -63,7 +63,7 @@ export default function DailyPriming({ settings, updateSettings }: PrimePodSched
             onChange={ (event) => updateSettings({ rebootDaily: event.target.checked }) }
           />
         }
-        label="Restart the pod an hour before priming"
+        label="Restart the Pod an hour before priming"
       />
     </>
 

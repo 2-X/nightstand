@@ -1,7 +1,9 @@
 import { beforeAll, describe, it, expect } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { screen, waitFor } from '@testing-library/react';
-import { renderApp } from '@test/renderWithProviders';
+import { useLocation } from 'react-router-dom';
+import AppRoutes from './AppRoutes';
+import { renderApp, renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 
 beforeAll(async () => {
@@ -56,4 +58,34 @@ it('redirects an unknown settings category to the index', async () => {
   renderApp('/settings/unknown');
   expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Back to Settings' })).not.toBeInTheDocument();
+});
+
+it.each([
+  ['/settings/bed', 'Bed and sides'],
+  ['/settings/features', 'Features'],
+  ['/settings/versions', 'Software'],
+  ['/settings/device', 'Pod and diagnostics'],
+  ['/settings/about', 'About and license'],
+  ['/settings/people', 'Bed and sides'],
+  ['/settings/automation', 'Bed and sides'],
+  ['/settings/sleep-data', 'Features'],
+  ['/status', 'System status'],
+  ['/data/logs', 'Logs'],
+])('resolves %s to its settings destination', async (route, heading) => {
+  renderApp(route);
+  expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeVisible();
+});
+
+function CurrentRoute() {
+  const location = useLocation();
+  return <output aria-label="Current route">{ location.pathname + location.search }</output>;
+}
+
+it.each([
+  ['/data', '/sleep'], ['/data/sleep', '/sleep'],
+  ['/data/vitals', '/sleep?metric=heart_rate'],
+  ['/left', '/'], ['/right', '/'],
+])('preserves the legacy redirect from %s', async (route, destination) => {
+  renderWithProviders(<><AppRoutes/><CurrentRoute/></>, { initialRoute: route });
+  await waitFor(() => expect(screen.getByLabelText('Current route').textContent).toBe(destination), { timeout: 15000 });
 });

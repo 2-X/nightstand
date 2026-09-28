@@ -23,8 +23,8 @@ describe('UpdateFreeSleepButton', () => {
 
     const { user } = renderWithProviders(<UpdateFreeSleepButton runningVersion="3.0.0"/>);
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Update' })).toBeEnabled());
-    await user.click(screen.getByRole('button', { name: 'Update' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Update(?: to.*)?$/ })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: /^Update(?: to.*)?$/ }));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(await screen.findByText('Update to v3.2.0?')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Update now' }));
@@ -44,8 +44,8 @@ describe('UpdateFreeSleepButton', () => {
 
     const { user } = renderWithProviders(<UpdateFreeSleepButton runningVersion="3.0.0"/>);
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Update' })).toBeEnabled());
-    await user.click(screen.getByRole('button', { name: 'Update' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Update(?: to.*)?$/ })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: /^Update(?: to.*)?$/ }));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
@@ -57,15 +57,15 @@ describe('UpdateFreeSleepButton', () => {
 it('does not offer a branch-tip update when the release manifest is unavailable', async () => {
   server.use(http.get(manifestUrl, () => new HttpResponse(null, { status: 503 })));
   renderWithProviders(<UpdateFreeSleepButton runningVersion="3.0.0"/>);
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Update' })).toBeDisabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Update(?: to.*)?$/ })).toBeDisabled());
 });
 it('shows a rejected request and lets the user close the dialog', async () => {
   server.use(http.get(manifestUrl, () => HttpResponse.json(manifest)),
     http.post('*/update', () => HttpResponse.json({ error: 'Update refused' }, { status: 400 })));
   const { user } = renderWithProviders(<UpdateFreeSleepButton runningVersion="3.0.0"/>);
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Update' })).toBeEnabled());
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Update' })).toBeEnabled());
-  await user.click(screen.getByRole('button', { name: 'Update' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Update(?: to.*)?$/ })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Update(?: to.*)?$/ })).toBeEnabled());
+  await user.click(screen.getByRole('button', { name: /^Update(?: to.*)?$/ }));
   await user.click(screen.getByRole('button', { name: 'Update now' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Update refused');
   await user.click(screen.getByRole('button', { name: 'Close' }));
@@ -77,8 +77,8 @@ it('keeps the confirmed target when the manifest refreshes while the dialog is o
   server.use(http.get(manifestUrl, () => HttpResponse.json(manifest)),
     http.post('*/update', async ({ request }) => { posted = await request.json(); return new HttpResponse(null, { status: 204 }); }));
   const { user, queryClient } = renderWithProviders(<UpdateFreeSleepButton runningVersion="3.0.0"/>);
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Update' })).toBeEnabled());
-  await user.click(screen.getByRole('button', { name: 'Update' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: /^Update(?: to.*)?$/ })).toBeEnabled());
+  await user.click(screen.getByRole('button', { name: /^Update(?: to.*)?$/ }));
   await act(async () => { queryClient.setQueryData(['useReleases'], { ...manifest, releases: [
     { kind: 'agent', version: '3.4.0', channel: 'stable', date: '2026-09-29' }, ...manifest.releases,
   ] }); });

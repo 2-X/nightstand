@@ -14,10 +14,10 @@ type UsageBarProps = {
 
 export default function UsageBar({ icon, label, usedBytes, totalBytes, usedPercent, caption }: UsageBarProps) {
   const barColor = usedPercent >= 90
-    ? palette.accent.red
+    ? palette.status.error
     : usedPercent >= 75
-      ? palette.accent.orange
-      : palette.accent.blue;
+      ? palette.status.warn
+      : palette.text.secondary;
 
   return (
     <Box sx={ { mb: 1.5 } }>

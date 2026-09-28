@@ -1,5 +1,4 @@
 import { ReactNode } from 'react';
-import InfoIcon from '@mui/icons-material/Info';
 import { Box, Typography, Switch } from '@mui/material';
 import { palette } from '@design/tokens';
 
@@ -29,8 +28,7 @@ export default function FeatureToggleRow({ label, checked, onChange, disabled, d
       </Box>
       { description && (
         <Box display='flex' gap={ 1 } alignItems='flex-start' sx={ { mt: 1 } }>
-          <InfoIcon sx={ { color: palette.text.tertiary, fontSize: 18, mt: '2px' } }/>
-          <Typography sx={ { color: palette.text.tertiary, fontSize: '0.85rem', lineHeight: 1.5 } }>
+          <Typography component="div" sx={ { color: palette.text.secondary, fontSize: '0.85rem', lineHeight: 1.5 } }>
             { description }
           </Typography>
         </Box>

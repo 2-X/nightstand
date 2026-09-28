@@ -6,7 +6,7 @@ import SettingsPage from './SettingsPage';
 describe('SettingsPage', () => {
   it('renders the settings page', async () => {
     renderWithProviders(<SettingsPage />, { initialRoute: '/settings' });
-    expect(await screen.findByRole('link', { name: /People and sides/ })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: /Bed and sides/ })).toBeInTheDocument();
   });
 
   // The Versions page is only reachable from here, so a silently dropped row
@@ -16,6 +16,6 @@ describe('SettingsPage', () => {
 
     await user.click(await screen.findByRole('link', { name: /Software/ }));
 
-    expect(await screen.findByText('Software & updates')).toBeInTheDocument();
+    expect(await screen.findByText('Software')).toBeInTheDocument();
   });
 });

@@ -81,7 +81,7 @@ export default function ReleaseRow({ release, runningVersion, body, offerReinsta
             <Stack spacing={ 2 } alignItems="center" sx={ { py: 2 } }>
               <CircularProgress/>
               <Typography variant="body2" color="text.secondary">
-                Installing v{ release.version }. This page reloads by itself when the pod comes back.
+                Installing v{ release.version }. This page reloads by itself when the Pod comes back.
               </Typography>
             </Stack>
           ) }
