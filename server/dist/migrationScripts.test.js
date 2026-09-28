@@ -101,9 +101,22 @@ describe('fork-switch tool scripts', () => {
     });
     describe('pod-installer.sh ordering', () => {
         const src = readScript('scripts/migrate/pod-installer.sh');
+        // main only moves at a release, so its tip is the newest release; the
+        // staged-version check still refuses a tip that does not match the manifest.
+        it('installs the newest release from the tip of main', () => {
+            assert.match(src, /MAIN_ZIP_URL="https:\/\/github\.com\/LTimothy\/nightstand\/archive\/refs\/heads\/main\.zip"/);
+            assert.match(src, /print\(data\['releases'\]\[0\]\['version'\]/);
+            assert.doesNotMatch(src, /r\['channel'\] == 'stable'/);
+            assert.match(src, /staged tree reports v\$STAGED_VERSION but v\$TARGET_VERSION was requested/);
+        });
+        it('switch-to-this-fork.sh tells the user the version it is about to install', () => {
+            const laptop = readScript('scripts/migrate/switch-to-this-fork.sh');
+            assert.match(laptop, /print\(data\['releases'\]\[0\]\['version'\]/);
+            assert.match(laptop, /Install LTimothy\/nightstand v\$NEWEST_VERSION/);
+        });
         it('guards entry with a lock file before any other work', () => {
             const lockIdx = src.indexOf('LOCK_FILE');
-            const resolveIdx = src.indexOf('Resolving the latest stable release');
+            const resolveIdx = src.indexOf('Resolving the newest release');
             assert.ok(lockIdx !== -1 && lockIdx < resolveIdx, 'lock file check must precede real work');
         });
         it('refuses to run while another fork-update service is active', () => {

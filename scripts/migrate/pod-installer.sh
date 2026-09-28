@@ -46,7 +46,8 @@ NPM=/home/dac/.volta/bin/npm
 NPX=/home/dac/.volta/bin/npx
 
 RELEASES_URL="https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json"
-TAG_ZIP_URL_PREFIX="https://github.com/LTimothy/nightstand/archive/refs/tags/v"
+# main only moves at a release, so its tip is always the newest release.
+MAIN_ZIP_URL="https://github.com/LTimothy/nightstand/archive/refs/heads/main.zip"
 
 mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
 exec > >(tee -a "$LOG_FILE") 2>&1
@@ -87,19 +88,18 @@ fail() {
 # ==============================================================================
 # Stage: pre-swap (their server is still running and untouched below this line)
 # ==============================================================================
-write_status "resolve" "in_progress" "resolving latest stable release"
+write_status "resolve" "in_progress" "resolving the newest release"
 
-say "Resolving the latest stable release from releases.json..."
+say "Resolving the newest release from releases.json..."
 RELEASES_JSON=$(curl -fsSL --max-time 20 "$RELEASES_URL") \
   || fail "could not fetch releases.json, check the pod's WAN access"
 TARGET_VERSION=$(printf '%s' "$RELEASES_JSON" | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
-stable = [r['version'] for r in data['releases'] if r['channel'] == 'stable']
-print(stable[0] if stable else '')
+print(data['releases'][0]['version'] if data['releases'] else '')
 ") || fail "could not parse releases.json"
-[ -n "$TARGET_VERSION" ] || fail "no stable release found in releases.json"
-say "Target: v$TARGET_VERSION (latest stable)"
+[ -n "$TARGET_VERSION" ] || fail "no release found in releases.json"
+say "Target: v$TARGET_VERSION (newest release)"
 write_status "resolve" "ok" "target v$TARGET_VERSION"
 
 # switch-to-this-fork.sh pushes its own Stage 2 (pre-consent) snapshot to
@@ -119,8 +119,8 @@ PERS_FREE=$(df -m /persistent | awk 'NR==2{print $4}')
 [ "$ROOT_FREE" -gt 2000 ] || fail "low disk on / (${ROOT_FREE}M free), aborting before touching anything"
 [ "$PERS_FREE" -gt 2000 ] || fail "low disk on /persistent (${PERS_FREE}M free), aborting before touching anything"
 
-say "Downloading v$TARGET_VERSION (stable tag archive, not main HEAD)..."
-curl -fL --max-time 300 -o "$ZIP" "${TAG_ZIP_URL_PREFIX}${TARGET_VERSION}.zip" \
+say "Downloading v$TARGET_VERSION (the tip of main)..."
+curl -fL --max-time 300 -o "$ZIP" "$MAIN_ZIP_URL" \
   || fail "download failed; their server was never touched"
 rm -rf "$STAGE" "$STAGE.unzip"
 unzip -q "$ZIP" -d "$STAGE.unzip" || fail "unzip failed; their server was never touched"

@@ -353,13 +353,12 @@ DETECTED_MODEL_NOTE="Pod 5: fully supported."
 # ==============================================================================
 # Stage 3, Report and consent (still read-only)
 # ==============================================================================
-STABLE_VERSION=$(curl -fsSL --max-time 20 "$RELEASES_URL" | python3 -c "
+NEWEST_VERSION=$(curl -fsSL --max-time 20 "$RELEASES_URL" | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
-stable = [r['version'] for r in data['releases'] if r['channel'] == 'stable']
-print(stable[0] if stable else '')
+print(data['releases'][0]['version'] if data['releases'] else '')
 " 2>/dev/null)
-[ -n "$STABLE_VERSION" ] || fail "could not resolve the latest stable release from releases.json"
+[ -n "$NEWEST_VERSION" ] || fail "could not resolve the newest release from releases.json"
 
 cat <<REPORT
 
@@ -374,8 +373,8 @@ What will happen:
   1. Full backup: a tarball of the pod's code + data, kept on the pod AND
      pulled to this laptop, both integrity-verified before anything else
      happens.
-  2. Install LTimothy/nightstand v$STABLE_VERSION (the current soaked stable
-     release, not main HEAD).
+  2. Install LTimothy/nightstand v$NEWEST_VERSION, the newest release (the tip
+     of main, which only moves when a release is published).
   3. Your old install is preserved at /home/dac/free-sleep-prev, this
      becomes the in-app instant-rollback slot afterward.
 
