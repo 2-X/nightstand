@@ -5,6 +5,15 @@ echo "Blocking internet access..."
 # IPv4 Rules
 echo "Configuring IPv4 rules..."
 
+# Start from a clean slate so the final ruleset is exactly what this script
+# writes, no matter what was in the chains before (a prior unblock, leftovers
+# from an old saved state, temporary deploy rules). Without this, stale ACCEPT
+# rules sitting above our final DROP survive re-blocking and then get
+# immortalized by the iptables-save at the bottom - which is exactly how the
+# WAN sat open for months (discovered Sep 2026).
+iptables -F INPUT
+iptables -F OUTPUT
+
 # -----------------------------------------------------------------------------------------------------
 # Allow return traffic for connections this pod initiates (DNS answers,
 # TCP 443 responses). The outbound allows further down only open the forward
@@ -69,14 +78,23 @@ iptables -A OUTPUT -o tailscale0 -j ACCEPT
 #       - UDP everywhere: direct WireGuard peer connections + STUN
 #       - TCP/443: control plane (controlplane.tailscale.com) + DERP relays
 #       - DNS: to resolve controlplane.tailscale.com / derp*.tailscale.com
-#     Note: this allows the pod to reach any HTTPS host, not only Tailscale.
-#     Eight Sleep's OTA updates are blocked at the systemd level (services
-#     masked per INSTALLATION.md), that's the real mechanism preventing
-#     forced firmware updates; this firewall is a second layer.
-iptables -A OUTPUT -p udp -j ACCEPT
-iptables -A OUTPUT -p tcp --dport 443 -j ACCEPT
-iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
-iptables -A OUTPUT -p tcp --dport 53 -j ACCEPT
+#     Note: this allows the pod to reach any HTTPS host, not only Tailscale -
+#     including Eight Sleep's cloud. So these rules are added ONLY while
+#     tailscaled is actually running (Sep 2026: it sat inactive for months
+#     while these rules silently held the WAN open for everything). Eight
+#     Sleep's OTA updates are additionally blocked at the systemd level
+#     (services masked per INSTALLATION.md); this firewall is a second layer.
+#     If you enable Tailscale later, re-run this script while tailscaled is
+#     active to get these rules back.
+if systemctl is-active --quiet tailscaled; then
+  echo "tailscaled active: allowing its control-plane/DERP/STUN egress"
+  iptables -A OUTPUT -p udp -j ACCEPT
+  iptables -A OUTPUT -p tcp --dport 443 -j ACCEPT
+  iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
+  iptables -A OUTPUT -p tcp --dport 53 -j ACCEPT
+else
+  echo "tailscaled inactive: skipping its WAN egress rules (full block)"
+fi
 # -----------------------------------------------------------------------------------------------------
 
 # Block everything else
