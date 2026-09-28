@@ -14,10 +14,10 @@ vi.mock('./FeaturesSection/FeaturesSection.tsx', () => ({
 
 describe('SettingsPage section isolation', () => {
   it('keeps the rest of the page alive when the features section throws', async () => {
-    renderWithProviders(<SettingsPage />, { initialRoute: '/settings' });
+    renderWithProviders(<SettingsPage />, { initialRoute: '/settings/automation' });
 
     expect(await screen.findByText('Features section failed to load')).toBeInTheDocument();
-    expect(await screen.findByText('Side settings')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Back to Settings' })).toBeInTheDocument();
     expect(await screen.findByText('Priming')).toBeInTheDocument();
   });
 });

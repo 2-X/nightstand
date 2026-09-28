@@ -15,7 +15,7 @@ describe('FeaturesSection', () => {
       }),
     );
 
-    const { user } = renderWithProviders(<FeaturesSection />);
+    const { user } = renderWithProviders(<FeaturesSection group="automation" />);
 
     const toggle = await screen.findByRole('switch', { name: 'One-off alarms' });
     await user.click(toggle);
@@ -33,7 +33,7 @@ describe('FeaturesSection', () => {
       }),
     );
 
-    const { user } = renderWithProviders(<FeaturesSection />);
+    const { user } = renderWithProviders(<FeaturesSection group="automation" />);
 
     const toggle = await screen.findByRole('switch', { name: 'Presence auto-off' });
     expect(toggle).toBeChecked();

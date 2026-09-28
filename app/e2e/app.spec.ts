@@ -6,5 +6,5 @@ test('boots the demo and renders the temperature page', async ({ page }) => {
   // ControlTempPage renders its heading.
   await expect(page.getByText('Temperature').first()).toBeVisible();
   // The bottom navigation is present (aria-label per nav item).
-  await expect(page.getByLabel('Settings').first()).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Primary mobile' }).getByRole('link', { name: 'Settings' })).toBeVisible();
 });

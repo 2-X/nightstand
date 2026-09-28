@@ -27,7 +27,7 @@ describe('FeaturesSection partial payload handling', () => {
       http.get('*/api/settings', () => HttpResponse.json(settingsWithoutFeatures)),
     );
 
-    renderWithProviders(<FeaturesSection />);
+    renderWithProviders(<FeaturesSection group="automation" />);
 
     expect(await screen.findByText('Features')).toBeInTheDocument();
 
@@ -43,7 +43,7 @@ describe('FeaturesSection partial payload handling', () => {
       http.get('*/api/settings', () => HttpResponse.json({})),
     );
 
-    renderWithProviders(<FeaturesSection />);
+    renderWithProviders(<FeaturesSection group="automation" />);
 
     expect(await screen.findByText('Features')).toBeInTheDocument();
   });
@@ -55,7 +55,7 @@ describe('FeaturesSection partial payload handling', () => {
       http.get('*/api/services', () => HttpResponse.json(servicesWithoutBiometrics)),
     );
 
-    renderWithProviders(<FeaturesSection />);
+    renderWithProviders(<FeaturesSection group="sleep" />);
 
     expect(await screen.findByText('Features')).toBeInTheDocument();
 

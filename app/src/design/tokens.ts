@@ -7,23 +7,23 @@
 
 export const palette = {
   bg: {
-    base: '#000000',
-    elevated: 'rgba(255,255,255,0.04)',
+    base: '#080A0C',
+    elevated: '#15191E',
     hover: 'rgba(255,255,255,0.08)',
   },
   border: {
-    subtle: 'rgba(255,255,255,0.06)',
+    subtle: '#2B333B',
     medium: 'rgba(255,255,255,0.12)',
   },
   text: {
-    primary: 'rgba(255,255,255,0.95)',
-    secondary: 'rgba(255,255,255,0.65)',
-    tertiary: 'rgba(255,255,255,0.45)',
+    primary: '#EDF1F4',
+    secondary: '#A6ADB5',
+    tertiary: '#A6ADB5',
     disabled: 'rgba(255,255,255,0.25)',
   },
   // Apple system colors - proven to feel right on dark.
   accent: {
-    blue: '#0a84ff',
+    blue: '#A3C7DF',
     green: '#30d158',
     yellow: '#ffd60a',
     orange: '#ff9500',
@@ -68,7 +68,7 @@ export const typography = {
     letterSpacing: '-0.03em',
   },
   largeTitle: {
-    fontSize: '2rem',
+    fontSize: '1.75rem',
     fontWeight: 600,
     letterSpacing: '-0.02em',
     lineHeight: 1.15,
@@ -93,10 +93,10 @@ export const typography = {
   },
   sectionLabel: {
     // Apple Home / 8 Sleep section header style.
-    fontSize: '0.7rem',
+    fontSize: '0.875rem',
     fontWeight: 600,
-    letterSpacing: '0.12em',
-    textTransform: 'uppercase' as const,
+    letterSpacing: 'normal',
+    textTransform: 'none' as const,
   },
 };
 
@@ -106,12 +106,9 @@ export const sx = {
     width: '100%',
     borderRadius: `${radius.xl}px`,
     p: space.cardPadding,
-    background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
+    background: palette.bg.elevated,
     border: `1px solid ${palette.border.subtle}`,
-    boxShadow:
-      '0 1px 0 rgba(255,255,255,0.04) inset, 0 12px 24px -12px rgba(0,0,0,0.5)',
-    backdropFilter: 'blur(20px)',
-    WebkitBackdropFilter: 'blur(20px)',
+    boxShadow: 'none',
     overflowWrap: 'break-word' as const,
     wordBreak: 'break-word' as const,
   },
@@ -122,12 +119,9 @@ export const sx = {
   glassAccordion: {
     width: '100%',
     borderRadius: `${radius.xl}px`,
-    background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
+    background: palette.bg.elevated,
     border: `1px solid ${palette.border.subtle}`,
-    boxShadow:
-      '0 1px 0 rgba(255,255,255,0.04) inset, 0 12px 24px -12px rgba(0,0,0,0.5)',
-    backdropFilter: 'blur(20px)',
-    WebkitBackdropFilter: 'blur(20px)',
+    boxShadow: 'none',
     '&:before': { display: 'none' },
     '&.Mui-expanded': { margin: 0 },
     '& .MuiAccordionSummary-root': {

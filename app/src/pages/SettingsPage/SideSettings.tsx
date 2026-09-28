@@ -48,6 +48,7 @@ export default function SideSettings({ side, settings, updateSettings }: AwayMod
       <Grid container spacing={ 0 }>
         <Typography alignContent="center">Away mode</Typography>
         <Switch
+          slotProps={ { input: { 'aria-label': `${title} away mode` } } }
           disabled={ isUpdating }
           checked={ settings?.[side]?.awayMode || false }
           onChange={ (event) => updateSettings({ [side]: { awayMode: event.target.checked } }) }

@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
+import SideRoute from './components/SideRoute';
 import RouteFallback from './components/RouteFallback.tsx';
 
 // Pages are lazy-loaded so each route ships only what it needs. The shell
@@ -11,8 +12,6 @@ const BaseControlPage = lazy(() => import('./pages/BaseControlPage/BaseControlPa
 const SettingsPage = lazy(() => import('./pages/SettingsPage/SettingsPage'));
 const SchedulePage = lazy(() => import('./pages/SchedulePage/SchedulePage.tsx'));
 const SleepPage = lazy(() => import('./pages/DataPage/SleepPage/SleepPage.tsx'));
-const DataPage = lazy(() => import('./pages/DataPage/DataPage.tsx'));
-const VitalsPage = lazy(() => import('./pages/DataPage/VitalsPage/VitalsPage.tsx'));
 const LogsPage = lazy(() => import('./pages/DataPage/LogsPage/LogsPage.tsx'));
 const ChangelogPage = lazy(() => import('./pages/DataPage/ChangelogPage/ChangelogPage.tsx'));
 const VersionsPage = lazy(() => import('./pages/SettingsPage/VersionsPage/VersionsPage.tsx'));
@@ -25,22 +24,25 @@ export default function AppRoutes() {
         <Route path="/" element={ <Layout/> }>
           <Route index element={ <ControlTempPage/> }/>
           <Route path="temperature" element={ <ControlTempPage/> }/>
-          <Route path="left" element={ <ControlTempPage/> }/>
-          <Route path="right" element={ <ControlTempPage/> }/>
-          <Route path="status" element={ <StatusPage /> } />
+          <Route path="left" element={ <SideRoute side="left"/> }/>
+          <Route path="right" element={ <SideRoute side="right"/> }/>
+          <Route path="status" element={ <Navigate to="/settings/system" replace/> }/>
+          <Route path="settings/system" element={ <StatusPage/> }/>
           <Route path="elevation" element={ <BaseControlPage/> }/>
 
-          <Route path="data" element={ <DataPage /> }>
-            <Route path="sleep" element={ <SleepPage/> }/>
-            <Route path="logs" element={ <LogsPage/> }/>
-            <Route path="vitals" element={ <VitalsPage/> }/>
-          </Route>
+          <Route path="sleep" element={ <SleepPage/> }/>
+          <Route path="data" element={ <Navigate to="/sleep" replace/> }/>
+          <Route path="data/sleep" element={ <Navigate to="/sleep" replace/> }/>
+          <Route path="data/vitals" element={ <Navigate to="/sleep?metric=heart_rate" replace/> }/>
+          <Route path="data/logs" element={ <Navigate to="/settings/logs" replace/> }/>
+          <Route path="settings/logs" element={ <LogsPage/> }/>
 
           <Route path="changelog" element={ <ChangelogPage/> }/>
 
           <Route path="settings/versions" element={ <VersionsPage/> }/>
 
           <Route path="settings" element={ <SettingsPage/> }/>
+          <Route path="settings/:category" element={ <SettingsPage/> }/>
           <Route path="schedules" element={ <SchedulePage/> }/>
         </Route>
       </Routes>

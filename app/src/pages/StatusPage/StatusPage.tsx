@@ -1,147 +1,58 @@
-import { useMemo, useState } from 'react';
 import moment from 'moment-timezone';
+import { Alert, Box, Button, CircularProgress, Typography } from '@mui/material';
 import { useServerStatus } from '@api/serverStatus.ts';
-import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
-  Box,
-  Chip,
-  CircularProgress,
-  Typography,
-} from '@mui/material';
-import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
-import ErrorRoundedIcon from '@mui/icons-material/ErrorRounded';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-
+import { ServerStatusKey, StatusInfo } from '@api/serverStatusSchema.ts';
+import { Link } from 'react-router-dom';
 import PageContainer from '../PageContainer.tsx';
-import GlassCard from '@design/GlassCard';
-import StatusRow from './StatusRow.tsx';
 import GroupCard from './GroupCard.tsx';
-import { ServerStatusKey, ServerStatus, StatusInfo } from '@api/serverStatusSchema.ts';
-import { palette, sx } from '@design/tokens';
-import { STATUS_META, GROUP_LABELS, StatusGroup } from './statusMeta.ts';
+import { GROUP_LABELS, STATUS_META, StatusGroup, needsAttention } from './statusMeta.ts';
 
-const UNHEALTHY_STATUSES = new Set(['failed', 'retrying', 'restarting']);
-
-function groupKeys(data: ServerStatus): Record<StatusGroup, ServerStatusKey[]> {
-  const groups: Record<StatusGroup, ServerStatusKey[]> = { schedules: [], biometrics: [], core: [] };
-  (Object.keys(data) as ServerStatusKey[]).forEach((key) => {
-    groups[STATUS_META[key].group].push(key);
-  });
-  return groups;
-}
+const GROUPS: StatusGroup[] = ['schedules', 'biometrics', 'core'];
 
 export default function StatusPage() {
-  // service-health pushes from the WebSocket invalidate this query, so a
-  // 30s safety-net poll is enough - no need for the old 5s.
-  const { data, isLoading, dataUpdatedAt } = useServerStatus(30_000);
-  const [coreExpanded, setCoreExpanded] = useState(false);
-  // `dataUpdatedAt` is 0 until the first fetch resolves - guard so the header
-  // doesn't briefly render "Updated" at the Unix epoch (1970) on first paint.
-  const formatted = dataUpdatedAt ? moment(dataUpdatedAt).format('h:mm:ss A') : null;
-
-  const groups = useMemo(() => (data ? groupKeys(data) : null), [data]);
-
-  const unhealthy = useMemo(() => {
-    if (!data) return [];
-    return (Object.keys(data) as ServerStatusKey[])
-      .filter((key) => UNHEALTHY_STATUSES.has((data[key] as StatusInfo).status))
-      .map((key) => (data[key] as StatusInfo).name);
-  }, [data]);
-
-  const coreUnhealthy = useMemo(() => {
-    if (!groups || !data) return false;
-    return groups.core.some((key) => UNHEALTHY_STATUSES.has((data[key] as StatusInfo).status));
-  }, [groups, data]);
-
-  const isAllHealthy = unhealthy.length === 0;
-  const summaryTitle = isAllHealthy
-    ? 'Everything is running normally'
-    : `${unhealthy.length} thing${unhealthy.length > 1 ? 's need' : ' needs'} attention`;
+  const { data, isLoading, isError, refetch, dataUpdatedAt } = useServerStatus(30_000);
+  const keys = data ? (Object.keys(data) as ServerStatusKey[]).filter(key => !!data[key]) : [];
+  const attention = keys.filter(key => needsAttention((data![key] as StatusInfo).status));
+  const activity = keys.filter(key => ['started', 'waiting_for_data'].includes((data![key] as StatusInfo).status));
 
   return (
-    <PageContainer
-      sx={ {
-        mb: 15,
-        pt: 3,
-        gap: 2,
-        alignItems: 'stretch',
-      } }
-    >
-      <Box sx={ { px: 0.5, mb: 0.5 } }>
-        <Typography
-          sx={ {
-            fontSize: '2rem',
-            fontWeight: 600,
-            letterSpacing: '-0.02em',
-            color: palette.text.primary,
-            lineHeight: 1.1,
-          } }
-        >
-          System
-        </Typography>
-        { formatted && (
-          <Typography sx={ { fontSize: '0.85rem', color: palette.text.tertiary, mt: 0.25 } }>
-            Updated { formatted }
+    <PageContainer sx={ { mb: 15, pt: 3, gap: 2, alignItems: 'stretch' } }>
+      <Button component={ Link } to="/settings/device" sx={ { alignSelf: 'flex-start' } }>Back to Device</Button>
+      <Box>
+        <Typography variant="h5" component="h1">System</Typography>
+        { dataUpdatedAt > 0 && (
+          <Typography variant="caption" color="text.secondary">
+            { isError ? 'Last received' : 'Updated' } { moment(dataUpdatedAt).format('h:mm:ss A') }
           </Typography>
         ) }
       </Box>
-
-      { isLoading && <CircularProgress sx={ { mx: 'auto' } } /> }
-
-      { data && groups && (
-        <Box sx={ { display: 'flex', flexDirection: 'column', gap: 1.5 } }>
-          <GlassCard sx={ isAllHealthy ? undefined : { borderColor: palette.accent.red } }>
-            <Box sx={ { display: 'flex', alignItems: 'center', gap: 1.5 } }>
-              { isAllHealthy ? (
-                <CheckCircleRoundedIcon sx={ { color: palette.accent.green, fontSize: 28 } } />
-              ) : (
-                <ErrorRoundedIcon sx={ { color: palette.accent.red, fontSize: 28 } } />
-              ) }
-              <Box>
-                <Typography sx={ { fontSize: '1rem', fontWeight: 600, color: palette.text.primary } }>
-                  { summaryTitle }
-                </Typography>
-                { !isAllHealthy && (
-                  <Typography sx={ { fontSize: '0.8rem', color: palette.text.tertiary, mt: 0.25 } }>
-                    { unhealthy.join(', ') }
-                  </Typography>
-                ) }
-              </Box>
-            </Box>
-          </GlassCard>
-
-          <GroupCard label={ GROUP_LABELS.schedules } keys={ groups.schedules } data={ data } />
-          <GroupCard label={ GROUP_LABELS.biometrics } keys={ groups.biometrics } data={ data } />
-
-          { groups.core.length > 0 && (
-            <Accordion
-              disableGutters
-              expanded={ coreExpanded || coreUnhealthy }
-              onChange={ (_e, expanded) => setCoreExpanded(expanded) }
-              sx={ sx.glassAccordion }
-            >
-              <AccordionSummary expandIcon={ <ExpandMoreIcon sx={ { color: palette.text.tertiary } } /> }>
-                <Box sx={ { display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' } }>
-                  <Typography sx={ { ...sx.sectionLabel, mb: 0 } }>{ GROUP_LABELS.core }</Typography>
-                  <Chip
-                    label={ coreUnhealthy ? 'Needs attention' : 'All healthy' }
-                    size="small"
-                    color={ coreUnhealthy ? 'error' : 'success' }
-                    variant={ coreUnhealthy ? 'filled' : 'outlined' }
-                    sx={ { ml: 'auto', fontWeight: 600 } }
-                  />
-                </Box>
-              </AccordionSummary>
-              <AccordionDetails>
-                { groups.core.map((key, index) => (
-                  <StatusRow key={ key } job={ key } statusInfo={ data[key] as StatusInfo } divider={ index > 0 } />
-                )) }
-              </AccordionDetails>
-            </Accordion>
-          ) }
-        </Box>
+      { isLoading && <CircularProgress aria-label="Loading system status" sx={ { mx: 'auto' } }/> }
+      { isError && (
+        <Alert severity="error" action={ <Button color="inherit" onClick={ () => void refetch() }>Retry</Button> }>
+          { data ? 'Could not refresh system status. These are the last received readings.' : 'Could not load system status.' }
+        </Alert>
+      ) }
+      { data && (
+        <>
+          <Typography variant="body2">
+            { attention.length > 0
+              ? `${attention.length} ${attention.length === 1 ? 'item needs' : 'items need'} attention`
+              : 'No reported service errors' }
+            { activity.length > 0 ? `; ${activity.length} collecting data or running.` : '.' }
+          </Typography>
+          { [...GROUPS].sort((left, right) => {
+            const rank = (group: StatusGroup) => attention.some(key => STATUS_META[key].group === group) ? 0
+              : activity.some(key => STATUS_META[key].group === group) ? 1 : 2;
+            return rank(left) - rank(right);
+          }).map(group => (
+            <GroupCard
+              key={ group }
+              label={ GROUP_LABELS[group] }
+              keys={ keys.filter(key => STATUS_META[key].group === group) }
+              data={ data }
+            />
+          )) }
+        </>
       ) }
     </PageContainer>
   );

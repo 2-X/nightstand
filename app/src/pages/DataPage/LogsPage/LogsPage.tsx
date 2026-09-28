@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { baseURL } from '@api/api';
 import {
   Paper, Typography, Box, MenuItem, Select, FormControl, InputLabel,
-  TextField, IconButton, Tooltip, Chip,
+  Alert, Button, Menu, TextField, IconButton, Tooltip, Chip,
 } from '@mui/material';
 import PageContainer from '../../PageContainer.tsx';
 import { useTheme } from '@mui/material/styles';
@@ -13,6 +14,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import ClearAllIcon from '@mui/icons-material/ClearAll';
 import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { getLogDescription, detectLogLevel } from './logsMeta.ts';
 import { appendCapped } from './logsBuffer.ts';
 
@@ -25,12 +27,21 @@ const LEVEL_COLORS: Record<string, string> = {
 };
 
 export default function LogsPage() {
+  const [searchParams] = useSearchParams();
+  const requestedFile = searchParams.get('file');
+  const appliedFileQuery = useRef<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [pendingLogs, setPendingLogs] = useState<string[]>([]);
   const [logFiles, setLogFiles] = useState<string[]>([]);
   const [selectedLog, setSelectedLog] = useState<string>('');
   const [filterText, setFilterText] = useState('');
   const [paused, setPaused] = useState(false);
+  const [connection, setConnection] = useState<'waiting' | 'connecting' | 'live' | 'disconnected'>('waiting');
+  const [listError, setListError] = useState(false);
+  const [filesLoaded, setFilesLoaded] = useState(false);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [severity, setSeverity] = useState('all');
+  const [actionsAnchor, setActionsAnchor] = useState<HTMLElement | null>(null);
   const logsContainerRef = useRef<HTMLDivElement | null>(null);
   const logsEndRef = useRef<HTMLDivElement | null>(null);
   const isUserAtBottom = useRef(true);
@@ -42,30 +53,57 @@ export default function LogsPage() {
 
   // Fetch available log files.
   useEffect(() => {
+    const controller = new AbortController();
     const fetchLogFiles = async () => {
+      setListError(false);
       try {
-        const response = await axios.get<{ logs: string[] }>(`${baseURL}/api/logs`);
-        if (response.data.logs.length > 0) {
-          setLogFiles(response.data.logs);
-          setSelectedLog(response.data.logs[0]); // Default to the latest log file
+        const response = await axios.get<{ logs: string[] }>(`${baseURL}/api/logs`, { signal: controller.signal });
+        setLogFiles(response.data.logs);
+        const queryChanged = appliedFileQuery.current !== requestedFile;
+        if (queryChanged) {
+          setLogs([]);
+          setPendingLogs([]);
         }
-      } catch (error) {
-        console.error('Error fetching log files:', error);
+        setSelectedLog(previous => {
+          if (!queryChanged && response.data.logs.includes(previous)) return previous;
+          if (requestedFile && response.data.logs.includes(requestedFile)) return requestedFile;
+          return response.data.logs[0] ?? '';
+        });
+        appliedFileQuery.current = requestedFile;
+      } catch {
+        if (!controller.signal.aborted) setListError(true);
+      } finally {
+        if (!controller.signal.aborted) setFilesLoaded(true);
       }
     };
 
-    fetchLogFiles();
-  }, []);
+    void fetchLogFiles();
+    return () => controller.abort();
+  }, [reconnectAttempt, requestedFile]);
 
   // Subscribe to log updates for the selected file
   useEffect(() => {
     if (!selectedLog) return;
 
-    const eventSource = new EventSource(`${baseURL}/api/logs/${selectedLog}`);
+    if (typeof EventSource === 'undefined') return;
+    let active = true;
+    setConnection('connecting');
+    const eventSource = new EventSource(`${baseURL}/api/logs/${encodeURIComponent(selectedLog)}`);
+    eventSource.onopen = () => {
+      if (!active) return;
+      // Each connection starts with a fresh tail from the server.
+      setLogs([]);
+      setPendingLogs([]);
+      setConnection('live');
+    };
 
     eventSource.onmessage = (event) => {
-      const logData = JSON.parse(event.data);
-      const newLines: string[] = logData.message.split('\n');
+      if (!active) return;
+      let message: unknown;
+      if (typeof event.data !== 'string') return;
+      try { message = JSON.parse(event.data).message; } catch { return; }
+      if (typeof message !== 'string') return;
+      const newLines = message.split('\n');
       if (pausedRef.current) {
         // Capped the same way as `logs` below: otherwise a busy log file
         // left streaming while paused grows this array without bound.
@@ -76,13 +114,15 @@ export default function LogsPage() {
     };
 
     eventSource.onerror = () => {
-      eventSource.close();
+      // Keep the source open: the browser retries lost SSE connections.
+      if (active) setConnection('disconnected');
     };
 
     return () => {
+      active = false;
       eventSource.close();
     };
-  }, [selectedLog]); // Re-run when the log file changes; pause state is read live via pausedRef
+  }, [selectedLog, reconnectAttempt]); // Re-run when the log file changes; pause state is read live via pausedRef
 
   // Track if user is at the bottom
   const handleScroll = () => {
@@ -124,10 +164,9 @@ export default function LogsPage() {
   };
 
   const filteredLogs = useMemo(() => {
-    if (!filterText.trim()) return logs;
     const needle = filterText.toLowerCase();
-    return logs.filter((line) => line.toLowerCase().includes(needle));
-  }, [logs, filterText]);
+    return logs.filter(line => line.toLowerCase().includes(needle) && (severity === 'all' || detectLogLevel(line) === severity));
+  }, [logs, filterText, severity]);
 
   return (
     <PageContainer
@@ -142,7 +181,20 @@ export default function LogsPage() {
         },
       } }
     >
-      <Header title="Logs" icon={ <TextSnippetIcon /> }/>
+      <Header title="Logs" icon={ <TextSnippetIcon /> } backTo="/settings/device" backLabel="Back to Device"/>
+      { requestedFile && filesLoaded && !listError && !logFiles.includes(requestedFile) && (
+        <Alert severity="info">The requested log is unavailable. Choose from the listed files.</Alert>
+      ) }
+      { listError && (
+        <Alert severity="error" action={ <Button onClick={ () => setReconnectAttempt(value => value + 1) }>Retry</Button> }>
+          Could not load log files.
+        </Alert>
+      ) }
+      { connection === 'disconnected' && (
+        <Alert severity="warning" action={ <Button onClick={ () => setReconnectAttempt(value => value + 1) }>Reconnect</Button> }>
+          Disconnected, reconnecting automatically. Displayed lines may be incomplete.
+        </Alert>
+      ) }
 
       <Paper
         elevation={ 3 }
@@ -160,9 +212,11 @@ export default function LogsPage() {
         } }
       >
         <Box sx={ { display: 'flex', gap: 1.5, alignItems: 'flex-start', flexWrap: 'wrap', mb: 1 } }>
-          <FormControl sx={ { minWidth: 200 } }>
-            <InputLabel sx={ { color: theme.palette.grey[100] } }>Log file</InputLabel>
+          <FormControl size="small" sx={ { minWidth: 0, width: { xs: '100%', sm: 220 } } }>
+            <InputLabel id="log-file-label" sx={ { color: theme.palette.grey[100] } }>Log file</InputLabel>
             <Select
+              labelId="log-file-label"
+              label="Log file"
               value={ selectedLog }
               onChange={ (e) => {
                 setLogs([]);
@@ -180,28 +234,47 @@ export default function LogsPage() {
 
           <TextField
             size="small"
-            placeholder="Filter visible lines…"
+            label="Search loaded lines"
             value={ filterText }
             onChange={ (e) => setFilterText(e.target.value) }
-            sx={ { minWidth: 220, flex: 1 } }
+            sx={ { minWidth: 0, flex: 1, width: { xs: '100%', sm: 'auto' } } }
           />
 
+          <FormControl size="small" sx={ { minWidth: 110 } }>
+            <InputLabel id="log-level-label">Severity</InputLabel>
+            <Select labelId="log-level-label" label="Severity" value={ severity } onChange={ event => setSeverity(event.target.value) }>
+              { ['all', 'error', 'warn', 'info', 'debug'].map(level => <MenuItem key={ level } value={ level }>{ level }</MenuItem>) }
+            </Select>
+          </FormControl>
+          <Chip
+            size="small"
+            label={ paused ? 'Paused' : connection === 'live' ? 'Live'
+              : connection === 'disconnected' ? 'Disconnected' : connection === 'connecting' ? 'Connecting' : 'Waiting' }
+          />
           <Box sx={ { display: 'flex', gap: 0.5 } }>
             <Tooltip title={ paused ? `Resume (${pendingLogs.length} new)` : 'Pause live updates' }>
-              <IconButton onClick={ handleTogglePause } size="small" sx={ { color: theme.palette.grey[100] } }>
+              <IconButton
+                aria-label={ paused ? 'Resume live updates' : 'Pause live updates' }
+                onClick={ handleTogglePause }
+                size="small"
+                sx={ { color: theme.palette.grey[100] } }
+              >
                 { paused ? <PlayArrowIcon /> : <PauseIcon /> }
               </IconButton>
             </Tooltip>
-            <Tooltip title="Clear displayed lines">
-              <IconButton onClick={ handleClear } size="small" sx={ { color: theme.palette.grey[100] } }>
-                <ClearAllIcon />
+            <Tooltip title="Loaded line actions">
+              <IconButton aria-label="Loaded line actions" onClick={ event => setActionsAnchor(event.currentTarget) } size="small">
+                <MoreVertIcon/>
               </IconButton>
             </Tooltip>
-            <Tooltip title="Download what's currently loaded">
-              <IconButton onClick={ handleDownload } size="small" sx={ { color: theme.palette.grey[100] } } disabled={ logs.length === 0 }>
-                <DownloadIcon />
-              </IconButton>
-            </Tooltip>
+            <Menu anchorEl={ actionsAnchor } open={ !!actionsAnchor } onClose={ () => setActionsAnchor(null) }>
+              <MenuItem onClick={ () => { handleDownload(); setActionsAnchor(null); } } disabled={ logs.length === 0 }>
+                <DownloadIcon sx={ { mr: 1 } }/>Download loaded lines
+              </MenuItem>
+              <MenuItem onClick={ () => { handleClear(); setActionsAnchor(null); } }>
+                <ClearAllIcon sx={ { mr: 1 } }/>Clear displayed lines
+              </MenuItem>
+            </Menu>
           </Box>
         </Box>
 
@@ -233,7 +306,7 @@ export default function LogsPage() {
             paddingBottom: 1,
           } }
         >
-          { filterText ? `Filtered lines (${filteredLogs.length}/${logs.length})` : 'Live Server Logs' }
+          { filterText || severity !== 'all' ? `Filtered lines (${filteredLogs.length}/${logs.length})` : 'Live Server Logs' }
         </Typography>
 
         <Box
@@ -261,6 +334,13 @@ export default function LogsPage() {
             },
           } }
         >
+          { filteredLogs.length === 0 && (
+            <Typography variant="body2" color="text.secondary">
+              { logs.length > 0 ? 'No matching lines.' : paused ? 'Paused. Resume to show incoming lines.'
+                : filesLoaded && logFiles.length === 0 && !listError ? 'No log files available.'
+                  : connection === 'disconnected' ? 'Waiting to reconnect.' : 'Waiting for log lines.' }
+            </Typography>
+          ) }
           { filteredLogs.map((line, i) => {
             const level = detectLogLevel(line);
             return (

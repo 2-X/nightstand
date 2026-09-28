@@ -11,13 +11,14 @@ export type StatusItemMeta = {
   meaning?: Partial<Record<Status, string>>;
   // Shown next to the Run button on items the user can trigger manually.
   runHint?: string;
+  runLabel?: string;
 };
 
 export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
   alarmSchedule: {
     group: 'schedules',
     blurb: 'Wakes you up with vibration and temperature changes at your alarm time.',
-    meaning: { healthy: 'Your alarms are loaded and will fire on time.' },
+    meaning: { healthy: 'Your alarms are loaded.' },
   },
   powerSchedule: {
     group: 'schedules',
@@ -50,24 +51,27 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
     meaning: { healthy: 'Actively streaming sensor data right now.' },
   },
   analyzeSleepLeft: {
+    runLabel: 'Analyze left-side sleep',
     group: 'biometrics',
     blurb: "Turns last night's raw sensor data into sleep stages and a sleep score, left side.",
     meaning: {
       healthy: 'Finished analyzing the most recent sleep session.',
       waiting_for_data: 'No full night to analyze yet. Runs automatically after your first night.',
     },
-    runHint: 'Analyzes the last 12 hours right now, instead of waiting for the overnight job.',
+    runHint: 'Analyzes the last 24 hours right now, instead of waiting for the overnight job.',
   },
   analyzeSleepRight: {
+    runLabel: 'Analyze right-side sleep',
     group: 'biometrics',
     blurb: "Turns last night's raw sensor data into sleep stages and a sleep score, right side.",
     meaning: {
       healthy: 'Finished analyzing the most recent sleep session.',
       waiting_for_data: 'No full night to analyze yet. Runs automatically after your first night.',
     },
-    runHint: 'Analyzes the last 12 hours right now, instead of waiting for the overnight job.',
+    runHint: 'Analyzes the last 24 hours right now, instead of waiting for the overnight job.',
   },
   biometricsCalibrationLeft: {
+    runLabel: 'Calibrate left presence',
     group: 'biometrics',
     blurb: 'Learns what an empty bed looks like to the sensors, so presence detection stays accurate, left side.',
     meaning: {
@@ -77,6 +81,7 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
     runHint: 'Recalibrates presence detection. Get off this side first: it assumes the side is empty.',
   },
   biometricsCalibrationRight: {
+    runLabel: 'Calibrate right presence',
     group: 'biometrics',
     blurb: 'Learns what an empty bed looks like to the sensors, so presence detection stays accurate, right side.',
     meaning: {
@@ -130,7 +135,7 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
   jobs: {
     group: 'core',
     blurb: 'The internal scheduler that runs all the timed jobs below (temperature, power, priming, reboots).',
-    meaning: { healthy: 'Running, and jobs are firing on time.' },
+    meaning: { healthy: 'The scheduler is running.' },
   },
   logger: {
     group: 'core',
@@ -165,3 +170,5 @@ export const GROUP_LABELS: Record<StatusGroup, string> = {
   biometrics: 'Biometrics & sensors',
   core: 'Core services',
 };
+
+export const needsAttention = (status?: Status) => status === 'failed' || status === 'retrying' || status === 'restarting';

@@ -9,12 +9,12 @@ type SectionProps = PropsWithChildren<{
 
 export default function Section({ title, children }: SectionProps) {
   return (
-    <Card sx={ { width: '98%', overflowWrap: 'break-word', wordBreak: 'break-word' } }>
+    <Card sx={ { width: '100%', overflowWrap: 'break-word', wordBreak: 'break-word' } }>
       <CardContent>
         {
           title && (
             <>
-              <Typography variant='h6' sx={ { textAlign: 'center' } }>
+              <Typography variant='h6' component="h2" sx={ { textAlign: 'left' } }>
                 { title }
               </Typography>
               <br />

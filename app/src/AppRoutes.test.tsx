@@ -10,7 +10,7 @@ beforeAll(async () => {
   // window and can push the first full-app render past the wait timeout while
   // later ones (with the chunk already cached) stay fast.
   await import('./pages/ControlTempPage/ControlTempPage');
-});
+}, 30_000);
 
 describe('app navigation and conditional visibility', () => {
   it('shows the Elevation tab when a base is configured', async () => {
@@ -50,4 +50,10 @@ describe('app navigation and conditional visibility', () => {
     });
     expect(screen.queryByText('Elevation')).not.toBeInTheDocument();
   });
+});
+
+it('redirects an unknown settings category to the index', async () => {
+  renderApp('/settings/unknown');
+  expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Back to Settings' })).not.toBeInTheDocument();
 });

@@ -25,17 +25,15 @@ export default function PageContainer({ children, sx, containerProps }: React.Pr
           alignItems: 'center',
           gap: 2,
           margin: 0,
-          justifyContent: 'center',
+          justifyContent: 'flex-start',
           [theme.breakpoints.up('sm')]: {
-            width: '90%',
-            padding: 0,
-            paddingTop: 6,
-            paddingBottom: 6,
-            maxWidth: '700px',
+            width: '100%',
+            padding: 3,
+            maxWidth: '960px',
           },
           [theme.breakpoints.down('sm')]: {
             width: '100%',
-            padding: 1,
+            padding: 2,
           },
           ...sx,
         } }

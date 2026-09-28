@@ -1,25 +1,41 @@
 import { test, expect } from '@playwright/test';
 
-// Each nav item carries aria-label={title} on the bottom navigation. Clicking
-// it routes client-side; assert the URL and a content anchor unique to the
-// destination page. If a nav name matches more than one element (the desktop
-// AppBar also renders the title text), scope to the bottom-nav link, which is
-// what these getByLabel calls target.
 const destinations = [
-  { name: 'Schedules', path: '/schedules', anchor: 'Power on' },
-  { name: 'Status', path: '/status', anchor: 'System' },
-  { name: 'Settings', path: '/settings', anchor: 'Side settings' },
-  { name: 'Elevation', path: '/elevation', anchor: 'Flat' },
+  { name: 'Schedule', path: '/schedules', heading: 'Power on' },
+  { name: 'Sleep', path: '/sleep', heading: 'Sleep' },
+  { name: 'Settings', path: '/settings', heading: 'Settings' },
 ];
 
-for (const d of destinations) {
-  test(`navigates to ${d.name}`, async ({ page }) => {
+for (const destination of destinations) {
+  test(`navigates to ${destination.name}`, async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByText('Temperature').first()).toBeVisible();
-
-    await page.getByLabel(d.name).first().click();
-
-    await expect(page).toHaveURL(new RegExp(`${d.path}$`));
-    await expect(page.getByText(d.anchor).first()).toBeVisible();
+    await page.getByRole('navigation', { name: 'Primary mobile' }).getByRole('link', { name: destination.name }).click();
+    await expect(page).toHaveURL(new RegExp(`${destination.path}$`));
+    await expect(page.getByText(destination.heading, { exact: true }).first()).toBeVisible();
   });
 }
+
+test('four named destinations fit 320px and selection follows Back and nested pages', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.goto('/settings/versions');
+  const nav = page.getByRole('navigation', { name: 'Primary mobile' });
+  await expect(nav.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
+  const bounds = await Promise.all((await nav.getByRole('link').all()).map(async link => {
+    const box = await link.boundingBox();
+    return { left: box!.x, right: box!.x + box!.width, width: box!.width, name: await link.textContent() };
+  }));
+  expect(bounds.map(bound => bound.name)).toEqual(['Bed', 'Schedule', 'Sleep', 'Settings']);
+  expect(bounds.every(bound => bound.left >= 0 && bound.right <= 320 && bound.width >= 44)).toBe(true);
+  await nav.getByRole('link', { name: 'Sleep' }).click();
+  await expect(nav.getByRole('link', { name: 'Sleep' })).toHaveAttribute('aria-current', 'page');
+  await page.goBack();
+  await expect(nav.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
+});
+
+test('legacy side URLs select their named side and data opens Sleep', async ({ page }) => {
+  await page.goto('/right');
+  await expect(page.getByRole('button', { name: /^Right/ })).toHaveAttribute('aria-pressed', 'true');
+  await page.goto('/data');
+  await expect(page).toHaveURL(/\/sleep$/);
+  await expect(page.getByText('Sleep', { exact: true }).first()).toBeVisible();
+});

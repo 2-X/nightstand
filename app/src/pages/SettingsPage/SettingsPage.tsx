@@ -1,12 +1,8 @@
+import { useState } from 'react';
 import { DeepPartial } from 'ts-essentials';
-import { Typography, Box } from '@mui/material';
-import InfoIcon from '@mui/icons-material/Info';
+import { Alert, Box, Button, CircularProgress, List, ListItemButton, ListItemText, Typography } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import TextSnippetIcon from '@mui/icons-material/TextSnippet';
-import HistoryIcon from '@mui/icons-material/History';
-import SystemUpdateAltIcon from '@mui/icons-material/SystemUpdateAlt';
-import { useNavigate } from 'react-router-dom';
-
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import SideSettings from './SideSettings.tsx';
 import PageContainer from '../PageContainer.tsx';
 import { Settings } from '@api/settingsSchema.ts';
@@ -15,156 +11,186 @@ import { useAppStore } from '@state/appStore.tsx';
 import DailyPriming from './DailyPriming.tsx';
 import LicenseModal from './LicenseModal.tsx';
 import PrimeControl from './PrimeControl.tsx';
-import Divider from './Divider.tsx';
 import FeaturesSection from './FeaturesSection/FeaturesSection.tsx';
 import Section from './Section.tsx';
-import DeviceSettingsSection from './DeviceSettingsSection/DeviceSettingsSection.tsx';
 import StorageIndicator from './StorageIndicator.tsx';
 import MemoryIndicator from './MemoryIndicator.tsx';
 import ErrorBoundary from '@components/ErrorBoundary.tsx';
-import { palette } from '@design/tokens';
-
+import TimeZoneSelector from './DeviceSettingsSection/TimeZoneSelector.tsx';
+import TemperatureFormatSelector from './DeviceSettingsSection/TemperatureFormatSelector.tsx';
+import LedBrightnessSlider from './DeviceSettingsSection/LedBrightnessSlider.tsx';
+import RawArchiveRetention from './DeviceSettingsSection/RawArchiveRetention.tsx';
+import DailyReboot from './DeviceSettingsSection/DailyReboot.tsx';
+import DeviceInfo from './DeviceSettingsSection/DeviceInfo.tsx';
 
 export default function SettingsPage() {
-  const { data: settings, refetch } = useSettings();
+  const { data: settings, refetch, isLoading, isError } = useSettings();
   const { setIsUpdating } = useAppStore();
-  const navigate = useNavigate();
-
-  const updateSettings = (settings: DeepPartial<Settings>) => {
+  const [error, setError] = useState<string | null>(null);
+  const { pathname } = useLocation();
+  const category = pathname.split('/')[2] ?? '';
+  const categories = [
+    {
+      key: 'people',
+      title: 'People and sides',
+      detail: settings ? `${settings.left.name} / ${settings.right.name}` : 'Names and away mode',
+    },
+    {
+      key: 'bed',
+      title: 'Bed preferences',
+      detail: settings
+        ? `${settings.temperatureFormat} / ${settings.timeZone}`
+        : 'Temperature units, timezone and lights',
+    },
+    { key: 'automation', title: 'Automation', detail: 'Priming, presence auto-off and one-off alarms' },
+    { key: 'sleep-data', title: 'Sleep data', detail: 'Biometrics, estimates and data retention' },
+    { key: 'device', title: 'Device', detail: 'System status, logs, storage and restart' },
+    { key: 'versions', title: 'Software', detail: 'Installed version, updates and recovery' },
+    { key: 'about', title: 'About', detail: 'Release notes, credits and license' },
+  ];
+  const selected = categories.find((item) => item.key === category);
+  const updateSettings = (patch: DeepPartial<Settings>) => {
+    setError(null);
     setIsUpdating(true);
-
-    postSettings(settings)
+    postSettings(patch)
       .then(() => refetch())
-      .catch(error => {
-        console.error(error);
+      .catch(() => {
+        setError('Could not save settings. Your previous settings are still active. Try the change again.');
       })
       .finally(() => setIsUpdating(false));
   };
 
+  if (category && !selected) return <Navigate to="/settings" replace />;
+
   return (
-    <PageContainer sx={ { mb: 15, mt: 2 } }>
-      <ErrorBoundary componentName='Device settings'>
-        <DeviceSettingsSection updateSettings={ updateSettings } />
-      </ErrorBoundary>
-      <ErrorBoundary componentName='Priming settings'>
-        <Section title="Priming">
-          <DailyPriming settings={ settings } updateSettings={ updateSettings }/>
-          <br/>
-          <PrimeControl/>
-
-          <Box display="flex" gap={ 1 } sx={ { mt: 2 } }>
-            <InfoIcon sx={ { color: 'text.secondary' } }/>
-            <Typography color='text.secondary'>
-            Regular priming helps prevent air bubbles, ensures even cooling and heating.
-            Schedule priming during a time that you're not on the bed.
+    <PageContainer sx={ { gap: 3, alignItems: 'stretch', maxWidth: '720px' } }>
+      { category && (
+        <Button component={ Link } to="/settings" sx={ { alignSelf: 'flex-start' } }>
+          Back to Settings
+        </Button>
+      ) }
+      <Typography component="h1" variant="h1">
+        { selected?.title ?? 'Settings' }
+      </Typography>
+      { error && (
+        <Alert severity="error" onClose={ () => setError(null) }>
+          { error }
+        </Alert>
+      ) }
+      { isError && (
+        <Alert severity="error" action={ <Button onClick={ () => refetch() }>Retry</Button> }>
+          Could not load settings.
+        </Alert>
+      ) }
+      { isLoading && category && <CircularProgress aria-label="Loading settings" /> }
+      { !selected && (
+        <List disablePadding sx={ { bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2 } }>
+          { categories.map((item) => (
+            <ListItemButton
+              key={ item.key }
+              component={ Link }
+              to={ `/settings/${item.key}` }
+              sx={ { py: 1.5, borderBottom: 1, borderColor: 'divider', '&:last-child': { borderBottom: 0 } } }
+            >
+              <ListItemText primary={ item.title } secondary={ item.detail } />
+              <ChevronRightIcon color="action" />
+            </ListItemButton>
+          )) }
+        </List>
+      ) }
+      { category === 'people' && (
+        <ErrorBoundary componentName="Side settings">
+          <Section title="Side settings">
+            <SideSettings side="left" settings={ settings } updateSettings={ updateSettings } />
+            <Box sx={ { my: 3, borderTop: 1, borderColor: 'divider' } } />
+            <SideSettings side="right" settings={ settings } updateSettings={ updateSettings } />
+            <Typography variant="body2" color="text.secondary" sx={ { mt: 2 } }>
+              Away mode pauses that side's schedules and mirrors the active side. If both sides are away, neither
+              schedule runs.
             </Typography>
-          </Box>
-        </Section>
-      </ErrorBoundary>
-
-      <ErrorBoundary componentName='Features section'>
-        <FeaturesSection/>
-      </ErrorBoundary>
-      <ErrorBoundary componentName='Side settings'>
-
-        <Section title="Side settings">
-          <SideSettings side="left" settings={ settings } updateSettings={ updateSettings }/>
-          <br/>
-          <SideSettings side="right" settings={ settings } updateSettings={ updateSettings }/>
-          <Box display="flex" gap={ 1 } sx={ { mt: 1 } }>
-
-            <InfoIcon sx={ { color: 'text.secondary' } }/>
-            <Typography color="text.secondary">
-            Away mode:
-            Disables schedules and temperature control for one side.
-            That side will mirror any temperature or schedule changes from the active side.
-            If both sides are in away mode, no schedules will apply.
-            </Typography>
-          </Box>
-        </Section>
-      </ErrorBoundary>
-      <ErrorBoundary componentName='Storage indicator'>
+          </Section>
+        </ErrorBoundary>
+      ) }
+      { category === 'bed' && (
+        <>
+          <ErrorBoundary componentName="Bed preferences">
+            <Section>
+              <TimeZoneSelector settings={ settings } updateSettings={ updateSettings } />
+              <TemperatureFormatSelector settings={ settings } updateSettings={ updateSettings } />
+              <LedBrightnessSlider />
+            </Section>
+          </ErrorBoundary>
+          <ErrorBoundary componentName="Features section">
+            <FeaturesSection group="bed" />
+          </ErrorBoundary>
+        </>
+      ) }
+      { category === 'automation' && (
+        <>
+          <ErrorBoundary componentName="Priming settings">
+            <Section title="Priming">
+              <DailyPriming settings={ settings } updateSettings={ updateSettings } />
+              <PrimeControl />
+              <Typography variant="body2" color="text.secondary" sx={ { mt: 2 } }>
+                Prime while the bed is empty to help circulate water and clear air.
+              </Typography>
+            </Section>
+          </ErrorBoundary>
+          <ErrorBoundary componentName="Features section">
+            <FeaturesSection group="automation" />
+          </ErrorBoundary>
+        </>
+      ) }
+      { category === 'sleep-data' && (
+        <>
+          <ErrorBoundary componentName="Features section">
+            <FeaturesSection group="sleep" />
+          </ErrorBoundary>
+          <ErrorBoundary componentName="Data retention">
+            <Section>
+              <RawArchiveRetention settings={ settings } updateSettings={ updateSettings } />
+            </Section>
+          </ErrorBoundary>
+        </>
+      ) }
+      { category === 'device' && (
+        <>
+          <Section>
+            <Button component={ Link } to="/settings/system">
+              System status
+            </Button>
+            <Button component={ Link } to="/settings/logs">
+              Logs
+            </Button>
+          </Section>
+          <ErrorBoundary componentName="Device info">
+            <Section>
+              <DeviceInfo />
+              <DailyReboot settings={ settings } updateSettings={ updateSettings } />
+            </Section>
+          </ErrorBoundary>
+          <ErrorBoundary componentName="Storage indicator">
+            <Section>
+              <StorageIndicator />
+              <MemoryIndicator />
+            </Section>
+          </ErrorBoundary>
+        </>
+      ) }
+      { category === 'about' && (
         <Section>
-          <StorageIndicator/>
-          <MemoryIndicator/>
-          <Box sx={ { height: 1, backgroundColor: palette.border.subtle, my: 1 } }/>
-          <Box
-            onClick={ () => navigate('/data/logs') }
-            sx={ {
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              cursor: 'pointer',
-              mx: -2.5,
-              px: 2.5,
-              py: 1.5,
-              my: -1.5,
-              borderRadius: 1,
-              '&:hover': { backgroundColor: palette.bg.hover },
-            } }
-          >
-            <Box sx={ { display: 'flex', alignItems: 'center', gap: 1.5 } }>
-              <TextSnippetIcon sx={ { color: palette.text.secondary } }/>
-              <Typography sx={ { fontSize: '1rem', color: palette.text.primary } }>
-                Logs
-              </Typography>
-            </Box>
-            <ChevronRightIcon sx={ { color: palette.text.tertiary } }/>
-          </Box>
-          <Box sx={ { height: 1, backgroundColor: palette.border.subtle, my: 1 } }/>
-          <Box
-            onClick={ () => navigate('/changelog') }
-            sx={ {
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              cursor: 'pointer',
-              mx: -2.5,
-              px: 2.5,
-              py: 1.5,
-              my: -1.5,
-              borderRadius: 1,
-              '&:hover': { backgroundColor: palette.bg.hover },
-            } }
-          >
-            <Box sx={ { display: 'flex', alignItems: 'center', gap: 1.5 } }>
-              <HistoryIcon sx={ { color: palette.text.secondary } }/>
-              <Typography sx={ { fontSize: '1rem', color: palette.text.primary } }>
-                Changelog
-              </Typography>
-            </Box>
-            <ChevronRightIcon sx={ { color: palette.text.tertiary } }/>
-          </Box>
-          <Box sx={ { height: 1, backgroundColor: palette.border.subtle, my: 1 } }/>
-          <Box
-            onClick={ () => navigate('/settings/versions') }
-            sx={ {
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              cursor: 'pointer',
-              mx: -2.5,
-              px: 2.5,
-              py: 1.5,
-              my: -1.5,
-              borderRadius: 1,
-              '&:hover': { backgroundColor: palette.bg.hover },
-            } }
-          >
-            <Box sx={ { display: 'flex', alignItems: 'center', gap: 1.5 } }>
-              <SystemUpdateAltIcon sx={ { color: palette.text.secondary } }/>
-              <Typography sx={ { fontSize: '1rem', color: palette.text.primary } }>
-                Versions
-              </Typography>
-            </Box>
-            <ChevronRightIcon sx={ { color: palette.text.tertiary } }/>
-          </Box>
+          <Typography sx={ { mb: 2 } }>
+            Nightstand is a community project based on free-sleep. It is not affiliated with Eight Sleep.
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Thanks to the free-sleep and Eight Sleep Jailbreak contributors.
+          </Typography>
+          <Button component={ Link } to="/changelog">
+            Release notes
+          </Button>
+          <LicenseModal />
         </Section>
-      </ErrorBoundary>
-      <ErrorBoundary componentName='Info section'>
-        <Divider/>
-        <LicenseModal/>
-      </ErrorBoundary>
+      ) }
     </PageContainer>
   );
 }

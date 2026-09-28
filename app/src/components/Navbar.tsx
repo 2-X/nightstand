@@ -1,232 +1,129 @@
-import React from 'react';
-import AppBar from '@mui/material/AppBar';
-import Badge from '@mui/material/Badge';
-import Box from '@mui/material/Box';
-import BottomNavigation from '@mui/material/BottomNavigation';
-import BottomNavigationAction from '@mui/material/BottomNavigationAction';
-import Toolbar from '@mui/material/Toolbar';
-import Button from '@mui/material/Button';
-import { useNavigate, useLocation } from 'react-router-dom';
+import {
+  Box,
+  Badge,
+  BottomNavigation,
+  BottomNavigationAction,
+  Button,
+  LinearProgress,
+  Typography,
+} from '@mui/material';
+import { Link, useLocation } from 'react-router-dom';
 import { useAppStore } from '@state/appStore.tsx';
-import { useTheme } from '@mui/material/styles';
 import { useServerStatus } from '@api/serverStatus.ts';
-import { Status } from '@api/serverStatusSchema.ts';
 import { useEventStreamStore } from '@api/eventStream.ts';
-import { useBaseConfigured } from '@api/baseControl.ts';
-import { PAGES } from './pages';
-import freeSleepIcon from '../../public/free-sleep-icon.svg';
-
-// A "check" is unhealthy when its status indicates an active failure or
-// recovery, not merely "running" / "idle". This matches the chips on the
-// Status page (warning + error variants).
-const UNHEALTHY_STATUSES: ReadonlySet<Status> = new Set(['failed', 'restarting', 'retrying']);
+import { needsAttention } from '../pages/StatusPage/statusMeta';
+import { PAGES, primaryRoute } from './pages';
 
 export default function Navbar() {
-  const navigate = useNavigate();
   const { pathname } = useLocation();
   const { isUpdating } = useAppStore();
-  const theme = useTheme(); // Access the Material-UI theme
-  // Show a subtle "Reconnecting…" tag only when the WS is down. When it's
-  // 'open' or freshly mounted ('connecting' for a fraction of a second), we
-  // show nothing, since the app is silent when everything is working.
   const wsState = useEventStreamStore((s) => s.state);
-  const showReconnecting = wsState === 'reconnecting';
-  // Hide the Elevation tab entirely on pods with no adjustable base, since
-  // the page would just render dead controls.
-  const baseConfigured = useBaseConfigured();
-  const pages = React.useMemo(
-    () => PAGES.filter((page) => page.route !== '/elevation' || baseConfigured),
-    [baseConfigured]
-  );
-  const [mobileNavValue, setMobileNavValue] = React.useState(
-    pages.findIndex((page) => page.route === pathname)
-  );
-
-  // Poll server status so the Status tab can show a red dot when any check
-  // is unhealthy. 30s is plenty for a passive indicator.
-  const { data: serverStatus } = useServerStatus(30_000);
-  const hasUnhealthyStatus = React.useMemo(() => {
-    if (!serverStatus) return false;
-    return Object.values(serverStatus).some(
-      (info) => info && UNHEALTHY_STATUSES.has(info.status),
-    );
-  }, [serverStatus]);
-
-  // Handle navigation for both desktop and mobile
-  const handleNavigation = (route: string) => {
-    navigate(route);
-  };
-
-  const handleMobileNavChange = (
-    _event: React.SyntheticEvent,
-    newValue: number
-  ) => {
-    setMobileNavValue(newValue);
-    handleNavigation(pages[newValue].route);
-  };
-
-  const gradient = `linear-gradient(
-  90deg,
-  transparent,
-  ${theme.palette.primary.dark},
-  transparent,
-  ${theme.palette.primary.dark},
-  transparent
-)`;
+  const { data: status } = useServerStatus(30_000);
+  const unhealthy =
+    status && Object.values(status).some((info) => needsAttention(info?.status));
+  const selected = primaryRoute(pathname);
   return (
     <>
-      { /* Loading Bar */ }
+      { isUpdating && (
+        <LinearProgress
+          aria-label="Saving changes"
+          sx={ { position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1300 } }
+        />
+      ) }
+      { wsState === 'reconnecting' && (
+        <Box
+          role="status"
+          sx={ {
+            position: 'fixed',
+            top: 'calc(8px + env(safe-area-inset-top, 0px))',
+            right: 16,
+            px: 1,
+            bgcolor: 'background.paper',
+            color: 'warning.light',
+            zIndex: 1202,
+          } }
+        >
+          Reconnecting...
+        </Box>
+      ) }
       <Box
+        component="nav"
+        aria-label="Primary desktop"
         sx={ {
+          display: { xs: 'none', md: 'flex' },
           position: 'fixed',
           top: 0,
           left: 0,
-          width: '100%',
-          height: '4px',
-          background: isUpdating ? gradient : 'transparent',
-          backgroundSize: '200% 100%',
-          animation: isUpdating
-            ? 'slide-gradient 10s linear infinite reverse'
-            : 'none',
-          zIndex: 1201,
-        } }
-      />
-      { /* Reconnecting indicator, only visible when the live event stream
-           is down. Sits below the iOS status bar via env(safe-area-inset-top). */ }
-      { showReconnecting && (
-        <Box
-          aria-live="polite"
-          sx={ {
-            position: 'fixed',
-            top: 'calc(env(safe-area-inset-top, 0px) + 6px)',
-            right: 12,
-            zIndex: 1202,
-            px: 1,
-            py: 0.25,
-            borderRadius: 1,
-            fontSize: '0.7rem',
-            color: theme.palette.warning.light,
-            backgroundColor: 'rgba(0,0,0,0.6)',
-            border: `1px solid ${theme.palette.warning.dark}`,
-          } }
-        >
-          Reconnecting…
-        </Box>
-      ) }
-      { /* Desktop Navigation */ }
-      <AppBar
-        position="fixed"
-        color="transparent"
-        sx={ {
-          display: { xs: 'none', md: 'flex' },
-          borderTop: `1px solid ${theme.palette.grey[700]}`,
-          backgroundColor: theme.palette.background.default,
-          boxShadow: 'none',
-          top: 'auto', // Push it to the bottom
-          bottom: 0, // Stick it to the bottom
-          left: 0,
           right: 0,
+          height: 64,
+          px: 3,
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          bgcolor: 'background.default',
+          borderBottom: 1,
+          borderColor: 'divider',
+          zIndex: 1100,
         } }
       >
-        <Toolbar>
-          <div style={ { flexGrow: 1 } }>
-            <img src={ freeSleepIcon } alt="Nightstand" width={ 45 } height={ 45 } />
-          </div>
-          <Box sx={ { display: 'flex', gap: 2 } }>
-            { pages.map(({ title, route }) => {
-              const showStatusDot = route === '/status' && hasUnhealthyStatus;
-              return (
-                <Button
-                  key={ route }
-                  onClick={ () => handleNavigation(route) }
-                  sx={ { color: 'white' } }
-                  variant={ pathname === route ? 'outlined' : 'text' }
-                >
-                  <Badge
-                    color="error"
-                    variant="dot"
-                    invisible={ !showStatusDot }
-                    overlap="rectangular"
-                    sx={ { '& .MuiBadge-badge': { right: -6, top: 4 } } }
-                  >
-                    { title }
-                  </Badge>
-                </Button>
-              );
-            }) }
-          </Box>
-        </Toolbar>
-      </AppBar>
-
-      { /* Mobile Bottom Navigation */ }
-      <Box
+        <Typography sx={ { fontWeight: 600 } }>Nightstand</Typography>
+        <Box sx={ { display: 'flex', gap: 1 } }>
+          { PAGES.map((page) => (
+            <Button
+              key={ page.route }
+              component={ Link }
+              to={ page.route }
+              aria-current={ selected === page.route ? 'page' : undefined }
+              variant={ selected === page.route ? 'outlined' : 'text' }
+            >
+              <Badge color="error" variant="dot" invisible={ !(page.route === '/settings' && unhealthy) }>
+                { page.title }
+              </Badge>
+            </Button>
+          )) }
+        </Box>
+      </Box>
+      <BottomNavigation
+        component="nav"
+        aria-label="Primary mobile"
+        showLabels
+        value={ selected }
         sx={ {
           display: { xs: 'flex', md: 'none' },
-          width: '100%',
           position: 'fixed',
+          left: 0,
+          right: 0,
           bottom: 0,
-          height: '80px',
-          justifyContent: 'space-between',
-          borderTop: `1px solid ${theme.palette.grey[700]}`,
-          backgroundColor: theme.palette.background.default,
-          zIndex: 10,
+          height: 'calc(64px + env(safe-area-inset-bottom, 0px))',
+          pb: 'env(safe-area-inset-bottom, 0px)',
+          bgcolor: 'background.default',
+          borderTop: 1,
+          borderColor: 'divider',
+          zIndex: 1100,
         } }
       >
-        <BottomNavigation
-          value={ mobileNavValue }
-          onChange={ handleMobileNavChange }
-          sx={ {
-            width: '100%',
-            backgroundColor: theme.palette.background.default,
-            '& .Mui-selected': {
-              color: theme.palette.grey[100],
-            },
-            '& .MuiBottomNavigationAction-root': {
-              color: theme.palette.grey[500],
-            },
-          } }
-        >
-          { pages.map(({ title, icon, route }, index) => {
-            const showStatusDot = route === '/status' && hasUnhealthyStatus;
-            const decoratedIcon = showStatusDot ? (
-              <Badge
-                color="error"
-                variant="dot"
-                overlap="circular"
-                anchorOrigin={ { vertical: 'top', horizontal: 'right' } }
-              >
-                { icon }
+        { PAGES.map((page) => (
+          <BottomNavigationAction
+            key={ page.route }
+            component={ Link }
+            to={ page.route }
+            value={ page.route }
+            label={ page.title }
+            aria-current={ selected === page.route ? 'page' : undefined }
+            icon={
+              <Badge color="error" variant="dot" invisible={ !(page.route === '/settings' && unhealthy) }>
+                { page.icon }
               </Badge>
-            ) : (
-              icon
-            );
-            return (
-              <BottomNavigationAction
-                key={ index }
-                icon={ decoratedIcon }
-                aria-label={ title }
-                sx={ {
-                  '&.Mui-selected': {
-                    color: theme.palette.grey[100],
-                  },
-                } }
-              />
-            );
-          }) }
-        </BottomNavigation>
-      </Box>
-      <style>
-        { `
-@keyframes slide-gradient {
-  0% {
-    background-position: 0% 50%;
-  }
-  100% {
-    background-position: 200% 50%;
-  }
-}
-        ` }
-      </style>
+            }
+            sx={ {
+              minWidth: 0,
+              flex: 1,
+              px: 0.5,
+              color: 'text.secondary',
+              '& .MuiBottomNavigationAction-label': { fontSize: '0.75rem', '&.Mui-selected': { fontSize: '0.75rem' } },
+            } }
+          />
+        )) }
+      </BottomNavigation>
     </>
   );
 }

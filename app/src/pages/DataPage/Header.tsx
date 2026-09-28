@@ -1,35 +1,15 @@
 import { ReactNode } from 'react';
-import { Typography } from '@mui/material';
-import Grid from '@mui/material/GridLegacy';
-
+import { Box, Button, Typography } from '@mui/material';
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
+type HeaderProps = { title: string; icon: ReactNode; backTo?: string; backLabel?: string };
 
-type HeaderProps = {
-  title: string;
-  icon: ReactNode;
-};
-
-export default function Header({ title, icon }: HeaderProps) {
-  const navigate = useNavigate();
-
-  return (
-    <Grid container alignItems="center">
-      { /* Back Icon - Left Aligned & Vertically Centered */ }
-      <Grid item xs={ 2 } display="flex" alignItems="center">
-        <NavigateBeforeIcon
-          onClick={ () => navigate(-1) }
-          sx={ { cursor: 'pointer', fontSize: 28 } }
-        />
-      </Grid>
-      { /* Title - Centered */ }
-      <Grid item xs={ 8 } display="flex" justifyContent="center">
-        <Typography variant="h6" display="flex" alignItems="center" gap={ 1 }>
-          { icon }
-          { title }
-        </Typography>
-      </Grid>
-    </Grid>
-  );
+export default function Header({ title, icon, backTo = '/settings', backLabel = 'Back to Settings' }: HeaderProps) {
+  return <Box sx={ { width: '100%', mb: 1 } }>
+    <Button component={ Link } to={ backTo } startIcon={ <NavigateBeforeIcon/> }>{ backLabel }</Button>
+    <Typography component="h1" variant="h1" sx={ { display: 'flex', alignItems: 'center', gap: 1, mt: 1 } }>
+      { icon }{ title }
+    </Typography>
+  </Box>;
 }

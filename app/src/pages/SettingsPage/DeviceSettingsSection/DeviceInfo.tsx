@@ -1,7 +1,7 @@
-import { Box, Chip, Typography } from '@mui/material';
+import { Box, Button, Chip, Typography } from '@mui/material';
 import { useDeviceStatus } from '@api/deviceStatus.ts';
 import { Version } from '@api/deviceStatusSchema';
-import VersionStatus from '@components/VersionStatus.tsx';
+import { Link } from 'react-router-dom';
 import WifiStrength from './WifiStrength.tsx';
 import RebootButton from './RebootButton.tsx';
 
@@ -32,7 +32,7 @@ export default function DeviceInfo() {
         <RebootButton />
         <WifiStrength />
       </Box>
-      <VersionStatus />
+      <Button component={ Link } to="/settings/versions">Software and updates</Button>
     </>
   );
 }

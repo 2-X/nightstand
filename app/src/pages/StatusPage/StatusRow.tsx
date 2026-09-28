@@ -1,12 +1,12 @@
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import moment from 'moment-timezone';
 import { ServerStatusKey, StatusInfo } from '@api/serverStatusSchema.ts';
-import { Box, Button, Typography } from '@mui/material';
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material';
 
 import StatusChip from './StatusChip.tsx';
 import { postJobs, JobSchema, Jobs } from '@api/jobs.ts';
 import { useCalibration } from '@api/calibration.ts';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { palette } from '@design/tokens';
 import { STATUS_META, GENERIC_MEANING } from './statusMeta.ts';
 import CalibrationSubline from './CalibrationSubline.tsx';
@@ -18,6 +18,7 @@ type StatusRowProps = {
 };
 
 export default function StatusRow({ job, statusInfo, divider }: StatusRowProps) {
+  const titleId = useId();
   const meta = STATUS_META[job];
   const meaning = meta.meaning?.[statusInfo.status] ?? GENERIC_MEANING[statusInfo.status];
   const timestamp = statusInfo.timestamp && moment(statusInfo.timestamp).format('MMM D, h:mm A');
@@ -28,13 +29,32 @@ export default function StatusRow({ job, statusInfo, divider }: StatusRowProps) 
     ? 'left'
     : job === 'biometricsCalibrationRight' ? 'right' : null;
 
-  const [disabled, setDisabled] = useState(false);
-  const startJob = () => {
-    setDisabled(true);
-    postJobs([job] as Jobs).catch((error) => {
-      console.error(error);
-    });
-    setTimeout(() => setDisabled(false), 30_000);
+  const [request, setRequest] = useState<'idle' | 'pending' | 'accepted' | 'failed'>('idle');
+  const [confirmationOpen, setConfirmationOpen] = useState(false);
+  const [requestedTimestamp, setRequestedTimestamp] = useState<string>();
+  const actionLabel = meta.runLabel ?? `Run ${statusInfo.name}`;
+  const newStatus = statusInfo.timestamp !== undefined && statusInfo.timestamp !== requestedTimestamp;
+  let feedback: string | undefined;
+  if (request === 'failed') feedback = 'Could not start this job. Try again.';
+  else if (request === 'pending') feedback = 'Sending request...';
+  else if (request === 'accepted') {
+    if (statusInfo.status === 'started') feedback = 'Running.';
+    else if (newStatus && statusInfo.status === 'healthy') feedback = 'Completed, as reported by the server.';
+    else if (newStatus && statusInfo.status === 'failed') feedback = `Job failed: ${statusInfo.message || 'Check the logs and try again.'}`;
+    else if (newStatus && statusInfo.status === 'waiting_for_data') feedback = 'Waiting for enough sensor data.';
+    else feedback = 'Request accepted. Waiting for the server to report progress.';
+  }
+  const failed = request === 'failed' || (request === 'accepted' && newStatus && statusInfo.status === 'failed');
+  const startJob = async () => {
+    setConfirmationOpen(false);
+    setRequestedTimestamp(statusInfo.timestamp);
+    setRequest('pending');
+    try {
+      await postJobs([job] as Jobs);
+      setRequest('accepted');
+    } catch {
+      setRequest('failed');
+    }
   };
 
   return (
@@ -71,22 +91,35 @@ export default function StatusRow({ job, statusInfo, divider }: StatusRowProps) 
       ) }
 
       { isRunnable && (
-        <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, mt: 1 } }>
+        <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5, mt: 1 } }>
           <Typography sx={ { fontSize: '0.75rem', color: palette.text.tertiary, flex: 1, lineHeight: 1.4 } }>
             { meta.runHint }
           </Typography>
           <Button
-            onClick={ startJob }
+            onClick={ () => calibrationSide ? setConfirmationOpen(true) : void startJob() }
             variant="outlined"
             size="small"
-            disabled={ disabled || statusInfo.status === 'started' }
+            disabled={ request === 'pending' || (request === 'accepted' && !newStatus) || statusInfo.status === 'started' }
             startIcon={ <PlayArrowIcon /> }
             sx={ { flexShrink: 0 } }
           >
-            Run
+            { actionLabel }
           </Button>
         </Box>
       ) }
+      { feedback && <Alert role={ failed ? 'alert' : 'status' } severity={ failed ? 'error' : 'info' } sx={ { mt: 1 } }>{ feedback }</Alert> }
+      <Dialog aria-labelledby={ titleId } open={ confirmationOpen } onClose={ () => setConfirmationOpen(false) }>
+        <DialogTitle id={ titleId }>{ actionLabel }?</DialogTitle>
+        <DialogContent>
+          Keep the { calibrationSide } side empty before continuing. Manual calibration uses the last
+          two hours of sensor data and bypasses the automatic occupancy check. Remove people and pets
+          from this side; if it has been occupied recently, wait for an empty stretch first.
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={ () => setConfirmationOpen(false) }>Cancel</Button>
+          <Button onClick={ () => void startJob() }>{ actionLabel }</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

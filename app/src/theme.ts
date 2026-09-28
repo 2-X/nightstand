@@ -1,22 +1,22 @@
 import { PaletteMode, alpha, createTheme, type Theme, type ThemeOptions } from '@mui/material/styles';
 
 const HEADING_WEIGHT = 500;
-const DARK_THEME_BORDER = '#1E1E1E';
+const DARK_THEME_BORDER = '#2B333B';
 const LIGHT_THEME_BORDER = '#E0E0E0';
-const DARK_APP_BAR = '#0B0B0B';
+const DARK_APP_BAR = '#080A0C';
 
 const typography = {
-  fontFamily: 'poppins, Geist Sans, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+  fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',
   allVariants: {
-    fontSize: 15,
-    letterSpacing: '0.05em',
+    fontSize: 16,
+    letterSpacing: 'normal',
   },
   h1: {
-    fontSize: '3rem',
+    fontSize: '1.75rem',
     fontWeight: HEADING_WEIGHT,
   },
   h2: {
-    fontSize: '2.25rem',
+    fontSize: '1.5rem',
     fontWeight: HEADING_WEIGHT,
   },
   h3: {
@@ -37,20 +37,18 @@ const typography = {
   },
 } satisfies ThemeOptions['typography'];
 
-const getBorderColor = (mode: PaletteMode) => mode === 'dark' ? DARK_THEME_BORDER : LIGHT_THEME_BORDER;
+const getBorderColor = (mode: PaletteMode) => (mode === 'dark' ? DARK_THEME_BORDER : LIGHT_THEME_BORDER);
 
-const getFilledChipStyles = (
-  theme: Theme,
-  paletteKey: 'success' | 'info' | 'warning' | 'secondary'
-) => {
+const getFilledChipStyles = (theme: Theme, paletteKey: 'success' | 'info' | 'warning' | 'secondary') => {
   const paletteColor = theme.palette[paletteKey];
   const overlay = theme.palette.mode === 'light' ? 0.15 : 0.35;
 
   return {
     backgroundColor: alpha(paletteColor.main, overlay),
-    color: theme.palette.mode === 'light'
-      ? paletteColor.dark ?? paletteColor.main
-      : paletteColor.light ?? paletteColor.contrastText ?? theme.palette.getContrastText(paletteColor.main),
+    color:
+      theme.palette.mode === 'light'
+        ? (paletteColor.dark ?? paletteColor.main)
+        : (paletteColor.light ?? paletteColor.contrastText ?? theme.palette.getContrastText(paletteColor.main)),
     border: 'none',
   };
 };
@@ -58,6 +56,18 @@ const getFilledChipStyles = (
 const buildComponents = (mode: PaletteMode) => {
   const borderColor = getBorderColor(mode);
   return {
+    MuiCssBaseline: {
+      styleOverrides: {
+        '@media (prefers-reduced-motion: reduce)': {
+          '*, *::before, *::after': {
+            animationDuration: '0.01ms !important',
+            animationIterationCount: '1 !important',
+            transitionDuration: '0.01ms !important',
+            scrollBehavior: 'auto !important',
+          },
+        },
+      },
+    },
     MuiButton: {
       styleOverrides: {
         root: {
@@ -125,7 +135,6 @@ const buildComponents = (mode: PaletteMode) => {
       styleOverrides: {
         select: {
           fontSize: 16,
-          borderColor: '1px solid red !important',
         },
       },
     },
@@ -179,15 +188,17 @@ const buildComponents = (mode: PaletteMode) => {
 const buildPalette = (mode: PaletteMode): ThemeOptions['palette'] => ({
   mode,
   divider: getBorderColor(mode),
-  background: mode === 'dark'
-    ? {
-      default: '#000000',
-      paper: '#0A0A0A',
-    }
-    : {
-      default: 'rgb(250, 250, 250)',
-      paper: 'rgb(255, 255, 255)',
-    },
+  ...(mode === 'dark' ? { primary: { main: '#A3C7DF' }, text: { primary: '#EDF1F4', secondary: '#A6ADB5' } } : {}),
+  background:
+    mode === 'dark'
+      ? {
+        default: '#080A0C',
+        paper: '#15191E',
+      }
+      : {
+        default: 'rgb(250, 250, 250)',
+        paper: 'rgb(255, 255, 255)',
+      },
 });
 
 export const buildTheme = (mode: PaletteMode = 'dark') =>

@@ -1,4 +1,6 @@
 import { defineConfig, configDefaults } from 'vitest/config';
+import { fileURLToPath } from 'node:url';
+import { searchForWorkspaceRoot } from 'vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
 export default defineConfig({
@@ -6,6 +8,11 @@ export default defineConfig({
   // way vite.config.ts does for the app build. Without this, mocks/handlers.ts
   // (imported by src/test/setup.ts) fails to resolve its @api/* imports.
   plugins: [tsconfigPaths()],
+  server: { fs: { allow: [
+    searchForWorkspaceRoot(process.cwd()),
+    fileURLToPath(new URL('../LICENSE.md', import.meta.url)),
+    `${fileURLToPath(new URL('../LICENSE.md', import.meta.url))}?raw`,
+  ] } },
   test: {
     environment: 'jsdom',
     globals: false,

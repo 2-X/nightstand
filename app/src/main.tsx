@@ -29,7 +29,7 @@ const App = () => {
         <LocalizationProvider dateAdapter={ AdapterMoment }>
 
           <AppStoreProvider>
-            <CssBaseline/>
+            <CssBaseline enableColorScheme/>
             <GlobalStyles
               styles={ {
                 // Split html / body styles deliberately. Applying
