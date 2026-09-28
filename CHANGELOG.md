@@ -13,6 +13,17 @@ is a hard fork; for the history of the projects it descends from, see
   Prisma's development command, which can create new migrations or offer to
   reset the database when it finds differences.
 
+- The app works when opened at http://eight-pod.local:3000. Changes made
+  from that address were refused before. From Kris's fork, 2-X/nightstand.
+
+- Re-running the firewall script no longer piles up duplicate rules, and the
+  outbound rules Tailscale needs are only added while Tailscale is running, so
+  a Pod without it stays fully blocked. If you set up Tailscale later, run the
+  block script again once it is running. From Kris's fork, 2-X/nightstand.
+
+- After a restart, replayed sensor records no longer show old temperatures on
+  the Status page or trip a false pump alert. From Kris's fork, 2-X/nightstand.
+
 - Presence auto-off, which turns a side off after 45 minutes with no one on it
   outside its scheduled on-window, can now be turned off in Settings, under
   Features. It stays on by default, so nothing changes unless you turn it off.

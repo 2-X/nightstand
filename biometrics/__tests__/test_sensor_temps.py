@@ -5,13 +5,8 @@ RAW-file fallback re-reads the current file from byte 0 on startup; the
 durable NATS consumer replays its acked backlog after a restart), and
 update_sensor_temps posted them without checking the record's own `ts`.
 The 30s wall-clock throttle then posted the oldest record of each window
-and suppressed the fresher ones behind it, so the API re-lived the
-historical temperature trajectory (observed Sep 6 2026: heatsinkC climbing
-16->19C while the live `hs` stream fell to 14.5C).
-
-Run locally (not part of the node CI):
-    python3 -m pytest biometrics/__tests__/test_sensor_temps.py -v
-(also runs under plain unittest: python3 -m unittest discover ...)
+and suppressed the fresher ones behind it, so the API replayed the old
+temperature history instead of the live readings.
 """
 import json
 import time

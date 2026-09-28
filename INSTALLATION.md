@@ -495,11 +495,13 @@ In-app updates keep this setting. Rerunning the step 13 installer rewrites the s
 
 ### 20.5 Re-apply the firewall
 
-The block script already allows what Tailscale needs, so you can turn the firewall back on:
+The block script allows what Tailscale needs only while Tailscale is running, so check that `tailscale status` works, then turn the firewall back on:
 
 ```bash
 sh /home/dac/free-sleep/scripts/block_internet_access.sh
 ```
+
+It prints `tailscaled active: allowing its control-plane/DERP/STUN egress`. If it says `tailscaled inactive` instead, start Tailscale and run it again.
 
 The Tailscale-related rules (visible with `iptables -L OUTPUT -n -v`) are:
 - `tailscale0` interface in/out (the VPN traffic to your phone)

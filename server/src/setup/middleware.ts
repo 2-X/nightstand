@@ -61,7 +61,7 @@ export function getLocalSubnetPrefixes(): string[] {
  * @param origin - The origin to check.
  * @returns True if the origin is allowed, false otherwise.
  */
-function isAllowedOrigin(origin: string | undefined): boolean {
+export function isAllowedOrigin(origin: string | undefined): boolean {
   if (!origin) {
     return true;
   }

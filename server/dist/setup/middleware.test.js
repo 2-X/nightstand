@@ -1,7 +1,7 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'os';
-import { getLocalSubnetPrefixes } from './middleware.js';
+import { getLocalSubnetPrefixes, isAllowedOrigin } from './middleware.js';
 describe('getLocalSubnetPrefixes', () => {
     it('collects the /24 of every non-internal IPv4 interface', (t) => {
         t.mock.method(os, 'networkInterfaces', () => ({
@@ -26,6 +26,20 @@ describe('getLocalSubnetPrefixes', () => {
         }));
         assert.deepEqual(getLocalSubnetPrefixes(), []);
         mock.restoreAll();
+    });
+});
+describe('isAllowedOrigin', () => {
+    it('accepts the pod\'s mDNS name, with or without a port', () => {
+        assert.equal(isAllowedOrigin('http://eight-pod.local:3000'), true);
+        assert.equal(isAllowedOrigin('http://eight-pod.local'), true);
+    });
+    it('rejects names that only contain .local', () => {
+        assert.equal(isAllowedOrigin('http://eight-pod.local.example.com'), false);
+        assert.equal(isAllowedOrigin('https://example.com'), false);
+        assert.equal(isAllowedOrigin('http://example.com/eight-pod.local'), false);
+    });
+    it('accepts requests without an Origin header', () => {
+        assert.equal(isAllowedOrigin(undefined), true);
     });
 });
 //# sourceMappingURL=middleware.test.js.map

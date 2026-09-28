@@ -22,13 +22,10 @@ SENSOR_TEMPS_UPDATE_INTERVAL = 30  # seconds
 # Both ingest paths can hand update_sensor_temps() records far older than
 # "now": the RAW-file fallback replays the current file from byte 0 on
 # startup, and the durable NATS consumer replays its acked backlog after a
-# restart. Posting those makes the API re-live the historical temperature
-# trajectory instead of tracking the sensor (observed Sep 6 2026:
-# sensorTemps.heatsinkC climbing 16->19C while the live frzTemp `hs` stream
-# fell to 14.5C), and the wall-clock throttle compounds it by posting the
-# oldest record of each 30s window and suppressing the fresher ones behind
-# it. Mirrors RECENT_RECORD_WINDOW in stream/stream.py, which already
-# applies the same guard to piezo records.
+# restart. Posting those makes the API replay the old temperature history
+# instead of tracking the sensor, and the wall-clock throttle compounds it by
+# posting the oldest record of each 30s window. Mirrors RECENT_RECORD_WINDOW
+# in stream/stream.py, which applies the same guard to piezo records.
 SENSOR_TEMPS_MAX_RECORD_AGE = 120  # seconds
 
 

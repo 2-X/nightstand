@@ -5,12 +5,9 @@ echo "Blocking internet access..."
 # IPv4 Rules
 echo "Configuring IPv4 rules..."
 
-# Start from a clean slate so the final ruleset is exactly what this script
-# writes, no matter what was in the chains before (a prior unblock, leftovers
-# from an old saved state, temporary deploy rules). Without this, stale ACCEPT
-# rules sitting above our final DROP survive re-blocking and then get
-# immortalized by the iptables-save at the bottom - which is exactly how the
-# WAN sat open for months (discovered Sep 2026).
+# Start from a clean slate so the saved ruleset is exactly what this script
+# writes. Otherwise every re-run stacks duplicates, and stale ACCEPT rules above
+# the final DROP survive and get saved at the bottom.
 iptables -F INPUT
 iptables -F OUTPUT
 
@@ -78,14 +75,11 @@ iptables -A OUTPUT -o tailscale0 -j ACCEPT
 #       - UDP everywhere: direct WireGuard peer connections + STUN
 #       - TCP/443: control plane (controlplane.tailscale.com) + DERP relays
 #       - DNS: to resolve controlplane.tailscale.com / derp*.tailscale.com
-#     Note: this allows the pod to reach any HTTPS host, not only Tailscale -
-#     including Eight Sleep's cloud. So these rules are added ONLY while
-#     tailscaled is actually running (Sep 2026: it sat inactive for months
-#     while these rules silently held the WAN open for everything). Eight
-#     Sleep's OTA updates are additionally blocked at the systemd level
-#     (services masked per INSTALLATION.md); this firewall is a second layer.
-#     If you enable Tailscale later, re-run this script while tailscaled is
-#     active to get these rules back.
+#     These also let the pod reach any HTTPS host, Eight Sleep's cloud
+#     included, so they are added only while tailscaled is running. If you set
+#     up Tailscale later, re-run this script once it is active. Eight Sleep's
+#     OTA updates are also blocked at the systemd level (services masked per
+#     INSTALLATION.md); this firewall is a second layer.
 if systemctl is-active --quiet tailscaled; then
   echo "tailscaled active: allowing its control-plane/DERP/STUN egress"
   iptables -A OUTPUT -p udp -j ACCEPT
@@ -105,6 +99,8 @@ iptables -A OUTPUT -j DROP
 iptables-save > /etc/iptables/iptables.rules
 
 echo "Configuring IPv6 rules..."
+ip6tables -F INPUT
+ip6tables -F OUTPUT
 # Allow local traffic for IPv6
 ip6tables -A INPUT -s fe80::/10 -j ACCEPT
 ip6tables -A OUTPUT -d fe80::/10 -j ACCEPT
