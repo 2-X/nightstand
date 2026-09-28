@@ -13,11 +13,17 @@ is a hard fork; for the history of the projects it descends from, see
   Prisma's development command, which can create new migrations or offer to
   reset the database when it finds differences.
 
-- A Pod switched over from another fork, or set up with the agent bootstrap,
-  now gets the same services and permissions as a fresh install, so Roll
-  back, Revert to stock, and turning biometrics off work right away instead
-  of after the first update. Every install path now shares one script for
-  these, and it checks the permissions file before replacing it.
+- Presence auto-off, which turns a side off after 45 minutes with no one on it
+  outside its scheduled on-window, can now be turned off in Settings, under
+  Features. It stays on by default, so nothing changes unless you turn it off.
+
+- The restart an hour before daily priming can now be turned off in Settings,
+  next to daily priming. It was already a setting, with no control in the app.
+
+- A Pod switched over from another fork now gets the same services and
+  permissions as a fresh install, so Roll back, Revert to stock, and turning
+  biometrics off work right away instead of after the first update. The
+  permissions file is also checked before it is replaced.
 
 - Switching from another fork now downloads the migration tool's two helper
   files along with it, and the tool checks for them before it changes
@@ -296,13 +302,11 @@ to safety-critical code than belongs in a patch release.
 
 ## [3.0.0] - 2026-07-16
 
-Nightstand's first release under its own identity: a minimal agent that
-turns a stock free-sleep install into one with update, rollback, and
-revert-to-stock built in. Everything else that has landed on top of that
-agent so far, Franken hardening, biometrics, the sleep and schedule
-pages, the updater surface, ships in this same tree today, and becomes
-the first flag-gated feature bundle in a later release once the flag
-system exists.
+Nightstand's first release under its own version numbers. It is the full
+tree: the in-app updater with rollback and revert to stock, the features
+carried over from jmew/free-sleep (presence detection, sleep stages,
+adjustable base control, and live updates in the app), and the fixes made
+since, including the hardware socket timeouts and the biometrics work.
 
 The git history itself was rebuilt from a fresh clone of upstream
 throwaway31265/free-sleep, with each prior feature ported or

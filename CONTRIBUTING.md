@@ -89,6 +89,22 @@ logic.
   against the mock data using `renderWithProviders` or `renderApp`.
   [app/src/test/README.md](app/src/test/README.md) explains the harness.
 
+## Optional features
+
+Anything a user might reasonably want off ships behind a toggle in Settings,
+under Features:
+
+- A key in `defaultFeatures` in `server/src/db/settingsSchema.ts`, with a
+  default that keeps existing Pods behaving as they did.
+- A row in `app/src/pages/SettingsPage/FeaturesSection/FeaturesSection.tsx`.
+- An entry in `server/src/features/featuresManifest.ts`, whose tests fail if a
+  settings feature key has no entry.
+
+Always-on work also gets a manifest entry, with `flag: null` and the reason in
+`rationale`. Manifest ids are never renamed, since `releases.json` lists them.
+New settings keys are merged into stored settings at startup (see
+`server/src/db/settings.ts`), so they need no migration.
+
 ## Running your changes on a Pod
 
 The in-app updater installs published releases only. To run your own changes
@@ -141,7 +157,8 @@ which was at 2.1.4 and followed the original project's 2.x line.
 build is based on. Change it only when a build moves to a newer base.
 
 Every release is also recorded in `releases.json` at the repository root,
-with a `channel` of `stable` or `beta` and a `kind` of `agent` or `bundle`,
+with a `channel` of `stable` or `beta` and a `kind` of `bundle` (`agent` is
+an older value the app still accepts; no release uses it),
 and tagged in git as `v<version>` (for example `v3.2.0`).
 
 ## Release cadence and promotion
@@ -181,7 +198,7 @@ or table that an older, still-installable release reads.
 
 1. Bump the version in `server/src/serverInfo.json`.
 2. Add the new release to the top of `releases.json`, following the shape of
-   the entry below it: `kind` (`agent` or `bundle`), `version`, `date`, and
+   the entry below it: `kind` (always `bundle`), `version`, `date`, and
    `channel` (`beta` unless there is a reason to ship straight to `stable`).
    A bundle also carries its own `upstreamBase`, the release it was built
    from, and its `features` list.

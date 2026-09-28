@@ -11,10 +11,10 @@ const releaseFields = {
   artifacts: z.record(z.string(), z.string()).optional(),
 };
 
-// The agent overlays whatever stock a pod already runs and replaces no
-// upstream code, so it has no base of its own. A bundle is the full tree
-// built against exactly one upstream release, so it names that base and the
-// features it carries.
+// Every release is a bundle: the full tree built against one upstream
+// release, naming that base and the features it carries. 'agent' is an older
+// kind no release uses anymore; it stays accepted so the manifest keeps
+// parsing if one ever appears.
 const AgentReleaseSchema = z.object({ kind: z.literal('agent'), ...releaseFields });
 const BundleReleaseSchema = z.object({
   kind: z.literal('bundle'),

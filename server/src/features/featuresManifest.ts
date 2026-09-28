@@ -1,17 +1,14 @@
 import { defaultFeatures } from '../db/settingsSchema.js';
 
-// The committed feature inventory the future CI pipeline, store UI, and
-// releases.json v2 feature catalog will read from. Not imported by the app
-// bundle, this is a server-side/tooling artifact, not client code.
+// The feature inventory. releases.json names its features from these ids,
+// so an id is never renamed. Not imported by the app bundle.
 //
-// flag is the real settings.features key for the 5 entries this repo
-// actually flag-gates (features.sleepScore etc). biometrics and
-// base-control use their own external mechanisms (a separate lowdb store,
-// hardware-file presence) documented in flag as prose, not a
-// FeaturesSchema key, see featuresManifest.test.ts for how the two kinds
-// are distinguished. Baseline entries (no-telemetry, security-hardening,
-// franken-hardening, honest-status, websocket-live-updates, the agent
-// itself) carry flag: null, always on, not individually removable.
+// Rule: an optional feature ships behind a Settings > Features toggle, with
+// flag set to its settings.features key and default matching
+// defaultFeatures. A behavior controlled by another setting names that
+// setting in flag as prose (biometrics, daily reboot, RAW archive retention),
+// as does one gated by hardware (base control). Always-on work carries
+// flag: null and says why in rationale.
 type ManifestEntry = {
   id: string;
   title: string;
@@ -31,8 +28,8 @@ type ManifestEntry = {
 export const FEATURES_MANIFEST: ManifestEntry[] = [
   {
     id: 'agent',
-    title: 'Agent',
-    description: 'Update, rollback, revert-to-stock, and the Settings Versions surface. The floor every other feature sits on.',
+    title: 'Updates and rollback',
+    description: 'In-app updates, rollback, revert to stock, and the Settings > Software & updates page. The floor every other feature sits on.',
     category: 'platform',
     version: '3.0.0',
     flag: null,
@@ -42,7 +39,7 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     reversible: false,
     tests: ['server/src/updaterScripts.test.ts', 'server/src/rollbackScript.test.ts'],
     upstream_offer: false,
-    rationale: 'Always on, not individually removable: this is the agent, the thing that makes everything else installable and reversible.',
+    rationale: 'Always on, not individually removable: it is what makes everything else installable and reversible.',
   },
   {
     id: 'no-telemetry',
@@ -204,16 +201,16 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     description: 'Geist font, glass-card look, applied app-wide.',
     category: 'ui',
     version: 'n/a',
-    flag: 'nightstandTheme',
+    flag: null,
     default: true,
     touchpoints: ['app/src/theme.ts', 'app/src/design/GlassCard.tsx'],
     depends_on: ['agent'],
     reversible: false,
     tests: [],
     upstream_offer: false,
-    rationale: 'Schema-only stub as of 3.1.0: nothing reads this flag yet. A real toggle '
-      + 'needs a second whole theme and a stock card variant used app-wide, a much bigger, '
-      + 'separate lift than the other flags.',
+    rationale: 'Always on. A features.nightstandTheme key exists in settings from 3.1.0, '
+      + 'but nothing reads it and Settings does not show it; it stays in the schema so '
+      + 'stored settings keep validating. A real toggle would need a second whole theme.',
   },
   {
     id: 'logs-viewer',
@@ -251,5 +248,89 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     rationale: 'Auto-gated by hardware presence, not a user-settable flag. Low priority: '
       + 'hardware not present on this pod, first candidate to drop if it stops being a clean '
       + 'dormant feature.',
+  },
+  {
+    id: 'presence-auto-off',
+    title: 'Presence auto-off',
+    description: 'Turns a side off after 45 minutes with no one on it, outside its scheduled on-window.',
+    category: 'biometrics',
+    version: '3.4.0',
+    flag: 'presenceAutoOff',
+    default: true,
+    touchpoints: ['server/src/8sleep/presenceAutoOffMonitor.ts', 'app/src/pages/SettingsPage/FeaturesSection'],
+    depends_on: ['biometrics'],
+    reversible: true,
+    tests: ['server/src/8sleep/presenceAutoOffMonitor.test.ts'],
+    upstream_offer: false,
+    rationale: 'On by default so existing pods behave as before. Needs presence from '
+      + 'biometrics and holds whenever presence is unknown, so it never acts without it. '
+      + 'Off keeps tracking state, so turning it back on mid-session measures idle time '
+      + 'correctly.',
+  },
+  {
+    id: 'daily-reboot',
+    title: 'Daily reboot',
+    description: 'Restarts the pod an hour before daily priming.',
+    category: 'platform',
+    version: '3.4.0',
+    flag: 'settings.rebootDaily',
+    default: true,
+    touchpoints: ['server/src/jobs/primeScheduler.ts', 'app/src/pages/SettingsPage/DailyPriming.tsx'],
+    depends_on: ['agent'],
+    reversible: true,
+    tests: [],
+    upstream_offer: false,
+    rationale: 'A setting since upstream 2.x with no control in the app until 3.4.0. It is '
+      + 'scheduled with daily priming, so it only runs while priming is on, and the control '
+      + 'sits with priming for that reason.',
+  },
+  {
+    id: 'raw-archive-retention',
+    title: 'RAW archive retention',
+    description: 'Keeps overnight sensor files past the firmware\'s rolling buffer for a set number of days.',
+    category: 'biometrics',
+    version: '3.3.0',
+    flag: 'settings.rawArchiveRetentionDays',
+    default: 'n/a',
+    touchpoints: [
+      'scripts/archive-raw.sh', 'server/src/jobs/rawArchiveConf.ts',
+      'app/src/pages/SettingsPage/DeviceSettingsSection/RawArchiveRetention.tsx',
+    ],
+    depends_on: ['biometrics'],
+    reversible: true,
+    tests: [],
+    upstream_offer: false,
+    rationale: 'A number of days rather than on or off. Without the archive the daily sleep '
+      + 'analysis sees only the last ~75 minutes of data, so it is not offered as a switch.',
+  },
+  {
+    id: 'water-tank-status',
+    title: 'Water tank status',
+    description: 'A Status page entry for the water tank level, with its last change recorded.',
+    category: 'ui',
+    version: '3.3.0',
+    flag: null,
+    default: true,
+    touchpoints: ['server/src/8sleep/waterLevelTracker.ts', 'app/src/pages/StatusPage/statusMeta.ts'],
+    depends_on: ['agent'],
+    reversible: false,
+    tests: [],
+    upstream_offer: false,
+    rationale: 'Always on: a read-only status row with nothing to turn off.',
+  },
+  {
+    id: 'service-memory-limits',
+    title: 'Service memory limits',
+    description: 'Memory caps for the Nightstand services so a runaway job cannot take memory from the pod\'s firmware.',
+    category: 'safety',
+    version: '3.3.0',
+    flag: null,
+    default: true,
+    touchpoints: ['scripts/setup_resource_limits.sh'],
+    depends_on: ['agent'],
+    reversible: true,
+    tests: ['server/src/resourceLimitsScript.test.ts'],
+    upstream_offer: false,
+    rationale: 'Always on, as a safety measure. Revert to stock removes the limits.',
   },
 ];

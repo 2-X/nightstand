@@ -61,6 +61,17 @@ describe('FEATURES_MANIFEST', () => {
     }
   });
 
+  // The rule in CONTRIBUTING.md: an optional feature ships behind a Settings >
+  // Features toggle and has a manifest entry. nightstandTheme is the one key
+  // nothing reads; it stays in the schema only so stored settings validate.
+  it('has an entry for every settings feature flag', () => {
+    const flags = new Set(FEATURES_MANIFEST.map((entry) => entry.flag));
+    for (const key of Object.keys(defaultFeatures)) {
+      if (key === 'nightstandTheme') continue;
+      assert.ok(flags.has(key), `settings.features.${key} has no featuresManifest entry`);
+    }
+  });
+
   // No bundle releases exist yet, so this passes vacuously today. It is the
   // guard that arms the moment the first one lands.
   it('has every feature id named by a bundle release', () => {

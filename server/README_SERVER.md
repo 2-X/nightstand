@@ -219,7 +219,7 @@ server/
 ├── dist/                   # Compiled server (tsc); committed, run by npm start
 ├── src/
 │   ├── 8sleep/             # Franken socket client, command queue, monitor, base control
-│   ├── agent/              # Manifest for the self-update overlay (tooling, not runtime)
+│   ├── agent/              # File list for the maintainer's stock-to-Nightstand tooling (not used at runtime)
 │   ├── db/                 # LowDB stores, Prisma client, schemas, read helpers
 │   ├── events/             # In-process event bus
 │   ├── features/           # Feature manifest (tooling, not runtime)

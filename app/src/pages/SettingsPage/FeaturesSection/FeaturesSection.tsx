@@ -75,6 +75,15 @@ export default function FeaturesSection() {
           : 'The Sleep Fitness Score and the sleep-stages chart on the Sleep page.' }
       />
       <FeatureToggleRow
+        label='Presence auto-off'
+        disabled={ isUpdating || !features || !biometricsEnabled }
+        checked={ features?.presenceAutoOff ?? false }
+        onChange={ (next) => updateFeature({ presenceAutoOff: next }) }
+        description={ !biometricsEnabled
+          ? 'Needs Biometrics turned on above.'
+          : 'Turns a side off after 45 minutes with no one on it. Never during a scheduled on-window or in away mode.' }
+      />
+      <FeatureToggleRow
         label='Level temperature display'
         disabled={ isUpdating || !features }
         checked={ features?.levelTemps ?? false }

@@ -55,6 +55,16 @@ export default function DailyPriming({ settings, updateSettings }: PrimePodSched
           } }
         />
       </Box>
+      <FormControlLabel
+        control={
+          <Switch
+            disabled={ isUpdating || settings?.primePodDaily?.enabled === false }
+            checked={ settings?.rebootDaily ?? true }
+            onChange={ (event) => updateSettings({ rebootDaily: event.target.checked }) }
+          />
+        }
+        label="Restart the pod an hour before priming"
+      />
     </>
 
   );

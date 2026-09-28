@@ -23,4 +23,22 @@ describe('FeaturesSection', () => {
     // Default mock oneOffAlarms is true, so the first click posts false.
     expect(posted).toEqual({ features: { oneOffAlarms: false } });
   });
+
+  it('posts presenceAutoOff when the presence auto-off toggle is switched', async () => {
+    let posted: unknown;
+    server.use(
+      http.post('*/api/settings', async ({ request }) => {
+        posted = await request.json();
+        return HttpResponse.json({});
+      }),
+    );
+
+    const { user } = renderWithProviders(<FeaturesSection />);
+
+    const toggle = await screen.findByRole('switch', { name: 'Presence auto-off' });
+    expect(toggle).toBeChecked();
+    await user.click(toggle);
+
+    expect(posted).toEqual({ features: { presenceAutoOff: false } });
+  });
 });

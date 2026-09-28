@@ -2,7 +2,7 @@
 //
 // If a side has been ON without any reported presence for PRESENCE_AUTO_OFF_MS,
 // we turn it off automatically. Acts independently per side. Skipped while a
-// side is in awayMode. The grace period from "user just turned the side on"
+// side is in awayMode, and never acts while features.presenceAutoOff is off. The grace period from "user just turned the side on"
 // counts toward the timeout - if the user turns the side on but never lays
 // down, we still shut it off after the timeout elapses.
 //
@@ -111,6 +111,10 @@ async function tick() {
         }
         prevIsOn[side] = isOn;
         if (!isOn)
+            continue;
+        // Checked after the tracking above, so turning the feature back on
+        // mid-session measures idle time from the real on-transition.
+        if (settingsDB.data.features?.presenceAutoOff === false)
             continue;
         if (settingsDB.data[side].awayMode)
             continue;

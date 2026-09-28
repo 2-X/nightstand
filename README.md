@@ -103,6 +103,19 @@ unless you set up [Tailscale](https://tailscale.com) (installation step 20).
 - Away mode, LED brightness, and time zone settings
 - Full functionality without an internet connection
 
+### What you can turn off
+
+In Settings, under Features:
+
+- **Biometrics:** off by default, and needs a one-time install (see below).
+- **Sleep score and stages:** needs biometrics.
+- **Presence auto-off:** on by default, and needs biometrics. Turns a side off
+  after 45 minutes with no one on it, outside its scheduled on-window.
+- **Level temperature display** and **one-off alarms:** on by default.
+
+Next to daily priming, the restart an hour before priming is on by default and
+only runs while priming is on.
+
 ### Biometrics
 
 Biometrics in free-sleep and its forks, including this one, are still early.

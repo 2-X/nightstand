@@ -62,6 +62,7 @@ beforeEach(async () => {
     settingsDB.data.timeZone = 'UTC';
     settingsDB.data.left.awayMode = false;
     settingsDB.data.right.awayMode = false;
+    settingsDB.data.features.presenceAutoOff = true;
     await settingsDB.write();
     await schedulesDB.read();
     for (const day of DAY_NAMES) {
@@ -132,6 +133,29 @@ describe('presenceAutoOffMonitor', () => {
         // Side on at 14:00, no presence ever. Auto-off is meant to fire ~45min later.
         await runTicks(at('2026-03-02T14:00:00'), 50, heartbeatAbsent);
         assert.equal(powerOffCalls.length > 0, true, 'expected auto-off to fire for an empty bed');
+    });
+    it('never powers off while the presenceAutoOff feature is off', async () => {
+        await settingsDB.read();
+        settingsDB.data.features.presenceAutoOff = false;
+        await settingsDB.write();
+        await runTicks(at('2026-03-02T14:00:00'), 60, heartbeatAbsent);
+        assert.deepEqual(powerOffCalls, [], 'powered off with the feature turned off');
+    });
+    it('measures idle time from the real power-on when the feature is turned back on', async () => {
+        // Off for the first 40 minutes of an empty, powered-on side, then on.
+        // The side has been idle since minute 0, so it should go off within a
+        // few minutes of re-enabling rather than waiting another 45.
+        await settingsDB.read();
+        settingsDB.data.features.presenceAutoOff = false;
+        await settingsDB.write();
+        await runTicks(at('2026-03-02T14:00:00'), 50, (i) => {
+            heartbeatAbsent();
+            if (i === 40) {
+                settingsDB.data.features.presenceAutoOff = true;
+                void settingsDB.write();
+            }
+        });
+        assert.ok(powerOffCalls.length > 0, 'expected auto-off to fire soon after re-enabling');
     });
     it('does not power off while the presence stream is stale/unreported (unknown != absent)', async () => {
         // The python presence stream is down: it has never POSTed, so

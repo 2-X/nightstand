@@ -83,20 +83,23 @@ const SideSettingsSchema = z.object({
 export const UPDATE_CHANNELS = ['stable', 'beta'] as const;
 const UpdateChannel = z.enum(UPDATE_CHANNELS);
 
-// Runtime feature flags. Biometrics has its own toggle in ServicesSchema
-// (install precondition, systemd side effect) and stays there rather than
-// joining this list. nightstandTheme has no code reading it yet, it is a
-// placeholder for a future dual-theme pass.
+// Runtime feature flags, each listed in server/src/features/featuresManifest.ts.
+// Biometrics has its own toggle in ServicesSchema (install precondition,
+// systemd side effect) and stays there rather than joining this list.
+// nightstandTheme is read by nothing and not shown in Settings; it stays so
+// stored settings keep validating.
 export const defaultFeatures = {
   sleepScore: true,
   levelTemps: true,
   oneOffAlarms: true,
+  presenceAutoOff: true,
   nightstandTheme: true,
 } as const;
 const FeaturesSchema = z.object({
   sleepScore: z.boolean(),
   levelTemps: z.boolean(),
   oneOffAlarms: z.boolean(),
+  presenceAutoOff: z.boolean(),
   nightstandTheme: z.boolean(),
 }).strict();
 
