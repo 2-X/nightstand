@@ -19,6 +19,7 @@ const SCRIPTS = [
     'scripts/update.sh',
     'scripts/update_service.sh',
     'scripts/install.sh',
+    'scripts/setup_services.sh',
 ];
 describe('updater shell scripts', () => {
     for (const script of SCRIPTS) {
@@ -51,7 +52,7 @@ describe('updater shell scripts', () => {
         });
     }
     it('the update unit runs the script via bash (immune to lost exec bits)', () => {
-        const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
+        const src = readFileSync(path.join(repoRoot, 'scripts/setup_services.sh'), 'utf8');
         assert.match(src, /ExecStart=\/bin\/bash \/home\/dac\/free-sleep\/scripts\/update_service\.sh/);
     });
     // install.sh is the from-scratch bootstrap, and it installs this fork. The
@@ -88,13 +89,13 @@ describe('updater shell scripts', () => {
     // never stopped free-sleep-stream.service. Gate both halves of the fix:
     // fresh installs get the rule, and existing pods self-heal it on their
     // next update (mirroring the instant-rollback sudoers self-heal below).
-    it('install.sh grants a NOPASSWD sudoers rule for disable_biometrics.sh', () => {
-        const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
+    it('setup_services.sh grants a NOPASSWD sudoers rule for disable_biometrics.sh', () => {
+        const src = readFileSync(path.join(repoRoot, 'scripts/setup_services.sh'), 'utf8');
         assert.match(src, /ALL=\(ALL\) NOPASSWD: \/bin\/sh \/home\/dac\/free-sleep\/scripts\/disable_biometrics\.sh/);
     });
-    it('update.sh self-heals the disable_biometrics.sh sudoers rule on existing pods', () => {
+    it('update.sh re-runs setup_services.sh so existing pods pick up missing rules', () => {
         const src = readFileSync(path.join(repoRoot, 'scripts/update.sh'), 'utf8');
-        assert.match(src, /ALL=\(ALL\) NOPASSWD: \/bin\/sh \/home\/dac\/free-sleep\/scripts\/disable_biometrics\.sh/);
+        assert.match(src, /bash "\$LIVE\/scripts\/setup_services\.sh" "\$LIVE"/);
     });
     // Target-version protocol: the server writes update-target.json before
     // starting the service; a syntax slip here would either silently ignore a

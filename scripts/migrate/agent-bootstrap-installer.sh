@@ -232,14 +232,10 @@ mv "$LIVE" "$PREV" || { restore_and_report "could not move their tree aside"; ex
 mv "$STAGE" "$LIVE" || { restore_and_report "could not move the staged tree into place"; exit 1; }
 chown -R dac:dac "$LIVE"
 
-say "Installing the agent's systemd units..."
-cp "$LIVE/scripts/systemd/free-sleep-rollback.service" /etc/systemd/system/ 2>/dev/null || true
-cp "$LIVE/scripts/systemd/free-sleep-revert.service" /etc/systemd/system/ 2>/dev/null || true
-systemctl daemon-reload
-# NB: both units are STATIC, on-demand oneshots the app starts when the user
-# clicks Roll back or Revert to stock. Do NOT `enable --now` them: --now would
-# execute the action immediately, undoing this install before the health check
-# even runs. Installing the unit files is all they need to be startable.
+# NB: the rollback and revert units are STATIC, on-demand oneshots the app
+# starts when the user clicks Roll back or Revert to stock. Never `enable --now`
+# them: that would run the action immediately. setup_services.sh installs them,
+# without starting them, once the health check below has passed.
 
 systemctl start free-sleep || { restore_and_report "the service failed to start after the overlay"; exit 1; }
 systemctl start free-sleep-stream >/dev/null 2>&1 || true
@@ -257,6 +253,13 @@ if [ "$HEALTHY" != "1" ]; then
   restore_and_report "the server did not answer 200 after the overlay"
   exit 1
 fi
+
+# Stock grants sudo for the updater and reboot only; Roll back, Revert to
+# stock, and turning biometrics off need their own units and rules. Done after
+# the health check so a failed overlay restores stock without any of it.
+say "Installing the updater, rollback, and revert services and their sudoers rules..."
+bash "$LIVE/scripts/setup_services.sh" "$LIVE" \
+  || say "WARNING: some services or sudoers rules could not be installed; the next in-app update retries them"
 
 rm -f "$SWAP_MARKER"
 disarm_sentinel

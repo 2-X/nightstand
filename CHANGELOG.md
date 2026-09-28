@@ -13,6 +13,12 @@ is a hard fork; for the history of the projects it descends from, see
   Prisma's development command, which can create new migrations or offer to
   reset the database when it finds differences.
 
+- A Pod switched over from another fork, or set up with the agent bootstrap,
+  now gets the same services and permissions as a fresh install, so Roll
+  back, Revert to stock, and turning biometrics off work right away instead
+  of after the first update. Every install path now shares one script for
+  these, and it checks the permissions file before replacing it.
+
 - Switching from another fork now downloads the migration tool's two helper
   files along with it, and the tool checks for them before it changes
   anything. Following the guide before this downloaded only the main script,

@@ -51,16 +51,16 @@ describe('rollback_pod.sh', () => {
         const src = readFileSync(full, 'utf8');
         assert.match(src, /ExecStart=\/bin\/bash \/home\/dac\/free-sleep\/scripts\/rollback_pod\.sh/);
     });
-    it('install.sh installs the rollback service and its sudoers rule', () => {
-        const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
+    it('setup_services.sh installs the rollback service and its sudoers rule', () => {
+        const src = readFileSync(path.join(repoRoot, 'scripts/setup_services.sh'), 'utf8');
         assert.match(src, /free-sleep-rollback\.service/);
         assert.match(src, /NOPASSWD: \/bin\/systemctl start free-sleep-rollback\.service --no-block/);
     });
-    it('update.sh self-heals the rollback service and sudoers rule for older installs', () => {
-        const src = readFileSync(path.join(repoRoot, 'scripts/update.sh'), 'utf8');
-        assert.match(src, /Ensuring instant-rollback service is installed/);
-        assert.match(src, /free-sleep-rollback\.service/);
-        assert.match(src, /NOPASSWD: \/bin\/systemctl start free-sleep-rollback\.service --no-block/);
+    it('install.sh and update.sh both run setup_services.sh', () => {
+        for (const script of ['scripts/install.sh', 'scripts/update.sh']) {
+            const src = readFileSync(path.join(repoRoot, script), 'utf8');
+            assert.match(src, /bash "\$(REPO_DIR|LIVE)\/scripts\/setup_services\.sh"/, script);
+        }
     });
 });
 //# sourceMappingURL=rollbackScript.test.js.map

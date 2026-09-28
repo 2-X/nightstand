@@ -79,6 +79,15 @@ describe('the agent bootstrap scripts', () => {
         // installer looks like it never started.
         assertOrder(read(POD), [': > "$SWAP_MARKER"', 'mv "$LIVE" "$PREV"'], 'marker-before-move');
     });
+    it('installs the rollback and revert units and their sudoers rules only after a passed health check', () => {
+        const pod = read(POD);
+        assert.ok(pod.indexOf('bash "$LIVE/scripts/setup_services.sh"') > pod.indexOf('if [ "$HEALTHY" != "1" ]; then'), 'setup_services.sh must not run before the health check');
+        assertOrder(pod, [
+            'if [ "$HEALTHY" != "1" ]; then',
+            'bash "$LIVE/scripts/setup_services.sh" "$LIVE"',
+            'rm -f "$SWAP_MARKER"',
+        ], 'services-after-health');
+    });
     it('never enables the rollback or revert units, only installs them', () => {
         // `enable --now` on either would execute the action immediately, undoing
         // the install before the health check runs.

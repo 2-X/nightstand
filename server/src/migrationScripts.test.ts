@@ -185,6 +185,24 @@ describe('fork-switch tool scripts', () => {
       assert.match(src, /node --check "\$STAGE\/server\/dist\/server\.js"/);
     });
 
+    // The previous fork's sudoers file has no rules for this fork's Roll back
+    // and Revert to stock units, so the installer has to add them. It does so
+    // only after the health check, so a failed install restores their fork
+    // without any of it.
+    it('installs the app-control units and sudoers rules only after the health check passes', () => {
+      assert.ok(
+        src.indexOf('bash "$LIVE/scripts/setup_services.sh"') > src.indexOf('if [ "$HEALTHY" != yes ]'),
+        'setup_services.sh must not run before the health check',
+      );
+      assertOrder(src, [
+        'Health check passed',
+        'bash "$LIVE/scripts/setup_services.sh" "$LIVE"',
+        'block_internet_access.sh',
+        'disarm_sentinel',
+      ], 'pod-installer.sh');
+      assert.doesNotMatch(src, /\/etc\/sudoers/, 'sudoers changes belong in setup_services.sh');
+    });
+
     it('applies this fork\'s WAN policy only after the health check succeeds', () => {
       assertOrder(src, [
         'if [ "$HEALTHY" != yes ]',

@@ -239,46 +239,13 @@ systemctl enable --now free-sleep-archive-raw.timer
 echo ""
 
 # -----------------------------------------------------------------------------------------------------
-# Create systemd service for updating
+# Units and sudoers rules for the app's Update, Roll back, Revert to stock,
+# Reboot, and biometrics controls (shared with update.sh and the migration
+# installers)
 
-UPDATE_SERVICE_FILE="/etc/systemd/system/free-sleep-update.service"
-echo "Creating systemd service file at $UPDATE_SERVICE_FILE..."
-
-cat > "$UPDATE_SERVICE_FILE" <<EOF
-[Unit]
-Description=Nightstand Updater
-After=free-sleep.service
-
-[Service]
-Type=oneshot
-# Run via bash so the updater still works if the script's exec bit is lost
-# (systemd fails with 203/EXEC before writing anything to the log otherwise).
-ExecStart=/bin/bash /home/dac/free-sleep/scripts/update_service.sh
-User=root
-Group=root
-KillMode=process
-# Also capture logs at the unit level (append so your file grows)
-StandardOutput=append:/persistent/free-sleep-data/logs/free-sleep-update.log
-StandardError=append:/persistent/free-sleep-data/logs/free-sleep-update.log
-
-EOF
-
-# -----------------------------------------------------------------------------------------------------
-# Create systemd service for instant rollback
-
-echo "Installing instant-rollback service..."
-chmod +x "$REPO_DIR/scripts/rollback_pod.sh"
-cp "$REPO_DIR/scripts/systemd/free-sleep-rollback.service" /etc/systemd/system/
-systemctl daemon-reload
-echo ""
-
-# -----------------------------------------------------------------------------------------------------
-# Create systemd service for reverting to stock upstream
-
-echo "Installing revert-to-stock service..."
-chmod +x "$REPO_DIR/scripts/revert-to-stock.sh"
-cp "$REPO_DIR/scripts/systemd/free-sleep-revert.service" /etc/systemd/system/
-systemctl daemon-reload
+echo "Installing the updater, rollback, and revert services and their sudoers rules..."
+bash "$REPO_DIR/scripts/setup_services.sh" "$REPO_DIR" \
+  || echo -e "\033[33mWARNING: some updater services or sudoers rules could not be installed; see above\033[0m"
 echo ""
 
 # --------------------------------------------------------------------------------
@@ -294,75 +261,6 @@ else
 fi
 
 echo ""
-# --------------------------------------------------------------------------------
-# Setup passwordless sudo scripts for dac user
-
-SUDOERS_FILE="/etc/sudoers.d/$USERNAME"
-echo "Setting up sudoers rules..."
-# Reboot
-SUDOERS_RULE="$USERNAME ALL=(ALL) NOPASSWD: /sbin/reboot"
-if sudo grep -Fxq "$SUDOERS_RULE" "$SUDOERS_FILE" 2>/dev/null; then
-  echo "Rule for '$USERNAME' reboot permissions already exists."
-else
-  echo "$SUDOERS_RULE" | sudo tee "$SUDOERS_FILE" > /dev/null
-  sudo chmod 440 "$SUDOERS_FILE"
-  echo "Passwordless permission for reboots granted to '$USERNAME'."
-fi
-
-# Updates
-SUDOERS_UPDATE_RULE="$USERNAME ALL=(root) NOPASSWD: /bin/systemctl start free-sleep-update.service --no-block"
-if sudo grep -Fxq "$SUDOERS_UPDATE_RULE" "$SUDOERS_FILE" 2>/dev/null; then
-  echo "Rule for '$USERNAME' update permissions already exists."
-else
-  echo "$SUDOERS_UPDATE_RULE" | sudo tee -a "$SUDOERS_FILE" >> /dev/null
-  sudo chmod 440 "$SUDOERS_FILE"
-  echo "Passwordless permission for updates granted to '$USERNAME'."
-fi
-chmod 755 /home/dac/free-sleep/scripts/update_service.sh
-
-# Instant rollback
-SUDOERS_ROLLBACK_RULE="$USERNAME ALL=(root) NOPASSWD: /bin/systemctl start free-sleep-rollback.service --no-block"
-if sudo grep -Fxq "$SUDOERS_ROLLBACK_RULE" "$SUDOERS_FILE" 2>/dev/null; then
-  echo "Rule for '$USERNAME' rollback permissions already exists."
-else
-  echo "$SUDOERS_ROLLBACK_RULE" | sudo tee -a "$SUDOERS_FILE" >> /dev/null
-  sudo chmod 440 "$SUDOERS_FILE"
-  echo "Passwordless permission for rollback granted to '$USERNAME'."
-fi
-
-# Revert to stock upstream
-SUDOERS_REVERT_RULE="$USERNAME ALL=(root) NOPASSWD: /bin/systemctl start free-sleep-revert.service --no-block"
-if sudo grep -Fxq "$SUDOERS_REVERT_RULE" "$SUDOERS_FILE" 2>/dev/null; then
-  echo "Rule for '$USERNAME' revert-to-stock permissions already exists."
-else
-  echo "$SUDOERS_REVERT_RULE" | sudo tee -a "$SUDOERS_FILE" >> /dev/null
-  sudo chmod 440 "$SUDOERS_FILE"
-  echo "Passwordless permission for revert-to-stock granted to '$USERNAME'."
-fi
-
-
-# Biometrics enablement
-SUDOERS_BIOMETRICS_RULE="$USERNAME ALL=(ALL) NOPASSWD: /bin/sh /home/dac/free-sleep/scripts/enable_biometrics.sh"
-if sudo grep -Fxq "$SUDOERS_BIOMETRICS_RULE" "$SUDOERS_FILE" 2>/dev/null; then
-  echo "Rule for '$USERNAME' biometrics permissions already exists."
-else
-  echo "$SUDOERS_BIOMETRICS_RULE" | sudo tee -a "$SUDOERS_FILE" >> /dev/null
-  sudo chmod 440 "$SUDOERS_FILE"
-  echo "Passwordless permission for biometrics granted to '$USERNAME'."
-fi
-
-# Biometrics disablement
-SUDOERS_BIOMETRICS_DISABLE_RULE="$USERNAME ALL=(ALL) NOPASSWD: /bin/sh /home/dac/free-sleep/scripts/disable_biometrics.sh"
-if sudo grep -Fxq "$SUDOERS_BIOMETRICS_DISABLE_RULE" "$SUDOERS_FILE" 2>/dev/null; then
-  echo "Rule for '$USERNAME' biometrics-disable permissions already exists."
-else
-  echo "$SUDOERS_BIOMETRICS_DISABLE_RULE" | sudo tee -a "$SUDOERS_FILE" >> /dev/null
-  sudo chmod 440 "$SUDOERS_FILE"
-  echo "Passwordless permission for biometrics disable granted to '$USERNAME'."
-fi
-
-echo ""
-
 sh /home/dac/free-sleep/scripts/add_shortcuts.sh
 
 # --------------------------------------------------------------------------------

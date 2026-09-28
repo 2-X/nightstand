@@ -180,13 +180,6 @@ else
   say "WARNING: data-compat-check.mjs missing from staged tree; skipping (older release predates this check)"
 fi
 
-say "Staging systemd units and sudoers rules (installed atomically after the swap)..."
-mkdir -p /home/dac/free-sleep-migrate-units
-cp "$STAGE/scripts/systemd/free-sleep-archive-raw.service" \
-   "$STAGE/scripts/systemd/free-sleep-archive-raw.timer" \
-   "$STAGE/scripts/systemd/free-sleep-rollback.service" \
-   /home/dac/free-sleep-migrate-units/ 2>/dev/null || true
-
 # ==============================================================================
 # Dead-man sentinel, armed immediately before we touch their service.
 # ==============================================================================
@@ -264,8 +257,8 @@ mv "$STAGE" "$LIVE" || {
 }
 chown -R dac:dac "$LIVE"
 
-say "Installing our systemd units..."
-cp /home/dac/free-sleep-migrate-units/*.service /home/dac/free-sleep-migrate-units/*.timer /etc/systemd/system/ 2>/dev/null || true
+say "Installing the RAW-archive timer units..."
+cp "$LIVE/scripts/systemd/free-sleep-archive-raw.service" "$LIVE/scripts/systemd/free-sleep-archive-raw.timer" /etc/systemd/system/ 2>/dev/null || true
 systemctl daemon-reload
 
 say "Running prisma migrate deploy (additive by standing rule)..."
@@ -280,13 +273,10 @@ systemctl start free-sleep || { restore_and_report "our service failed to start"
 # separate stream service (older layouts) simply has nothing to start.
 systemctl start free-sleep-stream >/dev/null 2>&1 || true
 systemctl enable --now free-sleep-archive-raw.timer >/dev/null 2>&1 || true
-# NB: free-sleep-rollback.service is a STATIC, on-demand oneshot, the app starts
-# it only when the user clicks "Roll back", and it swaps $LIVE <-> $PREV. Do NOT
-# `enable --now` it here: --now would EXECUTE an instant rollback right now,
-# transposing the freshly-installed tree back out with the original fork before
-# the health check even runs (the check would then see the OLD version, "fail",
-# and the restore would inherit an already-swapped pair). Installing the unit
-# file above (cp + daemon-reload) is all it needs to be startable on demand.
+# NB: free-sleep-rollback.service is a STATIC, on-demand oneshot that swaps
+# $LIVE <-> $PREV when the user clicks "Roll back". Never `enable --now` it:
+# that would run a rollback right now, before the health check. It is
+# installed, without being started, by setup_services.sh after the check passes.
 
 # --- health check (same shape as update.sh/rollback_pod.sh) --------------------
 # Pass condition: the new server answers /api/deviceStatus with HTTP 200 AND
@@ -353,7 +343,21 @@ fi
 # ==============================================================================
 # Success: apply our WAN policy, disarm the sentinel, report.
 # ==============================================================================
-say "Health check passed on v$STAGED_VERSION. Applying this fork's WAN policy..."
+say "Health check passed on v$STAGED_VERSION."
+# The same units, sudoers rules, memory limits, and shortcuts install.sh sets
+# up, so the app's Update, Roll back, and Revert to stock controls work without
+# relying on whatever the previous fork left. Done only after the health check,
+# so a failed install restores their fork without any of it. The memory limits
+# apply from the service's next restart.
+say "Installing the updater, rollback, and revert services and their sudoers rules..."
+bash "$LIVE/scripts/setup_services.sh" "$LIVE" \
+  || say "WARNING: some services or sudoers rules could not be installed; the next in-app update retries them"
+bash "$LIVE/scripts/setup_resource_limits.sh" >/dev/null 2>&1 \
+  || say "WARNING: could not install the service memory limits"
+bash "$LIVE/scripts/add_shortcuts.sh" >/dev/null 2>&1 \
+  || say "WARNING: could not install the fs-* shell shortcuts"
+
+say "Applying this fork's WAN policy..."
 sh "$LIVE/scripts/block_internet_access.sh" >/dev/null 2>&1 \
   || say "WARNING: could not apply block_internet_access.sh, check manually"
 
@@ -361,7 +365,7 @@ disarm_sentinel
 # Their original tree now lives at $PREV as this fork's instant-rollback slot;
 # their older pre-existing slot (if any) is intentionally retired, and the swap
 # marker is cleared so a stray later restore run correctly no-ops.
-rm -rf /home/dac/free-sleep-migrate-units "$IPTABLES_SNAPSHOT" "$BASELINE_FILE" "$RESTORE_SCRIPT_DEST" "$PREEXISTING_PREV"
+rm -rf "$IPTABLES_SNAPSHOT" "$BASELINE_FILE" "$RESTORE_SCRIPT_DEST" "$PREEXISTING_PREV"
 rm -f "$SWAP_MARKER"
 write_status "install" "success" "migrated to v$STAGED_VERSION; previous fork kept at $PREV (in-app instant rollback)"
 say "SUCCESS: migrated to v$STAGED_VERSION. Their original install is kept at $PREV, the app's Settings > Software & updates > Roll back button uses it."

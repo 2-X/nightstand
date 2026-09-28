@@ -300,11 +300,6 @@ else
   systemctl try-restart free-sleep-stream 2>/dev/null || true
 fi
 
-# Self-heal exec bits on the updater chain: free-sleep-update.service execs
-# update_service.sh directly on older installs, and a missing exec bit fails
-# the unit with 203/EXEC before it can log anything.
-chmod +x "$LIVE"/scripts/update.sh "$LIVE"/scripts/update_service.sh 2>/dev/null || true
-
 say "Ensuring RAW-archive retention timer is installed"
 if chmod +x "$LIVE/scripts/archive-raw.sh" \
   && cp "$LIVE/scripts/systemd/free-sleep-archive-raw.service" "$LIVE/scripts/systemd/free-sleep-archive-raw.timer" /etc/systemd/system/ \
@@ -315,54 +310,16 @@ else
   say "WARNING: failed to install RAW-archive retention timer; calibration/analyze jobs may fail on stale data windows"
 fi
 
-# --- instant-rollback service --------------------------------------------------
-# Installs that predate the instant-rollback feature never got
-# free-sleep-rollback.service or its sudoers rule, so the in-app "Roll back"
-# button would 404 against systemd. Idempotent, safe to re-run on every update.
-say "Ensuring instant-rollback service is installed"
-if chmod +x "$LIVE/scripts/rollback_pod.sh" \
-  && cp "$LIVE/scripts/systemd/free-sleep-rollback.service" /etc/systemd/system/ \
-  && systemctl daemon-reload; then
-  :
+# --- units and sudoers rules behind the app's controls --------------------------
+# Installs that predate a control (or came from another fork) may lack its unit
+# or sudoers rule, so the matching button would fail. Idempotent, so every
+# update re-runs it.
+say "Ensuring the updater, rollback, and revert services and sudoers rules are installed"
+if [ -f "$LIVE/scripts/setup_services.sh" ]; then
+  bash "$LIVE/scripts/setup_services.sh" "$LIVE" \
+    || say "WARNING: some services or sudoers rules could not be installed; the matching controls may not work until the next successful update"
 else
-  say "WARNING: failed to install the instant-rollback service; the Roll back button will not work until the next successful update"
-fi
-ROLLBACK_SUDOERS_RULE="dac ALL=(root) NOPASSWD: /bin/systemctl start free-sleep-rollback.service --no-block"
-SUDOERS_FILE=/etc/sudoers.d/dac
-if [ -f "$SUDOERS_FILE" ] && grep -Fxq "$ROLLBACK_SUDOERS_RULE" "$SUDOERS_FILE" 2>/dev/null; then
-  :
-else
-  echo "$ROLLBACK_SUDOERS_RULE" >> "$SUDOERS_FILE" && chmod 440 "$SUDOERS_FILE" \
-    || say "WARNING: failed to add rollback sudoers rule; the Roll back button will not work until the next successful update"
-fi
-
-# --- revert-to-stock service ----------------------------------------------------
-say "Ensuring revert-to-stock service is installed"
-if chmod +x "$LIVE/scripts/revert-to-stock.sh" \
-  && cp "$LIVE/scripts/systemd/free-sleep-revert.service" /etc/systemd/system/ \
-  && systemctl daemon-reload; then
-  :
-else
-  say "WARNING: failed to install the revert-to-stock service; the Revert to stock control will not work until the next successful update"
-fi
-REVERT_SUDOERS_RULE="dac ALL=(root) NOPASSWD: /bin/systemctl start free-sleep-revert.service --no-block"
-if [ -f "$SUDOERS_FILE" ] && grep -Fxq "$REVERT_SUDOERS_RULE" "$SUDOERS_FILE" 2>/dev/null; then
-  :
-else
-  echo "$REVERT_SUDOERS_RULE" >> "$SUDOERS_FILE" && chmod 440 "$SUDOERS_FILE" \
-    || say "WARNING: failed to add revert-to-stock sudoers rule; the Revert to stock control will not work until the next successful update"
-fi
-
-# --- biometrics-disable sudoers rule --------------------------------------------
-# Same self-heal as above: installs that predate this feature never got the
-# sudoers rule for disable_biometrics.sh, so flipping the Settings biometrics
-# toggle off would silently fail to stop free-sleep-stream.service.
-BIOMETRICS_DISABLE_SUDOERS_RULE="dac ALL=(ALL) NOPASSWD: /bin/sh /home/dac/free-sleep/scripts/disable_biometrics.sh"
-if [ -f "$SUDOERS_FILE" ] && grep -Fxq "$BIOMETRICS_DISABLE_SUDOERS_RULE" "$SUDOERS_FILE" 2>/dev/null; then
-  :
-else
-  echo "$BIOMETRICS_DISABLE_SUDOERS_RULE" >> "$SUDOERS_FILE" && chmod 440 "$SUDOERS_FILE" \
-    || say "WARNING: failed to add biometrics-disable sudoers rule; turning biometrics off will not stop the stream service until the next successful update"
+  chmod +x "$LIVE"/scripts/update.sh "$LIVE"/scripts/update_service.sh 2>/dev/null || true
 fi
 
 # --- health check --------------------------------------------------------------

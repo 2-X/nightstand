@@ -89,14 +89,8 @@ describe('revert-to-stock.sh', () => {
         const src = readFileSync(full, 'utf8');
         assert.match(src, /ExecStart=\/bin\/bash \/home\/dac\/free-sleep\/scripts\/revert-to-stock\.sh/);
     });
-    it('install.sh installs the revert-to-stock service and its sudoers rule', () => {
-        const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
-        assert.match(src, /free-sleep-revert\.service/);
-        assert.match(src, /NOPASSWD: \/bin\/systemctl start free-sleep-revert\.service --no-block/);
-    });
-    it('update.sh self-heals the revert-to-stock service and sudoers rule for existing installs', () => {
-        const src = readFileSync(path.join(repoRoot, 'scripts/update.sh'), 'utf8');
-        assert.match(src, /Ensuring revert-to-stock service is installed/);
+    it('setup_services.sh installs the revert-to-stock service and its sudoers rule', () => {
+        const src = readFileSync(path.join(repoRoot, 'scripts/setup_services.sh'), 'utf8');
         assert.match(src, /free-sleep-revert\.service/);
         assert.match(src, /NOPASSWD: \/bin\/systemctl start free-sleep-revert\.service --no-block/);
     });

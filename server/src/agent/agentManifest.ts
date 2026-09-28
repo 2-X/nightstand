@@ -96,6 +96,7 @@ export const AGENT_MANIFEST: AgentEntry[] = [
   { path: 'scripts/install.sh', mode: 'copy', why: 'installs this fork and wires the agent units' },
   { path: 'scripts/update.sh', mode: 'copy', why: 'download, back up, swap, health check, auto rollback' },
   { path: 'scripts/update_service.sh', mode: 'copy', why: 'systemd entry point for the updater' },
+  { path: 'scripts/setup_services.sh', mode: 'add', why: 'installs the updater, rollback and revert units and their sudoers rules' },
   { path: 'scripts/rollback_pod.sh', mode: 'add', why: 'swaps the live and previous trees offline' },
   // No snapshot exists to restore. Upstream ships no tags, so this downloads
   // whatever main is that day, which is not pinned to AGENT_BASE.sha and need
