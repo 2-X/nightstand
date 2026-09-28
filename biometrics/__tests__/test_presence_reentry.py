@@ -139,6 +139,29 @@ class TestPresenceReentry(unittest.TestCase):
         self.assertFalse(self.left.present)
         self.assertIn(('left', False), self.calls)
 
+    def test_blip_on_an_empty_side_does_not_exit_it_again(self):
+        self._establish_presence()
+        for _ in range(180):
+            self.left.detect_presence(QUIET)
+            self.right.detect_presence(QUIET)
+        self.assertFalse(self.left.present)
+
+        exits = []
+        original_exit = self.left._exit_presence
+        self.left._exit_presence = lambda: (exits.append(1), original_exit())
+
+        # Too short to enter (the gate needs 5), long enough to have reset the
+        # exit clock, after which the side logged a second exit 180s later.
+        for _ in range(4):
+            self.left.detect_presence(DOMINANT)
+            self.right.detect_presence(QUIET)
+        for _ in range(400):
+            self.left.detect_presence(QUIET)
+            self.right.detect_presence(QUIET)
+
+        self.assertFalse(self.left.present)
+        self.assertEqual(exits, [])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -641,7 +641,10 @@ class BiometricProcessor:
             if not self.present:
                 self.present_for = 0
             self.not_present_for += 1
-            if self.not_present_for == self.no_presence_tolerance:
+            # Gated on present: while absent, a short blip can still reset the
+            # clock above, and it would otherwise log an exit that never
+            # happened each time it ran out again.
+            if self.present and self.not_present_for == self.no_presence_tolerance:
                 logger.info(
                     f'Slow exit on {self.side} side: '
                     f'no signal for {self.no_presence_tolerance}s'
