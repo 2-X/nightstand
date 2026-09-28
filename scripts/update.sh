@@ -1,7 +1,7 @@
 #!/bin/bash
-# Self-updater for this fork. Downloads the latest main branch of
-# LTimothy/nightstand from GitHub and installs it: backup, stage, atomic
-# swap, health check, automatic rollback on failure.
+# Self-updater for this fork. Downloads the newest release of
+# LTimothy/nightstand from its tag archive on GitHub and installs it: backup,
+# stage, atomic swap, health check, automatic rollback on failure.
 #
 # Runs on the pod as root, normally via free-sleep-update.service (triggered
 # from the app's Settings page). Internet access is opened only long enough
@@ -10,19 +10,17 @@
 # Env:
 #   FS_UPDATE_FORCE=1   install even if the published version isn't newer
 #   NIGHTSTAND_REPO     GitHub repo to pull from (default: LTimothy/nightstand)
-#   NIGHTSTAND_BRANCH   branch to pull from (default: main)
+#   NIGHTSTAND_BRANCH   branch to read releases.json from (default: main)
 #
 # Target-version protocol: if the server wrote
 # /persistent/free-sleep-data/update-target.json before starting this
 # service, that file requests a specific version (and whether a downgrade is
-# allowed) instead of "latest branch". See the "consume the target-version
+# allowed) instead of the newest release. See the "consume the target-version
 # request file" block below.
 set -uo pipefail
 
 NIGHTSTAND_REPO="${NIGHTSTAND_REPO:-LTimothy/nightstand}"
 NIGHTSTAND_BRANCH="${NIGHTSTAND_BRANCH:-main}"
-INFO_URL="https://raw.githubusercontent.com/${NIGHTSTAND_REPO}/${NIGHTSTAND_BRANCH}/server/src/serverInfo.json"
-ZIP_URL="https://github.com/${NIGHTSTAND_REPO}/archive/refs/heads/${NIGHTSTAND_BRANCH}.zip"
 RELEASES_URL="https://raw.githubusercontent.com/${NIGHTSTAND_REPO}/${NIGHTSTAND_BRANCH}/releases.json"
 TAG_ZIP_URL_PREFIX="https://github.com/${NIGHTSTAND_REPO}/archive/refs/tags/v"
 
@@ -128,12 +126,7 @@ import json, sys
 target = '$TARGET_VERSION'
 data = json.load(sys.stdin)
 versions = [r['version'] for r in data['releases']]
-if target not in versions:
-    print('missing')
-elif data['releases'][0]['version'] == target:
-    print('head')
-else:
-    print('tagged')
+print('known' if target in versions else 'missing')
 " 2>/dev/null) || fail "could not parse releases.json"
   [ "$MANIFEST_CHECK" = missing ] && fail "v$TARGET_VERSION is not a known release (checked releases.json)"
 
@@ -145,18 +138,14 @@ print("yes" if parts(sys.argv[1]) < parts(sys.argv[2]) else "no")' "$TARGET_VERS
     fail "v$TARGET_VERSION is older than the running v$CUR_VERSION; refusing without allowDowngrade"
   fi
 
-  if [ "$MANIFEST_CHECK" = head ]; then
-    say "Requested version is the manifest head; using the branch zip"
-    RESOLVED_ZIP_URL="$ZIP_URL"
-  else
-    say "Requested version is an older tagged release; using the v$TARGET_VERSION tag archive"
-    RESOLVED_ZIP_URL="${TAG_ZIP_URL_PREFIX}${TARGET_VERSION}.zip"
-  fi
+  # Always the tag, never the branch: the branch moves after a release and
+  # would install code that no release describes.
+  RESOLVED_ZIP_URL="${TAG_ZIP_URL_PREFIX}${TARGET_VERSION}.zip"
   EXPECTED_VERSION="$TARGET_VERSION"
 else
-  say "Checking GitHub for the latest build..."
-  REMOTE_VERSION=$(curl -fsSL --max-time 20 "$INFO_URL" | python3 -c 'import json,sys;print(json.load(sys.stdin)["version"])') \
-    || fail "could not fetch the published version (check internet access and DNS)"
+  say "Checking GitHub for the newest release..."
+  REMOTE_VERSION=$(curl -fsSL --max-time 20 "$RELEASES_URL" | python3 -c 'import json,sys;print(json.load(sys.stdin)["releases"][0]["version"])') \
+    || fail "could not fetch releases.json (check internet access and DNS)"
 
   NEWER=$(python3 -c '
 import sys
@@ -168,7 +157,7 @@ print("yes" if pub > cur else "no")' "$CUR_VERSION" "$REMOTE_VERSION")
     say "Already up to date (published: v$REMOTE_VERSION). Nothing to do."
     exit 0
   fi
-  RESOLVED_ZIP_URL="$ZIP_URL"
+  RESOLVED_ZIP_URL="${TAG_ZIP_URL_PREFIX}${REMOTE_VERSION}.zip"
   EXPECTED_VERSION="$REMOTE_VERSION"
 fi
 
@@ -193,6 +182,9 @@ STAGED_VERSION=$(python3 -c 'import json;print(json.load(open("'"$STAGE"'/server
   || fail "staged tree has no readable serverInfo.json"
 if [ -n "$TARGET_VERSION" ] && [ "$STAGED_VERSION" != "$TARGET_VERSION" ]; then
   fail "staged tree reports v$STAGED_VERSION but v$TARGET_VERSION was requested; refusing a mislabeled release"
+fi
+if [ -z "$TARGET_VERSION" ] && [ -n "${EXPECTED_VERSION:-}" ] && [ "$STAGED_VERSION" != "$EXPECTED_VERSION" ]; then
+  fail "staged tree reports v$STAGED_VERSION but releases.json lists v$EXPECTED_VERSION; refusing a mislabeled release"
 fi
 
 # --- dependencies (old server still running) ---------------------------------

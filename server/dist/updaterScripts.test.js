@@ -31,9 +31,7 @@ describe('updater shell scripts', () => {
     it('update.sh pulls from this fork by default, overridable via env', () => {
         const src = readFileSync(path.join(repoRoot, 'scripts/update.sh'), 'utf8');
         assert.match(src, /NIGHTSTAND_REPO:-LTimothy\/nightstand/, 'must default to this fork');
-        assert.match(src, /NIGHTSTAND_BRANCH:-main/, 'must default to main');
-        assert.match(src, /ZIP_URL="https:\/\/github\.com\/\$\{NIGHTSTAND_REPO\}\/archive\/refs\/heads\/\$\{NIGHTSTAND_BRANCH\}\.zip"/);
-        assert.match(src, /INFO_URL="https:\/\/raw\.githubusercontent\.com\/\$\{NIGHTSTAND_REPO\}\/\$\{NIGHTSTAND_BRANCH\}\/server\/src\/serverInfo\.json"/);
+        assert.match(src, /NIGHTSTAND_BRANCH:-main/, 'must read releases.json from main by default');
         assert.match(src, /block_internet_access\.sh/, 'must re-block WAN');
         assert.match(src, /trap cleanup EXIT/, 'must re-block WAN even on failure');
         assert.match(src, /rolling back/i, 'must have a rollback path');
@@ -60,17 +58,39 @@ describe('updater shell scripts', () => {
     // units and sudoers rules it goes on to wire up (rollback, revert to stock)
     // name scripts that exist only here, so pointing it at the stock upstream
     // archive would install a tree those rules do not match.
-    it('install.sh installs from this fork, whose scripts it wires up', () => {
+    it('install.sh installs a release of this fork, whose scripts it wires up', () => {
         const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
-        assert.match(src, /REPO_URL="https:\/\/github\.com\/LTimothy\/nightstand\/archive\/refs\/heads\/main\.zip"/);
+        assert.match(src, /RELEASES_URL="https:\/\/raw\.githubusercontent\.com\/LTimothy\/nightstand\/main\/releases\.json"/);
+        assert.match(src, /TAG_ZIP_URL_PREFIX="https:\/\/github\.com\/LTimothy\/nightstand\/archive\/refs\/tags\/v"/);
+        assert.match(src, /NIGHTSTAND_CHANNEL:-stable/, 'fresh installs default to the stable channel');
+        assert.doesNotMatch(src, /refs\/heads/, 'must never install a branch');
     });
-    // GitHub names an archive's top directory after the repo, so this fork's zip
-    // unpacks to nightstand-main rather than free-sleep-main. Hardcoding either
-    // name silently breaks the install the moment the repo is renamed.
+    // GitHub names an archive's top directory after the repo and ref, so it is
+    // nightstand-3.3.0 for a tag. Hardcoding a name breaks on a rename.
     it('install.sh resolves the unpacked archive directory instead of hardcoding it', () => {
         const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
-        assert.match(src, /find \. -mindepth 1 -maxdepth 1 -type d -name '\*-main'/);
-        assert.doesNotMatch(src, /mv free-sleep-main/);
+        assert.match(src, /SRC_DIR=\$\(find "\$UNZIP_DIR" -mindepth 1 -maxdepth 1 -type d/);
+        assert.doesNotMatch(src, /free-sleep-main|nightstand-main|'\*-main'/);
+    });
+    describe('install.sh picks the newest release on its channel', () => {
+        const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
+        const picker = /VERSION=\$\(curl -fsSL "\$RELEASES_URL" \| python3 -c '\n([\s\S]*?)\n' "\$CHANNEL"\)/.exec(src)?.[1];
+        const manifest = JSON.stringify({
+            channels: ['stable', 'beta'],
+            releases: [
+                { version: '3.4.0', channel: 'beta' },
+                { version: '3.3.0', channel: 'stable' },
+                { version: '3.0.0', channel: 'stable' },
+            ],
+        });
+        const pick = (channel, input = manifest) => execFileSync('python3', ['-c', picker ?? '', channel], { input, encoding: 'utf8' }).trim();
+        it('finds the picker', () => assert.ok(picker, 'the inline release picker moved; update this test'));
+        it('stable skips newer betas', () => assert.equal(pick('stable'), '3.3.0'));
+        it('beta takes the newest of either channel', () => assert.equal(pick('beta'), '3.4.0'));
+        it('prints nothing when the channel has no release', () => {
+            assert.equal(pick('stable', JSON.stringify({ releases: [{ version: '3.4.0', channel: 'beta' }] })), '');
+        });
+        it('rejects an unknown channel', () => assert.throws(() => pick('nightly')));
     });
     it('install.sh bootstraps node through the shared ensure-node.sh', () => {
         const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
@@ -119,8 +139,15 @@ describe('updater shell scripts', () => {
         it('skips prisma migrate on a downgrade', () => {
             assert.match(src, /IS_DOWNGRADE.*=.*yes.*\n.*skipping prisma migrate/);
         });
-        it('resolves a tagged release via the GitHub tag-archive URL, not just the branch zip', () => {
+        it('installs every release from its tag archive, never a branch', () => {
             assert.match(src, /TAG_ZIP_URL_PREFIX="https:\/\/github\.com\/\$\{NIGHTSTAND_REPO\}\/archive\/refs\/tags\/v"/);
+            assert.doesNotMatch(src, /refs\/heads/);
+            assert.match(src, /RESOLVED_ZIP_URL="\$\{TAG_ZIP_URL_PREFIX\}\$\{TARGET_VERSION\}\.zip"/);
+            assert.match(src, /RESOLVED_ZIP_URL="\$\{TAG_ZIP_URL_PREFIX\}\$\{REMOTE_VERSION\}\.zip"/);
+        });
+        it('a plain update takes the newest release from releases.json', () => {
+            assert.match(src, /REMOTE_VERSION=\$\(curl -fsSL --max-time 20 "\$RELEASES_URL" \| python3 -c '.*\["releases"\]\[0\]\["version"\]/);
+            assert.match(src, /but releases\.json lists v\$EXPECTED_VERSION/);
         });
         it('verifies releases.json before installing a requested version', () => {
             assert.match(src, /RELEASES_URL="https:\/\/raw\.githubusercontent\.com\/\$\{NIGHTSTAND_REPO\}\/\$\{NIGHTSTAND_BRANCH\}\/releases\.json"/);

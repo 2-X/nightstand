@@ -223,10 +223,18 @@ nmcli connection reload
 
 ## 13. Install the Nightstand server
 
-This sets up a systemd service that starts automatically on boot.
+This installs the newest stable release and sets up a systemd service that
+starts automatically on boot.
 
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LTimothy/nightstand/main/scripts/install.sh)"
+```
+
+To start on the newest beta instead, set `NIGHTSTAND_CHANNEL=beta`, and pick
+the beta channel under Settings, then Versions, once the app is up:
+
+```bash
+NIGHTSTAND_CHANNEL=beta /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LTimothy/nightstand/main/scripts/install.sh)"
 ```
 
 ---
@@ -474,5 +482,5 @@ Run these in a terminal over an SSH session on your pod.
 - `fs-restart`: restarts the free-sleep and free-sleep-stream services.
 - `fs-reset-db`: deletes the biometrics database and recreates it (useful for a corrupted database file).
 - `fs-reset`: deletes all Nightstand data (schedules, biometrics, settings) and reinstalls the latest published build. Useful for a corrupted database, or when switching from the beta channel to stable. Asks for confirmation before running.
-- `fs-update`: downloads and installs the latest build of this fork from GitHub, with automatic backup and rollback (the same script the app's Update button runs).
+- `fs-update`: downloads and installs the newest release of this fork from GitHub, with automatic backup and rollback (the same script the app's Update button runs).
 - `fs-dev-server`: stops the Nightstand service and runs the Express server directly with nodemon (for development).
