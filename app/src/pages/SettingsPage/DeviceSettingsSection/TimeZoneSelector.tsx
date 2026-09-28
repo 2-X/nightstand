@@ -25,14 +25,15 @@ export default function TimeZoneSelector({ settings, updateSettings }: TimeZoneS
   };
 
   return (
-    <Box sx={ { minWidth: 120, width: 300 } }>
+    <Box sx={ { minWidth: 0, width: '100%', maxWidth: 300 } }>
       <FormControl fullWidth>
-        <InputLabel>Time Zone</InputLabel>
+        <InputLabel id="time-zone-label">Time zone</InputLabel>
         <Select
+          labelId="time-zone-label"
           error={ settings?.timeZone === null }
           disabled={ isUpdating }
           value={ settings?.timeZone || '' }
-          label="Time Zone"
+          label="Time zone"
           onChange={ handleChange }
         >
           {

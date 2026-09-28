@@ -9,7 +9,7 @@ import SchedulePage from './SchedulePage';
 describe('SchedulePage', () => {
   it('renders the schedule page once schedule data loads', async () => {
     renderWithProviders(<SchedulePage />, { initialRoute: '/schedules' });
-    expect(await screen.findByText('Power on')).toBeInTheDocument();
+    expect(await screen.findByText('Turn on at')).toBeInTheDocument();
   });
 });
 

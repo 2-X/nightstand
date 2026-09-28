@@ -1,38 +1,32 @@
 import { useEffect, useState } from 'react';
-import { ToggleButtonGroup, ToggleButton, Box, Tooltip } from '@mui/material';
+import { Box, Radio, RadioGroup, Typography } from '@mui/material';
+import CheckCircleOutline from '@mui/icons-material/CheckCircleOutline';
 import { useAppStore } from '@state/appStore.tsx';
 import { useSettings } from '@api/settings.ts';
 import { useDeviceStatus } from '@api/deviceStatus.ts';
+import { useServices } from '@api/services.ts';
 import { usePresence, PresenceSide } from '@api/presence.ts';
-import { formatTemperature } from '@lib/temperatureConversions.ts';
+import { fahrenheitToLevel, formatTemperature } from '@lib/temperatureConversions.ts';
+import { temperatureColor } from '@lib/temperatureColor';
+import { palette } from '@design/tokens';
 
-function isFresh(side: PresenceSide | undefined): boolean {
-  const age = Date.now() - Date.parse(side?.lastUpdatedAt ?? '');
-  return Number.isFinite(age) && age >= 0 && age <= 5 * 60_000;
+function presenceLabel(observation: PresenceSide | undefined): string | undefined {
+  const age = Date.now() - Date.parse(observation?.lastUpdatedAt ?? '');
+  const elapsed = Date.now() - Date.parse(observation?.stateChangedAt ?? '');
+  if (!observation?.present || !Number.isFinite(age) || age < 0 || age > 5 * 60_000 || !Number.isFinite(elapsed) || elapsed < 0) return;
+  const minutes = Math.floor(elapsed / 60_000);
+  return minutes < 1 ? 'In bed less than a minute' : `In bed ${minutes} min`;
 }
 
-function formatDuration(ms: number): string {
-  const sec = Math.max(0, Math.floor(ms / 1000));
-  if (sec < 60) return `${sec}s`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m`;
-  const hr = Math.floor(min / 60);
-  const remMin = min % 60;
-  return remMin > 0 ? `${hr}h ${remMin}m` : `${hr}h`;
-}
-
-function presenceLabel(side: PresenceSide | undefined): string {
-  if (!side?.lastUpdatedAt) return 'Presence unavailable';
-  if (!isFresh(side)) return 'Presence stale';
-  const elapsed = Date.now() - Date.parse(side.stateChangedAt ?? '');
-  if (!Number.isFinite(elapsed) || elapsed < 0) return side.present ? 'Presence detected' : 'No presence';
-  return side.present ? `In bed for ${formatDuration(elapsed)}` : `No presence for ${formatDuration(elapsed)}`;
-}
-
-export default function SideControl({ showTemp, beforeSideChange }: { showTemp?: boolean; beforeSideChange?: () => boolean }) {
+export default function SideControl({ compact = true, mergeAwaySides = true, beforeSideChange }: {
+  compact?: boolean;
+  mergeAwaySides?: boolean;
+  beforeSideChange?: (side: 'left' | 'right') => boolean;
+}) {
   const { side, setSide } = useAppStore();
   const { data: settings } = useSettings();
   const { data: deviceStatus } = useDeviceStatus();
+  const { data: services } = useServices();
   const { data: presence } = usePresence();
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -40,37 +34,71 @@ export default function SideControl({ showTemp, beforeSideChange }: { showTemp?:
     return () => clearInterval(id);
   }, []);
   const format = settings?.temperatureFormat ?? 'fahrenheit';
+  const other = side === 'left' ? 'right' : 'left';
+  const both = mergeAwaySides && settings?.[other]?.awayMode && !settings?.[side]?.awayMode;
+  const keys = both ? [side] : ['left', 'right'] as const;
   return (
-    <ToggleButtonGroup
+    <RadioGroup
       aria-label="Bed side"
-      color="primary"
-      exclusive
+      row
       value={ side }
-      onChange={ (_event, value: unknown) => {
-        if ((value === 'left' || value === 'right') && value !== side && (!beforeSideChange || beforeSideChange())) setSide(value);
+      onChange={ (_event, value) => {
+        if ((value === 'left' || value === 'right') && value !== side && (!beforeSideChange || beforeSideChange(value))) setSide(value);
       } }
-      size="small"
-    >
-      { (['left', 'right'] as const).map(key => (
-        <Tooltip key={ key } describeChild title={ presenceLabel(presence?.[key]) }>
-          <ToggleButton value={ key } sx={ { p: 1, gap: 0.75 } }>
-            { settings?.[key]?.name ?? (key === 'left' ? 'Left' : 'Right') }
-            { showTemp && side !== key && ' ' }
-            { showTemp && side !== key && (
-              deviceStatus?.[key]?.isOn
-                ? formatTemperature(deviceStatus[key].targetTemperatureF, format)
-                : 'Off'
-            ) }
-            <Box
-              component="span"
-              aria-hidden
-              sx={ {
-                width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                backgroundColor: !isFresh(presence?.[key]) ? 'text.disabled' : presence?.[key]?.present ? 'success.main' : 'text.secondary',
-              } }/>
-          </ToggleButton>
-        </Tooltip>
-      )) }
-    </ToggleButtonGroup>
+      sx={ {
+        width: '100%', display: 'grid', gridTemplateColumns: both ? '1fr' : '1fr 1fr', gap: 1,
+        ...(!compact && { p: 0.5, border: `1px solid ${palette.border.control}`, borderTopWidth: 4, borderRadius: 3 }),
+      } }>
+      { keys.map(key => {
+        const selected = side === key;
+        const status = deviceStatus?.[key];
+        const name = settings?.[key]?.name || (key === 'left' ? 'Left side' : 'Right side');
+        const away = settings?.[key]?.awayMode;
+        const temperature = status ? formatTemperature(status.targetTemperatureF, format) : '';
+        const direction = status && (status.currentTemperatureF > status.targetTemperatureF ? 'cooling'
+          : status.currentTemperatureF < status.targetTemperatureF ? 'warming' : 'holding');
+        const state = away ? 'Away' : !status ? 'Status unavailable' : !status.isOn ? 'Off'
+          : `${temperature}, ${direction}`;
+        const calibration = services?.biometrics?.jobs?.[key === 'left' ? 'calibrateLeft' : 'calibrateRight'];
+        const occupancy = !compact && !away && services?.biometrics.enabled && calibration?.status === 'healthy'
+          ? presenceLabel(presence?.[key]) : undefined;
+        const title = both ? 'Both sides' : name;
+        return <Box
+          component="label"
+          key={ key }
+          sx={ {
+            position: 'relative', display: 'flex', alignItems: 'center', gap: 1, minWidth: 0,
+            minHeight: compact ? 48 : 88, py: compact ? 0.5 : 1, px: compact ? 1 : 1.5, cursor: 'pointer', borderRadius: 2,
+            bgcolor: selected ? palette.bg.selected : palette.bg.elevated,
+            border: `2px solid ${selected ? palette.lamp : palette.border.subtle}`,
+            '&:has(input:focus-visible)': { outline: `2px solid ${palette.lamp}`, outlineOffset: 3 },
+          } }>
+          <Radio
+            value={ key }
+            checked={ selected }
+            slotProps={ { input: {
+              'aria-label': `${title}. ${both ? `${name}'s controls apply to both sides. ` : ''}${state}.${occupancy ? ` ${occupancy}.` : ''}`,
+            } } }
+            sx={ { position: 'absolute', inset: 0, opacity: 0, p: 0, '& input': { width: '100%', height: '100%' } } }/>
+          <Box sx={ { minWidth: 0, flex: 1 } }>
+            <Typography fontWeight={ 600 } sx={ { fontSize: 16, pr: 1.5, overflowWrap: 'anywhere', lineHeight: compact ? 1.2 : 1.5 } }>
+              { title }
+            </Typography>
+            <Box sx={ { display: 'flex', alignItems: 'center', gap: 0.5 } }>
+              <Typography
+                variant="caption"
+                color={ status?.isOn && !away ? temperatureColor(fahrenheitToLevel(status.targetTemperatureF)) : 'text.secondary' }
+                sx={ { lineHeight: compact ? 1.2 : 1.5 } }>
+                { compact && status?.isOn && !away ? temperature : state }
+              </Typography>
+            </Box>
+            { occupancy && <Typography variant="caption" color="text.secondary">{ occupancy }</Typography> }
+          </Box>
+          { selected && <CheckCircleOutline
+            aria-hidden
+            sx={ { position: 'absolute', top: 4, right: 4, fontSize: 18, color: palette.lamp, pointerEvents: 'none' } }/> }
+        </Box>;
+      }) }
+    </RadioGroup>
   );
 }

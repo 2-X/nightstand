@@ -35,7 +35,7 @@ export default function AlarmDisabledDialog({ open, setOpen, nightEnd, scope, al
     <DialogTitle id="alarm-disable-title">{ alarmDisabled ? 'Restore recurring alarms?' : 'Skip recurring alarms for this night?' }</DialogTitle>
     <DialogContent>
       <Typography variant="body2" sx={ { mb: 1 } }>{ scope }</Typography>
-      <Typography variant="body2">Applies to all remaining recurring alarms for this night. One-off alarms are unchanged.</Typography>
+      <Typography variant="body2">Applies to all remaining recurring alarms for this night. One-time alarms are unchanged.</Typography>
       { error && <Alert severity="error" sx={ { mt: 2 } }>{ error }</Alert> }
     </DialogContent>
     <DialogActions>

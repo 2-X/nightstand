@@ -48,7 +48,7 @@ export default function AlarmOverride({ open, setOverrideOpen, alarmTimeLocalOve
     <DialogContent>
       <Typography variant="body2" sx={ { mb: 1 } }>{ scope }</Typography>
       <Typography variant="body2" sx={ { mb: 2 } }>
-        Replaces all recurring alarms still to come this night with one alarm. One-off alarms are unchanged.
+        Replaces all recurring alarms still to come this night with one alarm. One-time alarms are unchanged.
       </Typography>
       <TextField
         label="Alarm"

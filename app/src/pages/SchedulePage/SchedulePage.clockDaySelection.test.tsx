@@ -25,7 +25,7 @@ describe('SchedulePage initial day selection under a controlled clock', () => {
     renderWithProviders(<SchedulePage />, { initialRoute: '/schedules' });
 
     // Wait for the schedules query to land (originalSchedules set); the
-    // "Power on" label renders with fallback data before that.
+    // "Turn on at" label renders with fallback data before that.
     await waitFor(() => expect(useScheduleStore.getState().originalSchedules).toBeTruthy());
     await waitFor(() => expect(useScheduleStore.getState().selectedDay).toBe('tuesday'));
 

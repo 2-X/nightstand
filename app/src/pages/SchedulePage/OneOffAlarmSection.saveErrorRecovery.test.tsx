@@ -5,7 +5,7 @@ import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import OneOffAlarmSection from './OneOffAlarmSection';
 
-// This test deliberately makes the one-off alarm save reject. The app
+// This test deliberately makes the one-time alarm save reject. The app
 // catches it, but the rejected request can be reported as a transient
 // unhandled rejection depending on timing; swallow that expected rejection
 // so it does not fail the run. Pattern copied from
@@ -14,7 +14,7 @@ function swallowRejection(event: PromiseRejectionEvent) {
   event.preventDefault();
 }
 
-// Regression: when the one-off alarm save fails, the local `saving` state
+// Regression: when the one-time alarm save fails, the local `saving` state
 // must clear (finally runs regardless of the catch) so the button is usable
 // again rather than stuck showing a spinner forever.
 describe('OneOffAlarmSection save error recovery', () => {
@@ -28,12 +28,12 @@ describe('OneOffAlarmSection save error recovery', () => {
 
     const { user } = renderWithProviders(<OneOffAlarmSection />, { initialRoute: '/schedules' });
 
-    const save = await screen.findByRole('button', { name: 'Save one-off alarm' }) as HTMLButtonElement;
+    const save = await screen.findByRole('button', { name: 'Save one-time alarm' }) as HTMLButtonElement;
     await user.click(save);
 
     // After the failed save settles, the button must return to its normal,
     // enabled state - not remain stuck in the saving spinner.
-    const savedAgain = await screen.findByRole('button', { name: 'Save one-off alarm' }) as HTMLButtonElement;
+    const savedAgain = await screen.findByRole('button', { name: 'Save one-time alarm' }) as HTMLButtonElement;
     await waitFor(() => expect(savedAgain.disabled).toBe(false), { timeout: 3000 });
     expect(screen.getByRole('alert')).toHaveTextContent(/Could not save/);
   });

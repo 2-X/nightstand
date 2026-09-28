@@ -28,7 +28,8 @@ function alarms(times: Array<[string, boolean]>, powerOff = '09:00') {
 it('shows the next enabled secondary alarm and preserves 24-hour dialog input', async () => {
   alarms([['07:00', false], ['23:00', true], ['08:00', true]]);
   renderWithProviders(<AlarmNotification />);
-  fireEvent.click(await screen.findByRole('button', { name: '11:00 PM' }));
+  expect(await screen.findByText('Alarm today at 11:00 PM')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Change' }));
   expect(await screen.findByLabelText('Alarm')).toHaveValue('23:00');
   expect(screen.getByText(/replaces all recurring alarms/i)).toBeInTheDocument();
 });
@@ -41,7 +42,7 @@ it('disabling the night expires after all its alarms, on the correct overnight d
     return HttpResponse.json(getSettings());
   }));
   renderWithProviders(<AlarmNotification />);
-  fireEvent.click(await screen.findByRole('button', { name: 'Disable' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Skip' }));
   fireEvent.click(await screen.findByRole('button', { name: /disable tonight/i }));
   await waitFor(() => expect(payload?.left.scheduleOverrides.alarm.disabled).toBe(true));
   expect(payload.left.scheduleOverrides.alarm.expiresAt).toBe('2026-09-29T09:00:00Z');
@@ -55,14 +56,14 @@ it('keeps a later replacement visible after the original alarm time has passed',
   settings.left.scheduleOverrides.alarm = { disabled: false, timeOverride: '08:00', expiresAt: '2026-09-29T09:00:00Z' };
   server.use(http.get('*/settings', () => HttpResponse.json(settings)));
   renderWithProviders(<AlarmNotification />);
-  expect(await screen.findByRole('button', { name: '8:00 AM' })).toBeInTheDocument();
+  expect(await screen.findByText('Alarm today at 8:00 AM')).toBeInTheDocument();
 });
 
 
 it('keeps alarms visible inside a full-day power window', async () => {
   alarms([['23:00', true]], '21:00');
   renderWithProviders(<AlarmNotification />);
-  expect(await screen.findByRole('button', { name: '11:00 PM' })).toBeInTheDocument();
+  expect(await screen.findByText('Alarm today at 11:00 PM')).toBeInTheDocument();
 });
 
 it('does not carry a completed full-day override into the next night', async () => {
@@ -78,5 +79,26 @@ it('does not carry a completed full-day override into the next night', async () 
   settings.left.scheduleOverrides.alarm = { disabled: true, timeOverride: '', expiresAt: '2026-09-29T21:00:00Z' };
   server.use(http.get('*/settings', () => HttpResponse.json(settings)), http.get('*/schedules', () => HttpResponse.json(schedules)));
   renderWithProviders(<AlarmNotification />);
-  expect(await screen.findByRole('button', { name: '11:00 PM' })).toBeInTheDocument();
+  expect(await screen.findByText('Alarm today at 11:00 PM')).toBeInTheDocument();
+});
+
+
+it('uses the overridden alarm date when the replacement moves before midnight', async () => {
+  alarms([['07:00', true]]);
+  const settings = structuredClone(getSettings());
+  settings.timeZone = 'UTC';
+  settings.left.scheduleOverrides.alarm = { disabled: false, timeOverride: '23:00', expiresAt: '2026-09-29T09:00:00Z' };
+  server.use(http.get('*/settings', () => HttpResponse.json(settings)));
+  renderWithProviders(<AlarmNotification />);
+  expect(await screen.findByText('Alarm today at 11:00 PM')).toBeInTheDocument();
+  expect(screen.getByText(/Alarm today at/)).toBeInTheDocument();
+  expect(screen.queryByText(/Alarm tomorrow at/)).not.toBeInTheDocument();
+});
+
+it('makes changing the upcoming alarm an explicit action beside its time', async () => {
+  alarms([['07:00', true]]);
+  renderWithProviders(<AlarmNotification/>);
+  expect(await screen.findByText('Alarm tomorrow at 7:00 AM')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+  expect(await screen.findByRole('dialog', { name: /Change this night's recurring alarms/ })).toBeInTheDocument();
 });

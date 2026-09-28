@@ -60,8 +60,9 @@ export default function ScheduleOverrideBanner() {
       icon={ false }
       sx={ {
         width: '100%',
-        backgroundColor: 'rgba(33, 150, 243, 0.08)',
-        border: '1px solid rgba(33, 150, 243, 0.25)',
+        backgroundColor: 'background.paper',
+        border: '1px solid',
+        borderColor: 'divider',
         '& .MuiAlert-message': { width: '100%' },
       } }
     >

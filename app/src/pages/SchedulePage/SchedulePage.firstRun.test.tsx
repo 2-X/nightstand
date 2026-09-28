@@ -1,0 +1,42 @@
+import { beforeEach, expect, it } from 'vitest';
+import { fireEvent, screen } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { renderWithProviders } from '@test/renderWithProviders';
+import { server } from '@test/setup';
+import { useAppStore } from '@state/appStore';
+import { useScheduleStore } from './scheduleStore';
+import SchedulePage from './SchedulePage';
+import { getSchedules } from '../../mocks/mockData';
+
+beforeEach(() => {
+  useAppStore.setState({ side: 'left', isUpdating: false });
+  useScheduleStore.setState(useScheduleStore.getInitialState(), true);
+});
+
+it('starts a complete editable draft when no saved night exists', async () => {
+  server.use(http.get('*/schedules', () => HttpResponse.json({})));
+  renderWithProviders(<SchedulePage/>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Set bedtime and wake time' }));
+  expect(screen.getByLabelText('Turn on at')).toHaveValue('21:00');
+  expect(screen.getByLabelText('Alarm time')).toHaveValue('07:00');
+  expect(useScheduleStore.getState().isValid()).toBe(true);
+  expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+});
+
+
+it('offers setup for an unused side and preserves its saved times when starting', async () => {
+  const schedules = structuredClone(getSchedules());
+  for (const day of Object.values(schedules.left)) {
+    day.power = { ...day.power, enabled: false, on: '22:15', off: '08:30' };
+    day.temperatures = {};
+    day.alarm = { ...day.alarm, enabled: false, time: '08:00' };
+    day.alarms = [];
+  }
+  server.use(http.get('*/schedules', () => HttpResponse.json(schedules)));
+  renderWithProviders(<SchedulePage/>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Set bedtime and wake time' }));
+  expect(screen.getByLabelText('Turn on at')).toHaveValue('22:15');
+  expect(screen.getByLabelText('Alarm time')).toHaveValue('08:00');
+  expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('08:30');
+  expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+});

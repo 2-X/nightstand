@@ -66,13 +66,3 @@ export function formatDisplayValue(value: number, format: TemperatureFormat): st
 export function formatTemperature(temperature: number, format: TemperatureFormat): string {
   return formatDisplayValue(fahrenheitToDisplay(temperature, format), format);
 }
-
-export function getTemperatureColor(tempF: number | undefined): string {
-  if (tempF === undefined) return '#262626';
-  if (fahrenheitToLevel(tempF) === 0) return '#9e9e9e';
-  if (tempF <= 70) return '#2196f3';
-  if (tempF <= 82) return '#5393ff';
-  if (tempF <= 95) return '#db5858';
-  return '#d32f2f';
-}
-

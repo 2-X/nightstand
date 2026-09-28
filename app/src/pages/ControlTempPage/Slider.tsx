@@ -1,159 +1,78 @@
-import { useEffect, useRef } from 'react';
-import { CircularSliderWithChildren } from 'react-circular-slider-svg';
-import { postDeviceStatus } from '@api/deviceStatus.ts';
+import { useId } from 'react';
+import { Box } from '@mui/material';
 import { useAppStore } from '@state/appStore';
-import styles from './Slider.module.scss';
+import { useControlTempStore } from './controlTempStore.tsx';
 import TemperatureLabel from './TemperatureLabel.tsx';
 import TemperatureButtons from './TemperatureButtons.tsx';
-import { useControlTempStore } from './controlTempStore.tsx';
-import { useTheme } from '@mui/material/styles';
-import { useResizeDetector } from 'react-resize-detector';
-import { useSettings } from '@api/settings.ts';
-import { MAX_TEMP_F, MIN_TEMP_F, getTemperatureColor, TemperatureFormat } from '@lib/temperatureConversions.ts';
+import { fahrenheitToLevel, MAX_TEMP_F, MIN_TEMP_F, TemperatureFormat } from '@lib/temperatureConversions.ts';
+import { temperatureColor } from '@lib/temperatureColor';
+import { palette } from '@design/tokens';
 
 type SliderProps = {
   isOn: boolean;
   currentTargetTemp: number;
   currentTemperatureF: number;
-  refetch: any;
+  refetch: () => unknown;
   format: TemperatureFormat;
+};
+
+function position(temperature: number) {
+  const fraction = Math.max(0, Math.min(1, (temperature - MIN_TEMP_F) / (MAX_TEMP_F - MIN_TEMP_F)));
+  const angle = (150 + fraction * 240) * Math.PI / 180;
+  return { x: 140 + 122 * Math.cos(angle), y: 140 + 122 * Math.sin(angle) };
 }
 
 export default function Slider({ isOn, currentTargetTemp, refetch, currentTemperatureF, format }: SliderProps) {
-  const { deviceStatus, setDeviceStatus, beginEdit, endEdit } = useControlTempStore();
-  const { isUpdating, setIsUpdating, side } = useAppStore();
-  const { data: settings } = useSettings();
-  const isInAwayMode = settings?.[side].awayMode;
-  const disabled = isUpdating || isInAwayMode || !isOn;
-  const { width, ref } = useResizeDetector();
-  const theme = useTheme();
-  const sliderColor = getTemperatureColor(deviceStatus?.[side]?.targetTemperatureF);
-  // Tracks whether this drag/click has already opened the edit gate. We open
-  // it on the first onChange (or directly in handleControlFinished if the
-  // user clicked without dragging) and close it once the POST settles.
-  const dragOpenRef = useRef(false);
-
-  const openGateIfClosed = () => {
-    if (!dragOpenRef.current) {
-      dragOpenRef.current = true;
-      beginEdit();
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (dragOpenRef.current) {
-        dragOpenRef.current = false;
-        endEdit();
-      }
-    };
-  }, [endEdit]);
-
-  const handleControlFinished = async () => {
-    if (!deviceStatus) return;
-    // Click without drag (no onChange fired), still need to open the gate
-    // so a stale WS push doesn't snap the value back during the POST.
-    openGateIfClosed();
-
-    setIsUpdating(true);
-    void postDeviceStatus({
-      [side]: {
-        targetTemperatureF: deviceStatus[side].targetTemperatureF
-      }
-    })
-      .then(() => {
-        // Wait 1 second before refreshing the device status
-        return new Promise((resolve) => setTimeout(resolve, 1_500));
-      })
-      .then(() => {
-        if (dragOpenRef.current) {
-          dragOpenRef.current = false;
-          endEdit();
-        }
-        return refetch();
-      })
-      .catch(error => {
-        console.error(error);
-        // The write failed, so the optimistic store value is now a lie. Revert
-        // it to the last known server value. A plain refetch is not enough: the
-        // server value did not change, so it would not re-sync into the store.
-        setDeviceStatus({ [side]: { targetTemperatureF: currentTargetTemp } });
-        if (dragOpenRef.current) {
-          dragOpenRef.current = false;
-          endEdit();
-        }
-      })
-      .finally(() => {
-        setIsUpdating(false);
-      });
-  };
-
-  const arcBackgroundColor = theme.palette.grey[700];
-
-  const sideStatus = deviceStatus?.[side];
-  const minTemp = Math.min(sideStatus?.currentTemperatureF || 55, sideStatus?.targetTemperatureF || 55);
-  const maxTemp = Math.max(sideStatus?.currentTemperatureF || 55, sideStatus?.targetTemperatureF || 55);
-  const isHeating = (sideStatus?.currentTemperatureF ?? 55) < (sideStatus?.targetTemperatureF ?? 55);
-
-  return (
-    <div
-      ref={ ref }
-      style={ { position: 'relative', display: 'inline-block', width: '100%', maxWidth: '240px' } }
-    >
-      { /* Circular Slider */ }
-      <div className={ `${styles.Slider} ${disabled && styles.Disabled} ${isHeating && styles.Heating}` }>
-        <CircularSliderWithChildren
-          disabled={ disabled }
-          onControlFinished={ handleControlFinished }
-          size={ width }
-          trackWidth={ 6 }
-          minValue={ MIN_TEMP_F }
-          maxValue={ MAX_TEMP_F }
-          startAngle={ 60 }
-          endAngle={ 300 }
-          angleType={ {
-            direction: 'cw',
-            axis: '-y'
-          } }
-          handle1={ {
-            value: minTemp,
-            onChange: (value) => {
-              if (disabled) return;
-              if (Math.round(value) !== deviceStatus?.[side]?.targetTemperatureF) {
-                openGateIfClosed();
-                setDeviceStatus({ [side]: { targetTemperatureF: Math.round(value) } });
-              }
-            },
-
-          } }
-          arcColor={ isOn ? sliderColor : arcBackgroundColor }
-          arcBackgroundColor={ arcBackgroundColor }
-          handle2={ {
-            value: maxTemp,
-            onChange: (value) => {
-              if (disabled) return;
-              if (Math.round(value) !== deviceStatus?.[side]?.targetTemperatureF) {
-                openGateIfClosed();
-                setDeviceStatus({ [side]: { targetTemperatureF: Math.round(value) } });
-              }
-            },
-          } }
-          handleSize={ 8 }
-        >
-          <TemperatureLabel
-            isOn={ isOn }
-            sliderTemp={ deviceStatus?.[side]?.targetTemperatureF || 55 }
-            sliderColor={ sliderColor }
-            currentTargetTemp={ currentTargetTemp }
-            currentTemperatureF={ currentTemperatureF }
-            format={ format }
-          />
-        </CircularSliderWithChildren>
-      </div>
-      {
-        isOn && (
-          <TemperatureButtons key={ side } refetch={ refetch } currentTargetTemp={ currentTargetTemp }/>
-        ) }
-    </div>
-  );
-};
+  const { side } = useAppStore();
+  const target = useControlTempStore(state => state.deviceStatus?.[side]?.targetTemperatureF) ?? currentTargetTemp;
+  const color = temperatureColor(fahrenheitToLevel(target));
+  const currentColor = temperatureColor(fahrenheitToLevel(currentTemperatureF));
+  const gradient = useId();
+  const start = position(MIN_TEMP_F);
+  const end = position(MAX_TEMP_F);
+  const current = position(currentTemperatureF);
+  const requested = position(target);
+  const clampedCurrent = Math.max(MIN_TEMP_F, Math.min(MAX_TEMP_F, currentTemperatureF));
+  const clampedTarget = Math.max(MIN_TEMP_F, Math.min(MAX_TEMP_F, target));
+  const span = Math.abs(clampedTarget - clampedCurrent) / (MAX_TEMP_F - MIN_TEMP_F) * 240;
+  const activeArc = `M ${current.x} ${current.y} A 122 122 0 ${span > 180 ? 1 : 0} `
+    + `${target >= currentTemperatureF ? 1 : 0} ${requested.x} ${requested.y}`;
+  return <Box sx={ { width: '100%', maxWidth: { xs: 280, sm: 320 } } }>
+    <Box sx={ { position: 'relative', width: '100%', aspectRatio: '1 / 1', maxHeight: 320 } }>
+      <svg viewBox="0 0 280 280" width="100%" height="100%" aria-hidden="true" style={ { pointerEvents: 'none' } }>
+        <defs><linearGradient
+          id={ gradient }
+          gradientUnits="userSpaceOnUse"
+          x1={ current.x }
+          y1={ current.y }
+          x2={ requested.x }
+          y2={ requested.y }>
+          <stop stopColor={ currentColor }/><stop offset="1" stopColor={ color }/>
+        </linearGradient></defs>
+        <path
+          d={ `M ${start.x} ${start.y} A 122 122 0 1 1 ${end.x} ${end.y}` }
+          stroke={ palette.border.control }
+          strokeWidth="5"
+          strokeLinecap="round"
+          fill="none"/>
+        { isOn && <>
+          <path
+            d={ activeArc }
+            stroke={ `url(#${gradient})` }
+            strokeWidth="6"
+            strokeLinecap="round"
+            fill="none"/>
+          <circle cx={ requested.x } cy={ requested.y } r="5" fill={ color }/>
+        </> }
+      </svg>
+      <TemperatureLabel
+        isOn={ isOn }
+        sliderTemp={ target }
+        sliderColor={ color }
+        currentTargetTemp={ currentTargetTemp }
+        currentTemperatureF={ currentTemperatureF }
+        format={ format }/>
+    </Box>
+    { isOn && <TemperatureButtons key={ side } refetch={ refetch } currentTargetTemp={ currentTargetTemp }/> }
+  </Box>;
+}

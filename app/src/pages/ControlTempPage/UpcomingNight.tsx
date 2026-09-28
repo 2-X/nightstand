@@ -32,14 +32,18 @@ export default function UpcomingNight() {
       : event.kind === 'on'
         ? 'Turns on'
         : `Changes to ${temperature}`);
-  const eventText = event && `${action} ${event.at.format('ddd')} at ${event.at.format('h:mm A')}`
+  const now = moment.tz(settings.timeZone);
+  const eventDay = event && (event.at.isSame(now, 'day') ? event.at.hour() >= 17 ? 'tonight' : 'today'
+    : event.at.isSame(now.clone().add(1, 'day'), 'day') ? 'tomorrow' : event.at.format('ddd'));
+  const tonight = now.hour() >= 17 || (!!event && event.kind !== 'on' && event.at.isSame(now, 'day'));
+  const eventText = event && `${action} ${eventDay} at ${event.at.format('h:mm A')}`
     + (event.kind === 'on' ? eventPaused ? ' and keeps your manual temperature' : `, set to ${temperature}` : '')
     + (event.kind === 'temperature' && eventPaused ? ' (currently paused)' : '');
   return (
     <Box sx={ { width: '100%', bgcolor: 'background.paper', borderRadius: 2, p: 2 } }>
       <Box sx={ { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' } }>
         <Typography component="h2" variant="h6">
-          Upcoming
+          { tonight ? 'Tonight' : 'Upcoming' }
         </Typography>
         <Button component={ Link } to="/schedules" size="small">
           Edit schedule

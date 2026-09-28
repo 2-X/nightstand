@@ -1,13 +1,11 @@
-import SearchIcon from '@mui/icons-material/Search';
-import { Button, Box } from '@mui/material';
+import { Alert, Button, Box } from '@mui/material';
 import { postDeviceStatus } from '@api/deviceStatus.ts';
 import { DeviceStatus } from '@api/deviceStatusSchema.ts';
 import { DeepPartial } from 'ts-essentials';
 import { useAppStore } from '@state/appStore.tsx';
 import { useSettings } from '@api/settings.ts';
 import { useState } from 'react';
-import { useServices } from '@api/services.ts';
-import { Job, postJobs } from '@api/jobs.ts';
+import useAnalyzeSleep from '@lib/useAnalyzeSleep';
 import { useSchedules } from '@api/schedules.ts';
 import { getScheduledTargetTemperature } from '@lib/scheduleTemperature.ts';
 import AnalyzeSleepNotification from './AnalyzeSleepNotification.tsx';
@@ -22,7 +20,7 @@ type PowerButtonProps = {
 export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
   const { isUpdating, setIsUpdating, side } = useAppStore();
   const { data: settings } = useSettings();
-  const { data: services } = useServices();
+  const { analyze, canAnalyze, isPending: analyzing, error: analysisError } = useAnalyzeSleep();
   const { data: schedules } = useSchedules();
   const setDeviceStatus = useControlTempStore(state => state.setDeviceStatus);
   const beginEdit = useControlTempStore(state => state.beginEdit);
@@ -30,7 +28,6 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
   const isInAwayMode = settings?.[side].awayMode;
   const disabled = isUpdating || isInAwayMode;
   const [showAnalyzeSleep, setShowAnalyzeSleep] = useState(false);
-  const [showAnalyzeNotification, setShowAnalyzeNotification] = useState(false);
 
   const handleOnClick = (powerOn: boolean) => {
     // Powering on manually starts at the temperature the schedule would have
@@ -81,37 +78,27 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
       });
   };
 
-  const handleAnalyzeSleep = () => {
-    const capitalized = side.charAt(0).toUpperCase() + side.slice(1) as Job;
-    setShowAnalyzeNotification(true);
-    // @ts-expect-error
-    postJobs([`analyzeSleep${capitalized}`])
-      .catch(error => {
-        console.error(error);
-      });
-    setTimeout(() => setShowAnalyzeNotification(false), 120_000);
-  };
   if (isInAwayMode) return null;
 
   return (
-    <Box sx={ { mt: 0, display: 'flex', flexDirection: 'column', gap: 2 } }>
-      <Button variant="outlined" disabled={ disabled } onClick={ () => handleOnClick(!isOn) }>
+    <Box sx={ { width: '100%', mt: 0, display: 'flex', flexDirection: 'column', gap: 2 } }>
+      <Button fullWidth sx={ { minHeight: 48 } } variant="outlined" disabled={ disabled } onClick={ () => handleOnClick(!isOn) }>
         { isOn ? 'Turn off' : 'Turn on' }
       </Button>
       {
-        showAnalyzeSleep && !isUpdating && services?.biometrics?.enabled && (
+        showAnalyzeSleep && !isUpdating && canAnalyze && (
           <Button
-            variant="contained"
-            disabled={ disabled }
-            onClick={ handleAnalyzeSleep }
+            variant="text"
+            disabled={ !canAnalyze }
+            onClick={ () => void analyze() }
           >
-            <SearchIcon />
-            Analyze sleep
+            Analyze last night
           </Button>
         )
       }
+      { analysisError && <Alert severity="error">Could not start sleep analysis. Try again.</Alert> }
       {
-        showAnalyzeNotification && (
+        analyzing && (
           <AnalyzeSleepNotification />
         )
       }

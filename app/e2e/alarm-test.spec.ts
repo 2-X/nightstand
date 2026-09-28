@@ -9,8 +9,8 @@ test('testing an alarm reports no errors', async ({ page }) => {
   const alarmResponse = page.waitForResponse((r) => r.url().endsWith('/api/alarm'));
 
   await page.goto('/schedules');
-  await page.getByRole('button', { name: /Alarm options/ }).click();
-  await page.getByRole('button', { name: 'Test alarm' }).first().click();
+  await page.getByRole('button', { name: /^Vibrate/ }).click();
+  await page.getByRole('button', { name: "Test on Alex's side" }).click();
 
   expect((await alarmResponse).status()).toBe(200);
   expect(errors).toEqual([]);

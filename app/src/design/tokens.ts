@@ -20,24 +20,6 @@ export const palette = {
   lamp: '#E9E3D5',
   status: { ok: '#6CCB8E', warn: '#E8C95A', error: '#FF7A8A', info: '#A3AAB2' },
   stage: { awake: '#E9E3D5', rem: '#C3B5FF', light: '#8E80F0', deep: '#6A58E6' },
-  accent: {
-    blue: '#A3C7DF',
-    green: '#30d158',
-    yellow: '#ffd60a',
-    orange: '#ff9500',
-    red: '#ff453a',
-    pink: '#ff375f',
-    purple: '#bf5af2',
-  },
-  // Sleep score color ramp (kept distinct from system colors so it stays consistent
-  // with the SleepScoreCard).
-  score: {
-    excellent: '#22c55e',
-    good: '#84cc16',
-    fair: '#eab308',
-    poor: '#f97316',
-    veryPoor: '#ef4444',
-  },
 };
 
 export const radius = {

@@ -18,7 +18,7 @@ beforeEach(() => {
 
 it('rejects duplicate temperature times without losing either adjustment', () => {
   render(<ScheduleTimeline format="fahrenheit" />);
-  fireEvent.change(screen.getAllByLabelText('Adjustment time')[0], { target: { value: '02:00' } });
+  fireEvent.change(screen.getAllByLabelText('Change at')[0], { target: { value: '02:00' } });
   expect(useScheduleStore.getState().selectedSchedule?.temperatures).toEqual({ '01:00': 60, '02:00': 80 });
   expect(screen.getByRole('alert')).toHaveTextContent(/already/);
 });
@@ -60,18 +60,20 @@ it.each(['21:00', '09:00'])('rejects a temperature change at power boundary %s',
 });
 it('keeps the adjustment input mounted and focused when its time changes', () => {
   render(<ScheduleTimeline format="fahrenheit" />);
-  const input = screen.getAllByLabelText('Adjustment time')[0];
+  const input = screen.getAllByLabelText('Change at')[0];
   input.focus();
   fireEvent.change(input, { target: { value: '03:00' } });
   expect(input).toBeInTheDocument();
   expect(input).toHaveFocus();
 });
-it('offers exactly 21 distinct levels', () => {
+it('keeps the temperature within the 21 supported levels', () => {
+  useScheduleStore.getState().updateSelectedSchedule({ power: { onTemperature: 110 } });
   render(<ScheduleTimeline format="level" />);
-  fireEvent.mouseDown(screen.getAllByRole('combobox')[0]);
-  expect(screen.getAllByRole('option')).toHaveLength(21);
-  const levels = Array.from({ length: 21 }, (_, index) => index > 10 ? `+${index - 10}` : `${index - 10}`);
-  expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(levels);
+  const control = screen.getByRole('spinbutton', { name: 'Bedtime temperature' });
+  fireEvent.keyDown(control, { key: 'ArrowUp' });
+  expect(useScheduleStore.getState().selectedSchedule?.power.onTemperature).toBe(110);
+  fireEvent.keyDown(control, { key: 'ArrowDown' });
+  expect(useScheduleStore.getState().selectedSchedule?.power.onTemperature).toBe(107);
 });
 
 it('focuses and scrolls a newly added temperature row into view', () => {
@@ -79,7 +81,8 @@ it('focuses and scrolls a newly added temperature row into view', () => {
   HTMLElement.prototype.scrollIntoView = scroll;
   render(<ScheduleTimeline format="fahrenheit" />);
   fireEvent.click(screen.getByRole('button', { name: 'Add temperature change' }));
-  expect(screen.getByDisplayValue('22:00')).toHaveFocus();
+  expect(screen.getByDisplayValue('05:30')).toHaveFocus();
+  expect(useScheduleStore.getState().selectedSchedule?.temperatures['05:30']).toBe(80);
   expect(scroll).toHaveBeenCalled();
 });
 

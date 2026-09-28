@@ -62,7 +62,7 @@ The class describes why a value exists, not whether it is learned today:
 
 ## Estimates and calibration stored today
 
-Pump health appears under Settings > Device > System status.
+Pump health appears under Settings > Pod and diagnostics > System status.
 
 | Value | Current implementation | Persistence |
 | --- | --- | --- |

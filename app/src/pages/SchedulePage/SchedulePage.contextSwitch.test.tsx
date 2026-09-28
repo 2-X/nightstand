@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import _ from 'lodash';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
@@ -17,7 +17,6 @@ const loaded = async () => {
 // deterministic regardless of what ran before it in the same worker.
 afterEach(() => vi.restoreAllMocks());
 beforeEach(() => {
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
   localStorage.removeItem('side');
   useAppStore.setState({ side: 'left', isUpdating: false });
   useScheduleStore.setState({ originalSchedules: undefined, changesPresent: false });
@@ -37,13 +36,14 @@ describe('side switch with unsaved edits (full page)', () => {
     const orig = _.cloneDeep(useScheduleStore.getState().originalSchedules) as any;
 
     // Make a pending, unsaved alarm edit on the left side.
-    useScheduleStore.getState().updateSelectedAlarm({ time: '03:33' });
+    act(() => useScheduleStore.getState().updateSelectedAlarm({ time: '03:33' }));
     expect(useScheduleStore.getState().changesPresent).toBe(true);
 
     // Switch to the right side. The buttons are named by the settings query,
     // which answers independently of the schedules one loaded() waited for, so
     // look them up by waiting rather than assuming settings has already landed.
-    await user.click(await screen.findByRole('button', { name: /Right side/ }));
+    await user.click(await screen.findByRole('radio', { name: /Sam\./ }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Discard' }));
     await waitFor(() => expect(useAppStore.getState().side).toBe('right'));
     await waitFor(() =>
       expect(useScheduleStore.getState().selectedSchedule?.alarm.time).toBe(orig.right[day].alarm.time),
@@ -55,7 +55,7 @@ describe('side switch with unsaved edits (full page)', () => {
     expect(afterRight.changesPresent).toBe(false);
 
     // Switch back to the left side: the earlier edit must be gone.
-    await user.click(await screen.findByRole('button', { name: /Left side/ }));
+    await user.click(await screen.findByRole('radio', { name: /Alex\./ }));
     await waitFor(() => expect(useAppStore.getState().side).toBe('left'));
     await waitFor(() =>
       expect(useScheduleStore.getState().selectedSchedule?.alarm.time).toBe(orig.left[day].alarm.time),
@@ -107,13 +107,22 @@ describe('Apply to other days save targeting (full page)', () => {
 it('keeps unsaved edits when a day or side discard is canceled', async () => {
   const { user } = renderWithProviders(<SchedulePage />, { initialRoute: '/schedules' });
   await loaded();
-  useScheduleStore.getState().selectDay(1);
-  useScheduleStore.getState().updateSelectedAlarm({ time: '03:33' });
-  vi.mocked(window.confirm).mockReturnValue(false);
-  await user.click(await screen.findByRole('button', { name: /Right side/ }));
-  expect(window.confirm).toHaveBeenCalledWith('Discard changes to Monday, left side?');
+  act(() => {
+    useScheduleStore.getState().selectDay(1);
+    useScheduleStore.getState().updateSelectedAlarm({ time: '03:33' });
+  });
+  await user.click(await screen.findByRole('radio', { name: /Sam\./ }));
+  expect(screen.getByRole('dialog', { name: 'Discard changes to Monday?' })).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Keep editing' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   expect(useAppStore.getState().side).toBe('left');
   await user.click(screen.getByRole('tab', { name: /Tue/ }));
+  await user.click(screen.getByRole('button', { name: 'Keep editing' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   expect(useScheduleStore.getState().selectedDay).toBe('monday');
   expect(useScheduleStore.getState().selectedSchedule?.alarm.time).toBe('03:33');
+  await user.click(screen.getByRole('tab', { name: /Tue/ }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Discard' }));
+  expect(useScheduleStore.getState().selectedDay).toBe('tuesday');
+  expect(useScheduleStore.getState().changesPresent).toBe(false);
 });

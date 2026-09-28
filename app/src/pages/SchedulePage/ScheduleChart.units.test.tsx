@@ -9,8 +9,19 @@ vi.mock('@mui/x-charts/LineChart', () => ({
     <div>{ xAxis[0].label } { yAxis[0].label }</div>,
   lineElementClasses: {}, areaElementClasses: {},
 }));
-it('labels time and level axes using the selected display format', () => {
+it('labels the temperature axis using the selected display format', () => {
   useScheduleStore.setState({ selectedSchedule: getSchedules().left.monday });
   render(<TemperatureScheduleChart/>);
-  expect(screen.getByText('Time Level')).toBeInTheDocument();
+  expect(screen.getByText('Level')).toBeInTheDocument();
+});
+
+it('focuses the matching row when its chart step is selected', () => {
+  const schedule = structuredClone(getSchedules().left.monday);
+  schedule.temperatures = { '01:00': 83 };
+  schedule.power.on = '21:00';
+  schedule.power.off = '09:00';
+  useScheduleStore.setState({ selectedSchedule: schedule });
+  render(<><TemperatureScheduleChart/><div id="schedule-temperature-01:00"><input type="time" aria-label="Change time"/></div></>);
+  screen.getByRole('button', { name: /1:00 AM 0/ }).click();
+  expect(screen.getByLabelText('Change time')).toHaveFocus();
 });

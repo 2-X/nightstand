@@ -2,8 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test('saving a schedule edit hides the save button', async ({ page }) => {
   await page.goto('/schedules');
-  // exact: true - "Power on temperature ..." also contains this text.
-  await expect(page.getByText('Power on', { exact: true })).toBeVisible();
+  await expect(page.getByText('Turn on at', { exact: true })).toBeVisible();
 
   // Toggle the power Enabled switch to mark the schedule changed. Wait for it
   // to reach its loaded checked state first: the schedule data arrives after
@@ -13,7 +12,7 @@ test('saving a schedule edit hides the save button', async ({ page }) => {
   await expect(enabled).toBeChecked();
   await enabled.click();
 
-  // exact: true - the one-off alarm section also has a "Save one-off alarm" button.
+  // exact: true - the one-time alarm section also has a "Save one-time alarm" button.
   const save = page.getByRole('button', { name: 'Save', exact: true });
   await expect(save).toBeVisible();
   await save.click();
@@ -32,7 +31,7 @@ test('leaving Schedule silently discards unsaved edits', async ({ page }) => {
   await page.goto('/schedules');
   const enabled = page.getByRole('switch', { name: 'Enabled' }).first();
   await expect(enabled).toBeChecked();
-  const powerOn = page.getByLabel('Power on', { exact: true });
+  const powerOn = page.getByLabel('Turn on at', { exact: true });
   await expect(powerOn).toHaveValue('21:30');
   await powerOn.fill('21:37');
   const save = page.getByRole('button', { name: 'Save', exact: true });
@@ -55,25 +54,28 @@ test('new rows stay focused and changing days requires discarding the draft', as
   await expect(focused).toHaveCount(1);
   await expect(focused).toBeInViewport();
   const day = page.getByRole('tab').filter({ hasText: 'Tuesday' });
-  page.once('dialog', dialog => dialog.dismiss());
   await day.click();
+  await expect(page.getByRole('dialog', { name: 'Discard changes to Monday?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Keep editing' }).click();
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
-  page.once('dialog', dialog => dialog.accept());
   await day.click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Discard', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeHidden();
 });
 
-test('level options are unique and boundary errors focus the affected row', async ({ page }) => {
+test('level steppers stay bounded and boundary errors focus the affected row', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 844 });
   await page.goto('/schedules');
-  await page.getByRole('combobox', { name: /^Temperature/ }).first().click();
-  const options = page.getByRole('option');
-  await expect(options).toHaveCount(21);
-  const labels = await options.allTextContents();
-  expect(new Set(labels).size).toBe(21);
-  await page.keyboard.press('Escape');
-  const off = await page.getByLabel('Power off', { exact: true }).inputValue();
-  await page.getByLabel('Adjustment time', { exact: true }).first().fill(off);
+  const stepper = page.getByRole('spinbutton', { name: 'Bedtime temperature' });
+  await expect(stepper).toHaveAttribute('aria-valuemin', '-10');
+  await expect(stepper).toHaveAttribute('aria-valuemax', '10');
+  await stepper.focus();
+  await page.keyboard.press('ArrowUp');
+  await expect(stepper).toHaveAttribute('aria-valuenow', '-7');
+  await page.getByRole('combobox', { name: /^Turn off/ }).click();
+  await page.getByRole('option', { name: 'At a set time' }).click();
+  const off = await page.getByLabel('Turn off at', { exact: true }).inputValue();
+  await page.getByLabel('Change at', { exact: true }).first().fill(off);
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Check invalid time' }).click();
   const invalid = page.locator('input[aria-invalid="true"]:focus');

@@ -111,12 +111,12 @@ unless you set up [remote access with Tailscale](docs/REMOTE_ACCESS.md).
 
 In Settings:
 
-- **Biometrics** under Sleep data: off by default, and needs a one-time install (see below).
-- **Sleep score and stages** under Sleep data > Features: needs biometrics.
-- **Presence auto-off** under Automation > Features: on by default, and needs biometrics. Turns a side off
+- **Biometrics** under Features: off by default, and needs a one-time install (see below).
+- **Sleep score and stages** under Features: needs biometrics.
+- **Presence auto-off** under Features: on by default, and needs biometrics. Turns a side off
   after 45 minutes with no one on it, outside its scheduled on-window.
-- **Level temperature display** under Bed preferences > Features and
-  **one-off alarms** under Automation > Features: on by default.
+- **Level temperature display** and
+  **one-time alarms** under Features: on by default.
 
 Next to daily priming, the restart an hour before priming is on by default and
 only runs while priming is on.
@@ -138,7 +138,7 @@ over SSH:
 sh /home/dac/free-sleep/scripts/enable_biometrics.sh
 ```
 
-After that, it can be turned on and off under Settings > Sleep data.
+After that, it can be turned on and off under Settings > Features.
 
 Data is stored on the Pod in `/persistent/free-sleep-data/free-sleep.db` and
 is available from `http://<POD_IP>:3000/api/metrics/vitals`. See
@@ -216,7 +216,7 @@ Nightstand builds on reverse-engineering work that others made public:
   original project: the installer, the server, the app, and the biometrics
   pipeline.
 - [jmew](https://github.com/jmew/free-sleep) built the fork this one is based
-  on, adding presence detection, sleep stages, one-off alarms, adjustable base
+  on, adding presence detection, sleep stages, one-time alarms, adjustable base
   control, and live updates in the app.
 - [@bobobo1618](https://github.com/bobobo1618) worked out how the Pod is
   controlled through `dac.sock`, which everything here depends on.

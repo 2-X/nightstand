@@ -85,20 +85,20 @@ build.
 - `lib/`: Plain helper functions (temperature conversion, bed geometry,
   formatting).
 - `pages/`:
-  - **ControlTempPage**: Temperature slider, power button, and away-mode and
-    alarm notices.
+  - **ControlTempPage**: Named bed sides, temperature steppers, a read-only
+    gauge, power controls and upcoming events.
   - **BaseControlPage**: Position controls for compatible adjustable-base hardware.
   - **SchedulePage**: Daily power, temperature, and alarm schedules, with
     copy to other days.
   - **DataPage**: Sleep with Night and Week views, a nightly summary and
     detailed metrics. The changelog and log components retain their source
-    location here, but logs are reached through Settings > Device. There is
+    location here, but logs are reached through Settings > Pod and diagnostics. There is
     no separate Vitals navigation destination.
-  - **SettingsPage**: Categories for People and sides, Bed preferences,
-    Automation, Sleep data, Device, Software and About. Device contains
+  - **SettingsPage**: Four groups: Bed and sides, Features, Software, and Pod and
+    diagnostics, with About and license in the footer. Pod and diagnostics contains
     diagnostics; Software contains releases and rollback; About links the
     canonical license.
-  - **StatusPage**: Service health and manual jobs, reached through Device.
+  - **StatusPage**: Service health and manual jobs, reached through Pod and diagnostics.
   - `PageContainer.tsx`: Standard wrapper for page content.
 - `mocks/`: Request handlers and data for demo mode.
 - `test/`: Test setup and render helpers.

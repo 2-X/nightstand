@@ -1,6 +1,8 @@
 import { expect, it } from 'vitest';
-import { getTemperatureColor, levelToFahrenheit } from './temperatureConversions';
-it('shows level zero as neutral', () => {
-  expect(getTemperatureColor(levelToFahrenheit(0))).toBe('#9e9e9e');
-  expect(getTemperatureColor(levelToFahrenheit(1))).not.toBe('#9e9e9e');
+import { fahrenheitToLevel, levelToFahrenheit, formatTemperature } from './temperatureConversions';
+it('round trips each supported level through the stored Fahrenheit value', () => {
+  for (let level = -10; level <= 10; level++) {
+    expect(fahrenheitToLevel(levelToFahrenheit(level))).toBe(level);
+  }
+  expect(formatTemperature(83, 'level')).toBe('0');
 });

@@ -66,6 +66,7 @@ const buildComponents = (mode: PaletteMode) => {
   return {
     MuiCssBaseline: {
       styleOverrides: {
+        summary: { minHeight: 44, paddingBlock: 10, boxSizing: 'border-box', cursor: 'pointer' },
         ':focus-visible': { outline: `2px solid ${palette.lamp}`, outlineOffset: '3px' },
         '@media (prefers-reduced-motion: reduce)': {
           '*, *::before, *::after': {
@@ -85,6 +86,12 @@ const buildComponents = (mode: PaletteMode) => {
         },
       },
     },
+    MuiSlider: { styleOverrides: { root: { padding: '20px 0' }, thumb: { '&::after': { width: 44, height: 44 } } } },
+    MuiSwitch: {
+      styleOverrides: { root: { width: 64, height: 44, padding: 15 }, switchBase: { padding: 12 } },
+    },
+    MuiRadio: { styleOverrides: { root: { minWidth: 44, minHeight: 44 } } },
+    MuiCheckbox: { styleOverrides: { root: { minWidth: 44, minHeight: 44 } } },
     MuiIconButton: { styleOverrides: { root: { minWidth: 44, minHeight: 44 } } },
     MuiToggleButton: {
       styleOverrides: {

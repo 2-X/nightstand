@@ -39,7 +39,11 @@ export default function AlarmNotification() {
   const replacement = night.start.clone().hour(Number(time.split(':')[0])).minute(Number(time.split(':')[1]));
   if (time < night.start.format('HH:mm')) replacement.add(1, 'day');
   const replacementFinished = hasOverride && !!override.timeOverride && replacement.isBefore(moment());
-  const scope = `${side === 'left' ? 'Left' : 'Right'} side · ${night.start.format('ddd, MMM D')} night`;
+  const scope = `${settings[side].name || (side === 'left' ? 'Left' : 'Right')} · ${night.start.format('ddd, MMM D')} night`;
+  const alarmDate = hasOverride && override.timeOverride ? replacement : night.alarms[0].at;
+  const now = moment.tz(settings.timeZone);
+  const alarmDay = alarmDate?.isSame(now, 'day') ? 'today'
+    : alarmDate?.isSame(now.clone().add(1, 'day'), 'day') ? 'tomorrow' : alarmDate?.format('ddd');
   return (
     <Alert
       icon={ disabled ? <AlarmOffIcon /> : <AlarmIcon /> }
@@ -60,14 +64,14 @@ export default function AlarmNotification() {
         alarmDisabled={ disabled }
         nightEnd={ night.end.format() }
         scope={ scope } />
-      <Typography variant="caption">{ scope }</Typography>
       <Box display="flex" flexWrap="wrap" alignItems="center" justifyContent="space-between" gap={ 1 }>
         { disabled ? <Typography variant="body2">Recurring alarms skipped</Typography>
           : replacementFinished ? <Typography variant="body2">Recurring alarms replaced for this night</Typography>
-            : <Box>
-          Next alarm at <Button size="small" onClick={ () => setOverrideOpen(true) }>{ moment(time, 'HH:mm').format('h:mm A') }</Button>
-            </Box> }
-        <Button size="small" onClick={ () => setDisabledOpen(true) }>{ disabled ? 'Enable' : 'Disable' }</Button>
+            : <Typography variant="body2">Alarm { alarmDay } at { moment(time, 'HH:mm').format('h:mm A') }</Typography> }
+        <Box sx={ { display: 'flex', gap: 1 } }>
+          { !disabled && !replacementFinished && <Button size="small" onClick={ () => setOverrideOpen(true) }>Change</Button> }
+          <Button size="small" onClick={ () => setDisabledOpen(true) }>{ disabled ? 'Restore alarm' : 'Skip' }</Button>
+        </Box>
       </Box>
     </Alert>
   );

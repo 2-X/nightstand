@@ -63,7 +63,7 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
     const { side } = useAppStore.getState();
     const { originalSchedules, selectedDay } = get();
     if (!originalSchedules) return;
-    const selectedSchedule = originalSchedules[side][selectedDay];
+    const selectedSchedule = originalSchedules[side]?.[selectedDay];
 
     set({
       selectedDays: { ...DEFAULT_DAYS_SELECTED },
@@ -107,7 +107,7 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
       return { ...schedule, alarms, alarm: alarms[0] };
     };
     const changesPresent = !_.isEqual(
-      normalizeAlarms(originalSchedules[side][selectedDay]),
+      normalizeAlarms(originalSchedules[side]?.[selectedDay]),
       normalizeAlarms(selectedSchedule),
     ) || _.some(selectedDays, value => value === true);
 
@@ -117,7 +117,12 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
   // Updating schedules
   updateSelectedSchedule: (newSelectedSchedule) => {
     const { selectedSchedule, checkForChanges } = get();
-    const selectedScheduleCopy = _.cloneDeep(selectedSchedule);
+    const selectedScheduleCopy = _.cloneDeep(selectedSchedule ?? {
+      power: { enabled: true, on: '21:00', off: '07:30', onTemperature: 83 },
+      temperatures: {},
+      alarm: { enabled: true, time: '07:00', vibrationIntensity: 30, vibrationPattern: 'rise' as const, duration: 10, alarmTemperature: 83 },
+      alarms: [],
+    });
     _.merge(selectedScheduleCopy, newSelectedSchedule);
 
     set({ selectedSchedule: selectedScheduleCopy });
@@ -211,8 +216,7 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
   setOriginalSchedules: (originalSchedules) => {
     const { side } = useAppStore.getState();
     const { selectedDay } = get();
-    if (originalSchedules[side] === undefined) return;
-    const selectedSchedule = _.cloneDeep(originalSchedules[side][selectedDay]);
+    const selectedSchedule = _.cloneDeep(originalSchedules[side]?.[selectedDay]);
 
     set({ originalSchedules, selectedSchedule });
   },

@@ -76,7 +76,7 @@ nothing while it is off.
   capacitance baseline that the daily analysis uses, and records an empty-bed
   piezo floor. It skips the run if someone is on the bed. It runs whether or
   not daily priming is on.
-- **Manual runs.** Settings > Device can run sleep analysis or calibration
+- **Manual runs.** Settings > Pod and diagnostics > System status can run sleep analysis or calibration
   for either side (`POST /api/jobs`). Manual sleep analysis looks back 24
   hours. Manual calibration looks back 2 hours, separately from the scheduled
   6-hour window. It skips the occupied-bed check, so only run it when the bed

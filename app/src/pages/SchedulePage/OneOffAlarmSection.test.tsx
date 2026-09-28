@@ -6,7 +6,7 @@ import { server } from '@test/setup';
 import OneOffAlarmSection from './OneOffAlarmSection';
 
 describe('OneOffAlarmSection', () => {
-  it('posts the one-off alarm to the left side on save', async () => {
+  it('posts the one-time alarm to the left side on save', async () => {
     let posted: any;
     server.use(
       http.post('*/settings', async ({ request }) => {
@@ -18,9 +18,9 @@ describe('OneOffAlarmSection', () => {
     const { user } = renderWithProviders(<OneOffAlarmSection />, { initialRoute: '/schedules' });
 
     // The section renders its heading once settings load.
-    expect(await screen.findByText('One-off alarm')).toBeInTheDocument();
+    expect(await screen.findByText('One-time alarm')).toBeInTheDocument();
 
-    const save = await screen.findByRole('button', { name: 'Save one-off alarm' });
+    const save = await screen.findByRole('button', { name: 'Save one-time alarm' });
     await user.click(save);
 
     await waitFor(() => expect(posted).toBeTruthy());

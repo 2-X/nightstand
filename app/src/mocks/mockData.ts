@@ -279,7 +279,7 @@ const createSettings = (): Settings => ({
   updateChannel: 'stable',
   features: { ...defaultFeatures },
   left: {
-    name: 'Left side',
+    name: 'Alex',
     awayMode: false,
     alarmsEnabled: true,
     scheduleOverrides: {
@@ -313,7 +313,7 @@ const createSettings = (): Settings => ({
     }
   },
   right: {
-    name: 'Right side',
+    name: 'Sam',
     awayMode: false,
     alarmsEnabled: true,
     scheduleOverrides: {

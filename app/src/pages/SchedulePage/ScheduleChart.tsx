@@ -1,8 +1,10 @@
 /* eslint-disable react/no-multi-comp */
+import moment from 'moment-timezone';
 import { useTheme } from '@mui/material/styles';
 import { useMemo } from 'react';
-import { Paper } from '@mui/material';
+import { Box, Button, Paper, Typography } from '@mui/material';
 import { LineChart, lineElementClasses, areaElementClasses } from '@mui/x-charts/LineChart';
+import { ChartsReferenceLine } from '@mui/x-charts/ChartsReferenceLine';
 import { useDrawingArea } from '@mui/x-charts/hooks';
 
 import { useScheduleStore } from './scheduleStore.tsx';
@@ -13,14 +15,20 @@ import {
   formatDisplayValue,
   displayBounds,
   TemperatureFormat,
+  fahrenheitToLevel,
+  levelToFahrenheit,
+  formatTemperature,
 } from '@lib/temperatureConversions.ts';
 
 
-type Point = { x: Date; y: number };
+import { temperatureColor } from '@lib/temperatureColor';
+import { minutesSincePowerOn, temperatureInPowerWindow, timeInPowerWindow } from './scheduleValidation';
 
-const THRESHOLD_F = 82;
-const AREA_ALPHA = 0.35;
+type Point = { x: Date; y: number; temperature: number; rowId: string };
+
+const AREA_ALPHA = 0.20;
 const LINE_ALPHA = 1.0;
+const CHART_END_PADDING_MS = 30 * 60 * 1000;
 
 // ---------------- buildSeriesData (same as before) ----------------
 const todayAt = (hhmm: Time, dayOffset = 0) => {
@@ -47,7 +55,7 @@ function buildSeriesData(selectedSchedule: DailySchedule, yMin: number, yMax: nu
   const start = todayAt(power.on, 0);
   const end = todayAt(power.off, wraps ? 1 : 0);
 
-  const entries = Object.entries(temperatures) as [Time, number][];
+  const entries = Object.entries(temperatures).filter(([time]) => temperatureInPowerWindow(time, power)) as [Time, number][];
   const day0: [Date, number][] = [];
   const day1: [Date, number][] = [];
 
@@ -63,14 +71,15 @@ function buildSeriesData(selectedSchedule: DailySchedule, yMin: number, yMax: nu
 
   const points: Point[] = [{
     x: start,
-    y: fahrenheitToDisplay(power.onTemperature, format)
+    y: fahrenheitToDisplay(power.onTemperature, format), temperature: power.onTemperature, rowId: 'schedule-bedtime'
   }];
   const pushStep = (arr: [Date, number][]) => {
     for (const [dt, temp] of arr) {
       const convertedTemp = fahrenheitToDisplay(temp, format);
 
       if (dt.getTime() > points[points.length - 1].x.getTime()) {
-        points.push({ x: dt, y: convertedTemp });
+        const time = `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+        points.push({ x: dt, y: convertedTemp, temperature: temp, rowId: `schedule-temperature-${time}` });
       } else {
         points[points.length - 1].y = convertedTemp;
       }
@@ -83,12 +92,12 @@ function buildSeriesData(selectedSchedule: DailySchedule, yMin: number, yMax: nu
   if (end.getTime() > points[points.length - 1].x.getTime()) {
     points.push({
       x: end,
-      y: lastY
+      y: lastY, temperature: points[points.length - 1].temperature, rowId: points[points.length - 1].rowId
     }
     );
   }
 
-  for (const p of points) p.y = Math.min(yMax, Math.max(yMin, Math.round(p.y)));
+  for (const p of points) p.y = Math.min(yMax, Math.max(yMin, p.y));
 
   return points;
 }
@@ -98,67 +107,29 @@ function HorizontalTempGradient({
   idArea,
   idLine,
   points,
-  threshold,
-  colorCool,
-  colorHot,
   areaAlpha = AREA_ALPHA,
   lineAlpha = LINE_ALPHA,
 }: {
   idArea: string;
   idLine: string;
   points: Point[];
-  threshold: number;
-  colorCool?: string;
-  colorHot?: string;
   areaAlpha?: number;
   lineAlpha?: number;
 }) {
-  // We need the drawing area's left/width to build a left→right gradient.
   const { left, width, top } = useDrawingArea();
-
-  // Normalize a Date->offset [0..1] across the x extent in the plotted window.
   const minX = points[0].x.getTime();
-  const maxX = points[points.length - 1].x.getTime();
-  const xToOff = (tMs: number) =>
-    maxX === minX ? 0 : Math.max(0, Math.min(1, (tMs - minX) / (maxX - minX)));
-
-  // Build stops where color should switch based on segment value (y at the segment start).
-  // Because curve='stepAfter', y is constant until the next point.
-  type Stop = { off: number; color: string };
-  const stops: Stop[] = [];
-  if (points.length) {
-    let curColor = points[0].y >= threshold ? colorHot : colorCool;
-    // @ts-expect-error
-    stops.push({ off: 0, color: curColor });
-
-    for (let i = 0; i < points.length - 1; i++) {
-      const segStart = points[i];
-      // const segEnd = points[i + 1];
-      const segColor = segStart.y >= threshold ? colorHot : colorCool;
-
-      // If color changes at this boundary, add a double stop at the boundary offset
-      if (segColor !== curColor) {
-        const off = xToOff(segStart.x.getTime()); // boundary is at the step where value changes
-        // close previous color up to boundary
-        // @ts-expect-error
-        stops.push({ off: off - 0.05, color: curColor });
-        // start new color at same boundary (hard switch)
-        // @ts-expect-error
-        stops.push({ off: off + 0.05, color: segColor });
-        curColor = segColor;
-      }
-    }
-    // Ensure final stop at 1 with the current color
-    // @ts-expect-error
-    stops.push({ off: 1, color: curColor });
-  }
+  const duration = points[points.length - 1].x.getTime() - minX;
+  const stops = points.slice(0, -1).flatMap((point, index) => [
+    { off: (point.x.getTime() - minX) / duration, color: temperatureColor(fahrenheitToLevel(point.temperature)) },
+    { off: (points[index + 1].x.getTime() - minX) / duration, color: temperatureColor(fahrenheitToLevel(point.temperature)) },
+  ]);
 
   return (
     <defs>
       <linearGradient
         id={ idArea }
         x1={ left }
-        x2={ left + width }
+        x2={ left + width * duration / (duration + CHART_END_PADDING_MS) }
         y1={ top }
         y2={ top }
         gradientUnits="userSpaceOnUse"
@@ -170,7 +141,7 @@ function HorizontalTempGradient({
       <linearGradient
         id={ idLine }
         x1={ left }
-        x2={ left + width }
+        x2={ left + width * duration / (duration + CHART_END_PADDING_MS) }
         y1={ top }
         y2={ top }
         gradientUnits="userSpaceOnUse"
@@ -191,7 +162,6 @@ export default function TemperatureScheduleChart() {
 
   const format = settings?.temperatureFormat ?? 'fahrenheit';
   const { min: yMin, max: yMax } = displayBounds(format);
-  const threshold = fahrenheitToDisplay(THRESHOLD_F, format);
 
   const points = useMemo(() => {
     if (!selectedSchedule) return [];
@@ -205,21 +175,33 @@ export default function TemperatureScheduleChart() {
   const yData = points.map(p => p.y);
   const gradAreaId = 'temp-x-grad-area';
   const gradLineId = 'temp-x-grad-line';
-  const axisColor = theme.palette.grey['600'];
+  const axisColor = theme.palette.text.secondary;
+  const showRow = (rowId: string) => {
+    const row = document.getElementById(rowId);
+    row?.scrollIntoView?.({ block: 'center', behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    row?.querySelector<HTMLInputElement>('input[type="time"]')?.focus({ preventScroll: true });
+    if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      row?.animate?.([{ outline: `2px solid ${theme.palette.primary.main}` }, { outline: '2px solid transparent' }], { duration: 1200 });
+    }
+  };
+  const alarms = selectedSchedule?.alarms.length ? selectedSchedule.alarms : selectedSchedule ? [selectedSchedule.alarm] : [];
+  const enabledAlarms = alarms.filter(alarm => alarm.enabled).sort((first, second) =>
+    minutesSincePowerOn(first.time, selectedSchedule!.power.on) - minutesSincePowerOn(second.time, selectedSchedule!.power.on));
 
   return (
-    <Paper sx={ { width: '100%', height: 300, p: 2 } }>
+    <Paper variant="outlined" aria-label="Night temperature chart" sx={ { width: '100%', p: 1, mb: 1 } }>
       <LineChart
+        height={ 120 }
+        onAxisClick={ (_, data) => { if (data) showRow(points[data.dataIndex].rowId); } }
         xAxis={ [{
           scaleType: 'time',
           data: xData,
           valueFormatter: (v) =>
-            new Date(v as number).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+            moment(v as Date).format('h:mm A'),
           min: xData[0],
-          max: xData[xData.length - 1],
+          max: new Date(xData[xData.length - 1].getTime() + CHART_END_PADDING_MS),
           tickMinStep: 60 * 60 * 1000,
           tickNumber: 4,
-          label: 'Time',
           tickLabelStyle: { fill: axisColor },
         }] }
         yAxis={ [{
@@ -234,14 +216,15 @@ export default function TemperatureScheduleChart() {
           label: format === 'level' ? 'Target level' : format === 'celsius' ? 'Target °C' : 'Target °F',
           data: yData,
           area: true,
+          baseline: fahrenheitToDisplay(levelToFahrenheit(0), format),
           showMark: false,
           curve: 'stepAfter',
         }] }
         margin={ {
-          right: 0,
-          left: 50,
+          right: 32,
+          left: 42,
           top: 5,
-          bottom: 19
+          bottom: 24
         } }
         sx={ {
           pt: 0,
@@ -265,17 +248,32 @@ export default function TemperatureScheduleChart() {
         } }
         slotProps={ { legend: { hidden: true } } }
       >
+        { enabledAlarms[0] && timeInPowerWindow(enabledAlarms[0].time, selectedSchedule!.power) && <ChartsReferenceLine
+          x={ todayAt(enabledAlarms[0].time, enabledAlarms[0].time < selectedSchedule!.power.on ? 1 : 0) }
+          label="Wake"
+          labelAlign="start"
+          labelStyle={ { fill: axisColor, fontSize: 11, textAnchor: 'end' } }
+          lineStyle={ { stroke: axisColor, strokeDasharray: '3 3' } }/> }
         <HorizontalTempGradient
           idArea={ gradAreaId }
           idLine={ gradLineId }
           points={ points }
-          threshold={ threshold }
-          colorCool="#2196f3"
-          colorHot="#d32f2f"
           areaAlpha={ AREA_ALPHA }
           lineAlpha={ LINE_ALPHA }
         />
       </LineChart>
+      <Box sx={ { display: 'flex', overflowX: 'auto', gap: 0.5 } }>
+        { points.slice(0, -1).map(point => <Button
+          key={ point.rowId }
+          size="small"
+          onClick={ () => showRow(point.rowId) }
+          sx={ { flexShrink: 0, minHeight: 44, color: temperatureColor(fahrenheitToLevel(point.temperature)) } }>
+          { moment(point.x).format('h:mm A') } { formatTemperature(point.temperature, format) }
+        </Button>) }
+      </Box>
+      { enabledAlarms.length > 0 && <Typography variant="caption" color="text.secondary" sx={ { px: 1 } }>
+        Wake { enabledAlarms.map(alarm => moment(alarm.time, 'HH:mm').format('h:mm A')).join(', ') }
+      </Typography> }
     </Paper>
   );
 }

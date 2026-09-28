@@ -5,7 +5,6 @@ import { palette } from '@design/tokens';
 
 import AlarmDismissal from './AlarmDismissal.tsx';
 import UpcomingNight from './UpcomingNight.tsx';
-import AwayNotification from './AwayNotification.tsx';
 import Clock from '@components/Clock.tsx';
 import BedTabs from '@components/BedTabs';
 import ErrorBoundary from '@components/ErrorBoundary.tsx';
@@ -57,7 +56,7 @@ export default function ControlTempPage() {
           sx={ {
             fontSize: '1.75rem',
             fontWeight: 600,
-            letterSpacing: '-0.02em',
+            letterSpacing: '-0.01em',
             color: palette.text.primary,
           } }
         >
@@ -68,7 +67,7 @@ export default function ControlTempPage() {
         </ErrorBoundary>
       </Box>
 
-      <SideControl showTemp />
+      <SideControl compact={ false } />
       <BedTabs />
       <Box
         sx={ {
@@ -112,7 +111,6 @@ export default function ControlTempPage() {
           <ErrorBoundary componentName="Alarm notification">
             <UpcomingNight />
           </ErrorBoundary>
-          <AwayNotification settings={ settings } />
           <WaterNotification />
           <ErrorBoundary componentName="Last night chip">
             <LastNightChip />

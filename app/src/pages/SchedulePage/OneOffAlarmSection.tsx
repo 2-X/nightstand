@@ -95,7 +95,7 @@ export default function OneOffAlarmSection() {
       setSaved(true);
     } catch (err) {
       console.error(err);
-      setSaveError('Could not save the one-off alarm. Your changes are still here. Try again.');
+      setSaveError('Could not save the one-time alarm. Your changes are still here. Try again.');
     } finally {
       setSaving(false);
     }
@@ -108,11 +108,11 @@ export default function OneOffAlarmSection() {
   return (
     <GlassCard>
       { saveError && <Alert severity="error">{ saveError }</Alert> }
-      { saved && <Typography role="status" variant="body2">One-off alarm saved for the { side } side.</Typography> }
+      { saved && <Typography role="status" variant="body2">One-time alarm saved for the { side } side.</Typography> }
       <Box sx={ { display: 'flex', alignItems: 'center', gap: 1.25, mb: 2 } }>
         <AlarmOnIcon sx={ { color: palette.text.primary } } />
         <Typography sx={ { fontSize: '1.1rem', fontWeight: 600, color: palette.text.primary } }>
-          One-off alarm
+          One-time alarm
         </Typography>
       </Box>
 
@@ -123,7 +123,7 @@ export default function OneOffAlarmSection() {
       <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 } }>
         <Typography sx={ { color: palette.text.primary } }>Enabled</Typography>
         <Switch
-          slotProps={ { input: { 'aria-label': 'Enable one-off alarm' } } }
+          slotProps={ { input: { 'aria-label': 'Enable one-time alarm' } } }
           checked={ enabled }
           onChange={ (e) => setEnabled(e.target.checked) } />
       </Box>
@@ -187,7 +187,7 @@ export default function OneOffAlarmSection() {
           disabled={ !canSave }
           size="small"
         >
-          { saving ? <CircularProgress size={ 18 } /> : 'Save one-off alarm' }
+          { saving ? <CircularProgress size={ 18 } /> : 'Save one-time alarm' }
         </Button>
       </Box>
     </GlassCard>

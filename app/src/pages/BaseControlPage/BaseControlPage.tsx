@@ -137,7 +137,7 @@ export default function BaseControlPage() {
 
   return (
     <PageContainer sx={ { maxWidth: '500px', width: '100%', justifyContent: 'flex-start', gap: 2 } }>
-      <Typography component="h1" variant="h5" sx={ { alignSelf: 'flex-start' } }>Bed</Typography>
+      <Typography component="h1" variant="h1" sx={ { alignSelf: 'flex-start' } }>Bed</Typography>
       <BedTabs/>
       { isLoading && <CircularProgress size={ 24 } aria-label="Loading base position" /> }
       { isError && <Alert severity="error">Could not load the base position.</Alert> }

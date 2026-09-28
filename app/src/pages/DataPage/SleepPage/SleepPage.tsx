@@ -236,7 +236,7 @@ export default function SleepPage() {
     <ErrorBoundary componentName="Sleep page">
       <PageContainer sx={ { mb: 12, gap: 2, alignItems: 'stretch' } }>
         <Typography component="h1" variant="h1">Sleep</Typography>
-        <SideControl/>
+        <SideControl mergeAwaySides={ false }/>
         { isError ? (
           <Alert severity="error" action={ <Button onClick={ () => refetch() }>Retry</Button> }>Pod settings could not be loaded.</Alert>
         ) : settings ? (

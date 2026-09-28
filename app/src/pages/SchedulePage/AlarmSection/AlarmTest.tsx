@@ -3,11 +3,14 @@ import { useScheduleStore } from '../scheduleStore.tsx';
 import { useAppStore } from '@state/appStore.tsx';
 import { postAlarm } from '@api/alarm.ts';
 import { useState } from 'react';
+import { useSettings } from '@api/settings';
 
 const TEST_DURATION_SECONDS = 10;
 
 export default function AlarmTest() {
   const { side } = useAppStore();
+  const { data: settings } = useSettings();
+  const sleeper = settings?.[side]?.name;
   const { selectedAlarmIndex, getEditedAlarms } = useScheduleStore();
   const alarm = getEditedAlarms()[selectedAlarmIndex];
   const [isTesting, setIsTesting] = useState(false);
@@ -63,7 +66,7 @@ export default function AlarmTest() {
         onClick={ onTestAlarm }
         disabled={ isTesting }
       >
-        Test alarm
+        Test on { sleeper ? `${sleeper}'s side` : `${side} side` }
       </Button>
     </Box>
   );

@@ -1,5 +1,5 @@
 import { useRef, useCallback, useEffect } from 'react';
-import { useTheme } from '@mui/material/styles';
+import { palette } from '@design/tokens';
 import { Button, Box } from '@mui/material';
 import { Add, Remove } from '@mui/icons-material';
 import { useControlTempStore } from './controlTempStore.tsx';
@@ -18,7 +18,6 @@ export default function TemperatureButtons({ refetch, currentTargetTemp }: Tempe
   const { side, setIsUpdating } = useAppStore();
   const { deviceStatus, setDeviceStatus, beginEdit, endEdit } = useControlTempStore();
   const { data: settings } = useSettings();
-  const theme = useTheme();
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editOpenRef = useRef(false);
   const inFlight = useRef(false);
@@ -87,8 +86,8 @@ export default function TemperatureButtons({ refetch, currentTargetTemp }: Tempe
   if (isInAwayMode) return null;
 
   const disabled = isInAwayMode;
-  const borderColor = theme.palette.grey[800];
-  const iconColor = theme.palette.grey[500];
+  const borderColor = palette.border.control;
+  const iconColor = palette.lamp;
 
   // When the user is viewing in 'level' mode (-10..+10), one click should
   // change the displayed level by 1, which is 2.75F under the hood (the
@@ -121,8 +120,8 @@ export default function TemperatureButtons({ refetch, currentTargetTemp }: Tempe
   const buttonStyle = {
     borderWidth: '2px',
     borderColor,
-    width: 50,
-    height: 50,
+    width: 64,
+    height: 64,
     borderRadius: '50%',
     minWidth: 0,
     padding: 0,
@@ -132,7 +131,7 @@ export default function TemperatureButtons({ refetch, currentTargetTemp }: Tempe
     <Box
       sx={ {
         position: 'relative',
-        mt: -2,
+        mt: -3,
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
@@ -148,6 +147,7 @@ export default function TemperatureButtons({ refetch, currentTargetTemp }: Tempe
         color="primary"
         sx={ buttonStyle }
         onClick={ () => handleClick(-1) }
+        onKeyDown={ event => { if (event.key === 'ArrowDown' || event.key === 'ArrowLeft') { event.preventDefault(); handleClick(-1); } } }
         disabled={ disabled || (deviceStatus?.[side]?.targetTemperatureF ?? MIN_TEMP_F) <= MIN_TEMP_F }
       >
         <Remove sx={ { color: iconColor } }/>
@@ -158,6 +158,7 @@ export default function TemperatureButtons({ refetch, currentTargetTemp }: Tempe
         sx={ buttonStyle }
 
         onClick={ () => handleClick(1) }
+        onKeyDown={ event => { if (event.key === 'ArrowUp' || event.key === 'ArrowRight') { event.preventDefault(); handleClick(1); } } }
         disabled={ disabled || (deviceStatus?.[side]?.targetTemperatureF ?? MAX_TEMP_F) >= MAX_TEMP_F }
       >
         <Add sx={ { color: iconColor } }/>

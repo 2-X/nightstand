@@ -17,3 +17,12 @@ it('does not advertise a disabled night', () => {
   };
   expect(nextBedEvent(schedule, 'UTC', moment.utc('2026-09-28T20:00:00Z'))).toBeUndefined();
 });
+
+it('finds the next scheduled power off past intervening adjustments', () => {
+  const schedule = {
+    sunday: { power: { on: '21:00', off: '09:00', enabled: true, onTemperature: 82 }, temperatures: { '02:00': 70 } },
+  };
+  const next = nextBedEvent(schedule, 'UTC', moment.utc('2026-09-28T01:00:00Z'), 'off');
+  expect(next?.kind).toBe('off');
+  expect(next?.at.toISOString()).toBe('2026-09-28T09:00:00.000Z');
+});

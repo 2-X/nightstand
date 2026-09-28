@@ -8,14 +8,6 @@ import { useAppStore } from '@state/appStore.tsx';
 import { useSleepRecords } from '@api/sleep.ts';
 import { useSleepScore, useSleepScoreEnabled } from '@api/sleepScore.ts';
 
-function scoreColor(score: number): string {
-  if (score >= 85) return '#22c55e';
-  if (score >= 70) return '#84cc16';
-  if (score >= 55) return '#eab308';
-  if (score >= 40) return '#f97316';
-  return '#ef4444';
-}
-
 export default function LastNightChip() {
   const { side } = useAppStore();
   const navigate = useNavigate();
@@ -46,19 +38,19 @@ export default function LastNightChip() {
   return (
     <Box display="flex" justifyContent="center" sx={ { width: '100%' } }>
       <Chip
-        icon={ <BedIcon sx={ { color: `${scoreColor(score.score)} !important`, fontSize: 18 } }/> }
+        icon={ <BedIcon sx={ { color: `${'text.secondary'} !important`, fontSize: 18 } }/> }
         label={ `Last night: estimated score ${score.score}. View Sleep` }
         clickable
         onClick={ () => navigate('/sleep') }
         sx={ {
           maxWidth: '100%',
           height: 'auto',
-          minHeight: 32,
+          minHeight: 44,
           backgroundColor: 'rgba(255,255,255,0.04)',
           border: 'none',
           color: 'text.secondary',
           fontWeight: 600,
-          '& .MuiChip-icon': { color: scoreColor(score.score) },
+          '& .MuiChip-icon': { color: 'text.secondary' },
           '& .MuiChip-label': { whiteSpace: 'normal', py: 0.5 },
         } }
       />

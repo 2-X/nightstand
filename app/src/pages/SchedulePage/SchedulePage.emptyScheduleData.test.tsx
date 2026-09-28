@@ -15,7 +15,7 @@ describe('SchedulePage empty schedule data robustness', () => {
 
     // The day tabs (static UI) render regardless of data shape; this proves
     // the page survived the render + effect pass without an unhandled throw.
-    expect(await screen.findByText('Power on')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Set bedtime and wake time' })).toBeInTheDocument();
     expect(await screen.findAllByRole('tab')).toHaveLength(7);
   });
 });

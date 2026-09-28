@@ -34,7 +34,7 @@ test('four named destinations fit 320px and selection follows Back and nested pa
 
 test('legacy side URLs select their named side and data opens Sleep', async ({ page }) => {
   await page.goto('/right');
-  await expect(page.getByRole('group', { name: 'Bed side' }).getByRole('button', { name: /^Right/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('radiogroup', { name: 'Bed side' }).getByRole('radio', { name: /^Sam/ })).toBeChecked();
   await page.goto('/data');
   await expect(page).toHaveURL(/\/sleep$/);
   await expect(page.getByRole('heading', { name: 'Sleep', exact: true })).toBeVisible();
