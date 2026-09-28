@@ -4,12 +4,12 @@ import { palette, typography } from './tokens';
 type StatusDotColor = 'green' | 'yellow' | 'orange' | 'red' | 'pink' | 'blue' | 'none';
 
 const STATUS_COLORS: Record<StatusDotColor, string> = {
-  green: palette.accent.green,
-  yellow: palette.accent.yellow,
-  orange: palette.accent.orange,
-  red: palette.accent.red,
-  pink: palette.accent.pink,
-  blue: palette.accent.blue,
+  green: palette.status.ok,
+  yellow: palette.status.warn,
+  orange: palette.status.warn,
+  red: palette.status.error,
+  pink: palette.status.error,
+  blue: palette.status.info,
   none: 'transparent',
 };
 

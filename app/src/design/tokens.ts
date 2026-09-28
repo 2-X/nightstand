@@ -1,27 +1,25 @@
-// Design tokens - single source of truth for the visual language:
-// near-black background, translucent "glass" cards, dim uppercase section
-// labels, and big high-contrast numerals.
-//
-// Use semantic names where possible so we can tweak the underlying palette
-// without grepping every component.
-
 export const palette = {
   bg: {
-    base: '#080A0C',
-    elevated: '#15191E',
+    base: '#000000',
+    elevated: '#121518',
+    raised: '#1B2026',
+    selected: '#303232',
     hover: 'rgba(255,255,255,0.08)',
   },
   border: {
-    subtle: '#2B333B',
+    subtle: '#23282E',
+    control: '#646D77',
     medium: 'rgba(255,255,255,0.12)',
   },
   text: {
-    primary: '#EDF1F4',
-    secondary: '#A6ADB5',
-    tertiary: '#A6ADB5',
-    disabled: 'rgba(255,255,255,0.25)',
+    primary: '#E4E7EA',
+    secondary: '#A3AAB2',
+    tertiary: '#848C95',
+    disabled: '#565D65',
   },
-  // Apple system colors - proven to feel right on dark.
+  lamp: '#E9E3D5',
+  status: { ok: '#6CCB8E', warn: '#E8C95A', error: '#FF7A8A', info: '#A3AAB2' },
+  stage: { awake: '#E9E3D5', rem: '#C3B5FF', light: '#8E80F0', deep: '#6A58E6' },
   accent: {
     blue: '#A3C7DF',
     green: '#30d158',
@@ -62,22 +60,23 @@ export const space = {
 
 export const typography = {
   hero: {
-    fontSize: '4.5rem',
-    fontWeight: 200,
+    fontSize: 'clamp(3.5rem, 16vw, 4.5rem)',
+    fontWeight: 300,
     lineHeight: 1,
     letterSpacing: '-0.03em',
   },
   largeTitle: {
     fontSize: '1.75rem',
     fontWeight: 600,
-    letterSpacing: '-0.02em',
+    letterSpacing: '-0.01em',
     lineHeight: 1.15,
   },
   title: {
-    fontSize: '1.25rem',
+    fontSize: '1.375rem',
     fontWeight: 600,
     letterSpacing: '-0.01em',
   },
+  metricLarge: { fontSize: '2.5rem', fontWeight: 400 },
   metricValue: {
     fontSize: '1.5rem',
     fontWeight: 500,
@@ -88,11 +87,10 @@ export const typography = {
     fontWeight: 400,
   },
   caption: {
-    fontSize: '0.85rem',
+    fontSize: '0.8125rem',
     fontWeight: 400,
   },
   sectionLabel: {
-    // Apple Home / 8 Sleep section header style.
     fontSize: '0.875rem',
     fontWeight: 600,
     letterSpacing: 'normal',
@@ -112,10 +110,7 @@ export const sx = {
     overflowWrap: 'break-word' as const,
     wordBreak: 'break-word' as const,
   },
-  // Glass aesthetic for an MUI Accordion. Drops the default divider, rounds
-  // the corners, and applies the same gradient/border/shadow as a GlassCard
-  // so accordion sections on the Schedules page visually match the Sleep
-  // page's cards while keeping their collapse/expand behaviour.
+  // Shared accordion surface and spacing.
   glassAccordion: {
     width: '100%',
     borderRadius: `${radius.xl}px`,

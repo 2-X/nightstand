@@ -1,40 +1,48 @@
 import { PaletteMode, alpha, createTheme, type Theme, type ThemeOptions } from '@mui/material/styles';
 
-const HEADING_WEIGHT = 500;
-const DARK_THEME_BORDER = '#2B333B';
+import { palette } from '@design/tokens';
+
+const HEADING_WEIGHT = 600;
+const DARK_THEME_BORDER = palette.border.subtle;
 const LIGHT_THEME_BORDER = '#E0E0E0';
-const DARK_APP_BAR = '#080A0C';
+const DARK_APP_BAR = palette.bg.base;
 
 const typography = {
   fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',
   allVariants: {
     fontSize: 16,
     letterSpacing: 'normal',
+    fontVariantNumeric: 'tabular-nums',
   },
   h1: {
     fontSize: '1.75rem',
     fontWeight: HEADING_WEIGHT,
+    lineHeight: 1.15,
+    letterSpacing: '-0.01em',
   },
   h2: {
-    fontSize: '1.5rem',
+    fontSize: '1.375rem',
     fontWeight: HEADING_WEIGHT,
   },
   h3: {
-    fontSize: '1.75rem',
+    fontSize: '1.125rem',
     fontWeight: HEADING_WEIGHT,
   },
   h4: {
-    fontSize: '1.5rem',
-    fontWeight: HEADING_WEIGHT,
-  },
-  h5: {
-    fontSize: '1.25rem',
-    fontWeight: HEADING_WEIGHT,
-  },
-  h6: {
     fontSize: '1rem',
     fontWeight: HEADING_WEIGHT,
   },
+  h5: {
+    fontSize: '1rem',
+    fontWeight: HEADING_WEIGHT,
+  },
+  h6: {
+    fontSize: '0.875rem',
+    fontWeight: HEADING_WEIGHT,
+  },
+  body1: { fontSize: '1rem', lineHeight: 1.5 },
+  body2: { fontSize: '0.875rem', lineHeight: 1.5 },
+  caption: { fontSize: '0.8125rem' },
 } satisfies ThemeOptions['typography'];
 
 const getBorderColor = (mode: PaletteMode) => (mode === 'dark' ? DARK_THEME_BORDER : LIGHT_THEME_BORDER);
@@ -58,6 +66,7 @@ const buildComponents = (mode: PaletteMode) => {
   return {
     MuiCssBaseline: {
       styleOverrides: {
+        ':focus-visible': { outline: `2px solid ${palette.lamp}`, outlineOffset: '3px' },
         '@media (prefers-reduced-motion: reduce)': {
           '*, *::before, *::after': {
             animationDuration: '0.01ms !important',
@@ -72,13 +81,16 @@ const buildComponents = (mode: PaletteMode) => {
       styleOverrides: {
         root: {
           textTransform: 'none',
+          minHeight: 44,
         },
       },
     },
+    MuiIconButton: { styleOverrides: { root: { minWidth: 44, minHeight: 44 } } },
     MuiToggleButton: {
       styleOverrides: {
         root: {
           textTransform: 'none',
+          minHeight: 44,
         },
       },
     },
@@ -127,13 +139,19 @@ const buildComponents = (mode: PaletteMode) => {
     MuiOutlinedInput: {
       styleOverrides: {
         notchedOutline: {
-          borderColor,
+          borderColor: mode === 'dark' ? palette.border.control : borderColor,
         },
       },
+    },
+    MuiInputBase: {
+      styleOverrides: { root: { minHeight: 44 }, input: { minHeight: 44, boxSizing: 'border-box' } },
     },
     MuiSelect: {
       styleOverrides: {
         select: {
+          minHeight: '44px !important',
+          boxSizing: 'border-box',
+          display: 'flex', alignItems: 'center',
           fontSize: 16,
         },
       },
@@ -152,7 +170,7 @@ const buildComponents = (mode: PaletteMode) => {
         },
         underline: ({ theme }) => ({
           '&:before': {
-            borderBottomColor: theme.palette.divider,
+            borderBottomColor: theme.palette.mode === 'dark' ? palette.border.control : theme.palette.divider,
           },
         }),
       },
@@ -188,12 +206,17 @@ const buildComponents = (mode: PaletteMode) => {
 const buildPalette = (mode: PaletteMode): ThemeOptions['palette'] => ({
   mode,
   divider: getBorderColor(mode),
-  ...(mode === 'dark' ? { primary: { main: '#A3C7DF' }, text: { primary: '#EDF1F4', secondary: '#A6ADB5' } } : {}),
+  ...(mode === 'dark' ? {
+    primary: { main: palette.lamp }, secondary: { main: palette.lamp },
+    success: { main: palette.status.ok }, warning: { main: palette.status.warn },
+    error: { main: palette.status.error }, info: { main: palette.status.info },
+    text: { primary: palette.text.primary, secondary: palette.text.secondary, disabled: palette.text.disabled },
+  } : {}),
   background:
     mode === 'dark'
       ? {
-        default: '#080A0C',
-        paper: '#15191E',
+        default: palette.bg.base,
+        paper: palette.bg.elevated,
       }
       : {
         default: 'rgb(250, 250, 250)',
@@ -206,7 +229,7 @@ export const buildTheme = (mode: PaletteMode = 'dark') =>
     typography,
     palette: buildPalette(mode),
     shape: {
-      borderRadius: 7,
+      borderRadius: 12,
     },
     components: buildComponents(mode),
   });

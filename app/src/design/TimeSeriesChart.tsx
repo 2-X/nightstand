@@ -37,7 +37,7 @@ export default function TimeSeriesChart({
   xValueFormatter,
   yValueFormatter,
   targetRange,
-  lineColor = '#ffffff',
+  lineColor = palette.lamp,
 }: TimeSeriesChartProps) {
   const { width = 320, ref } = useResizeDetector();
   const fmtX = xValueFormatter ?? ((d: Date) => d.toLocaleTimeString([], { hour: 'numeric' }).toLowerCase().replace(' ', ''));
@@ -77,8 +77,8 @@ export default function TimeSeriesChart({
               return `linear-gradient(to bottom,
                 transparent 0%,
                 transparent ${topPct}%,
-                rgba(34, 197, 94, 0.18) ${topPct}%,
-                rgba(34, 197, 94, 0.18) ${topPct + heightPct}%,
+                rgba(108, 203, 142, 0.12) ${topPct}%,
+                rgba(108, 203, 142, 0.12) ${topPct + heightPct}%,
                 transparent ${topPct + heightPct}%
               )`;
             })(),
