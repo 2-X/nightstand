@@ -17,6 +17,10 @@ is a hard fork; for the history of the projects it descends from, see
   outside its scheduled on-window, can now be turned off in Settings, under
   Features. It stays on by default, so nothing changes unless you turn it off.
 
+- The nightly sensor calibration for biometrics now runs whether or not daily
+  priming is on. Before, it was scheduled together with priming, so a Pod with
+  biometrics on and priming off never calibrated its presence thresholds.
+
 - The restart an hour before daily priming can now be turned off in Settings,
   next to daily priming. It was already a setting, with no control in the app.
 

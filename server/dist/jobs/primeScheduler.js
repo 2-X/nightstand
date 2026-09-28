@@ -63,6 +63,10 @@ export const schedulePrimingRebootAndCalibration = (settingsData) => {
     const { timeZone, primePodDaily } = settingsData;
     if (timeZone === null)
         return;
+    // Calibration does not depend on priming; each run checks that biometrics
+    // is on and that the bed is empty.
+    scheduleCalibrationJob(CALIBRATE_LEFT_HOUR, CALIBRATE_LEFT_MINUTE, timeZone, 'left');
+    scheduleCalibrationJob(CALIBRATE_RIGHT_HOUR, CALIBRATE_RIGHT_MINUTE, timeZone, 'right');
     if (!primePodDaily.enabled)
         return;
     const dailyRule = new schedule.RecurrenceRule();
@@ -75,8 +79,6 @@ export const schedulePrimingRebootAndCalibration = (settingsData) => {
     // hour of -1, which node-schedule rejects silently so the pod would simply
     // stop rebooting.
     scheduleRebootJob((onHour + 23) % 24, onMinute, timeZone);
-    scheduleCalibrationJob(CALIBRATE_LEFT_HOUR, CALIBRATE_LEFT_MINUTE, timeZone, 'left');
-    scheduleCalibrationJob(CALIBRATE_RIGHT_HOUR, CALIBRATE_RIGHT_MINUTE, timeZone, 'right');
     logger.debug(`Scheduling daily prime job at ${primePodDaily.time}`);
     schedule.scheduleJob(`daily-priming-${time}`, dailyRule, async () => {
         try {

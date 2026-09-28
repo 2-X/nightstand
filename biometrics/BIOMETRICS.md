@@ -59,8 +59,8 @@ nothing while it is off.
   `sleep_detection/calibrate_sensor_thresholds.py`. It looks back over the
   previous 6 hours for a stretch when the bed was empty, learns the
   capacitance baseline that the daily analysis uses, and records an empty-bed
-  piezo floor. It skips the run if someone is on the bed. It is scheduled
-  together with daily priming, so it only runs when daily priming is on.
+  piezo floor. It skips the run if someone is on the bed. It runs whether or
+  not daily priming is on.
 - **Manual runs.** The Status page can run the sleep analysis or calibration
   for either side (`POST /api/jobs`). A manual calibration skips the
   occupied-bed check, on the assumption that the person running it knows the

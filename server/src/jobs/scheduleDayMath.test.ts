@@ -222,6 +222,23 @@ describe('alarms land inside their own power window', () => {
   });
 });
 
+describe('calibration is scheduled independently of daily priming', () => {
+  it('schedules both calibration jobs, and no reboot or prime, while priming is off', () => {
+    const s = settings({ primePodDaily: { enabled: false, time: '14:00' } } as unknown as Partial<Settings>);
+    schedulePrimingRebootAndCalibration(s);
+    const names = captured.map((c) => c.name);
+    assert.ok(names.some((n) => n.startsWith('daily-calibration-') && n.endsWith('-left')), 'no left calibration job');
+    assert.ok(names.some((n) => n.startsWith('daily-calibration-') && n.endsWith('-right')), 'no right calibration job');
+    assert.ok(!names.some((n) => n.startsWith('daily-reboot') || n.startsWith('daily-priming')), 'reboot or prime scheduled with priming off');
+  });
+
+  it('still schedules calibration once each while priming is on', () => {
+    const s = settings({ primePodDaily: { enabled: true, time: '14:00' } } as unknown as Partial<Settings>);
+    schedulePrimingRebootAndCalibration(s);
+    assert.equal(captured.filter((c) => c.name.startsWith('daily-calibration-')).length, 2);
+  });
+});
+
 describe('prime scheduler derives the reboot hour by subtracting an hour', () => {
   it('a 00:30 prime time still schedules a daily reboot (at 23:30 the day before)', () => {
     const s = settings({ primePodDaily: { enabled: true, time: '00:30' } } as unknown as Partial<Settings>);
