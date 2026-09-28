@@ -4,8 +4,8 @@ A consolidated reference for what's been reverse-engineered about the Pod's
 local hardware protocol, the `dac.sock` command set, the RAW biometrics
 telemetry stream, and a few other odds and ends. This is our own working
 notes, cross-checked against other independent reverse-engineering projects
-where noted. **Not official, not guaranteed, use at your own risk**, see
-[Credits & sources](#credits--sources) for where each piece came from.
+where noted. These are unofficial notes. See [Credits & sources](#credits--sources)
+for the sources; each entry records what was tested.
 
 Every entry below is tagged with a verification status:
 
@@ -42,15 +42,17 @@ newline-delimited response.
 | 10 | `RIGHT_TEMP_DURATION` (aka `TURN_ON_RIGHT`) | integer seconds | ✅ | Same as 9, right side. |
 | 11 | `TEMP_LEVEL_LEFT` | integer level, -100..100 | ✅ | Free-sleep uses this actively. Level-to-°F: `82.5 + (level/100) * 27.5`. |
 | 12 | `TEMP_LEVEL_RIGHT` | integer level, -100..100 | ✅ | Same as 11, right side. |
-| 13 | `PRIME` | none (arg ignored) | ✅ starts, ❌ can't stop | Starts a priming cycle. `isPriming` goes `true` ~10s after the command and clears on its own after ~11-12 minutes: a genuinely long operation, not a quick flush. No known way to stop one early (see [below](#priming-cant-be-cancelled-as-far-as-we-can-tell)). |
+| 13 | `PRIME` | none (arg ignored) | ✅ starts, ❌ can't stop | Starts a priming cycle. `isPriming` goes `true` ~10s after the command and clears on its own after ~11-12 minutes: a genuinely long operation, not a quick flush. No known way to stop one early (see [below](#priming-cancellation)). |
 | 14 | `DEVICE_STATUS` | none | ✅ | Returns the full status blob: see [DEVICE_STATUS response fields](#device_status-response-fields) below. |
 | 15 | n/a | n/a | ❓ | Unused/unknown. Not referenced by free-sleep, jmew, or 8rp. |
 | 16 | `ALARM_CLEAR` | none | ✅ | Free-sleep uses this to stop an active alarm vibration. |
 | 17 | `STOP_PRIME` | none (arg ignored) | ❌ | Documented by 8rp as stopping an active prime. Tested directly against this pod: sent both immediately and again once priming was confirmed active, `isPriming` stayed `true` for 5+ minutes with no visible effect. May need a different argument or apply only in another context/Pod generation. A "Cancel priming" button built on this was reverted: don't re-add without a positive test. |
 
-### `PRIME` / priming can't be cancelled, as far as we can tell
+<a id="priming-cancellation"></a>
 
-No known way to stop a priming cycle early:
+### `PRIME` / priming cancellation on the tested Pod 5
+
+Cancellation has not been demonstrated on the tested Pod 5:
 
 - Command 17 (`STOP_PRIME` per 8rp) had no observable effect, see above.
 - `opensleep`'s lower-level protocol notes (direct STM32 serial, Pod 3)
@@ -58,9 +60,8 @@ No known way to stop a priming cycle early:
 - `ninesleep` sends `13\n\n` with no argument; a code comment there
   speculates about one but the implementation doesn't use it.
 
-Likely not designed to interrupt mid-cycle, similar to some appliances that
-won't cancel a cycle once water is moving. "Prime now" and the daily
-auto-prime schedule both still work fine, they just run to completion.
+On the tested Pod 5, "Prime now" and daily priming run to completion.
+Other models and firmware may behave differently.
 Open a PR if you find a working cancel command.
 
 ### `DEVICE_STATUS` response fields
@@ -142,7 +143,7 @@ against an 84°F setpoint, cleared by a power cycle; sleepypod/core
 independently documented the same root cause in their ADR 0022. free-sleep
 v3.1.0+ watches `frzHealth` for this (TEC actively drawing current + pump
 RPM near zero or `water: false`, sustained for a dwell window) and surfaces
-it on the Status page as "Pump health." Detection and visibility only,
+it in Settings > Device as "Pump health." Detection and visibility only,
 no automatic power-off, since a safe automatic response is a bigger call
 than a detection threshold.
 

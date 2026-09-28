@@ -11,7 +11,7 @@ Vite and uses Material UI for components and theming, React Query for server
 data, and Zustand for a small amount of client state.
 
 ## Developing
-Run `npm install` in `app/` and in `server/`. The app imports some schema
+Run `npm ci` in `app/` and in `server/`. The app imports some schema
 files directly from `server/src/`, and those need the server's dependencies.
 
 ### Against a Pod
@@ -26,9 +26,12 @@ the app opens its WebSocket, to `http://<VITE_POD_IP>:3000` instead of the
 page's own origin (see [src/api/api.ts](src/api/api.ts)). Vite serves on
 port 5173 on all interfaces, so a phone on the same network can load it.
 
-The server only accepts cross-origin requests from `localhost` and from its
-own local subnets. If your browser reaches Vite from another address (for
-example over Tailscale), set `ALLOWED_ORIGIN` in the server's environment.
+The HTTP and WebSocket origin checks accept parsed HTTP(S) origins with
+loopback hosts, single-label `.local` hosts, or IPv4 addresses in a /24 prefix
+of one of the server's non-internal interfaces. `ALLOWED_ORIGIN` adds an exact
+origin, for example your Tailscale HTTPS address. These browser checks are not
+authentication: requests without an Origin header are allowed. See the
+[API network boundary](../server/API.md).
 
 To change the server at the same time, run it in hot reload mode on the Pod:
 [server/README_SERVER.md](../server/README_SERVER.md#hot-reloading-on-the-pod).
@@ -75,27 +78,33 @@ build.
   Schemas that must match the server re-export the server's own files, for
   example `settingsSchema.ts` re-exports `server/src/db/settingsSchema.ts`.
 - `components/`: Shared components. `Layout` renders the current page and the
-  `Navbar`, which is a bottom navigation bar on narrow screens and a top app
-  bar on wide ones. The navbar hides the Elevation tab when no adjustable base
-  is configured and shows "Reconnecting" while the WebSocket is down. The
-  sleep and vitals chart and card components are here too.
+  `Navbar`, with four named bottom-navigation destinations: Bed, Schedule,
+  Sleep and Settings. Base controls are reached from Bed when configured.
+  Connection state, sleep charts and metric cards also live here.
 - `design/`: Shared visual building blocks and design tokens.
 - `lib/`: Plain helper functions (temperature conversion, bed geometry,
   formatting).
 - `pages/`:
   - **ControlTempPage**: Temperature slider, power button, and away-mode and
     alarm notices.
-  - **BaseControlPage**: Adjustable base position (Pod 4 and later).
+  - **BaseControlPage**: Position controls for compatible adjustable-base hardware.
   - **SchedulePage**: Daily power, temperature, and alarm schedules, with
     copy to other days.
-  - **DataPage**: Sleep, vitals, and logs tabs. The changelog page is in the
-    same folder.
-  - **SettingsPage**: Device and per-side settings, priming, storage and
-    memory usage, and the versions and update screen.
-  - **StatusPage**: Health of each server-side service.
+  - **DataPage**: Sleep with Night and Week views, a nightly summary and
+    detailed metrics. The changelog and log components retain their source
+    location here, but logs are reached through Settings > Device. There is
+    no separate Vitals navigation destination.
+  - **SettingsPage**: Categories for People and sides, Bed preferences,
+    Automation, Sleep data, Device, Software and About. Device contains
+    diagnostics; Software contains releases and rollback; About links the
+    canonical license.
+  - **StatusPage**: Service health and manual jobs, reached through Device.
   - `PageContainer.tsx`: Standard wrapper for page content.
 - `mocks/`: Request handlers and data for demo mode.
 - `test/`: Test setup and render helpers.
+
+Legacy URLs are preserved or redirected so saved links still lead to the
+corresponding controls.
 
 ---
 

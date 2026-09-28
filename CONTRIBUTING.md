@@ -91,8 +91,8 @@ logic.
 
 ## Optional features
 
-Anything a user might reasonably want off ships behind a toggle in Settings,
-under Features:
+Anything a user might reasonably want off ships behind a toggle in the
+relevant Settings category (Bed preferences, Automation or Sleep data):
 
 - A key in `defaultFeatures` in `server/src/db/settingsSchema.ts`, with a
   default that keeps existing Pods behaving as they did.

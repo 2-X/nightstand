@@ -14,14 +14,14 @@ I only have a Pod 5, so it's the only Pod I've tested this guide on. The Pod 3 a
 
 - Pod 1: not compatible.
 - Pod 2: not compatible.
-- Pod 3 (with SD card): reported to work for most people who have tried it. Not tested by the maintainer; support follows upstream free-sleep. The SD card method needs a Linux computer.
+- Pod 3 (with SD card): supported by upstream free-sleep. The SD card method needs a Linux computer.
   - Option 1: follow blopker's [ZeroSleep guide](https://blopker.com/writing/04-zerosleep-1/) to get root.
-  - Option 2: use Pixel-Meister's [SD card script](https://github.com/Pixel-Meister/freesleep_script/blob/main/modify_eight_sleep.sh), which modifies the Eight Sleep SD card. Not tested by the maintainer.
+  - Option 2: use Pixel-Meister's [SD card script](https://github.com/Pixel-Meister/freesleep_script/blob/main/modify_eight_sleep.sh), which modifies the Eight Sleep SD card.
   - Once you can SSH in as root, do [step 11](#11-disable-software-updates) right away. Until you do, the Pod can update its firmware on its own and disconnect you. Then skip step 12 (if SSH works, the Pod is already on your network) and continue from step 13.
-- Pod 3 (no SD card): compatible. This version has FCC ID 2AYXT61100001, printed on the back of the Pod where the water tubes plug in. Not tested by the maintainer; support follows upstream free-sleep.
-- Pod 4: compatible. Not tested by the maintainer; support follows upstream free-sleep.
-- Pod 5: compatible. This is the Pod the guide is tested on.
-- Pod 6: unknown. It was released in September 2026 and nobody has reported trying it yet. If you do, please open an issue.
+- Pod 3 (no SD card): supported by upstream free-sleep. This version has FCC ID 2AYXT61100001, printed on the back of the Pod where the water tubes plug in.
+- Pod 4: supported by upstream free-sleep.
+- Pod 5: tested by the maintainer. The missing teardown photos and reset procedure are noted below.
+- Pod 6: unknown; no Nightstand compatibility report is documented here.
 
 ## Tools required
 
@@ -39,6 +39,11 @@ These steps are written for Mac and Linux. On Windows you'll need to adapt them 
 
 ## How to revert changes and go back to using your Eight Sleep through their app
 
+This restores Eight Sleep software, not a previous Nightstand release or
+upstream free-sleep. Check the model-specific procedure before installing.
+Back up any data you want to keep before resetting. See the
+[recovery notes](README.md#what-happens-if-an-install-fails) before starting.
+
 1. If your Pod is still on your Eight Sleep account, open the app, manage the Pod, and remove it from your account.
 2. Reset the firmware:
    - [Pod 3](docs/pod_3_teardown/6_firmware_reset.jpeg)
@@ -52,10 +57,13 @@ These steps are written for Mac and Linux. On Windows you'll need to adapt them 
 
 If your Pod already runs a free-sleep fork (the original project, jmew's, or
 another), use the migration script instead of reinstalling by hand. It runs on
-your computer and connects to the Pod over SSH. Before it changes anything, it
-backs up the Pod's code and data, keeps one copy on the Pod and one on your
-computer, and checks that both are intact. It then installs Nightstand and
-keeps your old install in place, so you can roll back from the app afterward.
+your computer and connects to the Pod over SSH. Before replacing the app, it
+backs up application code and installed dependencies, the SQLite database
+and LowDB settings/schedules. It keeps one copy on the Pod and one on your
+computer, and checks both archives.
+Logs and RAW sensor archives are not included. It then installs Nightstand and
+keeps your old application tree for rollback from the app afterward. This
+application rollback does not restore the database to its earlier state.
 
 Before you start, check that:
 
@@ -65,6 +73,8 @@ Before you start, check that:
 - You can SSH in as root on port 8822 or 22. The script asks for the root
   password; if you log in with a key instead, leave the prompt blank.
 - Your computer (macOS or Linux) has `curl`, `ssh`, `scp`, `tar`, and `python3`.
+
+On your computer:
 
 1. Download the script and the two helper files it copies to the Pod into one
    folder. Saving them rather than piping into `bash` lets you read them first:
@@ -89,8 +99,9 @@ Before you start, check that:
 Pod 5 is the tested case. On a Pod 3 or Pod 4 the script asks for a separate
 typed acknowledgment, because sleep tracking there may not work on this fork
 (temperature control and scheduling are expected to). If the install fails,
-the script restores your original install automatically. For other recovery
-options, such as `--restore <backup-tarball>`, run it with `--help`.
+the script attempts to restore your original application automatically.
+See the [recovery notes](README.md#what-happens-if-an-install-fails). For
+options such as `--restore <backup-tarball>`, run it with `--help`.
 
 When it finishes, the Pod's internet access is blocked with the same rules as
 [step 19](#19-add-firewall-rules-to-block-internet-access-optional-but-recommended).
@@ -99,6 +110,10 @@ access.
 
 ---
 # Installation steps
+
+Steps 1 to 4 are physical setup or commands on your computer. From step 5,
+commands run **on the Pod**, first through the serial console and later over
+SSH. Browser and computer steps are labeled separately.
 
 ## 1. Access the circuit board
 
@@ -271,7 +286,8 @@ nmcli connection reload
 
 ## 13. Install the Nightstand server
 
-This downloads the newest release, installs it, and sets up a systemd service
+This downloads `main` (the newest published release, which may be beta),
+installs it, and sets up a systemd service
 so Nightstand starts on boot. When it finishes you should see `Installation
 complete!`. Just before that it prints your dac.sock path. If that path doesn't
 end in `dac.sock`, open an issue before going further.
@@ -301,9 +317,13 @@ nmcli -g ip4.address device show wlan0
 
 From a phone or computer on the same Wi-Fi network as the Pod, open the Pod's IP address on port 3000. With the example address above, that's:
 
-http://192.168.1.50:3000/
+`http://192.168.1.50:3000/`
 
-**Set your time zone on the Settings page, or scheduling will not work.** The page looks dimmed until the Pod is connected to the mattress cover. That is expected.
+Nightstand's API has no login: a device that can reach it can control the Pod
+and access its data. Use a trusted local network, do not port-forward it to
+the public internet, and restrict access if you enable Tailscale.
+
+**Set your time zone under Settings > Bed preferences before using schedules.** The page looks dimmed until the Pod is connected to the mattress cover. That is expected.
 
 ![Web App](docs/installation/4_web_app.png)
 
@@ -333,7 +353,7 @@ There are two checks. Do the first one now. The second needs steps 18 and 19, so
 3. Connect your Pod to the cover as you normally would.
 4. In the web app, set one side to the highest temperature and the other side to the lowest.
 5. Check that the temperature actually changes, by hand or with a thermometer.
-6. If it doesn't, open an issue on this repository and include the output of `fs-debug`, run on the Pod over SSH.
+6. If it does not, open an issue with your Pod model, Nightstand version and what you observed. `fs-debug`, run on the Pod over SSH, can help. Check it before posting and remove personal or network details you do not want to share.
 
 ## 18. Add an SSH config
 
@@ -353,182 +373,36 @@ sh /home/dac/free-sleep/scripts/setup_ssh.sh
 
 ## 19. Add firewall rules to block internet access (optional, but recommended)
 
-This blocks traffic between the Pod and the internet while leaving your local network, time sync (NTP), and the traffic Tailscale needs open. The second command undoes it.
+The firewall blocks most new internet connections while allowing local access,
+established connections and time sync. If Tailscale is running when the
+script runs, it also allows outbound UDP, DNS and HTTPS to any host.
+
+Run this on the Pod:
 
 ```bash
 sh /home/dac/free-sleep/scripts/block_internet_access.sh
+```
 
-# Undo this with
+To undo the rules:
+
+```bash
 sh /home/dac/free-sleep/scripts/unblock_internet_access.sh
 ```
 
-Blocking internet access doesn't stop you from updating Nightstand. When a
-new release is out, the Settings page shows an Update button, and the
-updater opens internet access only long enough to download it, then blocks
-it again. It applies the block when it finishes even if you skipped this step.
-
-The block is partial. So that Tailscale works (step 20), the rules allow all
-outbound UDP, outbound DNS, and outbound HTTPS (TCP port 443) to any host,
-which means the Pod can still reach Eight Sleep's servers over HTTPS. What
-prevents forced firmware updates is step 11; the firewall is a second layer.
+Updates open internet access for downloads and reapply the block afterward,
+even if you skipped this step. Rerun the block script after changing Tailscale
+setup: start Tailscale first to keep remote access, or stop it first to remove
+those broad exceptions. The rules stay in place until reapplied or changed.
+Keep the firmware update services disabled as described in step 11.
 
 ---
 
 ## 20. (Optional) Remote access from outside your home network with Tailscale
 
-By default you can only reach the Nightstand web app from your home Wi-Fi. [Tailscale](https://tailscale.com) is a third-party service, built on WireGuard, that puts your phone and the Pod on a private encrypted network. You can then reach the Pod from anywhere without exposing it to the public internet. It's free for personal use (100 devices or fewer at the time of writing).
-
-In outline: install the Tailscale daemon on the Pod, run `tailscale up` to log in, enable HTTPS and Serve in the admin console, allow the new address in Nightstand, then turn the firewall back on.
-
-### 20.1 Install the Tailscale daemon on the pod
-
-The Pod needs internet access to download Tailscale. If the firewall is on (you did step 19, migrated from another fork, or installed an update from the app), turn it off for now:
-```bash
-sh /home/dac/free-sleep/scripts/unblock_internet_access.sh
-```
-
-Then run this on the Pod as root. Before you do, check [pkgs.tailscale.com](https://pkgs.tailscale.com/stable/#static) for the newest arm64 version and change `VERSION` to match. If the checksum doesn't match, the `exit 1` ends your shell session before anything is installed; log back in and download again.
-```bash
-# Pre-flight: confirm the kernel exposes /dev/net/tun
-ls -la /dev/net/tun || modprobe tun
-
-# Pick the latest aarch64 build from https://pkgs.tailscale.com/stable/#static
-VERSION=1.96.4
-TARBALL=tailscale_${VERSION}_arm64.tgz
-cd /tmp
-curl -fLO "https://pkgs.tailscale.com/stable/${TARBALL}"
-curl -fsSL "https://pkgs.tailscale.com/stable/${TARBALL}.sha256" -o "${TARBALL}.sha256"
-[ "$(awk '{print $1}' "${TARBALL}.sha256")" = "$(sha256sum "${TARBALL}" | awk '{print $1}')" ] \
-  && echo OK || { echo CHECKSUM_MISMATCH; exit 1; }
-
-# Install: binaries on rootfs, daemon state on the persistent partition (so
-# the tailnet identity survives any future firmware events)
-mkdir -p /opt/tailscale /persistent/tailscale-state
-chmod 0700 /persistent/tailscale-state
-tar -C /opt/tailscale --strip-components=1 -xzf "${TARBALL}"
-ln -sf /opt/tailscale/tailscale  /usr/sbin/tailscale
-ln -sf /opt/tailscale/tailscaled /usr/sbin/tailscaled
-rm "${TARBALL}" "${TARBALL}.sha256"
-
-# Default env file
-cat > /etc/default/tailscaled <<'EOF'
-PORT="41641"
-FLAGS=""
-EOF
-
-# systemd unit. NOTE: `--statedir` is required separately from `--state`
-# when using a custom state path. Without it, Tailscale's TLS cert
-# subsystem fails with "no TailscaleVarRoot" and HTTPS won't work.
-cat > /etc/systemd/system/tailscaled.service <<'EOF'
-[Unit]
-Description=Tailscale node agent
-Documentation=https://tailscale.com/docs/
-Wants=network-pre.target
-After=network-pre.target NetworkManager.service systemd-resolved.service
-
-[Service]
-EnvironmentFile=/etc/default/tailscaled
-ExecStart=/opt/tailscale/tailscaled --statedir=/persistent/tailscale-state --state=/persistent/tailscale-state/tailscaled.state --socket=/run/tailscale/tailscaled.sock --port=${PORT} $FLAGS
-ExecStopPost=/opt/tailscale/tailscaled --cleanup
-Restart=on-failure
-RuntimeDirectory=tailscale
-RuntimeDirectoryMode=0755
-CacheDirectory=tailscale
-CacheDirectoryMode=0750
-Type=notify
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-systemctl daemon-reload
-systemctl enable --now tailscaled
-systemctl status tailscaled   # expect: Active: running, "Needs login:"
-```
-
-### 20.2 Log the pod in to your tailnet
-
-```bash
-tailscale up --hostname=eight-pod --accept-routes=false --advertise-exit-node=false
-```
-
-It prints a login URL (`https://login.tailscale.com/a/...`). Open it in any browser, sign in or create a free Tailscale account, and approve the device. Then, back on the Pod:
-
-```bash
-tailscale status     # should show eight-pod with a 100.x.y.z address
-```
-
-### 20.3 Enable Tailscale Serve and HTTPS in the admin console
-
-Two settings in the Tailscale admin console, both free, let you reach the Pod at `https://eight-pod.<tailnet>.ts.net` with no port number and a Let's Encrypt certificate:
-
-1. **Enable HTTPS certificates**: open <https://login.tailscale.com/admin/dns>, find "HTTPS Certificates", and choose **Enable HTTPS**.
-2. **Enable Serve**: visit `https://login.tailscale.com/f/serve`, or follow the link the next command prints if Serve isn't on yet.
-
-Then on the Pod:
-```bash
-tailscale serve --bg --https=443 http://127.0.0.1:3000
-tailscale serve status   # expect: https://eight-pod.<tailnet>.ts.net | -- / proxy http://127.0.0.1:3000
-```
-
-The first time you open the site, Tailscale requests the certificate. If that first request fails with an ACME error, wait a few seconds and try again.
-
-Get your full hostname for step 20.4. If more than one line appears, use the one that starts with `eight-pod`. Tailscale may print it with a trailing dot; leave the dot off when you copy it.
-```bash
-tailscale status --json | grep DNSName
-# e.g. eight-pod.tail8d5df2.ts.net
-```
-
-### 20.4 Tell Nightstand to accept the Tailscale origin (CORS)
-
-By default Nightstand only accepts API requests from pages opened on the Pod's own local network (addresses such as `http://192.168.1.x`). Opened from your Tailscale hostname, the page loads but every API call fails with a 500 error, so it stays blank. Add your Tailscale hostname as `ALLOWED_ORIGIN`:
-
-```bash
-# Replace with the FQDN from step 20.3
-TS_HOST="eight-pod.tail8d5df2.ts.net"
-sed -i "/^Environment=NODE_ENV=production/a Environment=ALLOWED_ORIGIN=https://${TS_HOST}" /etc/systemd/system/free-sleep.service
-systemctl daemon-reload
-systemctl restart free-sleep
-```
-
-In-app updates keep this setting. Rerunning the step 13 installer rewrites the service file, so repeat this step if you ever do that.
-
-### 20.5 Re-apply the firewall
-
-The block script allows what Tailscale needs only while Tailscale is running, so check that `tailscale status` works, then turn the firewall back on:
-
-```bash
-sh /home/dac/free-sleep/scripts/block_internet_access.sh
-```
-
-It prints `tailscaled active: allowing its control-plane/DERP/STUN egress`. If it says `tailscaled inactive` instead, start Tailscale and run it again.
-
-The Tailscale-related rules (visible with `iptables -L OUTPUT -n -v`) are:
-- `tailscale0` interface in/out (the VPN traffic to your phone)
-- Outbound UDP to any host (WireGuard direct peer connections and STUN)
-- Outbound TCP/443 (Tailscale control plane and DERP relays)
-- Outbound DNS (UDP and TCP port 53)
-
-As noted in step 19, these rules leave the Pod able to reach any HTTPS host. Masking the update services in step 11 is what prevents forced firmware updates.
-
-### 20.6 Use the pod from your phone
-
-1. Install Tailscale on your phone ([App Store](https://apps.apple.com/us/app/tailscale/id1470499037) / [Play Store](https://play.google.com/store/apps/details?id=com.tailscale.ipn)) and sign in to the same account.
-2. Open `https://eight-pod.<tailnet>.ts.net` in the phone's browser.
-3. Add it to your home screen as in step 16, so it opens like an app.
-4. Leave Tailscale on. Unless you set up an exit node, only traffic to your tailnet goes through it; the rest of your phone's traffic is unaffected. The iOS app also has "VPN On Demand" rules in its settings if you'd rather it connect only for certain domains.
-
-### 20.7 Verify
-
-From a device that isn't on your home Wi-Fi (on a phone, turn off Wi-Fi to use cellular):
-- `https://eight-pod.<tailnet>.ts.net` should load the Nightstand web app with live data.
-- On the Pod (`ssh -p 8822 root@<POD_IP>`), `tailscale status` should list both the Pod and your phone. The connection shows as `direct` (peer to peer) or as a relay through Tailscale's servers. Either works.
-
-To check that it survives a restart, reboot the Pod and test again from your phone. The page should load without logging in again. The Pod can take a few minutes to come back (see step 17).
-```bash
-ssh -p 8822 root@<POD_IP> reboot
-# wait ~60s, then re-test from your phone. UI should load without re-auth.
-```
+Follow [Remote access with Tailscale](docs/REMOTE_ACCESS.md) to install the
+daemon, configure HTTPS and restrict access. Start Tailscale before reapplying
+the firewall in step 19. Its broad UDP, DNS and HTTPS exceptions are selected
+when the script runs and remain until the rules are reapplied or changed.
 
 ---
 
@@ -536,9 +410,9 @@ ssh -p 8822 root@<POD_IP> reboot
 
 Step 13 installs these. Run them on the Pod as root, over SSH or at the serial console.
 
-- `fs-debug`: prints a debug report for the Pod and Nightstand. Include it when you open an issue.
+- `fs-debug`: prints device/server status, resolver configuration and service logs. Check it before sharing and remove personal or network details you do not want public.
 - `fs-restart`: restarts the free-sleep and free-sleep-stream services.
 - `fs-reset-db`: deletes the biometrics database and recreates it empty (useful if the database file is corrupted). Asks for confirmation first.
 - `fs-reset`: deletes all Nightstand data (schedules, biometrics, settings) in `/persistent/free-sleep-data`, then runs the updater. Asks for confirmation first. The updater only installs something when a newer release is published, so on an up-to-date Pod nothing is reinstalled. If it reports "Already up to date", run `fs-restart` to start the server again.
-- `fs-update`: downloads and installs the newest published release from GitHub, beta or stable, with automatic backup and rollback. It uses the same updater as the app. To choose a channel or a specific version, use Settings > Software & updates in the app instead.
+- `fs-update`: selects the newest release allowed by your saved channel preference and uses the same backup and rollback workflow as the app. Stable selects stable releases; beta includes both channels. To choose a channel or specific version, use Settings > Software.
 - `fs-dev-server`: stops the Nightstand service and runs the Express server directly with nodemon (for development).

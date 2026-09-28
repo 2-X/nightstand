@@ -31,7 +31,8 @@ work on the UI alone, the app's demo mode needs no server at all (see
 1. Install dependencies:
    ```bash
    cd server
-   npm install
+   npm ci
+   npm run generate
    ```
 2. Edit `.env.local`. The committed values are from another developer's
    machine.
@@ -62,6 +63,12 @@ Typecheck, lint, and test commands are in
 [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ### Hot reloading on the Pod
+
+This is a development workflow on an idle test Pod. It has no automatic
+backup or rollback step, and schedules and alarms pause while the server is
+stopped. For committed development deployments use
+[ops/deploy.sh](../ops/ANTIBRICK.md); for published releases use the app updater.
+
 `npm run dev` runs the TypeScript source with nodemon and restarts on changes
 to `src/`. It reads `.env.pod`, so it runs on the Pod.
 
@@ -110,7 +117,7 @@ Device control:
 - **`/api/execute`:** Sends a raw Franken command (`SET_TEMP`, `PRIME`, and
   others). See [API.md](./API.md).
 - **`/api/alarm`:** Starts the vibration alarm immediately.
-- **`/api/base-control`:** Adjustable base (Pod 4 and later): read the state,
+- **`/api/base-control`:** Compatible adjustable-base hardware: read the state,
   set head and foot positions, run a preset (`/preset`), or stop (`/stop`).
 - **`/api/jobs`:** Runs jobs on demand: sleep analysis and sensor calibration
   per side, update, and reboot.
@@ -118,7 +125,7 @@ Device control:
   `scripts/update.sh`), after writing the requested version to
   `/persistent/free-sleep-data/update-target.json` when one is given. Also
   `/api/update/rollback-info`, `/api/update/rollback`, and
-  `/api/update/revert-to-stock`, which returns the Pod to plain free-sleep.
+  `/api/update/revert-to-stock`, which switches to upstream free-sleep, not Eight Sleep firmware.
 - **`/api/calibration`:** Each side's capacitive-sensor calibration profile,
   the run that produced it, and the most recent run.
 - **`/api/changelog`:** `CHANGELOG.md` parsed into entries for the in-app
@@ -177,8 +184,8 @@ Commands run one at a time through a queue. Each is limited to
 an error and the connection is closed, so the next command opens a new one.
 
 `FrankenMonitor` polls the device every 2 seconds whether or not a client is
-connected, because the same loop detects tap gestures. It targets Pod 4 and
-later.
+connected, because the same loop detects tap gestures. Adjustable-base
+actions triggered by those gestures require compatible base hardware.
 
 ### Job scheduler (`src/jobs/`)
 Uses `node-schedule` for power, temperature, alarm, priming, reboot, and the
@@ -241,6 +248,9 @@ server/
 ---
 
 ## Pod-side runtime configuration
+
+The resource figures and firmware behavior below were observed on the
+maintainer's Pod 5. They are not model-independent measurements.
 
 Items 1 to 3 concern services on the Pod itself, outside this repo, and were
 done by hand to save RAM, CPU, and disk. Replay items 1 and 3 on a re-imaged

@@ -8,6 +8,31 @@ is a hard fork; for the history of the projects it descends from, see
 
 ## [Unreleased]
 
+- Alarms minutes apart no longer suppress one another. Overnight temperature
+  changes, alarm replacements and sleep analysis use the full night window.
+
+- Concurrent settings and schedule saves preserve unrelated changes. Empty
+  sensor windows wait for data; presence duration no longer resets on
+  heartbeats.
+
+- Hardware commands release stalled or dropped connections, and HTTP and
+  WebSocket connections apply the same origin checks.
+
+- Update notices and the Update button use the selected release channel and
+  offer only newer releases. Failed updates restart the restored biometrics
+  service. Migration stops if database setup fails; dry-run leaves the Pod
+  clock unchanged. Backup restore checks the code and dependencies before
+  replacing the running app.
+
+- The app now has Bed, Schedule, Sleep and Settings navigation. Schedule
+  editing shows night events and save scope; elevation cancels queued moves
+  on Stop.
+  Sleep separates Night and Week, preserves selection, uses the Pod timezone,
+  and distinguishes missing recordings from zero sleep.
+
+- Settings are grouped by task. System status separates problems from healthy
+  services, and logs show when the connection drops and resumes.
+
 - A fresh install and `fs-reset-db` now set up the database with only the
   migrations that ship with the release (`prisma migrate deploy`). They used
   Prisma's development command, which can create new migrations or offer to
@@ -26,7 +51,8 @@ is a hard fork; for the history of the projects it descends from, see
 
 - Presence auto-off, which turns a side off after 45 minutes with no one on it
   outside its scheduled on-window, can now be turned off in Settings, under
-  Features. It stays on by default, so nothing changes unless you turn it off.
+  Automation > Features. It stays on by default, so nothing changes unless
+  you turn it off.
 
 - The nightly sensor calibration for biometrics now runs whether or not daily
   priming is on. Before, it was scheduled together with priming, so a Pod with

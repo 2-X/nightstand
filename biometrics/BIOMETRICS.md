@@ -15,15 +15,15 @@ credited below where they are described.
 
 - **Accuracy.** Biometrics in free-sleep and its forks, this one included, is
   still early. Heart rate is the only measurement that has been compared with
-  a reference device: the original project's comparison, summarized in the
-  main [README](../README.md#biometrics). That comparison used the original
-  project's code, so it does not cover later changes in the forks. HRV,
-  breathing rate, and sleep stages have not been checked and may be
-  inaccurate.
-- **Accepted ranges.** Readings outside these ranges are discarded rather than
-  stored: heart rate 40 to 90 bpm, breathing rate 8 to 20 breaths per minute,
-  and HRV (SDNN) 8 to 200 ms. A sleeper whose heart rate stays above 90 bpm
-  gets no heart rate readings.
+  reference devices in the [upstream comparison](#upstream-heart-rate-comparison).
+  That comparison does not validate Nightstand's later changes. HRV,
+  breathing rate, sleep stages and sleep score have not been validated here
+  and may be inaccurate.
+- **Live estimator acceptance ranges.** Estimates outside these ranges are
+  discarded rather than stored: heart rate 40 to 90 bpm, breathing rate 8 to 20 breaths per minute,
+  and HRV (SDNN) 8 to 200 ms. Heart-rate estimates above 90 bpm are discarded,
+  which can leave gaps. The standalone recomputation script uses different
+  breathing/HRV limits; see [the catalog](../docs/CALIBRATION.md).
 - **Two sleepers.** Movement on one side reaches the other side's sensor
   through the mattress. Presence detection tries to tell the two apart (see
   [Presence detection](#presence-detection)) but can still be fooled, and any
@@ -33,10 +33,25 @@ credited below where they are described.
   which leaves gaps in vitals.
 - **Pod models.** Pod 3 has two piezo sensors per side; Pod 4 and Pod 5 have
   one. Newer Pods also write capacitance data in a different format. This fork
-  is developed on a Pod 5, and Pod 3 and Pod 4 get less testing.
+  is developed on a Pod 5; its biometrics have not been checked on Pod 3 or
+  Pod 4.
 - **Tuning.** Several thresholds were tuned on one or a few beds.
   [docs/CALIBRATION.md](../docs/CALIBRATION.md) lists which constants are
-  hardware facts and which are per-bed estimates.
+  fixed filters, bed-dependent tuning, rolling estimates or persisted
+  calibration.
+
+## Upstream heart-rate comparison
+
+The [original project's comparison](https://github.com/throwaway31265/free-sleep#biometrics)
+reports 33 nights from six people, compared mostly against Apple Watches.
+The table below reproduces its summary of heart-rate estimates. Nightstand's
+later changes, HRV and sleep stages have not been validated here.
+
+| Across 33 nights | Average | Best | Worst |
+| --- | --- | --- | --- |
+| RMSE (beats per minute) | 2.88 | 1.45 | 7.63 |
+| MAE (beats per minute) | 1.83 | 1 | 5.77 |
+| Correlation | 80.8% | 95% | 27% |
 
 ## What runs and when
 
@@ -52,7 +67,7 @@ nothing while it is off.
   and HRV needs 5 minutes; until then the row stores 0, which means no
   reading.
 - **Daily sleep analysis.** At 12:00 in the Pod's time zone, the server runs
-  `sleep_detection/analyze_sleep.py` for each side over the previous 12 hours
+  `sleep_detection/analyze_sleep.py` for each side over the previous 24 hours
   and writes the `sleep_records` and `movement` tables. A side in away mode is
   skipped.
 - **Calibration.** Each evening (left at 18:30, right at 19:00) the server runs
@@ -61,10 +76,11 @@ nothing while it is off.
   capacitance baseline that the daily analysis uses, and records an empty-bed
   piezo floor. It skips the run if someone is on the bed. It runs whether or
   not daily priming is on.
-- **Manual runs.** The Status page can run the sleep analysis or calibration
-  for either side (`POST /api/jobs`). A manual calibration skips the
-  occupied-bed check, on the assumption that the person running it knows the
-  bed is empty.
+- **Manual runs.** Settings > Device can run sleep analysis or calibration
+  for either side (`POST /api/jobs`). Manual sleep analysis looks back 24
+  hours. Manual calibration looks back 2 hours, separately from the scheduled
+  6-hour window. It skips the occupied-bed check, so only run it when the bed
+  is empty.
 - **Sleep stages and score** are computed by the server when the app asks for
   them (`server/src/routes/metrics/sleepStages.ts` and `sleepScore.ts`). Stages
   come from fixed rules over 5-minute buckets of heart rate, HRV, and

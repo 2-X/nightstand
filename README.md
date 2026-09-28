@@ -4,16 +4,18 @@
 
 <h1 align="center">Nightstand</h1>
 
-<p align="center"><b>Local control for Eight Sleep Pods. No cloud, no subscription.</b></p>
+<p align="center"><b>Local control for Eight Sleep Pods, without the Eight Sleep app or subscription.</b></p>
 
 <p align="center">
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FLTimothy%2Fnightstand%2Fmain%2Fserver%2Fsrc%2FserverInfo.json&query=%24.version&label=version" alt="Version"></a>
 </p>
 
-Eight Sleep Pods 3, 4, and 5 contain a small Linux computer. Nightstand runs a
-server on it, so the Pod can be controlled from your own network without the
-official app or Eight Sleep's cloud.
+Nightstand runs on the Linux computer inside compatible Eight Sleep Pods,
+providing local temperature controls, schedules and optional sleep estimates.
+It is a personal fork of free-sleep through jmew's fork, maintained on a Pod 5.
+See the compatibility table for other models and the biometrics notes for
+measurement limits.
 
 <p align="center">
   <img src="docs/on.png" width="240" alt="Temperature control, device on">
@@ -29,14 +31,18 @@ Inc. "Eight Sleep" and "Pod" are used only to identify compatible devices.
 
 ## Compatibility
 
-| Pod | Status | Notes |
-| --- | --- | --- |
-| Pod 1, Pod 2 | Not supported | |
-| Pod 3 (with SD card) | Supported | Installed with a community SD card method rather than the serial cable. See [INSTALLATION.md](INSTALLATION.md#compatibility). Not tested by the maintainer; support follows upstream free-sleep. |
-| Pod 3 (no SD card) | Supported | FCC ID `2AYXT61100001`, on the back near the water tubing. Not tested by the maintainer; support follows upstream free-sleep. |
-| Pod 4 | Supported | Not tested by the maintainer; support follows upstream free-sleep. |
-| Pod 5 | Supported | Developed and tested on this model. |
-| Pod 6 | Unknown | Released September 2026. No reports yet; please open an issue if you try it. |
+The maintainer tests Nightstand on a Pod 5. Pod 3 and Pod 4 support comes
+from upstream free-sleep; this fork's biometrics and base controls have not
+been tested on those models.
+
+| Pod | Temperature and schedules | Biometrics | Adjustable base |
+| --- | --- | --- | --- |
+| Pod 1, Pod 2 | Not supported | Not supported | Not supported |
+| Pod 3 (with SD card) | Upstream support; uses the [SD card method](INSTALLATION.md#compatibility) | Untested on this fork | Untested on this fork |
+| Pod 3 (no SD card) | Upstream support; FCC ID `2AYXT61100001` | Untested on this fork | Untested on this fork |
+| Pod 4 | Upstream support | Untested on this fork | Requires an adjustable base |
+| Pod 5 | Tested by maintainer | Experimental estimates | Requires an adjustable base; no separate test report |
+| Pod 6 | Unknown | Unknown | Unknown |
 
 ## About this fork
 
@@ -48,19 +54,12 @@ exists because of those projects, and most of the code here is theirs (see
 user base.
 
 I maintain Nightstand on my own Pod 5, mostly fixing issues I run into day to
-day. I don't have a Pod 3 or Pod 4 to test on, so reports from owners of those
-models are especially useful. The main differences in this fork:
-
-- **No error reporting.** Version checks run from your browser, and
-  Nightstand only connects to the internet to download an update. The
-  firewall rules in installation step 19 block most of the Pod's other
-  internet access.
-- **In-app updates.** Settings lists available releases. Installing one backs
-  up the Pod, confirms it came back healthy, and rolls back automatically if
-  not. You can also roll back manually or switch between stable and beta.
-- **Independent versioning,** starting at 3.0.0. Changes from the original
-  project are reviewed and brought in by hand, so upstream fixes can take some
-  time to appear here.
+day. Reports from owners of Pod 3 and Pod 4 are especially useful. Nightstand
+has no error reporting or analytics; its browser checks versions on GitHub.
+Daily use is local, with the [firewall exceptions](INSTALLATION.md#19-add-firewall-rules-to-block-internet-access-optional-but-recommended)
+explained in the installation guide. In-app updates support release selection
+and application rollback. Versions start at 3.0.0; upstream fixes are reviewed
+and brought in by hand, so they may take time to appear here.
 
 Already running another free-sleep fork? See
 **[Coming from free-sleep](docs/COMING_FROM_FREE_SLEEP.md)**.
@@ -81,14 +80,18 @@ http://eight-pod.local:3000
 
 If that address doesn't resolve (for example, the Pod was renamed or your
 network doesn't support `.local` names), use the Pod's IP address from your
-router instead: `http://<POD_IP>:3000`. The Pod doesn't advertise itself in
-Bonjour browsers, so enter the address directly.
+router instead: `http://<POD_IP>:3000`. Enter the address directly if the Pod
+does not appear in Bonjour browsers.
+
+Nightstand's API has no login: a device that can reach it can control the Pod
+and access its data. Use a trusted local network, do not port-forward it to
+the public internet, and restrict access if you enable Tailscale.
 
 To add it to an iPhone home screen, open it in Safari, tap Share, then
 **Add to Home Screen**. On Android, use Chrome's menu and choose
 **Add to Home screen** or **Install app**. The app talks to the Pod directly,
 so it keeps working during internet outages but isn't reachable away from home
-unless you set up [Tailscale](https://tailscale.com) (installation step 20).
+unless you set up [remote access with Tailscale](docs/REMOTE_ACCESS.md).
 
 ## Features
 
@@ -98,47 +101,44 @@ unless you set up [Tailscale](https://tailscale.com) (installation step 20).
   priming, and alarms with vibration patterns
 - Sleep and health data: heart rate, HRV, breathing rate, movement, sleep
   stages, and a sleep score (see [Biometrics](#biometrics) for accuracy)
-- Adjustable base control on Pod 4 and later, with presets and manual head and
-  foot positioning
+- Adjustable-base controls on compatible hardware, with presets and manual
+  positioning; see the model table for test status
 - Away mode, LED brightness, and time zone settings
-- Full functionality without an internet connection
+- Daily controls and schedules work locally. Installation, update downloads
+  and version checks use the internet; optional remote access uses Tailscale.
 
 ### What you can turn off
 
-In Settings, under Features:
+In Settings:
 
-- **Biometrics:** off by default, and needs a one-time install (see below).
-- **Sleep score and stages:** needs biometrics.
-- **Presence auto-off:** on by default, and needs biometrics. Turns a side off
+- **Biometrics** under Sleep data: off by default, and needs a one-time install (see below).
+- **Sleep score and stages** under Sleep data > Features: needs biometrics.
+- **Presence auto-off** under Automation > Features: on by default, and needs biometrics. Turns a side off
   after 45 minutes with no one on it, outside its scheduled on-window.
-- **Level temperature display** and **one-off alarms:** on by default.
+- **Level temperature display** under Bed preferences > Features and
+  **one-off alarms** under Automation > Features: on by default.
 
 Next to daily priming, the restart an hour before priming is on by default and
 only runs while priming is on.
 
 ### Biometrics
 
-Biometrics in free-sleep and its forks, including this one, are still early.
-Heart rate is the only measurement that has been validated: the original
-project compared it against reference devices (mostly Apple Watch) over 33
-nights from 6 people (3 men, 3 women), and accuracy was somewhat lower for
-women. HRV, breathing rate, sleep stages, and the sleep score have not been
-validated and may be inaccurate, and none of it has been checked on a Pod 3 or
-Pod 4.
+Biometrics is experimental. The original free-sleep project compared heart-rate
+estimates with reference devices across 33 nights from six people.
+That comparison does not validate Nightstand's later changes. HRV, breathing
+rate, sleep stages and sleep score have not been validated here and may be
+inaccurate. This fork is developed on a Pod 5; its biometrics have not been
+checked on Pod 3 or Pod 4. The [biometrics reference](biometrics/BIOMETRICS.md#upstream-heart-rate-comparison)
+has the original comparison and its source.
 
-| Across 33 nights | Average | Best | Worst |
-| --- | --- | --- | --- |
-| RMSE (beats per minute) | 2.88 | 1.45 | 7.63 |
-| MAE (beats per minute) | 1.83 | 1 | 5.77 |
-| Correlation | 80.8% | 95% | 27% |
-
-Biometrics is off by default and requires a one-time install on the Pod:
+Biometrics is off by default and requires a one-time install. On the Pod
+over SSH:
 
 ```bash
 sh /home/dac/free-sleep/scripts/enable_biometrics.sh
 ```
 
-After that, it can be turned on and off under Settings > Features.
+After that, it can be turned on and off under Settings > Sleep data.
 
 Data is stored on the Pod in `/persistent/free-sleep-data/free-sleep.db` and
 is available from `http://<POD_IP>:3000/api/metrics/vitals`. See
@@ -146,41 +146,61 @@ is available from `http://<POD_IP>:3000/api/metrics/vitals`. See
 
 ## Updating
 
-Updates are under Settings > Software & updates. Installing an update
-downloads the release, backs up the Pod's code and data, installs it, and rolls
-back automatically if the health check fails. Running `fs-update` over SSH does
-the same.
+Updates are under Settings > Software. The updater saves
+application code, SQLite data and settings before replacing the code. It
+checks the running version, a device-status temperature reading and that the
+server service is active, and attempts an application rollback if installation
+fails. Check the running version and your usual controls after it returns;
+the startup check covers only the signals above.
 
-There are two release channels. Beta offers every release; stable offers a
-release only after it has run without problems for a while. New installs start
-on stable, so switch to beta to receive every update.
+`fs-update` over SSH uses the same updater and saved channel preference.
+Stable selects stable releases; beta includes both channels. A new install
+saves stable as its preference, but the installation script downloads `main`,
+which may contain a beta. Choose a release in Settings to change versions.
+Installing another release replaces the immediate rollback slot. Application
+rollback restores code, not an earlier database or the Eight Sleep firmware.
 
 ## FAQ
 
 ### Can I go back to the Eight Sleep app?
 
-Yes. A firmware reset restores the stock software. See
-[How to revert](INSTALLATION.md#how-to-revert-changes-and-go-back-to-using-your-eight-sleep-through-their-app)
-in the install guide. The Pod 5 reset steps are not written up there yet.
+A firmware reset restores Eight Sleep's stock software. Follow the procedure
+for your model in [How to revert](INSTALLATION.md#how-to-revert-changes-and-go-back-to-using-your-eight-sleep-through-their-app).
+Pod 5 reset steps are not documented here yet. Switching to upstream
+free-sleep from Settings installs another community application; it does not
+restore Eight Sleep software.
 
 ### Could I brick my Pod?
 
 I'm not aware of any bricked Pods on Pod 3 without an SD card, Pod 4, or
-Pod 5, and a firmware reset restores the stock software if an install goes
-wrong. There are fewer reports for Pod 3 with an SD card, which uses a
-different method. As with any unofficial software, you install it at your own
-risk.
+Pod 5. There are fewer reports for Pod 3 with an SD card, which uses a
+different install method. If an install goes wrong, a firmware reset restores
+the stock software. Read the
+[reset instructions for your model](INSTALLATION.md#how-to-revert-changes-and-go-back-to-using-your-eight-sleep-through-their-app)
+before installing; Pod 5 reset steps are not documented here yet. Proceed
+at your own risk.
+
+### What happens if an install fails?
+
+The updater and migration tool keep backups and try to restore the previous
+application when startup fails. Recovery can still require SSH or a
+[model-specific firmware reset](INSTALLATION.md#how-to-revert-changes-and-go-back-to-using-your-eight-sleep-through-their-app),
+so check that procedure before installing. Schedules and alarms pause while
+Nightstand's server is stopped.
 
 ### Will it void my warranty?
 
-It may, since Eight Sleep doesn't support it. No hardware is modified, and a
-firmware reset returns the Pod to its original state.
+Eight Sleep does not support Nightstand. Check the warranty terms for your
+Pod before installing.
 
 ### Where can I get help?
 
-[Open an issue](https://github.com/LTimothy/nightstand/issues) and include the
-output of `fs-debug`, run on the Pod over SSH. If the problem also exists in
-the original project, consider reporting it there as well.
+[Open an issue](https://github.com/LTimothy/nightstand/issues) with your Pod
+model, Nightstand version, expected and actual behavior, and steps to reproduce.
+For service or installation problems, `fs-debug` on the Pod over SSH can help.
+Check the report before posting it publicly and remove any personal or
+network details you do not want to share. If the problem also exists in the
+original project, consider reporting it there as well.
 
 ## Contributing
 
@@ -231,26 +251,27 @@ warranty.
 
 ## Screenshots
 
-From the [demo](https://ltimothy.github.io/nightstand/), which uses sample
-data.
+These screenshots use sample data and show the Bed, Schedule, Sleep and
+Settings layout. The hosted [demo](https://ltimothy.github.io/nightstand/)
+follows the published release and may differ from this checkout.
 
 <details>
 <summary>Adjustable base</summary>
-<img src="docs/elevation.png" width="360">
+<img src="docs/elevation.png" width="360" alt="Bed elevation controls">
 </details>
 <details>
 <summary>Schedules and alarms</summary>
-<img src="docs/schedules.png" width="360">
+<img src="docs/schedules.png" width="360" alt="Recurring night schedule">
 </details>
 <details>
 <summary>Sleep stages, sleep score, and health metrics</summary>
-<img src="docs/sleep.png" width="360">
+<img src="docs/sleep.png" width="360" alt="Selected sleep night with sample estimates">
 </details>
 <details>
 <summary>System status</summary>
-<img src="docs/status.png" width="360">
+<img src="docs/status.png" width="360" alt="System status with exceptions first">
 </details>
 <details>
 <summary>Settings</summary>
-<img src="docs/settings.png" width="360">
+<img src="docs/settings.png" width="360" alt="Settings category index">
 </details>
