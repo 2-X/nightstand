@@ -1,3 +1,4 @@
+import { createSerializedUpdate } from './serializedUpdate.js';
 // LowDB, stores the schedules in /persistent/free-sleep-data/lowdb/schedulesDB.json
 import _ from 'lodash';
 import { Low } from 'lowdb';
@@ -53,5 +54,7 @@ for (const sideSchedule of Object.values(schedulesDB.data)) {
   }
 }
 await schedulesDB.write();
+
+export const updateSchedules = createSerializedUpdate(schedulesDB);
 
 export default schedulesDB;

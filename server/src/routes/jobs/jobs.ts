@@ -12,13 +12,13 @@ const router = express.Router();
 
 const analyzeSleepLeft = () => executeAnalyzeSleep(
   'left',
-  moment().subtract(12, 'hours').toISOString(),
+  moment().subtract(24, 'hours').toISOString(),
   moment().add(1, 'hours').toISOString()
 );
 
 const analyzeSleepRight = () => executeAnalyzeSleep(
   'right',
-  moment().subtract(12, 'hours').toISOString(),
+  moment().subtract(24, 'hours').toISOString(),
   moment().add(1, 'hours').toISOString()
 );
 

@@ -1,7 +1,7 @@
 import _ from 'lodash';
 import express, { Request, Response } from 'express';
 import logger from '../../logger.js';
-import schedulesDB from '../../db/schedules.js';
+import schedulesDB, { updateSchedules } from '../../db/schedules.js';
 import { sanitizeScheduleBody } from './sanitizeScheduleBody.js';
 
 
@@ -39,26 +39,25 @@ router.post('/schedules', async (req: Request, res: Response) => {
     return;
   }
   const schedules: SchedulesUpdate = validationResult.data;
-  await schedulesDB.read();
-
-  (
+  const saved = await updateSchedules(draft => {
+    (
     Object.entries(schedules) as [Side, Partial<SideSchedule>][]).forEach(([side, sideSchedule]) => {
-    (Object.entries(sideSchedule) as [DayOfWeek, Partial<DailySchedule>][]).forEach(([day, schedule]) => {
-      if (schedule.power) {
-        _.merge(schedulesDB.data[side][day].power, schedule.power);
-      }
-      if (schedule.temperatures) schedulesDB.data[side][day].temperatures = schedule.temperatures;
-      if (schedule.alarms) {
-        schedulesDB.data[side][day].alarms = schedule.alarms as AlarmSchedule[];
-        schedulesDB.data[side][day].alarm = primaryAlarm(schedulesDB.data[side][day].alarms, schedulesDB.data[side][day].alarm);
-      } else if (schedule.alarm) {
-        schedulesDB.data[side][day].alarm = schedule.alarm;
-        schedulesDB.data[side][day].alarms = schedule.alarm.enabled ? [schedule.alarm] : [];
-      }
+      (Object.entries(sideSchedule) as [DayOfWeek, Partial<DailySchedule>][]).forEach(([day, schedule]) => {
+        if (schedule.power) {
+          _.merge(draft[side][day].power, schedule.power);
+        }
+        if (schedule.temperatures) draft[side][day].temperatures = schedule.temperatures;
+        if (schedule.alarms) {
+          draft[side][day].alarms = schedule.alarms as AlarmSchedule[];
+          draft[side][day].alarm = primaryAlarm(draft[side][day].alarms, draft[side][day].alarm);
+        } else if (schedule.alarm) {
+          draft[side][day].alarm = schedule.alarm;
+          draft[side][day].alarms = schedule.alarm.enabled ? [schedule.alarm] : [];
+        }
+      });
     });
   });
-  await schedulesDB.write();
-  res.status(200).json(schedulesDB.data);
+  res.status(200).json(saved);
 });
 
 

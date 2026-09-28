@@ -56,20 +56,12 @@ after(() => {
   Object.keys(nodeSchedule.scheduledJobs).forEach((name) => nodeSchedule.cancelJob(name));
 });
 
-async function flush() {
-  for (let i = 0; i < 4; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 1));
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-}
-
 // Fires a scheduled job's body immediately instead of waiting for its
 // recurrence, so the job body itself (not just the predicate) is covered.
 async function invokeJob(name: string) {
   const job = nodeSchedule.scheduledJobs[name];
   assert.ok(job, `job ${name} was never scheduled`);
-  job.invoke();
-  await flush();
+  await job.invoke();
 }
 
 // The 22:00 adjustment sits inside a 21:00 to 09:00 night, so it resolves

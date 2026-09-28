@@ -48,6 +48,35 @@ function bufferMessages(ws: WebSocket) {
 }
 
 describe('wsServer', () => {
+  it('rejects a disallowed browser origin before subscribing to events', async () => {
+    const { server, port, ws: wsSrv } = await startHttp();
+    const before = eventBus.clientCount;
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/events`, { origin: 'http://localhost.attacker.example' });
+    try {
+      const result = await new Promise<string>((resolve) => {
+        ws.once('open', () => resolve('accepted'));
+        ws.once('unexpected-response', (_req, res) => { res.resume(); resolve(String(res.statusCode)); });
+        ws.once('error', () => resolve('error'));
+      });
+      assert.equal(result, '403');
+      assert.equal(eventBus.clientCount, before);
+    } finally {
+      ws.terminate();
+      await shutdown(server, wsSrv);
+    }
+  });
+
+  it('accepts a browser opened at the documented mDNS origin', async () => {
+    const { server, port, ws: wsSrv } = await startHttp();
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/events`, { origin: 'http://eight-pod.local:3000' });
+    try {
+      await new Promise<void>((resolve, reject) => { ws.once('open', resolve); ws.once('error', reject); });
+    } finally {
+      ws.terminate();
+      await shutdown(server, wsSrv);
+    }
+  });
+
   it('greets connections, forwards events, and tracks client count', async () => {
     const { server, port, ws: wsSrv } = await startHttp();
     const clientBefore = eventBus.clientCount;

@@ -56,6 +56,7 @@ export const scheduleTemperatures = (
   temperatures: DailySchedule['temperatures'],
   power: DailySchedule['power'],
 ) => {
+  if (!power.enabled) return;
   if (settingsData[side].awayMode) return;
   const { timeZone } = settingsData;
   if (timeZone === null) return;

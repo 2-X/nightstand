@@ -8,7 +8,7 @@ type ExecutePythonScriptArgs = {
   cwd?: string;
   args?: string[];
 };
-export const executePythonScript = async ({ script, args = [] }: ExecutePythonScriptArgs) => {
+async function runPythonScript({ script, args = [] }: ExecutePythonScriptArgs): Promise<void> {
   const pythonExecutable = '/home/dac/venv/bin/python';
 
   try {
@@ -21,23 +21,36 @@ export const executePythonScript = async ({ script, args = [] }: ExecutePythonSc
   const command = `${pythonExecutable} -B ${script} ${args.join(' ')}`;
   logger.info(`Executing: ${command}`);
 
-  exec(command, { env: { ...process.env } }, (error, stdout, stderr) => {
-    if (error) {
-      // stderr usually carries the actual traceback, error.message alone is
-      // often just "Command failed with exit code 1".
-      logger.error(`Execution error: ${error.message}${stderr ? `\n${stderr}` : ''}`);
-      return;
-    }
-    // Python's logging module writes every level (DEBUG included) to stderr,
-    // so a non-empty stderr here is routine, not evidence of failure, only
-    // a non-zero exit (handled above) means the script actually failed.
-    // Logging this at 'error' regardless of content used to bury real
-    // problems under giant benign DEBUG dumps on every scheduled run.
-    if (stderr) {
-      logger.debug(`Python stderr: ${stderr}`);
-    }
-    if (stdout) {
-      logger.debug(`Python stdout: ${stdout}`);
-    }
+  await new Promise<void>((resolve, reject) => {
+    exec(command, { env: { ...process.env } }, (error, stdout, stderr) => {
+      if (error) {
+        // stderr usually carries the actual traceback, error.message alone is
+        // often just "Command failed with exit code 1".
+        reject(new Error(`${error.message}${stderr ? `\n${stderr}` : ''}`));
+        return;
+      }
+      // Python's logging module writes every level (DEBUG included) to stderr,
+      // so a non-empty stderr here is routine, not evidence of failure, only
+      // a non-zero exit (handled above) means the script actually failed.
+      // Logging this at 'error' regardless of content used to bury real
+      // problems under giant benign DEBUG dumps on every scheduled run.
+      if (stderr) {
+        logger.debug(`Python stderr: ${stderr}`);
+      }
+      if (stdout) {
+        logger.debug(`Python stdout: ${stdout}`);
+      }
+      resolve();
+    });
   });
+}
+
+let executionQueue: Promise<void> = Promise.resolve();
+
+// Analysis and calibration share the server's memory budget.
+export const executePythonScript = (options: ExecutePythonScriptArgs): Promise<void> => {
+  executionQueue = executionQueue.then(() => runPythonScript(options)).catch((error: unknown) => {
+    logger.error(`Execution error: ${error instanceof Error ? error.message : String(error)}`);
+  });
+  return executionQueue;
 };

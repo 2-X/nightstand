@@ -36,12 +36,11 @@ def _calculate_p2p(arr: np.ndarray):
 def load_piezo_df(data: Data, side: Side, lower_percentile=2, upper_percentile=98, expected_row_count=None, with_p2p=False) -> pd.DataFrame:
     logger.debug('Loading piezo df...')
     df = pd.DataFrame(data['piezo_dual'])
+    if df.empty:
+        raise InsufficientDataError('No piezo rows found for the requested window (piezo_dual RAW data missing or not yet archived)')
     df.sort_values(by='ts', inplace=True)
     df['ts'] = pd.to_datetime(df['ts'])
     df.set_index('ts', inplace=True)
-
-    if df.empty:
-        raise InsufficientDataError('No piezo rows found for the requested window (piezo_dual RAW data missing or not yet archived)')
 
     df[f'{side}1_avg'] = df[f'{side}1'].apply(_calculate_avg)
     # Compute the within-second p98-p2 range BEFORE the raw array column is

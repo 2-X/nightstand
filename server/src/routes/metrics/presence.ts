@@ -9,6 +9,7 @@ const router: Router = express.Router();
 const PresenceSideSchema = z.object({
   present: z.boolean(),
   lastUpdatedAt: z.string().optional(),
+  stateChangedAt: z.string().optional(),
   // Last time `present` was reported as true. Used by the auto-off monitor
   // and surfaced to integrations (e.g. Home Assistant) to compute "minutes
   // since presence". Distinct from lastUpdatedAt, which advances every POST.
@@ -28,15 +29,13 @@ type PresenceDataState = {
 };
 
 // In-memory storage for presence data
-// Default values are null until first update
+// No observation timestamps until the first update.
 const presenceData: PresenceDataState = {
   left: {
     present: false,
-    lastUpdatedAt: moment.tz(settingsDB.data.timeZone).format(),
   },
   right: {
     present: false,
-    lastUpdatedAt: moment.tz(settingsDB.data.timeZone).format(),
   },
 };
 
@@ -51,7 +50,7 @@ router.post('/presence', async (req: Request, res: Response) => {
   try {
     await settingsDB.read();
     const { body } = req;
-    const validationResult = PresenceDataSchema.deepPartial().safeParse(body);
+    const validationResult = PresenceDataSchema.safeParse(body);
     if (!validationResult.success) {
       logger.error('Invalid device status update:', validationResult.error);
       res.status(400).json({
@@ -61,8 +60,9 @@ router.post('/presence', async (req: Request, res: Response) => {
       return;
     }
 
+    const updates = validationResult.data;
     // Check if at least one side is provided
-    if (!body.left && !body.right) {
+    if (!updates.left && !updates.right) {
       return res.status(400).json({
         error: 'At least one side (left or right) must be specified',
         message: 'Please provide "left" and/or "right" with boolean values'
@@ -72,9 +72,12 @@ router.post('/presence', async (req: Request, res: Response) => {
     const currentTime = moment.tz(settingsDB.data.timeZone).format();
 
     for (const side of ['left', 'right'] as const) {
-      const update = body[side];
+      const update = updates[side];
       if (!update) continue;
       const wasPresent = presenceData[side].present;
+      if (!presenceData[side].stateChangedAt || wasPresent !== update.present) {
+        presenceData[side].stateChangedAt = currentTime;
+      }
       presenceData[side].present = update.present;
       presenceData[side].lastUpdatedAt = currentTime;
       // lastPresenceAt = the most recent moment the system believed someone

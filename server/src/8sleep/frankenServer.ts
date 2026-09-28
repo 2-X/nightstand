@@ -9,7 +9,7 @@ import logger from '../logger.js';
 import { DeviceStatus } from '../routes/deviceStatus/deviceStatusSchema.js';
 import { loadDeviceStatus } from './loadDeviceStatus.js';
 import config from '../config.js';
-import { toPromise, wait } from './promises.js';
+import { wait } from './promises.js';
 import { promiseWithTimeout } from './timeoutPromise.js';
 import metrics from '../metrics/metrics.js';
 
@@ -34,14 +34,32 @@ export class FrankenCommandTimeoutError extends Error {
   }
 }
 
+// The singleton types refer to the classes defined below.
+// eslint-disable-next-line no-use-before-define
+let frankenServer: FrankenServer | undefined;
+// eslint-disable-next-line no-use-before-define
+let franken: Franken | undefined;
+// eslint-disable-next-line no-use-before-define
+let connectPromise: Promise<Franken> | undefined;
+
 export class Franken {
   private static readonly responseDelayMs = 10;
+  private readonly lifetime = new AbortController();
 
   public constructor(
     private readonly socket: Socket,
     private readonly messageStream: MessageStream,
     public readonly sequentialQueue: SequentialQueue,
   ) {
+    socket.once('close', () => {
+      this.lifetime.abort(new Error('Franken connection closed'));
+      // A dropped socket aborts reads before their timeout can trigger recovery.
+      // Retire only this active connection; late events must not close a newer one.
+      if (franken === this) {
+        // eslint-disable-next-line no-use-before-define -- Disconnect is a hoisted function.
+        void disconnectFranken().catch(err => logger.error(`disconnect after socket close failed: ${err}`));
+      }
+    });
   }
 
   static readonly separator = Buffer.from('\n\n');
@@ -55,6 +73,7 @@ export class Franken {
 
     try {
       const execPromise = this.sequentialQueue.exec(async () => {
+        this.lifetime.signal.throwIfAborted();
         const requestBytes = Buffer.concat([Buffer.from(message), Franken.separator]);
         await this.write(requestBytes);
         writeCompleted = true;
@@ -64,7 +83,7 @@ export class Franken {
         // the message stream) and surface a typed error.
         const abortController = new AbortController();
         const resp = await promiseWithTimeout(
-          this.messageStream.readMessage({ signal: abortController.signal }),
+          this.messageStream.readMessage({ signal: AbortSignal.any([abortController.signal, this.lifetime.signal]) }),
           FRANKEN_COMMAND_TIMEOUT_MS,
           {
             abortController,
@@ -110,8 +129,12 @@ export class Franken {
         logger.warn(`${error.message}; tearing down dac.sock so the next call reconnects`);
         // Fire-and-forget the reconnect so the rejected caller can handle the
         // error promptly. The next caller will rebuild the connection.
-        // eslint-disable-next-line no-use-before-define
-        void disconnectFranken().catch(err => logger.error(`disconnect after timeout failed: ${err}`));
+        if (franken === this) {
+          // eslint-disable-next-line no-use-before-define -- Disconnect is a hoisted function.
+          void disconnectFranken().catch(err => logger.error(`disconnect after timeout failed: ${err}`));
+        } else {
+          this.close();
+        }
       }
       if (!timedOut) {
         metrics.recordFrankenCommand(Date.now() - startedAt, false);
@@ -143,6 +166,7 @@ export class Franken {
   }
 
   public close() {
+    this.lifetime.abort(new Error('Franken connection closed'));
     const socket = this.socket;
     if (!socket.destroyed) socket.destroy();
   }
@@ -153,8 +177,13 @@ export class Franken {
   }
 
   private async write(data: Buffer) {
-    // @ts-expect-error
-    await toPromise(cb => this.socket.write(data, cb));
+    this.lifetime.signal.throwIfAborted();
+    await new Promise<void>((resolve, reject) => {
+      this.socket.write(data, error => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
   }
 }
 
@@ -179,11 +208,6 @@ class FrankenServer {
     return new FrankenServer(unixSocketServer);
   }
 }
-
-
-let frankenServer: FrankenServer | undefined;
-let franken: Franken | undefined;
-let connectPromise: Promise<Franken> | undefined;
 
 function waitForFrankenWithTimeout(server: FrankenServer) {
   if (!FRANKEN_CONNECTION_TIMEOUT_MS) {
@@ -216,12 +240,14 @@ async function shutdownFrankenServer() {
   frankenServer = undefined;
 
   if (currentFranken) {
+    // Abort pending I/O before waiting for the queue. A wedged write cannot
+    // drain until closing the connection rejects its operation.
+    currentFranken.close();
     try {
       await currentFranken.sequentialQueue.drain();
     } catch {
       // ignored
     }
-    currentFranken.close();
   }
   if (currentFrankenServer) {
     await currentFrankenServer.close();
@@ -281,13 +307,16 @@ export function isFrankenConnected(): boolean {
 // one is in flight. Cache lifetime is the duration of the in-flight call only,
 // no stale reads, this is purely a "did N requests just arrive simultaneously"
 // optimisation. Failures (including timeouts) are not cached.
-let inFlightDeviceStatus: Promise<DeviceStatus> | undefined;
+const inFlightDeviceStatus = new Map<boolean, Promise<DeviceStatus>>();
 
 export async function getDeviceStatusCoalesced(getGestures = false): Promise<DeviceStatus> {
-  if (inFlightDeviceStatus) return inFlightDeviceStatus;
-  const f = await connectFranken();
-  inFlightDeviceStatus = f.getDeviceStatus(getGestures).finally(() => {
-    inFlightDeviceStatus = undefined;
+  const current = inFlightDeviceStatus.get(getGestures);
+  if (current) return current;
+  // Publish the promise before awaiting connection setup, so callers entering
+  // in the same microtask turn share the entire operation.
+  const pending = connectFranken().then(connection => connection.getDeviceStatus(getGestures)).finally(() => {
+    inFlightDeviceStatus.delete(getGestures);
   });
-  return inFlightDeviceStatus;
+  inFlightDeviceStatus.set(getGestures, pending);
+  return pending;
 }

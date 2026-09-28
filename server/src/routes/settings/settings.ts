@@ -4,7 +4,7 @@ import logger from '../../logger.js';
 
 const router = express.Router();
 
-import settingsDB from '../../db/settings.js';
+import settingsDB, { updateSettings } from '../../db/settings.js';
 import { SettingsSchema } from '../../db/settingsSchema.js';
 import { wouldOrphanLevelFormat } from './settingsGuards.js';
 import { syncRawArchiveConf } from '../../jobs/rawArchiveConf.js';
@@ -32,21 +32,25 @@ router.post('/settings', async (req: Request, res: Response) => {
   // into settingsDB.data verbatim if the raw body were merged instead.
   const validatedUpdate = validationResult.data;
   delete validatedUpdate.id;
-  await settingsDB.read();
-
-  if (wouldOrphanLevelFormat(settingsDB.data, validatedUpdate)) {
+  let conflict = false;
+  const saved = await updateSettings(draft => {
+    if (wouldOrphanLevelFormat(draft, validatedUpdate)) {
+      conflict = true;
+      return false;
+    }
+    _.merge(draft, validatedUpdate);
+  }, async draft => {
+    if (validatedUpdate.rawArchiveRetentionDays !== undefined) {
+      await syncRawArchiveConf(draft.rawArchiveRetentionDays);
+    }
+  });
+  if (conflict) {
     res.status(409).json({
       error: 'Set temperature display away from Level before disabling this feature',
     });
     return;
   }
-
-  _.merge(settingsDB.data, validatedUpdate);
-  await settingsDB.write();
-  if (validatedUpdate.rawArchiveRetentionDays !== undefined) {
-    await syncRawArchiveConf(settingsDB.data.rawArchiveRetentionDays);
-  }
-  res.status(200).json(settingsDB.data);
+  res.status(200).json(saved);
 });
 
 

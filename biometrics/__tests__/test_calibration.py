@@ -404,5 +404,34 @@ class FinalOccupancyPiezoOnlyFallbackTest(unittest.TestCase):
         self.assertNotIn('left_combined', df.columns)
 
 
+class SleepWindowOverlapTest(unittest.TestCase):
+    def test_consecutive_windows_cannot_save_the_same_overlap_start_twice(self):
+        detector = _import_sleep_detector()
+        index = pd.date_range('2026-09-27 12:00', '2026-09-29 13:00', freq='5min')
+        entered = pd.Timestamp('2026-09-28 12:15')
+        left = pd.Timestamp('2026-09-28 18:00')
+        frame = pd.DataFrame({
+            'final_left_occupied': ((index >= entered) & (index < left)).astype(int),
+        }, index=index)
+        first = detector.build_sleep_records(frame.loc[:'2026-09-28 13:00'], 'left')
+        second = detector.build_sleep_records(frame.loc['2026-09-28 12:00':], 'left')
+        self.assertEqual(first, [])
+        self.assertEqual(len(second), 1)
+        self.assertEqual(second[0]['entered_bed_at'], entered)
+        self.assertEqual(second[0]['left_bed_at'], left)
+        self.assertEqual(second[0]['sleep_period_seconds'], 5 * 3600 + 45 * 60)
+
+    def test_sleep_period_requires_strictly_more_than_three_hours(self):
+        detector = _import_sleep_detector()
+        entered = pd.Timestamp('2026-09-28 12:00')
+        self.assertEqual(detector._identify_sleep_intervals([
+            (entered, entered + pd.Timedelta(hours=3)),
+        ]), [])
+        records = detector._identify_sleep_intervals([
+            (entered, entered + pd.Timedelta(hours=3, seconds=1)),
+        ])
+        self.assertEqual(records[0]['sleep_period_seconds'], 10801)
+
+
 if __name__ == '__main__':
     unittest.main()

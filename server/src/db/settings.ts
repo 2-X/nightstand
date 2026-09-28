@@ -1,3 +1,4 @@
+import { createSerializedUpdate } from './serializedUpdate.js';
 // LowDB, stores the schedules in /persistent/free-sleep-data/lowdb/settingsDB.json
 import _ from 'lodash';
 import { Low } from 'lowdb';
@@ -104,5 +105,7 @@ if (settingsDB.data.left.taps.quadTap.type === 'alarm') {
 }
 
 await settingsDB.write();
+
+export const updateSettings = createSerializedUpdate(settingsDB);
 
 export default settingsDB;
