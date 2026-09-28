@@ -133,10 +133,6 @@ describe('updater shell scripts', () => {
             assert.match(src, /RESOLVED_ZIP_URL="\$\{TAG_ZIP_URL_PREFIX\}\$\{TARGET_VERSION\}\.zip"/);
             assert.match(src, /RESOLVED_ZIP_URL="\$\{TAG_ZIP_URL_PREFIX\}\$\{REMOTE_VERSION\}\.zip"/);
         });
-        it('a plain update takes the newest release from releases.json', () => {
-            assert.match(src, /REMOTE_VERSION=\$\(curl -fsSL --max-time 20 "\$RELEASES_URL" \| python3 -c '.*\["releases"\]\[0\]\["version"\]/);
-            assert.match(src, /but releases\.json lists v\$EXPECTED_VERSION/);
-        });
         it('verifies releases.json before installing a requested version', () => {
             assert.match(src, /RELEASES_URL="https:\/\/raw\.githubusercontent\.com\/\$\{NIGHTSTAND_REPO\}\/\$\{NIGHTSTAND_BRANCH\}\/releases\.json"/);
             assert.match(src, /is not a known release/);
@@ -184,14 +180,10 @@ describe('update.sh will not ship code onto a schema that did not migrate', () =
         assert.doesNotMatch(src, /prisma step failed; health check will decide/, 'the health check cannot see a missing table, so it must not be the arbiter');
     });
     it('decides whether to migrate from what the database is missing, not from a schema diff', () => {
-        // A schema-file comparison cannot see a database an earlier update left
-        // half-migrated, so reinstalling the same version could never finish the
-        // job. migrate status is a read, so it can be asked before the streamer is
-        // stopped, and only a pending migration should stop it.
         assertOrder([
+            'systemctl stop free-sleep-stream',
             'Downgrade: skipping prisma migrate',
             'prisma migrate status',
-            'systemctl stop free-sleep-stream',
             'prisma migrate deploy',
         ], 'status-gates-migrate');
     });

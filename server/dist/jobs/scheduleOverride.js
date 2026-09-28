@@ -5,28 +5,32 @@
 // (POST /api/deviceStatus, tap gestures). DO NOT call it from the scheduler
 // jobs themselves, those are the ones we want to be suppressed.
 import moment from 'moment-timezone';
-import settingsDB from '../db/settings.js';
+import settingsDB, { updateSettings } from '../db/settings.js';
 import schedulesDB from '../db/schedules.js';
 import logger from '../logger.js';
+import { compareTimes, isValidTime } from './utils.js';
 export const OVERRIDE_WINDOW_HOURS = 3;
 export const OVERRIDE_DURATION_HOURS = 12;
 const DAYS = [
     'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
 ];
-// Walk today + tomorrow's schedules and return the next scheduled
-// temperature-change moment, or null if none within 48h.
+// Include yesterday's schedule: its after-midnight events run today.
 function findNextScheduledTempChange(side, now, timeZone) {
     const sideSchedule = schedulesDB.data[side];
     if (!sideSchedule)
         return null;
-    for (let dayOffset = 0; dayOffset < 2; dayOffset++) {
+    let next = null;
+    for (let dayOffset = -1; dayOffset < 2; dayOffset++) {
         const candidateDay = now.clone().tz(timeZone).add(dayOffset, 'day');
         const dayName = DAYS[candidateDay.day()];
         const daily = sideSchedule[dayName];
-        if (!daily?.temperatures)
+        if (!daily?.power.enabled || !daily.temperatures)
             continue;
-        const sortedTimes = Object.keys(daily.temperatures).sort();
-        for (const time of sortedTimes) {
+        // Power-on applies a temperature too, even when there are no later adjustments.
+        const times = new Set([daily.power.on, ...Object.keys(daily.temperatures)]);
+        for (const time of times) {
+            if (!isValidTime(time))
+                continue;
             const [h, m] = time.split(':').map(Number);
             const candidate = candidateDay
                 .clone()
@@ -34,12 +38,14 @@ function findNextScheduledTempChange(side, now, timeZone) {
                 .minute(m)
                 .second(0)
                 .millisecond(0);
-            if (candidate.isAfter(now)) {
-                return candidate;
+            if (compareTimes(time, daily.power.on) < 0)
+                candidate.add(1, 'day');
+            if (candidate.isAfter(now) && (!next || candidate.isBefore(next))) {
+                next = candidate;
             }
         }
     }
-    return null;
+    return next;
 }
 export const isTempScheduleOverridden = (side) => {
     const override = settingsDB.data[side]?.scheduleOverrides?.temperatureSchedules;
@@ -50,26 +56,16 @@ export const isTempScheduleOverridden = (side) => {
     return moment(override.expiresAt).isAfter(moment());
 };
 export const markManualTempChange = async (side) => {
-    await settingsDB.read();
     await schedulesDB.read();
-    const timeZone = settingsDB.data.timeZone || 'UTC';
-    const now = moment.tz(timeZone);
-    const next = findNextScheduledTempChange(side, now, timeZone);
-    if (!next) {
-        logger.debug(`[manual temp] ${side}: no upcoming scheduled change found`);
-        return;
-    }
-    const hoursUntil = next.diff(now, 'minutes') / 60;
-    if (hoursUntil > OVERRIDE_WINDOW_HOURS) {
-        logger.debug(`[manual temp] ${side}: next schedule at ${next.format()} is ${hoursUntil.toFixed(1)}h away (>${OVERRIDE_WINDOW_HOURS}h), no override.`);
-        return;
-    }
-    const expiresAt = now.clone().add(OVERRIDE_DURATION_HOURS, 'hours').format();
-    settingsDB.data[side].scheduleOverrides.temperatureSchedules = {
-        disabled: true,
-        expiresAt,
-    };
-    await settingsDB.write();
-    logger.info(`[manual temp] ${side}: schedule paused until ${expiresAt} (next change was at ${next.format()}, ${hoursUntil.toFixed(1)}h away).`);
+    await updateSettings(draft => {
+        const timeZone = draft.timeZone || 'UTC';
+        const now = moment.tz(timeZone);
+        const next = findNextScheduledTempChange(side, now, timeZone);
+        if (!next || next.diff(now, 'minutes') / 60 > OVERRIDE_WINDOW_HOURS)
+            return false;
+        const expiresAt = now.clone().add(OVERRIDE_DURATION_HOURS, 'hours').format();
+        draft[side].scheduleOverrides.temperatureSchedules = { disabled: true, expiresAt };
+        logger.info(`[manual temp] ${side}: schedule paused until ${expiresAt} (next change was at ${next.format()}).`);
+    });
 };
 //# sourceMappingURL=scheduleOverride.js.map

@@ -3,33 +3,8 @@ import cors from 'cors';
 import logger from '../logger.js';
 import { attachRequestCompletionLogging } from './requestLogging.js';
 import os from 'os';
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN;
-function getLocalIp() {
-    const interfaces = os.networkInterfaces();
-    for (const interfaceName in interfaces) {
-        const networkInterface = interfaces[interfaceName];
-        if (!networkInterface)
-            continue;
-        for (const network of networkInterface) {
-            if (network.family === 'IPv4' && !network.internal) {
-                return network.address;
-            }
-        }
-    }
-    return 'localhost'; // Default to localhost if LAN IP isn't found
-}
-// With no auth on the API, CORS is the only thing stopping another host on a
-// shared/guest network from issuing state-changing requests, so trusting the
-// entire RFC1918 range (192.168.*/172.16.*/10.0.*) is too broad. Derive the
-// pod's actual subnet(s) from network interfaces instead.
-//
-// getLocalIp() alone isn't enough here: os.networkInterfaces() has no
-// LAN-vs-other preference, and a Tailscale interface (a supported optional
-// install) adds its own non-internal IPv4 address. If that happened to
-// enumerate first, getLocalIp() would return the Tailscale address and every
-// legitimate LAN origin would fail CORS. Collect every non-internal IPv4
-// interface's /24 instead of picking just one, so the actual LAN subnet is
-// always included regardless of interface ordering.
+import { isIP } from 'net';
+// Include every non-internal IPv4 /24 so interface order cannot exclude the LAN.
 export function getLocalSubnetPrefixes() {
     const interfaces = os.networkInterfaces();
     const prefixes = [];
@@ -48,50 +23,70 @@ export function getLocalSubnetPrefixes() {
     }
     return prefixes;
 }
-/**
- * Check if the request origin is allowed, i.e., from localhost or LAN IP, or
- * matches the `ALLOWED_ORIGIN` environment variable. The function also allows
- * requests with no origin (e.g., `curl`).
- *
- * If `ALLOWED_ORIGIN` is set to a wildcard (`*`), all origins are allowed.
- *
- * @param origin - The origin to check.
- * @returns True if the origin is allowed, false otherwise.
- */
+function parseConfiguredOrigin() {
+    const value = process.env.ALLOWED_ORIGIN;
+    if (!value || value === '*')
+        return value;
+    try {
+        const parsed = new URL(value);
+        if (!['http:', 'https:'].includes(parsed.protocol) || parsed.origin !== value)
+            throw new Error('Invalid origin');
+        return parsed.origin;
+    }
+    catch {
+        logger.warn('Ignoring invalid ALLOWED_ORIGIN; use an http(s) origin including its scheme and optional port');
+        return undefined;
+    }
+}
+const configuredOrigin = parseConfiguredOrigin();
+let subnetPrefixes = [];
+let subnetRefreshAt = 0;
+function localSubnetPrefixes() {
+    if (Date.now() >= subnetRefreshAt) {
+        subnetPrefixes = getLocalSubnetPrefixes();
+        subnetRefreshAt = Date.now() + 30_000;
+    }
+    return subnetPrefixes;
+}
 export function isAllowedOrigin(origin) {
     if (!origin) {
         return true;
     }
-    if (ALLOWED_ORIGIN === '*') {
+    if (configuredOrigin === '*') {
         return true;
     }
-    if (origin.startsWith(`http://${getLocalIp()}:`) ||
-        origin.startsWith('http://localhost') ||
-        // mDNS names (http://eight-pod.local:3000). The app is served as an ES
-        // module, and module script requests always carry an Origin header, so
-        // same-origin loads via the .local name must pass this check too.
-        /^http:\/\/[a-z0-9-]+\.local(:\d+)?$/i.test(origin) ||
-        getLocalSubnetPrefixes().some(prefix => origin.startsWith(`http://${prefix}`)) ||
-        (ALLOWED_ORIGIN && origin.startsWith(ALLOWED_ORIGIN))) {
-        return true;
+    try {
+        const parsed = new URL(origin);
+        // An Origin is just scheme, host and port, never credentials or a path.
+        if (!['http:', 'https:'].includes(parsed.protocol) || parsed.origin !== origin)
+            return false;
+        if (configuredOrigin && parsed.origin === configuredOrigin)
+            return true;
+        const hostname = parsed.hostname;
+        if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]')
+            return true;
+        if (/^[a-z0-9-]+\.local$/i.test(hostname))
+            return true;
+        return isIP(hostname) === 4 && localSubnetPrefixes().some(prefix => hostname.startsWith(prefix));
     }
-    return false;
+    catch {
+        return false;
+    }
 }
 export default function (app) {
     app.use((req, res, next) => {
         attachRequestCompletionLogging(req, res, logger);
         next();
     });
-    app.use(express.json());
-    // Allow local development
-    app.use(cors({
-        origin: (origin, callback) => {
-            if (isAllowedOrigin(origin)) {
-                return callback(null, true);
-            }
-            return callback(new Error('Not allowed by CORS'));
+    app.use((req, res, next) => {
+        if (!isAllowedOrigin(req.headers.origin)) {
+            res.status(403).json({ error: 'Origin is not allowed' });
+            return;
         }
-    }));
+        next();
+    });
+    app.use(cors({ origin: true }));
+    app.use(express.json());
     // Logging
     app.use((req, res, next) => {
         const clientIp = req.headers['x-forwarded-for'] || req.ip;

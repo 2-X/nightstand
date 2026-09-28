@@ -30,6 +30,10 @@ async function setNextScheduledChange(hoursFromNow) {
     await schedulesDB.read();
     const target = moment.tz('UTC').add(hoursFromNow, 'hours');
     const dayName = DAY_NAMES[target.day()];
+    // Keep both power-on and its adjustment at the intended candidate time.
+    schedulesDB.data.left[dayName].power = {
+        on: target.format('HH:mm'), off: target.clone().add(6, 'hours').format('HH:mm'), enabled: true, onTemperature: 75,
+    };
     schedulesDB.data.left[dayName].temperatures = { [target.format('HH:mm')]: 75 };
     await schedulesDB.write();
 }
@@ -41,6 +45,7 @@ beforeEach(async () => {
     await schedulesDB.read();
     for (const day of DAY_NAMES) {
         schedulesDB.data.left[day].temperatures = {};
+        schedulesDB.data.left[day].power.enabled = false;
     }
     await schedulesDB.write();
 });
@@ -99,6 +104,20 @@ describe('isTempScheduleOverridden', () => {
         };
         await settingsDB.write();
         assert.equal(isTempScheduleOverridden('left'), true);
+    });
+});
+describe('power-on temperature override', () => {
+    it('protects a manual choice before power-on even without adjustment entries', async (t) => {
+        t.mock.method(moment, 'now', () => Date.parse('2026-09-28T20:30:00Z'));
+        for (const day of Object.values(schedulesDB.data.left))
+            day.power.enabled = false;
+        schedulesDB.data.left.monday.power = { enabled: true, on: '21:00', off: '09:00', onTemperature: 75 };
+        schedulesDB.data.left.monday.temperatures = {};
+        await schedulesDB.write();
+        await markManualTempChange('left');
+        await settingsDB.read();
+        assert.equal(settingsDB.data.left.scheduleOverrides.temperatureSchedules.disabled, true);
+        assert.equal(settingsDB.data.left.scheduleOverrides.temperatureSchedules.expiresAt, '2026-09-29T08:30:00Z');
     });
 });
 //# sourceMappingURL=scheduleOverride.test.js.map

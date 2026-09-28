@@ -1,0 +1,2 @@
+import{j as t,C as a,B as r,L as i,T as x}from"./index.js";import{N as c}from"./NavigateBefore-DK0zvJ5B.js";function h({title:s,icon:n,backTo:e="/settings",backLabel:o="Back to Settings"}){return t.jsxs(a,{sx:{width:"100%",mb:1},children:[t.jsx(r,{component:i,to:e,startIcon:t.jsx(c,{}),children:o}),t.jsxs(x,{component:"h1",variant:"h1",sx:{display:"flex",alignItems:"center",gap:1,mt:1},children:[n,s]})]})}export{h as H};
+//# sourceMappingURL=Header-CKz1pdcS.js.map

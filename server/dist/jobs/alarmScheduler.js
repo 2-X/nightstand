@@ -5,16 +5,29 @@ import logger from '../logger.js';
 import memoryDB from '../db/memoryDB.js';
 import serverStatus from '../serverStatus.js';
 import schedulesDB from '../db/schedules.js';
-import settingsDB from '../db/settings.js';
+import settingsDB, { updateSettings } from '../db/settings.js';
 import { dailyAlarmSchedules } from '../db/scheduleAlarms.js';
 import { executeFunction } from '../8sleep/deviceApi.js';
-import { getDayIndexForTime, isValidTime, logJob } from './utils.js';
+import { compareTimes, getDayIndexForTime, isValidTime, logJob } from './utils.js';
 import { connectFranken } from '../8sleep/frankenServer.js';
+import { nightBounds } from './nightBounds.js';
 import { emitJobEvent } from './jobEvents.js';
-// A repeated fall-back hour replays an alarm ~60 min later, so anything inside
-// this window is the same alarm firing twice, not a second intentional alarm.
-const ALARM_DEDUPE_MS = 50 * 60 * 1000;
-export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPattern, side, force = false }) => {
+const alarmOccurrences = new Map();
+const activeAlarms = new Map();
+const OCCURRENCE_RETENTION_MS = 48 * 60 * 60 * 1000;
+export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPattern, side, force = false }, occurrenceId) => {
+    // Reserve recurring occurrences before awaiting I/O; manual alarms can repeat.
+    const occurrenceKey = !force && occurrenceId ? `${side}:${occurrenceId}` : undefined;
+    const cutoff = Date.now() - OCCURRENCE_RETENTION_MS;
+    for (const [key, timestamp] of alarmOccurrences) {
+        if (timestamp < cutoff)
+            alarmOccurrences.delete(key);
+    }
+    if (occurrenceKey && alarmOccurrences.has(occurrenceKey))
+        return;
+    if (occurrenceKey)
+        alarmOccurrences.set(occurrenceKey, Date.now());
+    let fired = false;
     emitJobEvent({ jobName: `alarm-${side}`, status: 'started' });
     try {
         const min10Duration = Math.max(10, duration);
@@ -33,15 +46,6 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
             logger.debug('Not executing alarm, side is off!');
             return;
         }
-        // On the DST fall-back day a time between 01:00 and 01:59 occurs twice, so
-        // node-schedule fires the same alarm again an hour later. Swallow a repeat
-        // that lands within the dedupe window rather than vibrating the bed twice.
-        await memoryDB.read();
-        const lastFiredAt = memoryDB.data[side].lastAlarmFiredAt;
-        if (!force && lastFiredAt !== undefined && Date.now() - lastFiredAt < ALARM_DEDUPE_MS) {
-            logger.debug(`Skipping duplicate alarm for ${side}, one already fired recently`);
-            return;
-        }
         const currentTime = moment.tz(settingsDB.data.timeZone);
         const alarmTimeEpoch = currentTime.unix();
         const alarmPayload = {
@@ -55,13 +59,19 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
         const command = side === 'left' ? 'ALARM_LEFT' : 'ALARM_RIGHT';
         logger.debug(`Executing alarm... ${JSON.stringify(alarmPayload)}`);
         await executeFunction(command, hexPayload);
+        fired = true;
+        const activeAlarm = Symbol(side);
+        activeAlarms.set(side, activeAlarm);
         await memoryDB.read();
         memoryDB.data[side].isAlarmVibrating = true;
-        memoryDB.data[side].lastAlarmFiredAt = Date.now();
         await memoryDB.write();
         setTimeout(async () => {
-            logger.debug('');
+            if (activeAlarms.get(side) !== activeAlarm)
+                return;
             await memoryDB.read();
+            if (activeAlarms.get(side) !== activeAlarm)
+                return;
+            activeAlarms.delete(side);
             memoryDB.data[side].isAlarmVibrating = false;
             await memoryDB.write();
         }, min10Duration * 1_000);
@@ -75,6 +85,10 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
         serverStatus.status.alarmSchedule.message = message;
         logger.error(error);
         emitJobEvent({ jobName: `alarm-${side}`, status: 'fail', message });
+    }
+    finally {
+        if (occurrenceKey && !fired)
+            alarmOccurrences.delete(occurrenceKey);
     }
 };
 /**
@@ -112,17 +126,12 @@ export function scheduleOneOffAlarm(settingsData, side) {
     }
     const now = moment();
     if (!fireAt.isAfter(now)) {
-        // Already in the past, so auto-disable it here so it doesn't keep tripping
-        // the chokidar->setupJobs loop on every save. We do this best-effort and
-        // don't await; if the write races with another save, the worst case is
-        // one extra no-op rebuild.
+        // Disable only this expired occurrence; keep concurrent user saves.
         logger.debug(`One-off alarm for ${side} fireAt is in the past; disabling.`);
-        settingsDB.read()
-            .then(() => {
-            if (settingsDB.data[side].oneOffAlarm.fireAt === o.fireAt) {
-                settingsDB.data[side].oneOffAlarm.enabled = false;
-                return settingsDB.write();
-            }
+        updateSettings(draft => {
+            if (draft[side].oneOffAlarm.fireAt !== o.fireAt || !draft[side].oneOffAlarm.enabled)
+                return false;
+            draft[side].oneOffAlarm.enabled = false;
         })
             .catch((err) => logger.warn(`Failed to clear stale one-off alarm: ${err}`));
         return null;
@@ -142,11 +151,11 @@ export function scheduleOneOffAlarm(settingsData, side) {
             // need to come back and manually toggle it off, which is the whole
             // point of a "one-off" alarm.
             try {
-                await settingsDB.read();
-                if (settingsDB.data[side].oneOffAlarm.fireAt === o.fireAt) {
-                    settingsDB.data[side].oneOffAlarm.enabled = false;
-                    await settingsDB.write();
-                }
+                await updateSettings(draft => {
+                    if (draft[side].oneOffAlarm.fireAt !== o.fireAt || !draft[side].oneOffAlarm.enabled)
+                        return false;
+                    draft[side].oneOffAlarm.enabled = false;
+                });
             }
             catch (err) {
                 logger.error(`Failed to auto-disable one-off alarm for ${side}: ${err}`);
@@ -167,11 +176,33 @@ export function scheduleAlarmOverride(settingsData, side) {
     if (!expiresAt.isAfter(now))
         return null;
     const next = nextOccurrenceHhMm(settingsData.timeZone, alarmOverride.timeOverride);
+    if (!next.isBefore(expiresAt))
+        return null;
     logger.debug(`Alarm override is set! Scheduling alarm for ${next.format()}`);
     schedule.scheduleJob(`${side}-alarm-override-${alarmOverride.timeOverride}`, next.toDate(), async () => {
-        const dayKey = next.tz(settingsData.timeZone).format('dddd').toLowerCase();
-        const daySchedule = schedulesDB.data?.[side]?.[dayKey];
-        const sourceAlarm = daySchedule ? dailyAlarmSchedules(daySchedule)[0] : null;
+        // The replacement belongs to a night starting today or yesterday, not
+        // necessarily the calendar date on which it rings.
+        let sourceAlarm;
+        for (const offset of [-1, 0]) {
+            const date = next.clone().startOf('day').add(offset, 'day');
+            const dayKey = date.format('dddd').toLowerCase();
+            const daily = schedulesDB.data?.[side]?.[dayKey];
+            if (!daily?.power.enabled)
+                continue;
+            const { start, end } = nightBounds(date, daily.power);
+            if (!next.isBetween(start, end, undefined, '[]'))
+                continue;
+            sourceAlarm = dailyAlarmSchedules(daily).filter(alarm => alarm.enabled)
+                .sort((a, b) => {
+                const minutes = (time) => {
+                    const [h, m] = time.split(':').map(Number);
+                    return h * 60 + m + (compareTimes(time, daily.power.on) < 0 ? 1440 : 0);
+                };
+                return minutes(a.time) - minutes(b.time);
+            })[0];
+            if (sourceAlarm)
+                break;
+        }
         const { vibrationIntensity, duration, vibrationPattern } = sourceAlarm ?? {
             vibrationIntensity: 100,
             duration: 60,
@@ -222,10 +253,15 @@ export const scheduleAlarm = (settingsData, side, day, dailySchedule) => {
             try {
                 logJob('Executing alarm job', side, day, dayIndex, time);
                 await settingsDB.read();
+                const now = moment.tz(settingsData.timeZone);
                 if (settingsDB.data[side].scheduleOverrides.alarm.expiresAt) {
-                    const expiresAt = moment(settingsDB.data[side].scheduleOverrides.alarm.expiresAt);
-                    const now = moment();
-                    if (expiresAt.isAfter(now)) {
+                    const expiresAt = moment.tz(settingsDB.data[side].scheduleOverrides.alarm.expiresAt, settingsData.timeZone);
+                    // Keep the night's original alarms suppressed after an earlier replacement.
+                    const date = now.clone().startOf('day');
+                    if (compareTimes(time, dailySchedule.power.on) < 0)
+                        date.subtract(1, 'day');
+                    const { start: nightStart, end: nightEnd } = nightBounds(date, dailySchedule.power);
+                    if (expiresAt.isAfter(now) || expiresAt.isBetween(nightStart, nightEnd, undefined, '(]')) {
                         logJob(`Detected alarm override! Skipping alarm! Override expires at: ${expiresAt.format()}`, side, day, dayIndex, time);
                         return;
                     }
@@ -235,7 +271,7 @@ export const scheduleAlarm = (settingsData, side, day, dailySchedule) => {
                     vibrationIntensity: alarm.vibrationIntensity,
                     duration: alarm.duration,
                     vibrationPattern: alarm.vibrationPattern,
-                });
+                }, `recurring:${day}:${time}:${now.format('YYYY-MM-DD')}`);
             }
             catch (error) {
                 serverStatus.status.alarmSchedule.status = 'failed';

@@ -38,7 +38,7 @@ export const AGENT_BASE = {
 // agent file imports outside it.
 //
 // Scope, so this is not read as more than it is: that gate walks TypeScript
-// imports, so it covers the 19 .ts/.tsx entries below. The shell scripts and
+// imports, so it covers the .ts/.tsx entries below. The shell scripts and
 // systemd units are not checked for what they reach for, and install.sh and
 // update.sh do call sibling scripts that the overlay does not carry. Those
 // resolve because both run against a full fork tree, not against the overlay
@@ -46,11 +46,14 @@ export const AGENT_BASE = {
 export const STOCK_CONTRACT = {
     paths: [
         'app/src/api/api.ts',
+        'app/src/api/deviceStatus.ts',
         'app/src/api/jobs.ts',
+        'app/src/api/settings.ts',
         'server/src/logger.ts',
     ],
     packages: [
         'react',
+        'react-router-dom',
         'axios',
         'semver',
         '@mui/material',
@@ -68,6 +71,8 @@ export const AGENT_MANIFEST = [
     // The update path. Stock already has an updater; the agent replaces it with
     // one that also does rollback, revert to stock, and targeted versions.
     { path: 'app/src/api/serverInfo.ts', mode: 'copy', why: 'asks this fork for the latest version rather than upstream' },
+    { path: 'app/src/api/useLatestVersion.ts', mode: 'add', why: 'selects a release eligible for the saved update channel' },
+    { path: 'app/src/api/releases.ts', mode: 'add', why: 'fetches and validates the release manifest' },
     { path: 'app/src/api/update.ts', mode: 'add', why: 'update, rollback and revert API client' },
     { path: 'app/src/api/updateSchema.ts', mode: 'add', why: 'shared update request and response types' },
     { path: 'app/src/api/useUpdateProgress.ts', mode: 'add', why: 'polls for the pod coming back on a new version' },

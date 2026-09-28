@@ -40,6 +40,8 @@ const scheduleAdjustment = (timeZone, side, day, time, temperature, powerOn) => 
     });
 };
 export const scheduleTemperatures = (settingsData, side, day, temperatures, power) => {
+    if (!power.enabled)
+        return;
     if (settingsData[side].awayMode)
         return;
     const { timeZone } = settingsData;
