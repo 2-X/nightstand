@@ -4,10 +4,8 @@ set -euo pipefail
 
 # --------------------------------------------------------------------------------
 # Variables
-RELEASES_URL="https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json"
-TAG_ZIP_URL_PREFIX="https://github.com/LTimothy/nightstand/archive/refs/tags/v"
-# stable by default; NIGHTSTAND_CHANNEL=beta installs the newest beta instead.
-CHANNEL="${NIGHTSTAND_CHANNEL:-stable}"
+# main only moves at a release, so its tip is always the newest release.
+REPO_URL="https://github.com/LTimothy/nightstand/archive/refs/heads/main.zip"
 ZIP_FILE="free-sleep.zip"
 UNZIP_DIR="free-sleep-unzip"
 REPO_DIR="/home/dac/free-sleep"
@@ -15,23 +13,9 @@ SERVER_DIR="$REPO_DIR/server"
 USERNAME="dac"
 
 # --------------------------------------------------------------------------------
-# Download the newest release on the channel. A release's tag, not the main
-# branch: main can carry work that no release describes yet.
-echo "Finding the newest $CHANNEL release..."
-VERSION=$(curl -fsSL "$RELEASES_URL" | python3 -c '
-import json, sys
-channel = sys.argv[1]
-if channel not in ("stable", "beta"):
-    sys.exit("unknown channel: " + channel)
-data = json.load(sys.stdin)
-# beta users get the newest release of either channel, as the Versions page shows them
-matches = [r["version"] for r in data["releases"] if channel == "beta" or r["channel"] == "stable"]
-print(matches[0] if matches else "")
-' "$CHANNEL")
-[ -n "$VERSION" ] || { echo "No $CHANNEL release found in releases.json"; exit 1; }
-
-echo "Downloading Nightstand v$VERSION..."
-curl -fL -o "$ZIP_FILE" "${TAG_ZIP_URL_PREFIX}${VERSION}.zip"
+# Download the repository
+echo "Downloading the repository..."
+curl -fL -o "$ZIP_FILE" "$REPO_URL"
 
 echo ""
 echo "Unzipping the repository..."
@@ -42,7 +26,7 @@ rm -f "$ZIP_FILE"
 
 # Clean up existing directory and move new code into place
 echo "Setting up the installation directory..."
-# GitHub names the archive's top dir after the repo and tag, so resolve it
+# GitHub names the archive's top dir after the repo and ref, so resolve it
 # rather than hardcoding it.
 SRC_DIR=$(find "$UNZIP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)
 [ -d "$SRC_DIR" ] || { echo "unexpected zip layout"; exit 1; }

@@ -223,18 +223,11 @@ nmcli connection reload
 
 ## 13. Install the Nightstand server
 
-This installs the newest stable release and sets up a systemd service that
-starts automatically on boot.
+This installs the newest release and sets up a systemd service that starts
+automatically on boot.
 
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LTimothy/nightstand/main/scripts/install.sh)"
-```
-
-To start on the newest beta instead, set `NIGHTSTAND_CHANNEL=beta`, and pick
-the beta channel under Settings, then Versions, once the app is up:
-
-```bash
-NIGHTSTAND_CHANNEL=beta /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LTimothy/nightstand/main/scripts/install.sh)"
 ```
 
 ---

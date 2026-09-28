@@ -64,43 +64,20 @@ describe('updater shell scripts', () => {
   // units and sudoers rules it goes on to wire up (rollback, revert to stock)
   // name scripts that exist only here, so pointing it at the stock upstream
   // archive would install a tree those rules do not match.
-  it('install.sh installs a release of this fork, whose scripts it wires up', () => {
+  // main only moves at a release, so its tip is the newest release. The units
+  // and sudoers rules install.sh wires up name scripts that exist only in this
+  // fork, so the stock upstream archive would not match them.
+  it('install.sh installs the tip of this fork\'s main branch', () => {
     const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
-    assert.match(src, /RELEASES_URL="https:\/\/raw\.githubusercontent\.com\/LTimothy\/nightstand\/main\/releases\.json"/);
-    assert.match(src, /TAG_ZIP_URL_PREFIX="https:\/\/github\.com\/LTimothy\/nightstand\/archive\/refs\/tags\/v"/);
-    assert.match(src, /NIGHTSTAND_CHANNEL:-stable/, 'fresh installs default to the stable channel');
-    assert.doesNotMatch(src, /refs\/heads/, 'must never install a branch');
+    assert.match(src, /REPO_URL="https:\/\/github\.com\/LTimothy\/nightstand\/archive\/refs\/heads\/main\.zip"/);
   });
 
   // GitHub names an archive's top directory after the repo and ref, so it is
-  // nightstand-3.3.0 for a tag. Hardcoding a name breaks on a rename.
+  // nightstand-main today. Hardcoding a name breaks on a rename.
   it('install.sh resolves the unpacked archive directory instead of hardcoding it', () => {
     const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
     assert.match(src, /SRC_DIR=\$\(find "\$UNZIP_DIR" -mindepth 1 -maxdepth 1 -type d/);
     assert.doesNotMatch(src, /free-sleep-main|nightstand-main|'\*-main'/);
-  });
-
-  describe('install.sh picks the newest release on its channel', () => {
-    const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
-    const picker = /VERSION=\$\(curl -fsSL "\$RELEASES_URL" \| python3 -c '\n([\s\S]*?)\n' "\$CHANNEL"\)/.exec(src)?.[1];
-    const manifest = JSON.stringify({
-      channels: ['stable', 'beta'],
-      releases: [
-        { version: '3.4.0', channel: 'beta' },
-        { version: '3.3.0', channel: 'stable' },
-        { version: '3.0.0', channel: 'stable' },
-      ],
-    });
-    const pick = (channel: string, input = manifest) =>
-      execFileSync('python3', ['-c', picker ?? '', channel], { input, encoding: 'utf8' }).trim();
-
-    it('finds the picker', () => assert.ok(picker, 'the inline release picker moved; update this test'));
-    it('stable skips newer betas', () => assert.equal(pick('stable'), '3.3.0'));
-    it('beta takes the newest of either channel', () => assert.equal(pick('beta'), '3.4.0'));
-    it('prints nothing when the channel has no release', () => {
-      assert.equal(pick('stable', JSON.stringify({ releases: [{ version: '3.4.0', channel: 'beta' }] })), '');
-    });
-    it('rejects an unknown channel', () => assert.throws(() => pick('nightly')));
   });
 
   it('install.sh bootstraps node through the shared ensure-node.sh', () => {
