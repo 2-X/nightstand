@@ -1,4 +1,4 @@
-import { http, HttpResponse, delay } from 'msw';
+import { http, HttpResponse, delay, sse } from 'msw';
 import type { SleepRecord } from '@api/sleepSchema.ts';
 import type { Jobs } from '@api/jobs.ts';
 import type { BasePosition } from '@api/baseControl.ts';
@@ -223,6 +223,12 @@ export const handlers = [
       avgBreathingRate: 12,
     });
   }),
+  // The real route fires the alarm and returns the schedules; the demo has no
+  // bed to vibrate, so it only returns them.
+  http.post('/api/alarm', async () => {
+    await delay(150);
+    return HttpResponse.json(deepClone(getSchedules()));
+  }),
   http.post('/api/jobs', async ({ request }) => {
     const jobs = (await request.json()) as Jobs;
     handleJobs(jobs);
@@ -233,47 +239,33 @@ export const handlers = [
     await delay(120);
     return HttpResponse.json({ logs: getLogFiles() });
   }),
-  http.get('/api/logs/:filename', ({ params }) => {
+  // Live tail of one log file, as the server streams it over SSE. MSW can only
+  // mock SSE where EventSource exists, so jsdom unit tests skip this handler.
+  ...(typeof EventSource === 'undefined' ? [] : [sse('/api/logs/:filename', ({ client, params, request }) => {
     const filename = params.filename as string;
     const logStore = listLogs();
-    const initialLogs = deepClone(logStore[filename] ?? []);
     if (!logStore[filename]) {
-
-      // @ts-expect-error
-      return HttpResponse.eventStream({
-        // @ts-expect-error
-        open(controller) {
-          controller.send({ data: JSON.stringify({ message: 'Log file not found' }) });
-          controller.close();
-        },
-      });
+      client.send({ data: JSON.stringify({ message: 'Log file not found' }) });
+      client.close();
+      return;
     }
 
-    // @ts-expect-error
-    return HttpResponse.eventStream({
-      headers: {
-        'Cache-Control': 'no-cache',
-      },
-      // @ts-expect-error
-      open(controller) {
-        initialLogs.forEach((entry) => {
-          controller.send({ data: JSON.stringify({ message: entry }) });
-        });
-        let lastIndex = initialLogs.length;
-        const interval = setInterval(() => {
-          const latest = listLogs()[filename] ?? [];
-          if (latest.length > lastIndex) {
-            latest.slice(lastIndex).forEach((entry) => {
-              controller.send({ data: JSON.stringify({ message: entry }) });
-            });
-            lastIndex = latest.length;
-          }
-        }, 2000);
-
-        return () => clearInterval(interval);
-      },
+    const initialLogs = deepClone(logStore[filename]);
+    initialLogs.forEach((entry) => {
+      client.send({ data: JSON.stringify({ message: entry }) });
     });
-  }),
+    let lastIndex = initialLogs.length;
+    const interval = setInterval(() => {
+      const latest = listLogs()[filename] ?? [];
+      if (latest.length > lastIndex) {
+        latest.slice(lastIndex).forEach((entry) => {
+          client.send({ data: JSON.stringify({ message: entry }) });
+        });
+        lastIndex = latest.length;
+      }
+    }, 2000);
+    request.signal.addEventListener('abort', () => clearInterval(interval));
+  })]),
 
   // The pod has no WAN, so these three files only ever resolve in the browser;
   // mocking them keeps the demo and the tests offline and deterministic.

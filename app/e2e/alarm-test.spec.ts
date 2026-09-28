@@ -1,0 +1,17 @@
+import { test, expect } from '@playwright/test';
+
+// "Test alarm" posts to /api/alarm. The demo mocks that route, so pressing it
+// must not surface a request error.
+test('testing an alarm reports no errors', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  const alarmResponse = page.waitForResponse((r) => r.url().endsWith('/api/alarm'));
+
+  await page.goto('/schedules');
+  await page.getByRole('button', { name: /^Vibration alarms?$/ }).click();
+  await page.getByRole('button', { name: 'Test alarm' }).first().click();
+
+  expect((await alarmResponse).status()).toBe(200);
+  expect(errors).toEqual([]);
+});
