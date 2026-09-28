@@ -54,10 +54,16 @@ of `stable` or `beta`, a `kind` of `agent` or `bundle`, and tagged in git as
 ## Release cadence and promotion
 
 Cut a release when a coherent, user-facing bundle of work is ready, not once
-per change. Work accumulates on `main` under a `## [Unreleased]` heading in
-`CHANGELOG.md`; when there's enough to justify a version, that heading becomes
-the release. A steady trickle of one-commit releases makes the changelog noise
-and the version number meaningless, so resist it.
+per change. Work lands on the `dev` branch, with notes under a
+`## [Unreleased]` heading in `CHANGELOG.md`; when there's enough to justify a
+version, that heading becomes the release, `dev` is merged into `main`, and the
+merge is tagged. `main` only moves at a release, so it always matches the
+newest release: installed pods read `releases.json` and the updater from
+`main`, and pull requests should target `dev`. Beta and stable are not
+branches; each release's channel is a field in `releases.json`.
+
+A steady trickle of one-commit releases makes the changelog noise and the
+version number meaningless, so resist it.
 
 Every release is born on `beta`. Promotion to `stable` is part of the ritual,
 not an afterthought: at each release, sweep the existing betas and promote any
@@ -87,8 +93,10 @@ rename a column/table that an older, still-installable release reads.
 3. Add a matching entry at the top of `CHANGELOG.md`.
 4. Rebuild both halves (`npm run build:pr` in `server/` and `app/`) and commit
    the output.
-5. Commit everything together, then tag: `git tag -a v<version> -m "..."`.
-6. Push with tags: `git push origin main --tags`.
+5. Commit everything together on `dev`, fast-forward `main` to it
+   (`git switch main && git merge --ff-only dev`), then tag:
+   `git tag -a v<version> -m "..."`.
+6. Push both branches and the tag: `git push origin main dev v<version>`.
 7. Create the GitHub Release: `gh release create v<version> --title
    "v<version>" --notes-file <path>` with that version's `CHANGELOG.md`
    section as the notes, `-R LTimothy/nightstand` if `gh`'s default-repo
