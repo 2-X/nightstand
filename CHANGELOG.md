@@ -6,6 +6,16 @@ is a hard fork; for the history of the projects it descends from, see
 [jmew/free-sleep](https://github.com/jmew/free-sleep) and
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
 
+## [Unreleased]
+
+- A fresh install and `fs-reset-db` now set up the database with only the
+  migrations that ship with the release (`prisma migrate deploy`). They used
+  Prisma's development command, which can create new migrations or offer to
+  reset the database when it finds differences.
+
+- The README and install guide are reorganized around which install path
+  each pod takes and what tools each one needs.
+
 ## [3.3.1] - 2026-09-28
 
 - Biometrics installs on a Pod 3 that was set up with the SD card method.

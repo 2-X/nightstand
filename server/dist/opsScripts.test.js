@@ -30,6 +30,11 @@ describe('this repo\'s own tooling (not part of the agent overlay)', () => {
             assert.ok(mode & 0o111, `${script} must carry the exec bit`);
         });
     }
+    it('reset_db.sh recreates the database with migrate deploy, not migrate dev', () => {
+        const src = readFileSync(path.join(repoRoot, 'scripts/reset_db.sh'), 'utf8');
+        assert.doesNotMatch(src, /migrate dev|npm run migrate/);
+        assert.match(src, /prisma migrate deploy/);
+    });
     it('disable_biometrics.sh actually stops and disables the stream service', () => {
         const src = readFileSync(path.join(repoRoot, 'scripts/disable_biometrics.sh'), 'utf8');
         assert.match(src, /systemctl stop free-sleep-stream/);

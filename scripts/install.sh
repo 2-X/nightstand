@@ -165,8 +165,11 @@ rm -f /persistent/free-sleep-data/free-sleep.db-shm \
 
 migration_failed="false"
 
+# migrate deploy only applies the migrations in this tree; generate refreshes
+# the client, since node_modules may have been carried over from before.
 echo "Running Prisma migrations..."
-if sudo -u "$USERNAME" bash -c "cd '$SERVER_DIR' && /home/$USERNAME/.volta/bin/npm run migrate deploy"; then
+NPX="/home/$USERNAME/.volta/bin/npx"
+if sudo -u "$USERNAME" bash -c "cd '$SERVER_DIR' && '$NPX' dotenv -e .env.pod -- npx prisma migrate deploy && '$NPX' dotenv -e .env.pod -- npx prisma generate"; then
   echo "Prisma migrations completed successfully."
 else
   migration_failed="true"

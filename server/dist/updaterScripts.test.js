@@ -72,6 +72,13 @@ describe('updater shell scripts', () => {
         assert.match(src, /SRC_DIR=\$\(find "\$UNZIP_DIR" -mindepth 1 -maxdepth 1 -type d/);
         assert.doesNotMatch(src, /free-sleep-main|nightstand-main|'\*-main'/);
     });
+    // migrate dev is a development command: it can create migrations, prompt,
+    // or reset the database on drift. On a pod only committed migrations apply.
+    it('install.sh applies migrations with migrate deploy, then regenerates the client', () => {
+        const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
+        assert.doesNotMatch(src, /migrate dev|npm run migrate/);
+        assert.match(src, /prisma migrate deploy && [^\n]*prisma generate/);
+    });
     it('install.sh bootstraps node through the shared ensure-node.sh', () => {
         const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
         assert.match(src, /bash "\$REPO_DIR\/scripts\/ensure-node\.sh" "\$USERNAME"/);
