@@ -18,11 +18,7 @@ fi
 REPO_URL="https://github.com/python/cpython/archive/refs/tags/v${MAJOR_MINOR_INCREMENTAL_VERSION}.zip"
 TARGET_DIR="/home/dac/python-modules"
 
-if [ "$PYTHON_VERSION" = "39" ]; then
-  PYTHON_LIB_DIR="/usr/lib/python${MAJOR_MINOR}"
-else
-  PYTHON_LIB_DIR="/usr/lib64/python${MAJOR_MINOR}"
-fi
+PYTHON_LIB_DIR=$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["stdlib"])')
 
 # --- 1. Download and Unzip ---
 
