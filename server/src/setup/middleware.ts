@@ -73,6 +73,10 @@ function isAllowedOrigin(origin: string | undefined): boolean {
   if (
     origin.startsWith(`http://${getLocalIp()}:`) ||
     origin.startsWith('http://localhost') ||
+    // mDNS names (http://eight-pod.local:3000). The app is served as an ES
+    // module, and module script requests always carry an Origin header, so
+    // same-origin loads via the .local name must pass this check too.
+    /^http:\/\/[a-z0-9-]+\.local(:\d+)?$/i.test(origin) ||
     getLocalSubnetPrefixes().some(prefix => origin.startsWith(`http://${prefix}`)) ||
     (ALLOWED_ORIGIN && origin.startsWith(ALLOWED_ORIGIN))
   ) {
