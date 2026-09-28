@@ -6,6 +6,33 @@ is a hard fork; for the history of the projects it descends from, see
 [jmew/free-sleep](https://github.com/jmew/free-sleep) and
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
 
+## [3.3.1] - 2026-09-28
+
+- Biometrics installs on a Pod 3 that was set up with the SD card method.
+  The bundled Python module for reading XML needed a newer system library
+  than that pod has, so creating the Python environment failed. It is now
+  built against an older library that every supported pod has. The setup
+  step also looked for Python's files in the wrong folder on that pod, and
+  now asks Python where they are.
+
+- The installer stops if the download fails, and only removes an existing
+  install once the new files have unpacked.
+
+- Updates download each release from its own tagged archive. Before, the
+  newest release came from the main branch, so an update could include
+  changes made after that release, and two pods reporting the same version
+  could be running different code. This takes effect from the update after
+  this one, because the download step is run by the updater a pod already
+  has.
+
+- The biometrics log no longer records a second "exit" for a side that was
+  already empty. What the pod reports for presence is unchanged.
+
+- Opening internet access for an update now also clears the IPv6 rules that
+  blocking it adds, not only the IPv4 ones. Taken from
+  [Piyush's commit](https://github.com/EpicPi/free-sleep/commit/0642856a37e6828eb78f9d87b8024c8e72be2a6b)
+  to the EpicPi/free-sleep fork of free-sleep.
+
 ## [3.3.0] - 2026-09-26
 
 - The Status page has a Water tank entry. The pod reports its tank sensor on
