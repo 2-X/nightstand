@@ -1,11 +1,11 @@
 {
-  "name": "Free Sleep",
-  "short_name": "Free Sleep",
+  "name": "Nightstand",
+  "short_name": "Nightstand",
   "start_url": "/temperature",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#000000",
-  "description": "Free Sleep",
+  "description": "Local control for Eight Sleep Pods",
   "icons": [
     {
       "src": "/free-sleep-icon_96.png",
