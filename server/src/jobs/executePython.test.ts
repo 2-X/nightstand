@@ -37,6 +37,7 @@ mock.module('child_process', {
       calls.push(call);
     },
     spawn() { throw new Error('Unexpected service command'); },
+    execFile() { throw new Error('Unexpected privileged command'); },
   },
 });
 const access = fs.promises.access.bind(fs.promises);

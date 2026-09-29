@@ -42,6 +42,7 @@ systemctl() { echo "$* $(cat "$LIVE/version")" >> "$FIXTURE/services"; }
 ssh_cmd() { echo "$*" >> "$FIXTURE/ssh"; echo 0; }
 restore_and_report() { echo restored > "$FIXTURE/restored"; }
 fix_shared_node_modules() { :; }
+restore_switch_data() { :; }
 ${section('scripts/rollback_pod.sh', 'restart_services() {', '# --- preflight')}
 ${setup}
 ${fixtureScript}`], { env, encoding: 'utf8', input: 'y\n', timeout: 5000 });
@@ -383,6 +384,19 @@ ssh_cmd() { command bash -c "$2"; }
   assert.equal(result.liveVersion, 'failed');
 });
 
+it('a failed SQLite migration backup aborts instead of accepting a code-only archive', () => {
+  const backupScript = section('scripts/migrate/switch-to-this-fork.sh', 'say "Stage 4:', 'say "Pulling the backup');
+  const result = run(backupScript + '\necho completed > "$FIXTURE/marker"', `
+mkdir -p "$FIXTURE/persistent/free-sleep-data/lowdb"
+touch "$FIXTURE/persistent/free-sleep-data/free-sleep.db"
+sqlite3() { return 1; }
+export -f sqlite3
+ssh_cmd() { command bash -c "$2"; }
+`);
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.equal(result.marker, '');
+});
+
 for (const hasIonice of [false, true]) {
   it(`migration backup lowers copy and archive priority with ionice ${hasIonice ? 'available' : 'absent'}`, () => {
     const result = run(section('scripts/migrate/switch-to-this-fork.sh', 'say "Stage 4:', 'say "Pulling the backup'), `
@@ -402,7 +416,7 @@ export -f nice cp tar
 }
 
 for (const outcome of ['success', 'restored', 'failed', 'restore_failed']) {
-  it(`migration archive retention runs only for ${outcome === 'success' ? 'successful' : 'unsuccessful'} outcome ${outcome}`, () => {
+  it(`migration archive retention keeps two recovery archives after ${outcome}`, () => {
     const result = run(section('scripts/migrate/switch-to-this-fork.sh', 'say "Installer started.'), `
 POD_IP=fixture; REMOTE_BACKUP_DIR="$FIXTURE/backups"; REMOTE_BACKUP_TARBALL=remote; LOCAL_BACKUP_TARBALL=local
 mkdir -p "$REMOTE_BACKUP_DIR"
@@ -416,9 +430,7 @@ ssh_cmd() {
 trap 'ls "$REMOTE_BACKUP_DIR" > "$FIXTURE/marker"' EXIT
 `);
     assert.equal(result.status, outcome === 'success' ? 0 : 1, result.stdout + result.stderr);
-    assert.equal(result.marker, outcome === 'success'
-      ? 'keep.tar.gz\nmigrate-3.tar.gz\nmigrate-4.tar.gz\n'
-      : 'keep.tar.gz\nmigrate-1.tar.gz\nmigrate-2.tar.gz\nmigrate-3.tar.gz\nmigrate-4.tar.gz\n');
+    assert.equal(result.marker, 'keep.tar.gz\nmigrate-3.tar.gz\nmigrate-4.tar.gz\n');
   });
 }
 

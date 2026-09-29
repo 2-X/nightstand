@@ -32,6 +32,8 @@ SWAP_MARKER=/home/dac/free-sleep-migrate-swapped
 STAGE=/home/dac/free-sleep-migrate-staging
 ZIP=/home/dac/free-sleep-migrate.zip
 LOCK_FILE=/home/dac/free-sleep-migrate.lock
+PID_FILE=/home/dac/free-sleep-migrate.pid
+DB_PREFLIGHT=""
 STATUS_FILE=/persistent/free-sleep-data/migration-status.json
 IPTABLES_SNAPSHOT=/home/dac/free-sleep-migrate-iptables-snapshot.rules
 RESTORE_SCRIPT_SRC="$REPO_DIR_SELF/migrate/restore-original-fork.sh"
@@ -67,7 +69,12 @@ if [ -e "$LOCK_FILE" ]; then
   exit 1
 fi
 : > "$LOCK_FILE"
-cleanup_lock() { rm -f "$LOCK_FILE"; }
+echo "$$" > "$PID_FILE"
+cleanup_lock() {
+  rm -f "$LOCK_FILE" "$PID_FILE" "$ZIP" /tmp/free-sleep-migrate-health
+  rm -rf "$STAGE" "$STAGE.unzip"
+  if [ -n "$DB_PREFLIGHT" ]; then rm -rf "$DB_PREFLIGHT"; fi
+}
 trap cleanup_lock EXIT
 
 for unit in free-sleep-update.service free-sleep-rollback.service; do
@@ -179,6 +186,28 @@ else
   say "WARNING: data-compat-check.mjs missing from staged tree; skipping (older release predates this check)"
 fi
 
+# Database compatibility preflight runs the real target migrations against a
+# consistent snapshot. A divergent fork must fail here, before either tree is
+# moved or the live migration ledger is changed.
+say "Database compatibility preflight on an isolated snapshot..."
+DATABASE=/persistent/free-sleep-data/free-sleep.db
+[ -f "$STAGE/scripts/sqlite-safety.py" ] || fail "staged release lacks the database safety helper"
+if [ -f "$DATABASE" ]; then
+  DATABASE_BACKUP="/persistent/free-sleep-database-backups/$(date -u +%Y%m%dT%H%M%SZ)-$$-migration.db"
+  python3 "$STAGE/scripts/sqlite-safety.py" backup "$DATABASE" "$DATABASE_BACKUP" \
+    || fail "database snapshot failed; original install was not changed"
+  DB_PREFLIGHT=$(mktemp -d "$STAGE/.database-preflight.XXXXXX") \
+    || fail "could not create database preflight directory"
+  python3 "$STAGE/scripts/sqlite-safety.py" backup "$DATABASE_BACKUP" "$DB_PREFLIGHT/check.db" \
+    || fail "could not prepare database preflight snapshot"
+  chown -R dac:dac "$DB_PREFLIGHT" || fail "could not set database preflight ownership"
+  sudo -u dac bash -c "cd '$STAGE/server' && DATABASE_URL='file:$DB_PREFLIGHT/check.db' '$NPX' prisma migrate deploy" \
+    || fail "database histories are incompatible; original install and database were not changed. Do not reset the database"
+  rm -rf "$DB_PREFLIGHT"
+  DB_PREFLIGHT=""
+  say "Database snapshot retained at $DATABASE_BACKUP"
+fi
+
 # ==============================================================================
 # Dead-man sentinel, armed immediately before we touch their service.
 # ==============================================================================
@@ -192,7 +221,7 @@ Description=Fork-switch dead-man restore (fires only if the sentinel timer elaps
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash $RESTORE_SCRIPT_DEST
+ExecStart=/bin/bash $RESTORE_SCRIPT_DEST --sentinel
 EOF
 
 cat > "/etc/systemd/system/$SENTINEL_TIMER" <<EOF
@@ -233,8 +262,16 @@ restore_and_report() {
 # ==============================================================================
 write_status "swap" "in_progress" "stopping original service"
 say "Stopping their service (their tree is untouched up to this point)"
-systemctl stop free-sleep >/dev/null 2>&1 || true
-systemctl stop free-sleep-stream >/dev/null 2>&1 || true
+systemctl stop free-sleep >/dev/null 2>&1 \
+  || { restore_and_report "could not stop original server"; exit 1; }
+if systemctl cat free-sleep-stream >/dev/null 2>&1; then
+  systemctl stop free-sleep-stream >/dev/null 2>&1 \
+    || { restore_and_report "could not stop original streamer"; exit 1; }
+fi
+if [ -f "$DATABASE" ]; then
+  python3 "$STAGE/scripts/sqlite-safety.py" checkpoint "$DATABASE" \
+    || { restore_and_report "database checkpoint failed before swap"; exit 1; }
+fi
 
 # Preserve the pod's own rollback slot instead of rm -rf'ing it: destroying it
 # would throw away their instant-rollback history and, worse, leave a stale tree

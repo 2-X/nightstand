@@ -37,6 +37,10 @@ ABORTED_QUARANTINE=/home/dac/free-sleep-migrate-aborted
 IPTABLES_SNAPSHOT=/home/dac/free-sleep-migrate-iptables-snapshot.rules
 STATUS_FILE=/persistent/free-sleep-data/migration-status.json
 SENTINEL_UNIT=free-sleep-migrate-sentinel.timer
+SYSTEMD_DIR=/etc/systemd/system
+PID_FILE=/home/dac/free-sleep-migrate.pid
+STAGE=/home/dac/free-sleep-migrate-staging
+ZIP=/home/dac/free-sleep-migrate.zip
 
 say() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] restore-original-fork: $*"; }
 
@@ -50,7 +54,7 @@ write_status() {
 
 disarm_sentinel() {
   systemctl disable --now "$SENTINEL_UNIT" >/dev/null 2>&1 || true
-  rm -f "/etc/systemd/system/$SENTINEL_UNIT" 2>/dev/null || true
+  rm -f "$SYSTEMD_DIR/$SENTINEL_UNIT" "$SYSTEMD_DIR/free-sleep-migrate-sentinel.service" 2>/dev/null || true
   systemctl daemon-reload >/dev/null 2>&1 || true
 }
 
@@ -60,6 +64,51 @@ restore_iptables() {
     iptables-restore < "$IPTABLES_SNAPSHOT" 2>/dev/null || say "WARNING: iptables-restore failed"
   fi
 }
+
+cleanup_nightstand_services() {
+  # Remove only files owned by Nightstand. Preserve other drop-ins.
+  systemctl disable --now free-sleep-archive-raw.timer >/dev/null 2>&1 || true
+  systemctl stop free-sleep-archive-raw.service >/dev/null 2>&1 || true
+  rm -f "$SYSTEMD_DIR/free-sleep-archive-raw.timer" "$SYSTEMD_DIR/free-sleep-archive-raw.service" \
+    "$SYSTEMD_DIR/free-sleep.service.d/10-nightstand-limits.conf" \
+    "$SYSTEMD_DIR/free-sleep-stream.service.d/10-nightstand-limits.conf"
+  systemctl daemon-reload >/dev/null 2>&1 || true
+}
+
+cleanup_temporary_files() {
+  rm -rf "$ABORTED_QUARANTINE" "$STAGE" "$STAGE.unzip"
+  rm -f "$ZIP" "$PID_FILE" "$IPTABLES_SNAPSHOT" /home/dac/free-sleep-migrate.lock \
+    /home/dac/free-sleep-migrate-baseline.json /tmp/free-sleep-migrate-health
+}
+
+stop_active_installer() {
+  # systemd stops the entire installer cgroup, including npm/Prisma children.
+  if systemctl is-active --quiet free-sleep-migrate.service; then
+    systemctl stop free-sleep-migrate.service || return 1
+  elif [ -f "$PID_FILE" ]; then
+    local installer_pid installer_group
+    installer_pid=$(cat "$PID_FILE")
+    case "$installer_pid" in ''|*[!0-9]*) return 1 ;; esac
+    if kill -0 "$installer_pid" 2>/dev/null; then
+      # The nohup launcher uses setsid. Refuse to kill an unrelated process or
+      # restore alongside a runner whose descendants cannot be stopped safely.
+      [ "$installer_pid" != "$$" ] && [ "$installer_pid" != "$PPID" ] || return 1
+      tr '\0' ' ' < "/proc/$installer_pid/cmdline" | grep -q '/migrate/pod-installer.sh' || return 1
+      installer_group=$(ps -o pgid= -p "$installer_pid" | tr -d ' ')
+      [ "$installer_group" = "$installer_pid" ] || return 1
+      kill -STOP -- "-$installer_group" || return 1
+      kill -KILL -- "-$installer_group" || return 1
+    fi
+  fi
+}
+
+if [ "${1:-}" = "--sentinel" ]; then
+  stop_active_installer || {
+    say "FATAL: could not stop active installer; refusing a concurrent restore"
+    write_status "restore_failed" "installer could not be stopped safely"
+    exit 1
+  }
+fi
 
 if [ ! -f "$SWAP_MARKER" ]; then
   say "No swap marker, the swap never began (or already completed successfully)."
@@ -77,6 +126,7 @@ if [ ! -f "$SWAP_MARKER" ]; then
   # restarting is a safe no-op if it's already running.
   systemctl start free-sleep >/dev/null 2>&1 || true
   systemctl start free-sleep-stream >/dev/null 2>&1 || true
+  cleanup_temporary_files
   write_status "no_op" "no swap in progress"
   say "Nothing to move, their service has been (re)started just in case. Done."
   exit 0
@@ -118,6 +168,7 @@ if [ -d "$PREEXISTING_PREV" ]; then
   mv "$PREEXISTING_PREV" "$PREV" 2>/dev/null || say "WARNING: could not restore the pod's pre-existing rollback slot at $PREV"
 fi
 
+cleanup_nightstand_services
 restore_iptables
 
 say "Starting their original service"
@@ -136,5 +187,6 @@ else
 fi
 
 rm -f "$SWAP_MARKER"
+cleanup_temporary_files
 disarm_sentinel
 say "Done."

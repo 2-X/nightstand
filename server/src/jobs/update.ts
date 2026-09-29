@@ -1,15 +1,9 @@
-import { spawn } from 'child_process';
-import logger from '../logger.js';
+import { runPrivilegedCommand, StartHooks } from './privilegedCommand.js';
 
-export function triggerUpdateService() {
-  logger.debug('Starting free-sleep-update.service...');
-  const child = spawn('sudo', ['/bin/systemctl', 'start', 'free-sleep-update.service', '--no-block'], {
-    stdio: 'ignore',
-    detached: true,
-  });
-  child.unref();
+export function triggerUpdateService(hooks: StartHooks = {}) {
+  return runPrivilegedCommand(['/bin/systemctl', 'start', 'free-sleep-update.service', '--no-block'], 'free-sleep-update.service', hooks);
 }
 
 export default function update() {
-  triggerUpdateService();
+  return triggerUpdateService();
 }

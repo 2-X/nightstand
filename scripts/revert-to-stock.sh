@@ -16,10 +16,25 @@ STAGE=/home/dac/free-sleep-revert-staging
 FAILED=/home/dac/free-sleep-revert-failed
 ZIP=/home/dac/free-sleep-revert.zip
 BACKUPS=/persistent/free-sleep-backups
+DATABASE_BACKUPS=/persistent/free-sleep-database-backups
+SQLITE_SAFETY="$(dirname "${BASH_SOURCE[0]}")/sqlite-safety.py"
 KEEP_BACKUPS=5
 NPM=/home/dac/.volta/bin/npm
 
 say() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
+
+DATA_CHANGED=no
+ARCHIVE_WAS_ACTIVE=inactive
+restore_switch_data() {
+  [ "$DATA_CHANGED" = yes ] || return 0
+  for name in settingsDB.json schedulesDB.json; do
+    cp -p "$BK/lowdb/$name" "/persistent/free-sleep-data/lowdb/$name" || return 1
+  done
+  DATA_CHANGED=no
+  if [ "$ARCHIVE_WAS_ACTIVE" = active ]; then
+    systemctl start free-sleep-archive-raw.timer >/dev/null 2>&1 || true
+  fi
+}
 
 WAN_OPEN=no
 open_wan()  { say "Unblocking internet access (temporary)"; sh "$LIVE/scripts/unblock_internet_access.sh" >/dev/null && WAN_OPEN=yes; }
@@ -30,10 +45,17 @@ close_wan() {
     || sh "$PREV/scripts/block_internet_access.sh" >/dev/null 2>&1 || true
   WAN_OPEN=no
 }
-cleanup() { close_wan; rm -rf "$STAGE" "$STAGE.unzip" "$STAGE.health" "$ZIP"; }
-trap cleanup EXIT
+cleanup() { close_wan; restore_switch_data || say "WARNING: restore settings from $BK/lowdb before restarting"; rm -rf "$STAGE" "$STAGE.unzip" "$STAGE.health" "$ZIP"; }
 
 fail() { say "FATAL: $*"; exit 1; }
+
+# Keep the descriptor across updater exec handoffs; all three operations share it.
+if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
+  exec 9>"${NIGHTSTAND_OPERATION_LOCK:-/run/lock/free-sleep-operation.lock}" || fail "cannot open the update lock"
+  flock -n 9 || fail "another update, rollback or switch is already running"
+  export NIGHTSTAND_OPERATION_OWNER=$$
+fi
+trap cleanup EXIT
 
 # --- preflight ---------------------------------------------------------------
 [ -d "$LIVE" ] || fail "no live install at $LIVE"
@@ -74,6 +96,11 @@ if [ "$LOCK_SAME" = no ]; then
 else
   say "package-lock.json matches: reusing existing node_modules"
 fi
+# Upstream imports this even when the existing services record says installed.
+if [ -x /home/dac/venv/bin/python ]; then
+  /home/dac/venv/bin/python -m pip install sentry-sdk \
+    || fail "could not install the upstream biometrics dependency; live install untouched"
+fi
 close_wan
 
 # --- backup --------------------------------------------------------------------
@@ -82,17 +109,41 @@ BK="$BACKUPS/${TS}_v${CUR_VERSION}_prerevert-to-stock"
 say "Backing up code + data to $BK"
 mkdir -p "$BK"
 tar czf "$BK/code.tar.gz" -C /home/dac --exclude free-sleep/server/node_modules free-sleep || fail "backup failed; aborting, nothing changed"
-cp /persistent/free-sleep-data/free-sleep.db "$BK/" 2>/dev/null || true
-cp -r /persistent/free-sleep-data/lowdb "$BK/lowdb" 2>/dev/null || true
+if [ -f /persistent/free-sleep-data/free-sleep.db ]; then
+  DB_BACKUP="$DATABASE_BACKUPS/${TS}_v${CUR_VERSION}_switch.db"
+  python3 "$SQLITE_SAFETY" backup /persistent/free-sleep-data/free-sleep.db "$DB_BACKUP" \
+    || fail "database backup failed; live install untouched"
+  say "Database snapshot kept separately at $DB_BACKUP"
+fi
+cp -r /persistent/free-sleep-data/lowdb "$BK/lowdb" || fail "settings backup failed; live install untouched"
 ls -1dt "$BACKUPS"/*/ | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -rf
 
 # --- atomic swap -----------------------------------------------------------------
 say "Installing upstream free-sleep v$STAGED_VERSION (service stops now)"
 STREAM_WAS_ACTIVE=$(systemctl is-active free-sleep-stream 2>/dev/null || true)
 systemctl stop free-sleep-stream 2>/dev/null || true
-systemctl stop free-sleep
+systemctl stop free-sleep || fail "could not stop the server before converting settings"
+ARCHIVE_WAS_ACTIVE=$(systemctl is-active free-sleep-archive-raw.timer 2>/dev/null || true)
+systemctl stop free-sleep-archive-raw.timer free-sleep-archive-raw.service >/dev/null 2>&1 || true
+# Refresh the settings copy after stopping writers, before changing its shape.
+cp -rp /persistent/free-sleep-data/lowdb/. "$BK/lowdb/" || {
+  systemctl start free-sleep
+  [ "$STREAM_WAS_ACTIVE" != active ] || systemctl restart free-sleep-stream
+  [ "$ARCHIVE_WAS_ACTIVE" != active ] || systemctl start free-sleep-archive-raw.timer
+  fail "could not save the stopped settings; no conversion performed"
+}
+DATA_CHANGED=yes
+python3 "$(dirname "${BASH_SOURCE[0]}")/prepare-upstream.py" /persistent/free-sleep-data/lowdb || {
+  restore_switch_data || fail "conversion failed; restore settings from $BK/lowdb manually"
+  systemctl start free-sleep
+  [ "$STREAM_WAS_ACTIVE" != active ] || systemctl restart free-sleep-stream
+  fail "could not prepare upstream settings; original settings restored"
+}
+say "RAW archive retained; remove it manually only if no longer needed:"
+du -sh /persistent/free-sleep-data/raw-archive 2>/dev/null || true
 rm -rf "$PREV"
 mv "$LIVE" "$PREV" || {
+  restore_switch_data || fail "could not restore settings from $BK/lowdb"
   systemctl start free-sleep
   if [ "$STREAM_WAS_ACTIVE" = active ]; then
     systemctl restart free-sleep-stream 2>/dev/null || true
@@ -101,6 +152,7 @@ mv "$LIVE" "$PREV" || {
 }
 mv "$STAGE" "$LIVE" || {
   mv "$PREV" "$LIVE" || fail "swap failed and previous tree could not be restored; manual recovery required"
+  restore_switch_data || fail "could not restore settings from $BK/lowdb"
   systemctl start free-sleep
   if [ "$STREAM_WAS_ACTIVE" = active ]; then
     systemctl restart free-sleep-stream 2>/dev/null || true
@@ -146,10 +198,13 @@ rm -f "$HBODY"
 [ "$HEALTHY" = yes ] && systemctl is-active free-sleep >/dev/null || HEALTHY=no
 
 if [ "$HEALTHY" = yes ]; then
+  DATA_CHANGED=no
+  systemctl disable --now free-sleep-archive-raw.timer >/dev/null 2>&1 || true
   say "SUCCESS: pod is serving upstream free-sleep v$STAGED_VERSION. This fork kept at $PREV (no in-app way back; re-adopt via scripts/migrate/switch-to-this-fork.sh). Backup at $BK"
   # These units point at scripts that no longer exist in $LIVE.
   say "Removing fork-only systemd units (instant rollback, this revert service)"
-  rm -f /etc/systemd/system/free-sleep-rollback.service /etc/systemd/system/free-sleep-revert.service
+  rm -f /etc/systemd/system/free-sleep-rollback.service /etc/systemd/system/free-sleep-revert.service \
+    /etc/systemd/system/free-sleep-archive-raw.service /etc/systemd/system/free-sleep-archive-raw.timer
   # Upstream free-sleep never installs these. They take effect at the next service start.
   rm -f /etc/systemd/system/free-sleep.service.d/10-nightstand-limits.conf \
     /etc/systemd/system/free-sleep-stream.service.d/10-nightstand-limits.conf
@@ -165,6 +220,7 @@ systemctl stop free-sleep || true
 systemctl stop free-sleep-stream 2>/dev/null || true
 rm -rf "$FAILED"
 mv "$LIVE" "$FAILED" || {
+  restore_switch_data || fail "could not restore settings from $BK/lowdb"
   systemctl start free-sleep
   if [ "$STREAM_WAS_ACTIVE" = active ]; then
     systemctl restart free-sleep-stream 2>/dev/null || true
@@ -173,6 +229,7 @@ mv "$LIVE" "$FAILED" || {
 }
 mv "$PREV" "$LIVE" || {
   mv "$FAILED" "$LIVE" || fail "could not restore either tree; manual recovery required"
+  restore_switch_data || fail "could not restore settings from $BK/lowdb"
   systemctl start free-sleep
   if [ "$STREAM_WAS_ACTIVE" = active ]; then
     systemctl restart free-sleep-stream 2>/dev/null || true
@@ -182,6 +239,8 @@ mv "$PREV" "$LIVE" || {
 if [ "$MOVED_MODULES" = yes ]; then
   mv "$FAILED/server/node_modules" "$LIVE/server/node_modules"
 fi
+restore_switch_data || fail "could not restore settings from $BK/lowdb"
+sh "$LIVE/scripts/block_internet_access.sh" || say "WARNING: restored firewall could not be applied"
 systemctl start free-sleep
 if [ "$STREAM_WAS_ACTIVE" = active ]; then
   systemctl restart free-sleep-stream 2>/dev/null || true

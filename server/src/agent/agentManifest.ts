@@ -112,7 +112,12 @@ export const AGENT_MANIFEST: AgentEntry[] = [
   { path: 'scripts/systemd/free-sleep-rollback.service', mode: 'add', why: 'stock has no systemd directory; it writes its unit inline' },
   { path: 'scripts/systemd/free-sleep-revert.service', mode: 'add', why: 'stock has no systemd directory; it writes its unit inline' },
 
+  { path: 'scripts/sqlite-safety.py', mode: 'add', why: 'consistent database snapshots and verified migration recovery' },
+  { path: 'scripts/prepare-downgrade.py', mode: 'add', why: 'preserves configured sensor archive retention in older trees' },
+  { path: 'scripts/prepare-upstream.py', mode: 'add', why: 'prepares settings accepted by the upstream reader' },
+
   // Server routes and jobs.
+  { path: 'server/src/jobs/privilegedCommand.ts', mode: 'add', why: 'checks unit and sudo readiness before accepting an operation' },
   { path: 'server/src/jobs/update.ts', mode: 'copy', why: 'runs update.sh via the sudoers-permitted unit' },
   { path: 'server/src/jobs/rollback.ts', mode: 'add', why: 'runs rollback_pod.sh via its unit' },
   { path: 'server/src/jobs/revertToStock.ts', mode: 'add', why: 'runs revert-to-stock.sh via its unit' },

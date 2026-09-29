@@ -476,12 +476,18 @@ ssh_cmd "$SSH_PORT" "
   mkdir -p \"\$STAGE/free-sleep-data\"
   if [ -f /persistent/free-sleep-data/free-sleep.db ]; then
     if command -v sqlite3 >/dev/null 2>&1; then
-      low_priority sqlite3 /persistent/free-sleep-data/free-sleep.db '.backup '\''\$STAGE/free-sleep-data/free-sleep.db'\''' && echo 'used sqlite3 .backup'
+      low_priority sqlite3 /persistent/free-sleep-data/free-sleep.db \".backup '\$STAGE/free-sleep-data/free-sleep.db'\" || exit 1
     else
-      low_priority cp /persistent/free-sleep-data/free-sleep.db \"\$STAGE/free-sleep-data/\" && echo 'used plain copy (sqlite3 not present)'
+      low_priority python3 -c 'import sqlite3,sys; source=sqlite3.connect(sys.argv[1]); target=sqlite3.connect(sys.argv[2]); source.backup(target); target.close(); source.close()' /persistent/free-sleep-data/free-sleep.db \"\$STAGE/free-sleep-data/free-sleep.db\"
     fi
   fi
-  low_priority cp -r /persistent/free-sleep-data/lowdb \"\$STAGE/free-sleep-data/\" 2>/dev/null || true
+  if [ -f \"\$STAGE/free-sleep-data/free-sleep.db\" ]; then
+    low_priority python3 -c 'import sqlite3,sys; db=sqlite3.connect(sys.argv[1]); result=db.execute(\"PRAGMA integrity_check\").fetchall(); db.close(); sys.exit(0 if result==[(\"ok\",)] else 1)' \"\$STAGE/free-sleep-data/free-sleep.db\"
+    mkdir -p /persistent/free-sleep-database-backups
+    low_priority cp \"\$STAGE/free-sleep-data/free-sleep.db\" '/persistent/free-sleep-database-backups/migrate-${TS}.db'
+    chmod 600 '/persistent/free-sleep-database-backups/migrate-${TS}.db'
+  fi
+  low_priority cp -r /persistent/free-sleep-data/lowdb \"\$STAGE/free-sleep-data/\"
   low_priority tar czf '$REMOTE_BACKUP_TARBALL' -C \"\$STAGE\" .
   rm -rf \"\$STAGE\"
   low_priority tar tzf '$REMOTE_BACKUP_TARBALL' >/dev/null
@@ -524,10 +530,12 @@ ssh_cmd "$SSH_PORT" "chmod +x /home/dac/migrate/pod-installer.sh /home/dac/migra
 scp_to_pod "$SSH_PORT" "$IPTABLES_SNAPSHOT_LOCAL" "/home/dac/free-sleep-migrate-iptables-snapshot.rules"
 
 ssh_cmd "$SSH_PORT" "
+  rm -f /persistent/free-sleep-data/migration-status.json
   if command -v systemd-run >/dev/null 2>&1; then
     systemd-run --unit=free-sleep-migrate --collect bash /home/dac/migrate/pod-installer.sh
   else
-    nohup bash /home/dac/migrate/pod-installer.sh >/home/dac/migrate/installer.out 2>&1 & disown
+    command -v setsid >/dev/null || exit 1
+    nohup setsid bash /home/dac/migrate/pod-installer.sh >/home/dac/migrate/installer.out 2>&1 & disown
   fi
 " || fail "could not start the installer on the pod"
 
@@ -537,18 +545,25 @@ ATTEMPTS=0
 while [ "$ATTEMPTS" -lt 200 ]; do
   sleep 6
   ATTEMPTS=$((ATTEMPTS + 1))
-  STATUS_JSON=$(ssh_cmd "$SSH_PORT" "cat '$STATUS_FILE_REMOTE' 2>/dev/null") || { say "  (reconnecting...)"; continue; }
+  STATUS_JSON=$(ssh_cmd "$SSH_PORT" "if [ -f '$STATUS_FILE_REMOTE' ]; then cat '$STATUS_FILE_REMOTE'; fi") || { say "  (reconnecting...)"; continue; }
+  if [ -z "$STATUS_JSON" ] || printf '%s' "$STATUS_JSON" | grep -q '"in_progress"'; then
+    ssh_cmd "$SSH_PORT" 'systemctl is-active --quiet free-sleep-migrate.service || { pid=$(cat /home/dac/free-sleep-migrate.pid 2>/dev/null); case "$pid" in ""|*[!0-9]*) exit 1;; esac; kill -0 "$pid"; }' \
+      || fail "installer is no longer running; check the migration log and sentinel recovery before retrying"
+  fi
   [ -n "$STATUS_JSON" ] || continue
   OUTCOME=$(printf '%s' "$STATUS_JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("outcome",""))' 2>/dev/null)
   STAGE_NAME=$(printf '%s' "$STATUS_JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("stage",""))' 2>/dev/null)
   say "  [$STAGE_NAME] $OUTCOME"
   case "$OUTCOME" in
-    success)
-      # Only a completed migration retires older backups; failed attempts keep all.
+    success|restored|failed|refused|restore_failed)
       ssh_cmd "$SSH_PORT" "
         set -o pipefail
         ls -1t '$REMOTE_BACKUP_DIR'/migrate-*.tar.gz | tail -n +3 | xargs -r rm -f
       " || say "WARNING: could not prune old migration backups at $REMOTE_BACKUP_DIR"
+      ;;
+  esac
+  case "$OUTCOME" in
+    success)
       cat <<AFTERCARE
 
 ============================== Migration complete =============================

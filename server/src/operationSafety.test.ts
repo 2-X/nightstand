@@ -1,0 +1,151 @@
+import assert from 'node:assert/strict';
+import { it } from 'node:test';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { spawn, spawnSync } from 'node:child_process';
+
+const root = path.resolve('..');
+const script = (name: string) => readFileSync(path.join(root, 'scripts', name), 'utf8');
+
+for (const name of ['update.sh', 'revert-to-stock.sh']) {
+  it(`${name} does not clean the incumbent stage when its lock is refused`, () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'operation-refused-'));
+    try {
+      const stage = path.join(folder, name === 'update.sh' ? 'free-sleep-staging' : 'free-sleep-revert-staging');
+      mkdirSync(stage);
+      writeFileSync(path.join(stage, 'keep'), 'incumbent');
+      const source = script(name).replaceAll('/home/dac/', folder + '/')
+        .replaceAll('/persistent/', folder + '/persistent/');
+      const result = spawnSync('bash', ['-c', 'flock() { return 1; };\n' + source], {
+        encoding: 'utf8', env: { ...process.env, NIGHTSTAND_OPERATION_LOCK: path.join(folder, 'lock') },
+      });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout, /already running/);
+      assert.equal(readFileSync(path.join(stage, 'keep'), 'utf8'), 'incumbent');
+    } finally { rmSync(folder, { recursive: true, force: true }); }
+  });
+}
+
+it('real flock refuses all operations while another owns the shared lock', { skip: process.platform !== 'linux' }, async () => {
+  const folder = mkdtempSync(path.join(tmpdir(), 'operation-lock-'));
+  const lock = path.join(folder, 'operation.lock');
+  const holder = spawn('bash', ['-c', 'exec 9>"$1"; flock -n 9 || exit 1; echo ready; read -r finish', 'lock', lock]);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      holder.once('error', reject);
+      holder.once('exit', () => reject(new Error('lock holder exited')));
+      holder.stdout.once('data', () => resolve());
+    });
+    for (const name of ['update.sh', 'rollback_pod.sh', 'revert-to-stock.sh']) {
+      const source = script(name);
+      const begin = source.indexOf('# Keep the descriptor');
+      const end = source.indexOf('\nfi', begin) + 3;
+      const result = spawnSync('bash', ['-c', 'fail() { echo "$*"; exit 1; };\n' + source.slice(begin, end)], {
+        encoding: 'utf8', env: { ...process.env, NIGHTSTAND_OPERATION_LOCK: lock },
+      });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout, /already running/);
+    }
+  } finally {
+    holder.stdin.end('done\n');
+    await new Promise<void>(resolve => holder.once('exit', () => resolve()));
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+for (const name of ['update.sh', 'revert-to-stock.sh']) {
+  it(`${name} snapshots committed WAL rows separately from rotated code backups`, () => {
+    const source = script(name);
+    const block = source.slice(source.indexOf('# --- backup'), source.indexOf('# --- atomic swap'));
+    const result = spawnSync('python3', ['-c', `
+import pathlib, sqlite3, subprocess, sys, tempfile
+with tempfile.TemporaryDirectory() as folder:
+ root=pathlib.Path(folder); data=root/'data'; data.mkdir(); (data/'lowdb').mkdir()
+ database=data/'free-sleep.db'; writer=sqlite3.connect(database)
+ writer.execute('PRAGMA journal_mode=WAL'); writer.execute('PRAGMA wal_autocheckpoint=0')
+ writer.execute('CREATE TABLE sample(value INTEGER)'); writer.commit()
+ writer.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+ writer.executemany('INSERT INTO sample VALUES (?)', [(n,) for n in range(205)]); writer.commit()
+ block=sys.argv[1].replace('/persistent/free-sleep-data', str(data))
+ block=block.replace('/persistent/free-sleep-database-backups', str(root/'database-backups'))
+ setup='''set -uo pipefail
+BACKUPS="'''+str(root/'code-backups')+'''"; DATABASE_BACKUPS="'''+str(root/'database-backups')+'''"
+SQLITE_SAFETY="'''+sys.argv[2]+'''"; KEEP_BACKUPS=5; CUR_VERSION=3.3.1
+say() { echo "$*"; }; fail() { echo "$*"; exit 1; }; tar() { :; }
+'''
+ run=subprocess.run(['bash','-c',setup+block],capture_output=True,text=True)
+ assert run.returncode==0, run.stdout+run.stderr
+ copies=list((root/'database-backups').glob('*.db'))
+ assert len(copies)==1, 'No database snapshot outside rotating code backups'
+ with sqlite3.connect(copies[0]) as backup:
+  assert backup.execute('SELECT count(*) FROM sample').fetchone()[0]==205, 'WAL rows missing'
+ writer.close()
+`, block, path.join(root, 'scripts/sqlite-safety.py')], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  });
+}
+
+it('a low disk refusal consumes the requested update target', () => {
+  const folder = mkdtempSync(path.join(tmpdir(), 'update-preflight-'));
+  try {
+    const live = path.join(folder, 'home/dac/free-sleep');
+    const data = path.join(folder, 'persistent/free-sleep-data');
+    mkdirSync(path.join(live, 'server/src'), { recursive: true });
+    mkdirSync(data, { recursive: true });
+    writeFileSync(path.join(live, 'server/src/serverInfo.json'), '{"version":"3.3.1"}');
+    writeFileSync(path.join(data, 'update-target.json'), '{"version":"3.0.0","allowDowngrade":true}');
+    const source = script('update.sh').replaceAll('/home/dac/', `${folder}/home/dac/`)
+      .replaceAll('/persistent', `${folder}/persistent`);
+    const result = spawnSync('bash', ['-c', `
+df() { printf 'header\ndisk 100 100 0\n'; }
+flock() { return 0; }
+export -f df flock
+${source}`], { encoding: 'utf8', env: { ...process.env, NIGHTSTAND_OPERATION_LOCK: path.join(folder, 'lock') } });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /low disk/);
+    assert.throws(() => readFileSync(path.join(data, 'update-target.json')));
+  } finally { rmSync(folder, { recursive: true, force: true }); }
+});
+
+it('downgrades stay in the current updater instead of handing off safety checks', () => {
+  const source = script('update.sh');
+  const condition = source.slice(source.lastIndexOf('\n  if ', source.indexOf('say "Handing the rest')),
+    source.indexOf('say "Handing the rest'));
+  assert.match(condition, /IS_DOWNGRADE.*!=.*yes/);
+});
+
+for (const name of ['update.sh', 'rollback_pod.sh', 'revert-to-stock.sh']) {
+  it(`${name} takes the same exclusive operation lock before preflight`, () => {
+    const source = script(name);
+    assert.match(source, /NIGHTSTAND_OPERATION_LOCK.*\/run\/lock\/free-sleep-operation.lock/);
+    assert.ok(source.indexOf('flock -n 9') < source.indexOf('# --- preflight'));
+    assert.match(source, /flock -n 9.*(?:fail|exit)/);
+  });
+}
+
+it('an older archive script uses the configured retention after preparation', () => {
+  const folder = mkdtempSync(path.join(tmpdir(), 'archive-downgrade-'));
+  try {
+    const target = path.join(folder, 'archive-raw.sh');
+    const conf = path.join(folder, 'raw-archive.conf');
+    writeFileSync(target, readFileSync(path.join(root, 'fixtures/compat/archive-raw-v3.2.2.sh')));
+    writeFileSync(conf, 'RETENTION_HOURS=480\n');
+    const result = spawnSync('python3', [path.join(root, 'scripts/prepare-downgrade.py'), target, conf], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(readFileSync(target, 'utf8'), /^RETENTION_HOURS=480$/m);
+  } finally { rmSync(folder, { recursive: true, force: true }); }
+});
+
+it('an unrecognized archive script refuses a downgrade instead of deleting old data', () => {
+  const folder = mkdtempSync(path.join(tmpdir(), 'archive-downgrade-'));
+  try {
+    const target = path.join(folder, 'archive-raw.sh');
+    writeFileSync(target, '#!/bin/bash\nfind /archive -delete\n');
+    const result = spawnSync('python3',
+      [path.join(root, 'scripts/prepare-downgrade.py'), target, path.join(folder, 'missing.conf')], { encoding: 'utf8' });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /retention/i);
+    assert.equal(readFileSync(target, 'utf8'), '#!/bin/bash\nfind /archive -delete\n');
+  } finally { rmSync(folder, { recursive: true, force: true }); }
+});

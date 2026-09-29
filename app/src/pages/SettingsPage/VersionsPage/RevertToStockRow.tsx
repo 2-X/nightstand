@@ -57,9 +57,31 @@ export default function RevertToStockRow({ runningVersion }: Props) {
           { phase === 'idle' && (
             <DialogContentText component="div">
               <Typography variant="body2" sx={ { mb: 2 } }>
-                Replace Nightstand with the current upstream free-sleep build. Nightstand features are removed,
-                but settings and sleep data remain on the Pod. Schedules and alarms pause during restart.
+                Replace the app with the current upstream free-sleep build. Settings and sleep data remain on the Pod.
+                Schedules and alarms pause during restart.
               </Typography>
+              <Typography variant="body2" sx={ { mb: 2 } }>
+                A copy of the original code and settings is saved under /persistent/free-sleep-backups/
+                in a timestamped prerevert-to-stock directory. A consistent sleep database backup is saved
+                separately under /persistent/free-sleep-database-backups/.
+              </Typography>
+              <Typography variant="body2" sx={ { mb: 2 } }>
+                Upstream keeps only the first enabled alarm per day, limits vibration to 180 seconds,
+                and does not run one-time alarms. Level temperatures become Fahrenheit and base-control
+                taps become alarm-dismiss actions. The original settings remain in the backup.
+              </Typography>
+              <Typography variant="body2" sx={ { mb: 2 } }>
+                This does not remove everything Nightstand installed. Systemd units, disabled timers,
+                drop-ins, sudoers rules, firewall rules, the watchdog setting, raw-archive/ and backups
+                may remain outside the app directory. The archive timer is stopped and disabled;
+                the switch log reports the retained archive size so you can decide whether to delete it.
+              </Typography>
+              <Alert severity="warning" sx={ { mb: 2 } }>
+                Upstream's first update may print "reset, all data will be lost". Do not follow that
+                reset instruction: the existing data is intact. Its installer can also lose recent
+                sleep records from the database WAL. Keep the backup before running upstream updates.
+                Remote access through Tailscale ends at upstream's first update; arrange local or SSH access first.
+              </Alert>
               <Typography variant="body2">
                 Returning to Nightstand requires the migration tool from a computer with SSH access.
                 If installation checks fail, the Pod attempts rollback. Recovery may require SSH.

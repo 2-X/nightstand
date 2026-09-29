@@ -8,6 +8,7 @@ import semver from 'semver';
 import { postUpdate } from '@api/update.ts';
 import { migrationsApplied, useUpdateProgress } from '@api/useUpdateProgress.ts';
 import type { Release } from '@api/releases.ts';
+import { downgradeWarnings } from './downgradeWarnings';
 import { palette } from '@design/tokens';
 
 type Props = {
@@ -69,6 +70,9 @@ export default function ReleaseRow({ release, runningVersion, offerReinstall = f
               { ' ' }The app, schedules, and alarms pause during restart. Recovery may require SSH.
             </DialogContentText>
           ) }
+          { phase === 'idle' && isDowngrade && <Alert severity="warning" sx={ { mt: 2 } }>
+            <ul>{ downgradeWarnings(release, runningVersion).map(warning => <li key={ warning }>{ warning }</li>) }</ul>
+          </Alert> }
           { phase === 'updating' && (
             <Stack spacing={ 2 } alignItems="center" sx={ { py: 2 } }>
               <CircularProgress/>

@@ -6,6 +6,8 @@ import { triggerRollbackService } from '../../jobs/rollback.js';
 import { triggerRevertToStockService } from '../../jobs/revertToStock.js';
 import { UpdateRequestSchema, RollbackInfo } from './updateSchema.js';
 
+import { PrivilegedCommandError } from '../../jobs/privilegedCommand.js';
+
 const router = express.Router();
 
 // The updater keeps the previous install here after every swap (see
@@ -26,18 +28,26 @@ router.post('/', async (req, res) => {
   }
 
   const { targetVersion, allowDowngrade } = parsed.data;
+  let ownsTarget = false;
   try {
-    if (targetVersion) {
-      await fs.promises.writeFile(
-        TARGET_FILE,
-        JSON.stringify({ version: targetVersion, allowDowngrade: !!allowDowngrade })
-      );
-    }
-    triggerUpdateService();
+    await triggerUpdateService({
+      beforeStart: async () => {
+        if (targetVersion) {
+          ownsTarget = true;
+          await fs.promises.writeFile(
+            TARGET_FILE,
+            JSON.stringify({ version: targetVersion, allowDowngrade: !!allowDowngrade })
+          );
+        }
+      },
+      onStartFailure: async () => {
+        if (ownsTarget) await fs.promises.unlink(TARGET_FILE).catch(() => undefined);
+      },
+    });
     res.status(204).end();
   } catch (error) {
     logger.error('Failed to start update', error);
-    res.status(500).json({ message: 'Unable to start update' });
+    res.status(500).json({ message: error instanceof PrivilegedCommandError ? error.message : 'Unable to start update' });
   }
 });
 
@@ -57,24 +67,26 @@ router.get('/rollback-info', async (_req, res) => {
 
 router.post('/rollback', async (_req, res) => {
   try {
-    triggerRollbackService();
+    await triggerRollbackService();
     res.status(204).end();
   } catch (error) {
     logger.error('Failed to start rollback', error);
-    res.status(500).json({ message: 'Unable to start rollback' });
+    res.status(500).json({ message: error instanceof PrivilegedCommandError ? error.message : 'Unable to start rollback' });
   }
 });
 
-// Full revert to plain upstream free-sleep, undoing Nightstand entirely.
+// Switch the app to upstream free-sleep. System configuration and backups can remain.
 // Reversible only by re-adopting via scripts/migrate/switch-to-this-fork.sh
 // afterward. There's no in-app way back once upstream free-sleep is running.
 router.post('/revert-to-stock', async (_req, res) => {
   try {
-    triggerRevertToStockService();
+    await triggerRevertToStockService();
     res.status(204).end();
   } catch (error) {
     logger.error('Could not start switching to upstream free-sleep.', error);
-    res.status(500).json({ message: 'Could not start switching to upstream free-sleep.' });
+    res.status(500).json({
+      message: error instanceof PrivilegedCommandError ? error.message : 'Could not start switching to upstream free-sleep.',
+    });
   }
 });
 
