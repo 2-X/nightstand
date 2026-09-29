@@ -22,6 +22,9 @@ type Epoch = {
   stage: SleepStage;
 };
 
+export type StageVitals = { timestamp: number; heart_rate: number | null; hrv: number | null; breathing_rate: number | null };
+export type StageMovement = { timestamp: number; total_movement: number };
+
 // Heuristic sleep-stage classifier with three improvements over the original
 // per-epoch version:
 //
@@ -52,13 +55,16 @@ type Epoch = {
 const BUCKET_SECONDS = 300;
 const SLEEP_HR_DELTA_BPM = 5;
 const ONSET_REQUIRED_CALM_BUCKETS = 3; // 15 min of sustained calm = real sleep
+// Below this share of buckets with a vitals row, onset/offset detection is
+// guessing, so the per-epoch stages are kept as-is and the night is flagged.
+const MIN_VITALS_COVERAGE = 0.6;
 
 function classifyStages(
-  vitals: Array<{ timestamp: number; heart_rate: number | null; hrv: number | null; breathing_rate: number | null }>,
-  movements: Array<{ timestamp: number; total_movement: number }>,
+  vitals: StageVitals[],
+  movements: StageMovement[],
   periodStart: number,
   periodEnd: number,
-): Epoch[] {
+): { epochs: Epoch[]; lowCoverage: boolean } {
   // Build vitals lookup by 5-min bucket
   const vitalByBucket = new Map<number, typeof vitals[number]>();
   for (const v of vitals) {
@@ -124,6 +130,9 @@ function classifyStages(
     br: number | null;
     hrv: number | null;
     isCalm: boolean;
+    // No vitals row and low movement: unknown, so it neither extends nor
+    // breaks a calm or sleep run.
+    isNeutral: boolean;
     stage: SleepStage;
   };
   const working: WorkingEpoch[] = [];
@@ -139,6 +148,7 @@ function classifyStages(
     const hrCalm = hr !== null && hr <= baselineHR + SLEEP_HR_DELTA_BPM;
     const moveCalm = movement < calmMoveThreshold;
     const isCalm = hrCalm && moveCalm;
+    const isNeutral = hr === null && moveCalm;
 
     // HRV-driven signal (only meaningful when the per-night HRV spread is
     // reasonable - see hrvSpreadOk above). hrvLow is intentionally unused
@@ -177,7 +187,7 @@ function classifyStages(
 
     if (stage !== 'awake') lastClassifiedSleepStage = stage;
 
-    working.push({ bucket: b, movement, hr, br, hrv, isCalm, stage });
+    working.push({ bucket: b, movement, hr, br, hrv, isCalm, isNeutral, stage });
   }
 
   // Sleep-onset detection: first run of ≥ONSET_REQUIRED_CALM_BUCKETS consecutive
@@ -186,11 +196,14 @@ function classifyStages(
   // pre-sleep period correctly.
   let onsetIdx = -1;
   let calmRun = 0;
+  let calmRunStart = -1;
   for (let i = 0; i < working.length; i++) {
+    if (working[i].isNeutral) continue;
     if (working[i].isCalm) {
+      if (calmRun === 0) calmRunStart = i;
       calmRun++;
       if (calmRun >= ONSET_REQUIRED_CALM_BUCKETS) {
-        onsetIdx = i - ONSET_REQUIRED_CALM_BUCKETS + 1;
+        onsetIdx = calmRunStart;
         break;
       }
     } else {
@@ -214,12 +227,15 @@ function classifyStages(
   const OFFSET_REQUIRED_SLEEP_BUCKETS = 10; // 50 min of continuous sleep
   let offsetIdx = working.length;
   let sleepRun = 0;
+  let sleepRunEnd = -1;
   for (let i = working.length - 1; i >= 0; i--) {
+    if (working[i].isNeutral) continue;
     if (working[i].stage !== 'awake') {
+      if (sleepRun === 0) sleepRunEnd = i;
       sleepRun++;
       if (sleepRun >= OFFSET_REQUIRED_SLEEP_BUCKETS) {
         // First epoch AFTER the sustained sleep block, walking forward.
-        offsetIdx = i + OFFSET_REQUIRED_SLEEP_BUCKETS;
+        offsetIdx = sleepRunEnd + 1;
         break;
       }
     } else {
@@ -227,19 +243,100 @@ function classifyStages(
     }
   }
 
+  const covered = working.filter((w) => w.hr !== null).length;
+  const lowCoverage = working.length === 0 || covered / working.length < MIN_VITALS_COVERAGE;
+
   // If we never found a calm run, leave classifications as-is - the user
   // probably never properly slept (or vitals are too sparse to tell), and
   // the per-epoch heuristic is the best we have.
-  if (onsetIdx >= 0) {
+  if (onsetIdx >= 0 && !lowCoverage) {
     for (let i = 0; i < onsetIdx; i++) working[i].stage = 'awake';
     for (let i = offsetIdx; i < working.length; i++) working[i].stage = 'awake';
   }
 
-  return working.map((w) => ({
+  const epochs = working.map((w) => ({
     startUnix: w.bucket,
     endUnix: w.bucket + BUCKET_SECONDS,
     stage: w.stage,
   }));
+  return { epochs, lowCoverage };
+}
+
+export type StageSummary = {
+  epochs: Epoch[];
+  totals: Record<SleepStage, number>;
+  percentages: Record<SleepStage, number>;
+  totalSeconds: number;
+  asleepSeconds: number;
+  lowCoverage: boolean;
+};
+
+// The biometrics writer stores 0 when it had no HRV or breathing estimate.
+export function toStageVitals(row: StageVitals): StageVitals {
+  return {
+    timestamp: row.timestamp,
+    heart_rate: row.heart_rate,
+    hrv: row.hrv || null,
+    breathing_rate: row.breathing_rate || null,
+  };
+}
+
+// Classify [startUnix, endUnix] and roll the epochs up into per-stage totals.
+export function summarizeStages(
+  vitals: StageVitals[],
+  movements: StageMovement[],
+  startUnix: number,
+  endUnix: number,
+): StageSummary {
+  const { epochs: rawEpochs, lowCoverage } = classifyStages(vitals, movements, startUnix, endUnix);
+
+  // Clamp each epoch to the requested period AND drop epochs that fall
+  // entirely outside it. Belt-and-suspenders - the SQL query already filters
+  // by timestamp range, but the classifier extends each epoch by 300s so the
+  // last one could overrun endUnix.
+  const epochs = rawEpochs
+    .map((e) => ({
+      ...e,
+      startUnix: Math.max(e.startUnix, startUnix),
+      endUnix: Math.min(e.endUnix, endUnix),
+    }))
+    .filter((e) => e.endUnix > e.startUnix);
+
+  // Roll up totals per stage
+  const totals: Record<SleepStage, number> = { awake: 0, rem: 0, light: 0, deep: 0 };
+  for (const e of epochs) totals[e.stage] += e.endUnix - e.startUnix;
+  const totalSeconds = Object.values(totals).reduce((a, b) => a + b, 0) || 1;
+  const percentages: Record<SleepStage, number> = {
+    awake: Math.round((totals.awake / totalSeconds) * 100),
+    rem:   Math.round((totals.rem / totalSeconds) * 100),
+    light: Math.round((totals.light / totalSeconds) * 100),
+    deep:  Math.round((totals.deep / totalSeconds) * 100),
+  };
+
+  return { epochs, totals, percentages, totalSeconds, asleepSeconds: totals.light + totals.rem + totals.deep, lowCoverage };
+}
+
+export async function loadStageSummary(side: string, startUnix: number, endUnix: number): Promise<StageSummary> {
+  const vitalsQuery: Prisma.vitalsWhereInput = {
+    side,
+    timestamp: { gte: startUnix, lte: endUnix },
+  };
+  const vitalsRaw = await prisma.vitals.findMany({
+    where: vitalsQuery,
+    orderBy: { timestamp: 'asc' },
+  });
+
+  const movements = await prisma.movement.findMany({
+    where: { side, timestamp: { gte: startUnix, lte: endUnix } },
+    orderBy: { timestamp: 'asc' },
+  });
+
+  return summarizeStages(
+    vitalsRaw.map(toStageVitals),
+    movements.map((m) => ({ timestamp: m.timestamp, total_movement: m.total_movement })),
+    startUnix,
+    endUnix,
+  );
 }
 
 router.get(
@@ -264,58 +361,9 @@ router.get(
 
     const startUnix = moment(startTime).unix();
     const endUnix = moment(endTime).unix();
+    const { epochs, totals, percentages, totalSeconds, lowCoverage } = await loadStageSummary(side, startUnix, endUnix);
 
-    const vitalsQuery: Prisma.vitalsWhereInput = {
-      side,
-      timestamp: { gte: startUnix, lte: endUnix },
-    };
-    const vitalsRaw = await prisma.vitals.findMany({
-      where: vitalsQuery,
-      orderBy: { timestamp: 'asc' },
-    });
-
-    const movements = await prisma.movement.findMany({
-      where: { side, timestamp: { gte: startUnix, lte: endUnix } },
-      orderBy: { timestamp: 'asc' },
-    });
-
-    // Bucket-snap + dedupe is now inside classifyStages.
-    const rawEpochs = classifyStages(
-      vitalsRaw.map((v) => ({
-        timestamp: v.timestamp,
-        heart_rate: v.heart_rate,
-        hrv: v.hrv,
-        breathing_rate: v.breathing_rate,
-      })),
-      movements.map((m) => ({ timestamp: m.timestamp, total_movement: m.total_movement })),
-      startUnix,
-      endUnix,
-    );
-
-    // Clamp each epoch to the requested period AND drop epochs that fall
-    // entirely outside it. Belt-and-suspenders - the SQL query already filters
-    // by timestamp range, but the classifier extends each epoch by 300s so the
-    // last one could overrun endUnix.
-    const epochs = rawEpochs
-      .map((e) => ({
-        ...e,
-        startUnix: Math.max(e.startUnix, startUnix),
-        endUnix: Math.min(e.endUnix, endUnix),
-      }))
-      .filter((e) => e.endUnix > e.startUnix);
-
-    // Roll up totals per stage
-    const totals: Record<SleepStage, number> = { awake: 0, rem: 0, light: 0, deep: 0 };
-    for (const e of epochs) totals[e.stage] += e.endUnix - e.startUnix;
-    const totalSeconds = Object.values(totals).reduce((a, b) => a + b, 0) || 1;
-    const percentages: Record<SleepStage, number> = {
-      awake: Math.round((totals.awake / totalSeconds) * 100),
-      rem:   Math.round((totals.rem / totalSeconds) * 100),
-      light: Math.round((totals.light / totalSeconds) * 100),
-      deep:  Math.round((totals.deep / totalSeconds) * 100),
-    };
-
-    return res.json({ active: true, epochs, totals, percentages, totalSeconds });
+    return res.json({ active: true, epochs, totals, percentages, totalSeconds, lowCoverage });
   },
 );
 
