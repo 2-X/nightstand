@@ -1,0 +1,34 @@
+{
+  "timeZone": "UTC",
+  "features": {
+    "rhythms": true,
+    "logsViewer": false
+  },
+  "left": {
+    "futureSide": {
+      "kept": true
+    },
+    "scheduleOverrides": {
+      "pause": {
+        "enabled": true
+      }
+    },
+    "taps": {
+      "doubleTap": {
+        "type": "temperature",
+        "change": "decrement",
+        "amount": 1
+      },
+      "quadTap": {
+        "type": "alarm",
+        "behavior": "snooze",
+        "snoozeDuration": 300,
+        "inactiveAlarmBehavior": "none"
+      }
+    }
+  },
+  "futureTop": {
+    "version": 1
+  },
+  "strayScalar": 42
+}

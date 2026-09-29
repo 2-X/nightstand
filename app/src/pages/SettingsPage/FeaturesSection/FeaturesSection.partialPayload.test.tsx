@@ -20,7 +20,7 @@ describe('FeaturesSection partial payload handling', () => {
   beforeEach(() => window.addEventListener('unhandledrejection', swallowRejection));
   afterEach(() => window.removeEventListener('unhandledrejection', swallowRejection));
 
-  it('reports an error when the settings payload is missing the features object', async () => {
+  it('keeps older settings readable with unsupported feature controls disabled', async () => {
     const settingsWithoutFeatures: Record<string, unknown> = { ...getSettings() };
     delete settingsWithoutFeatures.features;
     server.use(
@@ -29,10 +29,12 @@ describe('FeaturesSection partial payload handling', () => {
 
     renderWithProviders(<FeaturesSection />);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load features.');
+    expect(await screen.findByRole('switch', { name: 'Biometrics' })).toBeEnabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-
-    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    for (const name of ['Sleep score and stages', 'Presence auto-off', 'Level temperature display', 'One-time alarm']) {
+      expect(screen.getByRole('switch', { name })).toBeDisabled();
+    }
   });
 
   it('reports an error when the settings payload is an empty object', async () => {

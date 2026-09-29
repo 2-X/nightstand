@@ -1,0 +1,76 @@
+import { expect, it } from 'vitest';
+import { validateResponse } from './responseValidation';
+import { getDeviceStatus, getSchedules, getServices, getSettings } from '../mocks/mockData';
+import { SettingsSchema } from './settingsSchema';
+import { DailyScheduleSchema } from './schedulesSchema';
+
+it.each([
+  ['/settings', getSettings], ['/schedules', getSchedules], ['/services', getServices], ['/deviceStatus', getDeviceStatus],
+] as const)('strips future keys from %s without changing the source', (path, fixture) => {
+  const data = structuredClone(fixture());
+  const addUnknown = (value: unknown) => {
+    if (!value || typeof value !== 'object') return;
+    if (Array.isArray(value)) { value.forEach(addUnknown); return; }
+    Object.values(value).forEach(addUnknown);
+    // Records have meaningful keys, so only add to objects with named fields.
+    if (Object.keys(value).some(key => /^[a-z]/i.test(key))) Object.assign(value, { futureField: true });
+  };
+  addUnknown(data);
+  expect(validateResponse(path, data)).toEqual(fixture());
+  expect(data).toHaveProperty('futureField', true);
+});
+
+it('accepts upstream status without sensor temperatures', () => {
+  const status: Record<string, unknown> = { ...getDeviceStatus() };
+  delete status.sensorTemps;
+  expect(validateResponse('/deviceStatus', status)).toEqual(status);
+});
+
+it('accepts legacy alarm counts and keeps request limits', () => {
+  const schedules = structuredClone(getSchedules());
+  schedules.left.monday.alarms = Array.from({ length: 12 }, () => ({ ...schedules.left.monday.alarm }));
+  expect(validateResponse('/schedules', schedules)).toEqual(schedules);
+  expect(DailyScheduleSchema.safeParse(schedules.left.monday).success).toBe(false);
+});
+
+it('keeps known-value bounds and strict requests', () => {
+  const settings = { ...getSettings(), future: true };
+  expect(SettingsSchema.safeParse(settings).success).toBe(false);
+  expect(() => validateResponse('/deviceStatus', {
+    ...getDeviceStatus(), left: { ...getDeviceStatus().left, targetTemperatureF: 500 },
+  })).toThrow();
+});
+
+it('accepts fields absent from older settings and services', () => {
+  const settings = structuredClone(getSettings()) as unknown as Record<string, unknown>;
+  for (const key of ['features', 'rebootDaily', 'rawArchiveRetentionDays', 'updateChannel']) delete settings[key];
+  for (const side of ['left', 'right']) {
+    delete (settings[side] as Record<string, unknown>).oneOffAlarm;
+    delete (settings[side] as Record<string, unknown>).alarmsEnabled;
+  }
+  expect(() => validateResponse('/settings', settings)).not.toThrow();
+  const services = structuredClone(getServices());
+  const jobs = services.biometrics.jobs as unknown as Record<string, unknown>;
+  for (const key of ['calibrateLeft', 'calibrateRight', 'pumpLeft', 'pumpRight']) delete jobs[key];
+  expect(() => validateResponse('/services', services)).not.toThrow();
+});
+
+it('strips future compatibility fixtures after defaults are backfilled', async () => {
+  const { default: merge } = await import('lodash/merge');
+  const settings = await import('../../../fixtures/compat/future/settingsDB.json');
+  const schedules = await import('../../../fixtures/compat/future/schedulesDB.json');
+  const services = await import('../../../fixtures/compat/future/servicesDB.json');
+  for (const [path, defaults, fixture] of [
+    ['/settings', getSettings(), settings.default],
+    ['/schedules', getSchedules(), schedules.default],
+    ['/services', getServices(), services.default],
+  ] as const) {
+    const input = merge({}, defaults, fixture);
+    const result = validateResponse(path, input);
+    const text = JSON.stringify(result);
+    for (const key of ['futureTop', 'futureSide', 'futureDay', 'strayScalar', 'futureService', 'sentryLogging', 'rhythms', 'pause']) {
+      expect(text).not.toContain(`"${key}"`);
+    }
+    expect(input).toEqual(merge({}, defaults, fixture));
+  }
+});

@@ -102,3 +102,13 @@ it('makes changing the upcoming alarm an explicit action beside its time', async
   fireEvent.click(screen.getByRole('button', { name: 'Change' }));
   expect(await screen.findByRole('dialog', { name: /Change this night's recurring alarms/ })).toBeInTheDocument();
 });
+
+it('shows upstream recurring alarms when the optional alarmsEnabled flag is absent', async () => {
+  alarms([['23:00', true]]);
+  const settings = structuredClone(getSettings());
+  settings.timeZone = 'UTC';
+  delete (settings.left as Partial<typeof settings.left>).alarmsEnabled;
+  server.use(http.get('*/settings', () => HttpResponse.json(settings)));
+  renderWithProviders(<AlarmNotification />);
+  expect(await screen.findByText('Alarm today at 11:00 PM')).toBeInTheDocument();
+});

@@ -1,4 +1,4 @@
-import { DailySchedule, DailyScheduleSchema } from '@api/schedulesSchema';
+import { DailySchedule, DailyScheduleSchema, AlarmScheduleSchema, MAX_ALARMS_PER_DAY } from '@api/schedulesSchema';
 
 export function minutesSincePowerOn(time: string, powerOn: string): number {
   const minutes = (value: string) => {
@@ -21,8 +21,10 @@ export function temperatureInPowerWindow(time: string, power: DailySchedule['pow
   return Number.isFinite(offset) && offset > 0 && offset < end;
 }
 
-export function validateSchedule(schedule: DailySchedule | undefined) {
-  const parsed = DailyScheduleSchema.safeParse(schedule);
+export function validateSchedule(schedule: DailySchedule | undefined, existingAlarmCount = 0) {
+  const parsed = DailyScheduleSchema.extend({
+    alarms: AlarmScheduleSchema.array().max(Math.max(MAX_ALARMS_PER_DAY, existingAlarmCount)),
+  }).safeParse(schedule);
   if (!parsed.success) return { invalidTimes: 0, schemaIssues: parsed.error.issues };
   const validSchedule = parsed.data;
   const alarms = validSchedule.alarms.length ? validSchedule.alarms : [validSchedule.alarm];
@@ -32,7 +34,7 @@ export function validateSchedule(schedule: DailySchedule | undefined) {
   return { invalidTimes, schemaIssues: [] };
 }
 
-export function scheduleIsValid(schedule: DailySchedule | undefined): boolean {
-  const { invalidTimes, schemaIssues } = validateSchedule(schedule);
+export function scheduleIsValid(schedule: DailySchedule | undefined, existingAlarmCount = 0): boolean {
+  const { invalidTimes, schemaIssues } = validateSchedule(schedule, existingAlarmCount);
   return invalidTimes === 0 && schemaIssues.length === 0;
 }

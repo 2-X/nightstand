@@ -89,7 +89,10 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
   },
 
   isValid: () => {
-    return scheduleIsValid(get().selectedSchedule);
+    const { selectedSchedule, originalSchedules, selectedDay, selectedDays } = get();
+    const { side } = useAppStore.getState();
+    const days = [selectedDay, ...LOWERCASE_DAYS.filter(day => selectedDays[day])];
+    return days.every(day => scheduleIsValid(selectedSchedule, originalSchedules?.[side]?.[day]?.alarms?.length ?? 0));
   },
   changesPresent: false,
   checkForChanges: () => {

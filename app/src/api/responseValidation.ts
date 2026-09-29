@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { DeviceStatusSchema } from './deviceStatusSchema';
 import { SettingsSchema } from './settingsSchema';
-import { SchedulesSchema } from './schedulesSchema';
+import { AlarmScheduleSchema, DailyScheduleSchema, SideScheduleSchema, SchedulesSchema } from './schedulesSchema';
 import { ServicesSchema } from '../../../server/src/db/servicesSchema';
 import { sleepRecordSchema } from './sleepSchema';
 import { ChangelogResponseSchema } from './changelogSchema';
@@ -10,6 +10,21 @@ import { StorageInfoSchema } from './storageSchema';
 import { StatusInfoSchema } from './serverStatusSchema';
 import { vitalsRecordSchema } from '../../../server/src/db/vitalsRecordSchema';
 import { movementRecordSchema } from '../../../server/src/db/movementRecordSchema';
+
+import { responseSchema } from './responseSchema';
+
+const dailyResponse = DailyScheduleSchema.extend({ alarms: z.array(AlarmScheduleSchema).default([]) });
+const sideResponse = SideScheduleSchema.extend(Object.fromEntries(
+  Object.keys(SideScheduleSchema.shape).map(day => [day, dailyResponse]),
+) as Record<keyof typeof SideScheduleSchema.shape, typeof dailyResponse>);
+
+const sideSettingsResponse = SettingsSchema.shape.left.partial({ oneOffAlarm: true, alarmsEnabled: true });
+const settingsResponse = SettingsSchema.partial({ features: true, rebootDaily: true, rawArchiveRetentionDays: true, updateChannel: true })
+  .extend({ left: sideSettingsResponse, right: sideSettingsResponse,
+    features: SettingsSchema.shape.features.partial().optional() });
+const servicesResponse = ServicesSchema.extend({ biometrics: ServicesSchema.shape.biometrics.extend({
+  jobs: ServicesSchema.shape.biometrics.shape.jobs.partial({ calibrateLeft: true, calibrateRight: true, pumpLeft: true, pumpRight: true }),
+}) });
 
 const seconds = z.number().finite().nonnegative();
 const percentage = seconds.max(100);
@@ -32,10 +47,10 @@ const calibrationSide = z.object({
 // Validate before responses reach query caches or controls. The Pod's schemas
 // remain the source of truth; local schemas cover responses with only TS types.
 const responseSchemas: Record<string, z.ZodTypeAny> = {
-  '/deviceStatus': DeviceStatusSchema,
-  '/settings': SettingsSchema,
-  '/schedules': SchedulesSchema,
-  '/services': ServicesSchema,
+  '/deviceStatus': responseSchema(DeviceStatusSchema.extend({ sensorTemps: DeviceStatusSchema.shape.sensorTemps.optional() })),
+  '/settings': responseSchema(settingsResponse),
+  '/schedules': responseSchema(SchedulesSchema.extend({ left: sideResponse, right: sideResponse })),
+  '/services': responseSchema(servicesResponse),
   '/metrics/sleep': sleepRecordSchema.refine(record => record.sleep_period_seconds >= 0
     && Date.parse(record.left_bed_at) >= Date.parse(record.entered_bed_at), 'Invalid sleep interval').array(),
   '/metrics/vitals': vitalsRecordSchema.array(),

@@ -67,7 +67,8 @@ export default function SchedulePage() {
   const nextDay = LOWERCASE_DAYS[(LOWERCASE_DAYS.indexOf(selectedDay) + 1) % 7];
   const sideLabel = settings?.[side]?.name || (side === 'left' ? 'Left side' : 'Right side');
   const affectedDays = _.uniq([selectedDay, ...Object.keys(selectedDays).filter(day => selectedDays[day as DayOfWeek])]);
-  const { invalidTimes, schemaIssues } = validateSchedule(selectedSchedule);
+  const { invalidTimes, schemaIssues } = validateSchedule(selectedSchedule, Math.min(...affectedDays.map(day =>
+    useScheduleStore.getState().originalSchedules?.[side]?.[day as DayOfWeek]?.alarms?.length ?? 0)));
   const [showSchemaError, setShowSchemaError] = useState(false);
   const schemaIssue = schemaIssues[0];
   const schemaField = schemaIssue?.path.join('.') === 'power.onTemperature' ? 'Bedtime temperature'
@@ -221,7 +222,7 @@ export default function SchedulePage() {
         <Button variant="contained" onClick={ startNight }>Set bedtime and wake time</Button>
       </Box> }
       { !firstRun && <ApplyToOtherDaysAccordion/> }
-      { settings?.features.oneOffAlarms && <Accordion sx={ { width: '100%' } } slotProps={ { transition: { unmountOnExit: true } } }>
+      { settings?.features?.oneOffAlarms && <Accordion sx={ { width: '100%' } } slotProps={ { transition: { unmountOnExit: true } } }>
         <AccordionSummary expandIcon={ <ExpandMore/> }>
           <Typography component="span" variant="inherit">Add one-time alarm</Typography>
         </AccordionSummary>

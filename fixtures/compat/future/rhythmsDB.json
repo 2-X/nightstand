@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "rhythms": [
+    {
+      "name": "weekday",
+      "pause": true
+    }
+  ]
+}

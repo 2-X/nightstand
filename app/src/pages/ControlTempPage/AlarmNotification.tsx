@@ -26,7 +26,7 @@ export default function AlarmNotification() {
     setDisabledOpen(false);
   }, [side]);
 
-  if (!settings || !schedules || !settings[side].alarmsEnabled || settings[side].awayMode) return null;
+  if (!settings || !schedules || settings[side].alarmsEnabled === false || settings[side].awayMode) return null;
   const override = settings[side].scheduleOverrides.alarm;
   const night = nextAlarmNight(schedules[side], settings.timeZone, moment.tz(settings.timeZone), override);
   if (!night) return null;

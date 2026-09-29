@@ -1,0 +1,26 @@
+{
+  "left": {
+    "monday": {
+      "power": {
+        "enabled": true,
+        "on": "21:00",
+        "off": "09:00"
+      },
+      "alarm": {
+        "time": "06:17",
+        "enabled": false,
+        "duration": 27
+      },
+      "futureDay": {
+        "rhythm": "weekday"
+      }
+    },
+    "futureDay": {
+      "kept": true
+    }
+  },
+  "futureSide": {
+    "kept": true
+  },
+  "strayScalar": 42
+}

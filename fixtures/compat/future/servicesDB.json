@@ -1,0 +1,8 @@
+{
+  "sentryLogging": {
+    "enabled": false
+  },
+  "futureService": {
+    "enabled": true
+  }
+}

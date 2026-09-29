@@ -190,3 +190,14 @@ it('resumes a rejected relative turn-off when changing bedtime makes the wake va
   expect(screen.queryByText('Wake time is before bedtime, so turn off was not moved.')).not.toBeInTheDocument();
   expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('19:30');
 });
+
+it('shows every legacy alarm and explains the add limit while permitting edits', () => {
+  const schedules = structuredClone(getSchedules());
+  schedules.left.monday.alarms = Array.from({ length: 12 }, () => ({ ...schedules.left.monday.alarm, enabled: true, time: '07:00' }));
+  useScheduleStore.getState().setOriginalSchedules(schedules);
+  render(<ScheduleTimeline format="level"/>);
+  expect(screen.getByText(/12 alarms are saved/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Add alarm' })).toBeDisabled();
+  expect(useScheduleStore.getState().getEditedAlarms()).toHaveLength(12);
+  expect(useScheduleStore.getState().isValid()).toBe(true);
+});

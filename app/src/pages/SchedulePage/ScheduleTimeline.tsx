@@ -372,6 +372,10 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
         </Typography> }
         { fullDay && <Typography variant="caption" sx={ { display: 'block' } }>Next day, after 24 hours</Typography> }
       </Paper>
+      { alarms.length > MAX_ALARMS_PER_DAY && <Typography role="status" variant="body2" color="text.secondary">
+        { alarms.length } alarms are saved for this day. All are shown and can be edited or removed.
+        Remove alarms until fewer than { MAX_ALARMS_PER_DAY } remain to add another.
+      </Typography> }
       <Button
         onClick={ store.addAlarm }
         disabled={ disabled || alarms.length >= MAX_ALARMS_PER_DAY }

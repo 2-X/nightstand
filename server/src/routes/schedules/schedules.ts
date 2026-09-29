@@ -2,6 +2,7 @@ import _ from 'lodash';
 import express, { Request, Response } from 'express';
 import logger from '../../logger.js';
 import schedulesDB, { updateSchedules } from '../../db/schedules.js';
+import { scheduleUpdateSchema } from './scheduleUpdateSchema.js';
 import { sanitizeScheduleBody } from './sanitizeScheduleBody.js';
 
 
@@ -10,7 +11,6 @@ import {
   DailySchedule,
   DayOfWeek,
   SchedulesUpdate,
-  SchedulesUpdateSchema,
   Side,
   SideSchedule,
 } from '../../db/schedulesSchema.js';
@@ -29,17 +29,14 @@ router.get('/schedules', async (req: Request, res: Response) => {
 
 router.post('/schedules', async (req: Request, res: Response) => {
   const body = sanitizeScheduleBody(req.body);
-  const validationResult = SchedulesUpdateSchema.safeParse(body);
-  if (!validationResult.success) {
-    logger.error('Invalid schedules update:', validationResult.error);
-    res.status(400).json({
-      error: 'Invalid request data',
-      details: validationResult?.error?.errors,
-    });
-    return;
-  }
-  const schedules: SchedulesUpdate = validationResult.data;
+  let validationError: import('zod').ZodError | undefined;
   const saved = await updateSchedules(draft => {
+    const validationResult = scheduleUpdateSchema(draft).safeParse(body);
+    if (!validationResult.success) {
+      validationError = validationResult.error;
+      return false;
+    }
+    const schedules: SchedulesUpdate = validationResult.data;
     (
     Object.entries(schedules) as [Side, Partial<SideSchedule>][]).forEach(([side, sideSchedule]) => {
       (Object.entries(sideSchedule) as [DayOfWeek, Partial<DailySchedule>][]).forEach(([day, schedule]) => {
@@ -57,6 +54,11 @@ router.post('/schedules', async (req: Request, res: Response) => {
       });
     });
   });
+  if (validationError) {
+    logger.error('Invalid schedules update:', validationError);
+    res.status(400).json({ error: 'Invalid request data', details: validationError.errors });
+    return;
+  }
   res.status(200).json(saved);
 });
 
