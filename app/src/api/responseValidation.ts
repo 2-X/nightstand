@@ -69,7 +69,7 @@ const responseSchemas: Record<string, z.ZodTypeAny> = {
   }),
   '/metrics/sleep-stages': z.object({
     active: z.boolean(), epochs: z.array(z.object({ startUnix: seconds, endUnix: seconds, stage: z.enum(['awake', 'rem', 'light', 'deep']) })),
-    totals: stages(seconds), percentages: stages(percentage), totalSeconds: seconds,
+    totals: stages(seconds), percentages: stages(percentage), totalSeconds: seconds, lowCoverage: z.boolean().optional(),
   }),
   '/metrics/sleep-score': z.object({
     active: z.boolean(), score: percentage.nullable(),

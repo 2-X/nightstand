@@ -18,6 +18,9 @@ export type SleepStagesResponse = {
   totals: Record<SleepStage, number>; // seconds per stage
   percentages: Record<SleepStage, number>; // 0..100
   totalSeconds: number;
+  // true when too few buckets had vitals to find sleep onset, so the stage
+  // totals are not a trustworthy asleep time. Absent from older servers.
+  lowCoverage?: boolean;
 };
 
 type Args = {

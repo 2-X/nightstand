@@ -112,13 +112,13 @@ export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZon
             const component = score?.components?.[key];
             return component?.available ? (
               <Typography key={ key } variant="body2" sx={ { mt: 2 } }>
-                { label }: { key === 'duration' ? `${formatSleepDuration(sleepRecord.sleep_period_seconds)} in bed`
-                  : component.value.replace(/\s*(ms|bpm)$/, ' $1') }
+                { label }: { component.value.replace(/\s*(ms|bpm)$/, ' $1') }
               </Typography>
             ) : null;
           }) }
           <Typography variant="body2" color="text.secondary" sx={ { mt: 2 } }>
-            The duration contribution uses time in bed. HRV uses readings from 30 to 120 ms.
+            The duration contribution uses time asleep, or time in bed when there are too few heart readings.
+            HRV uses readings from 30 to 120 ms.
           </Typography>
         </DialogContent>
         <DialogActions><Button onClick={ () => setInfoOpen(false) }>Close</Button></DialogActions>

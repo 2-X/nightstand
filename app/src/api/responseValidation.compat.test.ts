@@ -83,3 +83,12 @@ it('accepts sleep times with a timezone offset', () => {
     not_present_intervals: [['2026-09-29T05:28:40-07:00', '2026-09-29T05:29:06-07:00']] }];
   expect(validateResponse('/metrics/sleep', sleep)).toEqual(sleep);
 });
+
+it('keeps the sleep-stages coverage flag and accepts servers that do not send it', () => {
+  const stages = {
+    active: true, epochs: [{ startUnix: 0, endUnix: 300, stage: 'light' }],
+    totals: { awake: 0, rem: 0, light: 300, deep: 0 }, percentages: { awake: 0, rem: 0, light: 100, deep: 0 }, totalSeconds: 300,
+  };
+  expect(validateResponse('/metrics/sleep-stages', { ...stages, lowCoverage: true })).toEqual({ ...stages, lowCoverage: true });
+  expect(validateResponse('/metrics/sleep-stages', stages)).toEqual(stages);
+});

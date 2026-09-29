@@ -14,6 +14,10 @@ describe('night duration presentation', () => {
     expect(nightDuration(27000, { ...stages, epochs: [] })).toEqual({ seconds: 27000, kind: 'in bed' });
     expect(nightDuration(27000, { ...stages, active: false })).toEqual({ seconds: 27000, kind: 'in bed' });
   });
+  it('reports time in bed when vitals coverage was too low to find sleep onset', () => {
+    expect(nightDuration(27000, { ...stages, lowCoverage: true })).toEqual({ seconds: 27000, kind: 'in bed' });
+    expect(nightDuration(27000, { ...stages, lowCoverage: false })).toEqual({ seconds: 23400, kind: 'asleep' });
+  });
   it('keeps mixed stage coverage in separate averages', () => {
     expect(summarizeDurations([nightDuration(27000, stages), nightDuration(28800)])).toEqual([
       { kind: 'asleep', average: 23400, nights: 1 }, { kind: 'in bed', average: 28800, nights: 1 },

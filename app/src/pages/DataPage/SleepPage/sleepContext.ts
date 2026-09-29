@@ -30,7 +30,7 @@ export function formatSleepDuration(seconds: number) {
 export type NightDuration = { seconds: number; kind: 'asleep' | 'in bed' };
 
 export function nightDuration(secondsInBed: number, stages?: SleepStagesResponse): NightDuration {
-  return stages?.active && stages.epochs.length > 0
+  return stages?.active && stages.epochs.length > 0 && !stages.lowCoverage
     ? { seconds: stages.totals.light + stages.totals.rem + stages.totals.deep, kind: 'asleep' }
     : { seconds: secondsInBed, kind: 'in bed' };
 }
