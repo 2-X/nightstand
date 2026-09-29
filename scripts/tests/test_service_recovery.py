@@ -1,0 +1,149 @@
+"""Exercise recovery shell fragments only, with all services and mutations stubbed."""
+import os
+from pathlib import Path
+import re
+import subprocess
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def read(name):
+    return (ROOT / 'scripts' / name).read_text()
+
+
+def section(text, start, end):
+    return text[text.index(start):text.index(end)]
+
+
+class RecoveryTests(unittest.TestCase):
+    def run_shell(self, body, setup=''):
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(['bash', '-c', '''
+set -euo pipefail
+systemctl() { echo "$*" >> "$FIXTURE/services"; }
+fail() { echo "$*" >&2; exit 1; }
+say() { :; }
+''' + setup + '\n' + body], env={**os.environ, 'FIXTURE': directory},
+                text=True, capture_output=True)
+            log = Path(directory, 'services')
+            return result, log.read_text() if log.exists() else ''
+
+    def test_every_revert_restore_failure_restarts_server(self):
+        script = read('revert-to-stock.sh')
+        helper = ''
+        if 'restore_switch_data_or_fail()' in script:
+            helper = section(script, 'restore_switch_data_or_fail()', '\nWAN_OPEN=')
+        calls = re.findall(r'^\s*(?:restore_switch_data \|\| fail|restore_switch_data_or_fail) "[^"\n]+"$', script, re.M)
+        self.assertEqual(len(calls), 6)
+        for call in calls:
+            with self.subTest(call=call.strip()):
+                result, log = self.run_shell(helper + '\n' + call, '''
+restore_switch_data() { return 1; }
+STREAM_WAS_ACTIVE=active
+BK=fixture-backup
+''')
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('start free-sleep\n', log)
+                self.assertIn('restart free-sleep-stream\n', log)
+
+    def test_install_backup_refusals_restart_stopped_services(self):
+        script = read('install.sh')
+        block = section(script, '# Stop both database writers', 'rm -rf "$REPO_DIR"')
+        for failure in ('checkpoint', 'backup', 'sqlite_module'):
+            with self.subTest(failure=failure):
+                setup = '''
+SRC_DIR="$FIXTURE/stage"
+mkdir -p "$FIXTURE/data"
+touch "$FIXTURE/data/free-sleep.db"
+python3() {
+  if [ "$FAILURE" = sqlite_module ] || [ "$2" = "$FAILURE" ]; then return 1; fi
+}
+'''
+                body = block.replace('/persistent/free-sleep-data', '$FIXTURE/data').replace('/persistent/free-sleep-database-backups', '$FIXTURE/backups')
+                result, log = self.run_shell(body, setup + '\nFAILURE=' + failure)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn('start free-sleep\n', log)
+                self.assertIn('start free-sleep-stream\n', log)
+
+    def test_install_failure_preserves_disabled_streamer_and_missing_units(self):
+        block = section(read('install.sh'), '# Stop both database writers', 'SRC="/persistent')
+        for existing in (True, False):
+            with self.subTest(existing=existing):
+                result, log = self.run_shell(block + '\nfalse', """
+systemctl() {
+  case "$1" in
+    is-active) return 1;;
+    cat) return "$MISSING_UNITS";;
+    *) echo "$*" >> "$FIXTURE/services";;
+  esac
+}
+MISSING_UNITS=""" + ('0' if existing else '1'))
+                self.assertEqual(result.returncode, 1)
+                self.assertNotIn('start free-sleep-stream', log)
+                if existing:
+                    self.assertIn('start free-sleep\n', log)
+                else:
+                    self.assertEqual(log, '')
+
+    def test_reset_refusals_restart_stopped_services(self):
+        script = read('reset_db.sh').replace('/persistent/free-sleep-data', '$FIXTURE/data').replace('/persistent/free-sleep-database-backups', '$FIXTURE/backups')
+        script = script.replace('read -p "Are you sure you want to continue? (y/N): " confirm', 'confirm=y')
+        for failure in ('checkpoint', 'backup', 'sqlite_module', 'migration'):
+            with self.subTest(failure=failure):
+                result, log = self.run_shell(script, '''
+mkdir -p "$FIXTURE/data"
+touch "$FIXTURE/data/free-sleep.db"
+python3() { [ "$FAILURE" != sqlite_module ] && [ "$2" != "$FAILURE" ]; }
+su() { [ "$FAILURE" != migration ]; }
+''' + '\nFAILURE=' + failure)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertRegex(log, r'start free-sleep(?: free-sleep-stream)?\n')
+                self.assertIn('free-sleep-stream', log[log.index('start '):])
+
+    def test_sentry_install_is_pinned_and_uses_writable_venv_owner(self):
+        script = read('revert-to-stock.sh')
+        block = section(script, '# Upstream imports', '\nclose_wan\n')
+        for writable in (True, False):
+            with self.subTest(writable=writable):
+                setup = """
+mkdir -p "$FIXTURE/venv/bin"
+cat > "$FIXTURE/venv/bin/python" <<'STUB'
+#!/bin/bash
+if [ "$1" = -c ]; then exit "$WRITABLE_STATUS"; fi
+printf '%s %s\\n' "${RUN_AS:-root}" "$*"
+STUB
+chmod +x "$FIXTURE/venv/bin/python"
+stat() { echo fixture_owner; }
+sudo() ( export RUN_AS="$2"; shift 2; "$@"; )
+export WRITABLE_STATUS=""" + ('0' if writable else '1')
+                result, _ = self.run_shell(block.replace('/home/dac/venv', '$FIXTURE/venv'), setup)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                expected_owner = 'fixture_owner' if writable else 'root'
+                self.assertIn(expected_owner + ' -m pip install sentry-sdk==2.71.0', result.stdout)
+
+    def test_finished_migration_is_read_after_failed_liveness_probe(self):
+        script = read('migrate/switch-to-this-fork.sh')
+        block = section(script, '  if [ -z "$STATUS_JSON" ]', '  [ -n "$STATUS_JSON" ] || continue')
+        for outcome in ('success', 'restored', 'failed', 'refused', 'restore_failed', 'in_progress', ''):
+            with self.subTest(outcome=outcome):
+                result, _ = self.run_shell(block + '\nprintf "%s" "$STATUS_JSON"', '''
+STATUS_JSON='{"outcome":"in_progress"}'
+STATUS_FILE_REMOTE=status.json
+SSH_PORT=1
+ssh_cmd() {
+  case "$2" in
+    *is-active*) return 1;;
+    *) printf '{"outcome":"%s"}' "$FINAL_OUTCOME";;
+  esac
+}
+''' + '\nFINAL_OUTCOME=' + outcome)
+                terminal = outcome in ('success', 'restored', 'failed', 'refused', 'restore_failed')
+                self.assertEqual(result.returncode, 0 if terminal else 1, result.stderr)
+                if terminal:
+                    self.assertIn('"' + outcome + '"', result.stdout)
+
+
+if __name__ == '__main__':
+    unittest.main()

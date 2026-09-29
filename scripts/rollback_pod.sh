@@ -19,8 +19,17 @@ fail() { say "FATAL: $*"; exit 1; }
 
 # Keep the descriptor across updater exec handoffs; all three operations share it.
 if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
-  exec 9>"${NIGHTSTAND_OPERATION_LOCK:-/run/lock/free-sleep-operation.lock}" || fail "cannot open the update lock"
-  flock -n 9 || fail "another update, rollback or switch is already running"
+  OPERATION_LOCK="${NIGHTSTAND_OPERATION_LOCK:-/run/lock/free-sleep-operation.lock}"
+  if [ -z "${NIGHTSTAND_OPERATION_LOCK:-}" ] && [ ! -d /run/lock ]; then
+    OPERATION_LOCK=/tmp/free-sleep-operation.lock
+  fi
+  exec 9>"$OPERATION_LOCK" || fail "cannot open the update lock"
+  if command -v flock >/dev/null 2>&1; then
+    flock -n 9 || fail "another update, rollback or switch is already running"
+  else
+    python3 -c 'import fcntl; fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)' 2>/dev/null \
+      || fail "another update, rollback or switch is already running (or lock unavailable)"
+  fi
   export NIGHTSTAND_OPERATION_OWNER=$$
 fi
 
@@ -42,7 +51,7 @@ fix_shared_node_modules() {
 
 restart_services() {
   if [ "${ARCHIVE_WAS_ACTIVE:-inactive}" = active ] && \
-    python3 -c 'import json,sys;sys.exit(json.load(open(sys.argv[1])).get("fork") != "LTimothy/nightstand")' "$LIVE/server/src/serverInfo.json" 2>/dev/null; then
+    [ -f "$LIVE/scripts/archive-raw.sh" ]; then
     systemctl start free-sleep-archive-raw.timer >/dev/null 2>&1 || true
   fi
   if [ -f "$LIVE/scripts/block_internet_access.sh" ]; then
@@ -64,9 +73,10 @@ CUR_VERSION=$(python3 -c 'import json;print(json.load(open("'"$LIVE"'/server/src
 say "Rolling back v$CUR_VERSION -> v$TARGET_VERSION"
 
 # Other forks cannot run Nightstand's archive timer or its memory drop-ins.
-TARGET_FORK=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("fork", ""))' "$PREV/server/src/serverInfo.json")
+TARGET_IS_NIGHTSTAND=no
+[ -f "$PREV/scripts/archive-raw.sh" ] && TARGET_IS_NIGHTSTAND=yes
 ARCHIVE_WAS_ACTIVE=$(systemctl is-active free-sleep-archive-raw.timer 2>/dev/null || true)
-if [ "$TARGET_FORK" = LTimothy/nightstand ]; then
+if [ "$TARGET_IS_NIGHTSTAND" = yes ]; then
   python3 "$LIVE/scripts/prepare-downgrade.py" "$PREV/scripts/archive-raw.sh" /persistent/free-sleep-data/raw-archive.conf \
     || fail "could not preserve archive retention; rollback cancelled before the swap"
 else
@@ -132,7 +142,7 @@ rm -f "$HBODY"
 [ "$HEALTHY" = yes ] && systemctl is-active free-sleep >/dev/null || HEALTHY=no
 
 if [ "$HEALTHY" = yes ]; then
-  if [ "$TARGET_FORK" != LTimothy/nightstand ]; then
+  if [ "$TARGET_IS_NIGHTSTAND" != yes ]; then
     systemctl disable --now free-sleep-archive-raw.timer >/dev/null 2>&1 || true
     rm -f /etc/systemd/system/free-sleep-archive-raw.service /etc/systemd/system/free-sleep-archive-raw.timer \
       /etc/systemd/system/free-sleep.service.d/10-nightstand-limits.conf \

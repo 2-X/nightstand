@@ -12,6 +12,14 @@ read -p "Are you sure you want to continue? (y/N): " confirm
 
 
 if [[ "$confirm" =~ ^[Yy]$ ]]; then
+  # Recovery also runs when checkpoint, backup, or migration exits under set -e.
+  restart_on_failure() {
+    result=$?
+    if [ "$result" -ne 0 ]; then
+      systemctl start free-sleep free-sleep-stream || true
+    fi
+  }
+  trap restart_on_failure EXIT
   systemctl stop free-sleep free-sleep-stream
   DATABASE="/persistent/free-sleep-data/free-sleep.db"
   if [ -f "$DATABASE" ]; then

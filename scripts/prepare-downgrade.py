@@ -17,6 +17,9 @@ def prepare(script_path, config_path):
     # Config-aware releases already implement the same contract.
     if re.search(r'^CONF=.*raw-archive\.conf', source, re.M) and 'conf_hours' in source:
         return
+    # Early releases cannot prune under disk pressure. Keep their historical cap.
+    if "MIN_FREE_KB" not in source:
+        hours = min(hours, 336)
     updated, count = re.subn(r'^RETENTION_HOURS=\d+\s*$',
                              'RETENTION_HOURS=' + str(hours), source, flags=re.M)
     if count != 1:

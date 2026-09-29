@@ -548,7 +548,16 @@ while [ "$ATTEMPTS" -lt 200 ]; do
   STATUS_JSON=$(ssh_cmd "$SSH_PORT" "if [ -f '$STATUS_FILE_REMOTE' ]; then cat '$STATUS_FILE_REMOTE'; fi") || { say "  (reconnecting...)"; continue; }
   if [ -z "$STATUS_JSON" ] || printf '%s' "$STATUS_JSON" | grep -q '"in_progress"'; then
     ssh_cmd "$SSH_PORT" 'systemctl is-active --quiet free-sleep-migrate.service || { pid=$(cat /home/dac/free-sleep-migrate.pid 2>/dev/null); case "$pid" in ""|*[!0-9]*) exit 1;; esac; kill -0 "$pid"; }' \
-      || fail "installer is no longer running; check the migration log and sentinel recovery before retrying"
+      || {
+        # The installer can publish its outcome and exit between these probes.
+        STATUS_JSON=$(ssh_cmd "$SSH_PORT" "if [ -f '$STATUS_FILE_REMOTE' ]; then cat '$STATUS_FILE_REMOTE'; fi") \
+          || { say "  (reconnecting...)"; continue; }
+        FINAL_OUTCOME=$(printf '%s' "$STATUS_JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("outcome",""))' 2>/dev/null || true)
+        case "$FINAL_OUTCOME" in
+          success|restored|failed|refused|restore_failed) ;;
+          *) fail "installer is no longer running; check the migration log and sentinel recovery before retrying" ;;
+        esac
+      }
   fi
   [ -n "$STATUS_JSON" ] || continue
   OUTCOME=$(printf '%s' "$STATUS_JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("outcome",""))' 2>/dev/null)

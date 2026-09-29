@@ -32,12 +32,26 @@ SRC_DIR=$(find "$UNZIP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)
 [ -d "$SRC_DIR" ] || { echo "unexpected zip layout"; exit 1; }
 # Stop both database writers before replacing any files. Missing units are
 # normal on a first install; a failed stop for an existing unit is fatal.
+# Restart services on any refusal after stopping writers, including set -e exits.
+STOPPED_SERVICES=()
+restart_on_failure() {
+  result=$?
+  if [ "$result" -ne 0 ] && [ "${#STOPPED_SERVICES[@]}" -gt 0 ]; then
+    for stopped_service in "${STOPPED_SERVICES[@]}"; do
+      systemctl start "$stopped_service" || true
+    done
+  fi
+}
+trap restart_on_failure EXIT
 biometrics_enabled="false"
 if systemctl is-active --quiet free-sleep-stream; then
   biometrics_enabled="true"
 fi
 for service in free-sleep free-sleep-stream; do
   if systemctl cat "$service" >/dev/null 2>&1; then
+    if [ "$service" = free-sleep ] || [ "$biometrics_enabled" = true ]; then
+      STOPPED_SERVICES+=("$service")
+    fi
     systemctl stop "$service"
   fi
 done

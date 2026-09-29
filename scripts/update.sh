@@ -74,8 +74,17 @@ HANDOFF="${NIGHTSTAND_UPDATE_HANDOFF:-}"
 
 # Keep the descriptor across updater exec handoffs; all three operations share it.
 if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
-  exec 9>"${NIGHTSTAND_OPERATION_LOCK:-/run/lock/free-sleep-operation.lock}" || fail "cannot open the update lock"
-  flock -n 9 || fail "another update, rollback or switch is already running"
+  OPERATION_LOCK="${NIGHTSTAND_OPERATION_LOCK:-/run/lock/free-sleep-operation.lock}"
+  if [ -z "${NIGHTSTAND_OPERATION_LOCK:-}" ] && [ ! -d /run/lock ]; then
+    OPERATION_LOCK=/tmp/free-sleep-operation.lock
+  fi
+  exec 9>"$OPERATION_LOCK" || fail "cannot open the update lock"
+  if command -v flock >/dev/null 2>&1; then
+    flock -n 9 || fail "another update, rollback or switch is already running"
+  else
+    python3 -c 'import fcntl; fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)' 2>/dev/null \
+      || fail "another update, rollback or switch is already running (or lock unavailable)"
+  fi
   export NIGHTSTAND_OPERATION_OWNER=$$
 fi
 trap cleanup EXIT
@@ -427,10 +436,22 @@ if [ "$MIGRATION_FAILED" = yes ]; then
 fi
 
 if [ "$HEALTHY" = yes ]; then
-  if sh "$LIVE/scripts/block_internet_access.sh"; then
-    say "SUCCESS: pod is serving v$STAGED_VERSION. Previous version kept at $PREV; backup at $BK"
-    exit 0
-  fi
+  for FIREWALL_ATTEMPT in 1 2; do
+    sh "$LIVE/scripts/block_internet_access.sh" || say "WARNING: firewall script reported an error; checking rules"
+    # Older downgrade targets intentionally restore their historical firewall.
+    EXPECT_RESET=yes
+    if [ "${IS_DOWNGRADE:-no}" = yes ] &&
+      ! grep -q -- '--dport 1337.*--reject-with tcp-reset' "$LIVE/scripts/block_internet_access.sh"; then
+      EXPECT_RESET=no
+    fi
+    if iptables -C OUTPUT -j DROP && {
+      [ "$EXPECT_RESET" = no ] || iptables -C OUTPUT -p tcp --dport 1337 -j REJECT --reject-with tcp-reset
+    }; then
+      say "SUCCESS: pod is serving v$STAGED_VERSION. Previous version kept at $PREV; backup at $BK"
+      exit 0
+    fi
+    say "Firewall rules missing after attempt $FIREWALL_ATTEMPT"
+  done
   say "New firewall could not be applied; restoring the previous version"
 fi
 

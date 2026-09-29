@@ -36,6 +36,17 @@ restore_switch_data() {
   fi
 }
 
+# A failed settings restore must not prevent recovery of the web UI.
+restore_switch_data_or_fail() {
+  restore_switch_data || {
+    systemctl start free-sleep || true
+    if [ "$STREAM_WAS_ACTIVE" = active ]; then
+      systemctl restart free-sleep-stream 2>/dev/null || true
+    fi
+    fail "$*"
+  }
+}
+
 WAN_OPEN=no
 open_wan()  { say "Unblocking internet access (temporary)"; sh "$LIVE/scripts/unblock_internet_access.sh" >/dev/null && WAN_OPEN=yes; }
 close_wan() {
@@ -51,8 +62,17 @@ fail() { say "FATAL: $*"; exit 1; }
 
 # Keep the descriptor across updater exec handoffs; all three operations share it.
 if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
-  exec 9>"${NIGHTSTAND_OPERATION_LOCK:-/run/lock/free-sleep-operation.lock}" || fail "cannot open the update lock"
-  flock -n 9 || fail "another update, rollback or switch is already running"
+  OPERATION_LOCK="${NIGHTSTAND_OPERATION_LOCK:-/run/lock/free-sleep-operation.lock}"
+  if [ -z "${NIGHTSTAND_OPERATION_LOCK:-}" ] && [ ! -d /run/lock ]; then
+    OPERATION_LOCK=/tmp/free-sleep-operation.lock
+  fi
+  exec 9>"$OPERATION_LOCK" || fail "cannot open the update lock"
+  if command -v flock >/dev/null 2>&1; then
+    flock -n 9 || fail "another update, rollback or switch is already running"
+  else
+    python3 -c 'import fcntl; fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)' 2>/dev/null \
+      || fail "another update, rollback or switch is already running (or lock unavailable)"
+  fi
   export NIGHTSTAND_OPERATION_OWNER=$$
 fi
 trap cleanup EXIT
@@ -98,7 +118,15 @@ else
 fi
 # Upstream imports this even when the existing services record says installed.
 if [ -x /home/dac/venv/bin/python ]; then
-  /home/dac/venv/bin/python -m pip install sentry-sdk \
+  # Upstream leaves this unpinned; keep our revert dependency reproducible.
+  VENV_OWNER=$(stat -c '%U' /home/dac/venv) || fail "cannot identify the biometrics venv owner"
+  PIP_RUNNER=(env)
+  if sudo -u "$VENV_OWNER" /home/dac/venv/bin/python -c 'import os,sysconfig; assert all(os.access(sysconfig.get_path(key), os.W_OK) for key in ("purelib", "platlib"))'; then
+    PIP_RUNNER=(sudo -u "$VENV_OWNER")
+  else
+    say "Venv owner cannot write packages; installing the upstream dependency as root"
+  fi
+  "${PIP_RUNNER[@]}" /home/dac/venv/bin/python -m pip install sentry-sdk==2.71.0 \
     || fail "could not install the upstream biometrics dependency; live install untouched"
 fi
 close_wan
@@ -134,7 +162,7 @@ cp -rp /persistent/free-sleep-data/lowdb/. "$BK/lowdb/" || {
 }
 DATA_CHANGED=yes
 python3 "$(dirname "${BASH_SOURCE[0]}")/prepare-upstream.py" /persistent/free-sleep-data/lowdb || {
-  restore_switch_data || fail "conversion failed; restore settings from $BK/lowdb manually"
+  restore_switch_data_or_fail "conversion failed; restore settings from $BK/lowdb manually"
   systemctl start free-sleep
   [ "$STREAM_WAS_ACTIVE" != active ] || systemctl restart free-sleep-stream
   fail "could not prepare upstream settings; original settings restored"
@@ -143,7 +171,7 @@ say "RAW archive retained; remove it manually only if no longer needed:"
 du -sh /persistent/free-sleep-data/raw-archive 2>/dev/null || true
 rm -rf "$PREV"
 mv "$LIVE" "$PREV" || {
-  restore_switch_data || fail "could not restore settings from $BK/lowdb"
+  restore_switch_data_or_fail "could not restore settings from $BK/lowdb"
   systemctl start free-sleep
   if [ "$STREAM_WAS_ACTIVE" = active ]; then
     systemctl restart free-sleep-stream 2>/dev/null || true
@@ -152,7 +180,7 @@ mv "$LIVE" "$PREV" || {
 }
 mv "$STAGE" "$LIVE" || {
   mv "$PREV" "$LIVE" || fail "swap failed and previous tree could not be restored; manual recovery required"
-  restore_switch_data || fail "could not restore settings from $BK/lowdb"
+  restore_switch_data_or_fail "could not restore settings from $BK/lowdb"
   systemctl start free-sleep
   if [ "$STREAM_WAS_ACTIVE" = active ]; then
     systemctl restart free-sleep-stream 2>/dev/null || true
@@ -220,7 +248,7 @@ systemctl stop free-sleep || true
 systemctl stop free-sleep-stream 2>/dev/null || true
 rm -rf "$FAILED"
 mv "$LIVE" "$FAILED" || {
-  restore_switch_data || fail "could not restore settings from $BK/lowdb"
+  restore_switch_data_or_fail "could not restore settings from $BK/lowdb"
   systemctl start free-sleep
   if [ "$STREAM_WAS_ACTIVE" = active ]; then
     systemctl restart free-sleep-stream 2>/dev/null || true
@@ -229,7 +257,7 @@ mv "$LIVE" "$FAILED" || {
 }
 mv "$PREV" "$LIVE" || {
   mv "$FAILED" "$LIVE" || fail "could not restore either tree; manual recovery required"
-  restore_switch_data || fail "could not restore settings from $BK/lowdb"
+  restore_switch_data_or_fail "could not restore settings from $BK/lowdb"
   systemctl start free-sleep
   if [ "$STREAM_WAS_ACTIVE" = active ]; then
     systemctl restart free-sleep-stream 2>/dev/null || true
@@ -239,7 +267,7 @@ mv "$PREV" "$LIVE" || {
 if [ "$MOVED_MODULES" = yes ]; then
   mv "$FAILED/server/node_modules" "$LIVE/server/node_modules"
 fi
-restore_switch_data || fail "could not restore settings from $BK/lowdb"
+restore_switch_data_or_fail "could not restore settings from $BK/lowdb"
 sh "$LIVE/scripts/block_internet_access.sh" || say "WARNING: restored firewall could not be applied"
 systemctl start free-sleep
 if [ "$STREAM_WAS_ACTIVE" = active ]; then
