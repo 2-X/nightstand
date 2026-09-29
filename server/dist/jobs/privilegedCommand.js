@@ -1,9 +1,11 @@
 import { execFile } from 'child_process';
 export class PrivilegedCommandError extends Error {
 }
-function execute(file, args) {
+export class OperationCheckError extends PrivilegedCommandError {
+}
+function execute(file, args, timeout = 30_000) {
     return new Promise((resolve, reject) => {
-        execFile(file, [...args], { encoding: 'utf8', timeout: 30_000 }, (error, stdout) => {
+        execFile(file, [...args], { encoding: 'utf8', timeout }, (error, stdout) => {
             if (error)
                 reject(error);
             else
@@ -13,18 +15,28 @@ function execute(file, args) {
 }
 const OPERATION_UNITS = ['free-sleep-update.service', 'free-sleep-rollback.service', 'free-sleep-revert.service'];
 let operationStarting = false;
-async function assertOperationsIdle() {
+async function assertOperationUnitsIdle() {
     for (const unit of OPERATION_UNITS) {
         let state;
         try {
             state = (await execute('/bin/systemctl', ['show', unit, '--property=ActiveState', '--value'])).trim();
         }
         catch {
-            throw new PrivilegedCommandError('Cannot check running operations. Check the service logs before trying again.');
+            throw new OperationCheckError('Cannot check running operations. Check the service logs before trying again.');
         }
         if (!['inactive', 'failed'].includes(state)) {
             throw new PrivilegedCommandError('An update, rollback or switch is already running. Wait for it to finish.');
         }
+    }
+}
+export async function assertOperationsIdle() {
+    if (operationStarting) {
+        throw new PrivilegedCommandError('An update, rollback or switch is already running. Wait for it to finish.');
+    }
+    await assertOperationUnitsIdle();
+    // An operation can enter admission while the systemd checks are in flight.
+    if (operationStarting) {
+        throw new PrivilegedCommandError('An update, rollback or switch is already running. Wait for it to finish.');
     }
 }
 async function startCommand(command, unit, operation, hooks) {
@@ -39,14 +51,14 @@ async function startCommand(command, unit, operation, hooks) {
             + 'A successful update repairs these rules and services.');
     }
     if (operation)
-        await assertOperationsIdle();
+        await assertOperationUnitsIdle();
     try {
         await hooks.beforeStart?.();
-        await execute('sudo', ['-n', '--', ...command]);
+        await execute('sudo', ['-n', '--', ...command], hooks.timeout);
     }
     catch {
         await hooks.onStartFailure?.();
-        throw new PrivilegedCommandError(`Unable to start ${unit}. Check the service logs and try again.`);
+        throw new PrivilegedCommandError(`Unable to ${hooks.action ?? 'start'} ${unit}. Check the service logs and try again.`);
     }
 }
 // A queued systemd start is fast, but its exit status still matters. Check

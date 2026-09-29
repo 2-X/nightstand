@@ -122,7 +122,7 @@ for (const name of ['update.sh', 'rollback_pod.sh', 'revert-to-stock.sh']) {
         assert.match(source, /flock -n 9.*(?:fail|exit)/);
     });
 }
-it('an older archive script uses the configured retention after preparation', () => {
+it('an older archive script caps configured retention at fourteen days', () => {
     const folder = mkdtempSync(path.join(tmpdir(), 'archive-downgrade-'));
     try {
         const target = path.join(folder, 'archive-raw.sh');
@@ -131,7 +131,7 @@ it('an older archive script uses the configured retention after preparation', ()
         writeFileSync(conf, 'RETENTION_HOURS=480\n');
         const result = spawnSync('python3', [path.join(root, 'scripts/prepare-downgrade.py'), target, conf], { encoding: 'utf8' });
         assert.equal(result.status, 0, result.stdout + result.stderr);
-        assert.match(readFileSync(target, 'utf8'), /^RETENTION_HOURS=480$/m);
+        assert.match(readFileSync(target, 'utf8'), /^RETENTION_HOURS=336$/m);
     }
     finally {
         rmSync(folder, { recursive: true, force: true });

@@ -9,6 +9,10 @@ export function shouldDisableBiometrics(body) {
 }
 // Stop and disable the stream only after verifying the installed unit and grant.
 export function triggerBiometricsDisable() {
-    return runPrivilegedCommand(['/bin/sh', '/home/dac/free-sleep/scripts/disable_biometrics.sh'], 'free-sleep-stream.service');
+    return runPrivilegedCommand(['/bin/sh', '/home/dac/free-sleep/scripts/disable_biometrics.sh'], 'free-sleep-stream.service', {
+        // systemd may take 90 seconds to stop the streamer.
+        timeout: 120_000,
+        action: 'stop and disable',
+    });
 }
 //# sourceMappingURL=biometrics.js.map

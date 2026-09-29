@@ -2,6 +2,7 @@ import { it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 const calls = [];
+const timeouts = [];
 let loadState = 'loaded';
 let denied = false;
 let startFailed = false;
@@ -15,8 +16,9 @@ mock.module('child_process', { namedExports: {
             queueMicrotask(() => child.emit('exit', startFailed ? 1 : 0));
             return child;
         },
-        execFile: (command, args, _options, callback) => {
+        execFile: (command, args, options, callback) => {
             calls.push([command, ...args]);
+            timeouts.push(options.timeout);
             if (command === '/bin/systemctl') {
                 if (args.includes('--property=ActiveState'))
                     callback(null, args.includes(activeUnit) ? 'active' : 'inactive');
@@ -29,6 +31,7 @@ mock.module('child_process', { namedExports: {
                 callback((denied || (startFailed && !args.includes('-l'))) ? new Error('denied') : null, '');
         },
     } });
+const { assertOperationsIdle } = await import('./privilegedCommand.js');
 const { triggerUpdateService } = await import('./update.js');
 const { triggerRollbackService } = await import('./rollback.js');
 const { triggerRevertToStockService } = await import('./revertToStock.js');
@@ -51,7 +54,7 @@ for (const [name, trigger] of [
         await assert.rejects(async () => trigger(), /successful update.*repair/i);
         denied = false;
         startFailed = true;
-        await assert.rejects(async () => trigger(), /Unable to start/);
+        await assert.rejects(async () => trigger(), name === 'biometrics' ? /Unable to stop and disable/ : /Unable to start/);
         startFailed = false;
     });
     it(`${name} checks exact sudo command before awaiting success`, async () => {
@@ -84,6 +87,7 @@ it('refuses overlapping local admissions until the first start is acknowledged',
     const first = triggerUpdateService();
     try {
         await assert.rejects(triggerRollbackService(), /already running/);
+        await assert.rejects(assertOperationsIdle(), /already running/);
     }
     finally {
         holdLoadCheck = undefined;
@@ -102,6 +106,7 @@ it('keeps admission locked until failed-start target cleanup finishes', async ()
     try {
         await cleanupEntered;
         await assert.rejects(triggerRollbackService(), /already running/);
+        await assert.rejects(assertOperationsIdle(), /already running/);
     }
     finally {
         finishCleanup?.();
@@ -124,5 +129,13 @@ it('does not run target hooks when another operation is active', async () => {
     finally {
         activeUnit = '';
     }
+});
+it('allows the synchronous biometrics stop longer than the systemd stop deadline', async () => {
+    calls.length = 0;
+    timeouts.length = 0;
+    await triggerBiometricsDisable();
+    const stopIndex = calls.findIndex(args => args[0] === 'sudo' && !args.includes('-l'));
+    assert.ok(timeouts[stopIndex] > 90_000);
+    assert.equal(timeouts[stopIndex], 120_000);
 });
 //# sourceMappingURL=privilegedJobs.test.js.map

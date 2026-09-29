@@ -117,4 +117,20 @@ describe('jobScheduler system-date retry', () => {
         await waitFor(() => Boolean(nodeSchedule.scheduledJobs[POWER_ON_JOB]), 'a DB change to reschedule jobs');
     });
 });
+it('continues scheduling the other side when a side is missing', async () => {
+    await waitFor(() => serverStatus.status.jobs.status !== 'started', 'scheduler idle');
+    const original = schedulesDB.data;
+    const readMock = mock.method(schedulesDB, 'read', async () => { });
+    schedulesDB.data = { left: original.left };
+    try {
+        changeHandlers[0]('/tmp/lowdb/schedulesDB.json');
+        await waitFor(() => serverStatus.status.jobs.status !== 'started', 'partial rebuild');
+        assert.ok(nodeSchedule.scheduledJobs[POWER_ON_JOB]);
+        assert.match(serverStatus.status.jobs.message, /Skipped 7 unschedulable/);
+    }
+    finally {
+        schedulesDB.data = original;
+        readMock.mock.restore();
+    }
+});
 //# sourceMappingURL=jobSchedulerClock.test.js.map

@@ -103,11 +103,16 @@ class ServerStatus {
         return ServerStatus.instance;
     }
     async updateDB() {
+        const database = {
+            name: this.status.database.name,
+            description: this.status.database.description,
+            status: 'failed',
+            message: '',
+        };
         try {
             await prisma.$queryRaw `SELECT 1`;
             const quick = await prisma.$queryRawUnsafe(`PRAGMA quick_check;`);
             const quickCheckHealthy = quick?.[0] && Object.values(quick[0])[0] === 'ok';
-            delete this.status.database.unappliedMigrations;
             if (quickCheckHealthy) {
                 // An update that could not migrate leaves the server running against
                 // a database missing tables it needs, and nothing else notices until a
@@ -117,27 +122,28 @@ class ServerStatus {
           SELECT migration_name, finished_at, rolled_back_at FROM _prisma_migrations`;
                 const unapplied = findUnappliedMigrations(localMigrations, rows);
                 if (unapplied.length > 0) {
-                    this.status.database.status = 'failed';
-                    this.status.database.message =
+                    database.status = 'failed';
+                    database.message =
                         `Some database changes this version needs were never applied (${unapplied.join(', ')}). ` +
                             'To apply them, open Settings, then Software, expand Recovery, and choose Reinstall on the running version.';
-                    this.status.database.unappliedMigrations = unapplied;
+                    database.unappliedMigrations = unapplied;
                 }
                 else {
-                    this.status.database.status = 'healthy';
-                    this.status.database.message = '';
+                    database.status = 'healthy';
+                    database.message = '';
                 }
             }
             else {
-                this.status.database.status = 'failed';
-                this.status.database.message = `SQLite DB is unhealthy! - ${JSON.stringify(quick)}`;
+                database.status = 'failed';
+                database.message = `SQLite DB is unhealthy! - ${JSON.stringify(quick)}`;
             }
         }
         catch (error) {
-            this.status.database.status = 'failed';
+            database.status = 'failed';
             const message = error instanceof Error ? error.message : String(error);
-            this.status.database.message = message;
+            database.message = message;
         }
+        this.status.database = database;
     }
     updateSystemDate() {
         const isValid = isSystemDateValid();

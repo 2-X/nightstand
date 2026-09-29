@@ -38,10 +38,7 @@ router.post('/jobs', async (req, res) => {
     }
     try {
         for (const job of validationResult.data) {
-            if (job === 'update')
-                await update();
-            else
-                JOB_MAP[job]();
+            await JOB_MAP[job]();
         }
     }
     catch (error) {

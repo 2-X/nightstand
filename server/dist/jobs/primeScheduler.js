@@ -7,6 +7,7 @@ import settingsDB from '../db/settings.js';
 import serverStatus from '../serverStatus.js';
 import servicesDB from '../db/services.js';
 import reboot from './reboot.js';
+import { OperationCheckError, PrivilegedCommandError } from './privilegedCommand.js';
 const scheduleRebootJob = (onHour, onMinute, timeZone) => {
     const dailyRule = new schedule.RecurrenceRule();
     dailyRule.hour = onHour;
@@ -22,11 +23,18 @@ const scheduleRebootJob = (onHour, onMinute, timeZone) => {
                 return;
             }
             logger.info(`Executing scheduled reboot job`);
-            reboot();
+            await reboot();
             serverStatus.status.alarmSchedule.status = 'healthy';
             serverStatus.status.alarmSchedule.message = '';
         }
         catch (error) {
+            if (error instanceof PrivilegedCommandError) {
+                if (error instanceof OperationCheckError)
+                    logger.warn(`Skipping daily reboot: ${error.message}`);
+                else
+                    logger.info(`Skipping daily reboot: ${error.message}`);
+                return;
+            }
             serverStatus.status.alarmSchedule.status = 'failed';
             const message = error instanceof Error ? error.message : String(error);
             serverStatus.status.alarmSchedule.message = message;

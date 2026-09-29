@@ -42,6 +42,7 @@ ssh_cmd() { echo "$*" >> "$FIXTURE/ssh"; echo 0; }
 restore_and_report() { echo restored > "$FIXTURE/restored"; }
 fix_shared_node_modules() { :; }
 restore_switch_data() { :; }
+restore_switch_data_or_fail() { restore_switch_data || fail "$*"; }
 ${section('scripts/rollback_pod.sh', 'restart_services() {', '# --- preflight')}
 ${setup}
 ${fixtureScript}`], { env, encoding: 'utf8', input: 'y\n', timeout: 5000 });

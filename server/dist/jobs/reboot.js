@@ -1,6 +1,8 @@
 import { exec } from 'child_process';
+import { assertOperationsIdle } from './privilegedCommand.js';
 import logger from '../logger.js';
-export default function reboot() {
+export default async function reboot() {
+    await assertOperationsIdle();
     logger.debug('Rebooting pod...');
     exec('sudo /sbin/reboot', (error, stdout, stderr) => {
         if (error) {
