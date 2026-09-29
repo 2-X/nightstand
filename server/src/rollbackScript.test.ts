@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 // live install back to the previous tree. It's bash, so like update.sh it
 // can't be unit-tested directly: gate the invariants that would otherwise
 // brick a rollback silently: it refuses to run against a missing/unreadable
-// PREV, it never touches WAN, and it always restores on a failed health
+// PREV, it never unblocks WAN, and it always restores on a failed health
 // check rather than leaving the pod on neither tree.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const SCRIPT = 'scripts/rollback_pod.sh';
@@ -30,9 +30,10 @@ describe('rollback_pod.sh', () => {
     assert.match(src, /refusing to swap to an unknown tree/);
   });
 
-  it('never touches WAN (no unblock/block calls)', () => {
+  it('applies the restored firewall without opening a download window', () => {
     const src = readFileSync(path.join(repoRoot, SCRIPT), 'utf8');
-    assert.doesNotMatch(src, /unblock_internet_access|block_internet_access/);
+    assert.doesNotMatch(src, /unblock_internet_access/);
+    assert.match(src, /sh "\$LIVE\/scripts\/block_internet_access\.sh"/);
   });
 
   it('restores the running version if the post-swap health check fails', () => {

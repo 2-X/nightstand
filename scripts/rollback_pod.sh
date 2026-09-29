@@ -1,7 +1,7 @@
 #!/bin/bash
 # Instant rollback: swaps the live install back to the previous tree that
 # scripts/update.sh leaves at $PREV after every update. Seconds, fully
-# offline (never touches WAN), distinct from installing an older version
+# offline (applies the restored firewall), distinct from installing an older version
 # via the version picker, which is a
 # full download and takes minutes. PREV only ever holds one step of history,
 # so this can only go back one release.
@@ -16,6 +16,13 @@ TMP=/home/dac/free-sleep-rollback-tmp
 
 say() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 fail() { say "FATAL: $*"; exit 1; }
+
+# Keep the descriptor across updater exec handoffs; all three operations share it.
+if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
+  exec 9>"${NIGHTSTAND_OPERATION_LOCK:-/run/lock/free-sleep-operation.lock}" || fail "cannot open the update lock"
+  flock -n 9 || fail "another update, rollback or switch is already running"
+  export NIGHTSTAND_OPERATION_OWNER=$$
+fi
 
 # node_modules can live in only one of the two trees: when the update that
 # produced this LIVE/PREV pair reused node_modules (identical lockfiles), it
@@ -34,6 +41,13 @@ fix_shared_node_modules() {
 }
 
 restart_services() {
+  if [ "${ARCHIVE_WAS_ACTIVE:-inactive}" = active ] && \
+    python3 -c 'import json,sys;sys.exit(json.load(open(sys.argv[1])).get("fork") != "LTimothy/nightstand")' "$LIVE/server/src/serverInfo.json" 2>/dev/null; then
+    systemctl start free-sleep-archive-raw.timer >/dev/null 2>&1 || true
+  fi
+  if [ -f "$LIVE/scripts/block_internet_access.sh" ]; then
+    sh "$LIVE/scripts/block_internet_access.sh" || say "WARNING: restored firewall could not be applied"
+  fi
   systemctl start free-sleep
   if [ "$STREAM_WAS_ACTIVE" = active ]; then
     systemctl restart free-sleep-stream 2>/dev/null || true
@@ -48,6 +62,16 @@ TARGET_VERSION=$(python3 -c 'import json;print(json.load(open("'"$PREV"'/server/
 CUR_VERSION=$(python3 -c 'import json;print(json.load(open("'"$LIVE"'/server/src/serverInfo.json"))["version"])' 2>/dev/null) \
   || fail "cannot read the running version"
 say "Rolling back v$CUR_VERSION -> v$TARGET_VERSION"
+
+# Other forks cannot run Nightstand's archive timer or its memory drop-ins.
+TARGET_FORK=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("fork", ""))' "$PREV/server/src/serverInfo.json")
+ARCHIVE_WAS_ACTIVE=$(systemctl is-active free-sleep-archive-raw.timer 2>/dev/null || true)
+if [ "$TARGET_FORK" = LTimothy/nightstand ]; then
+  python3 "$LIVE/scripts/prepare-downgrade.py" "$PREV/scripts/archive-raw.sh" /persistent/free-sleep-data/raw-archive.conf \
+    || fail "could not preserve archive retention; rollback cancelled before the swap"
+else
+  systemctl stop free-sleep-archive-raw.timer free-sleep-archive-raw.service >/dev/null 2>&1 || true
+fi
 
 # --- swap ----------------------------------------------------------------------
 STREAM_WAS_ACTIVE=$(systemctl is-active free-sleep-stream 2>/dev/null || true)
@@ -108,6 +132,13 @@ rm -f "$HBODY"
 [ "$HEALTHY" = yes ] && systemctl is-active free-sleep >/dev/null || HEALTHY=no
 
 if [ "$HEALTHY" = yes ]; then
+  if [ "$TARGET_FORK" != LTimothy/nightstand ]; then
+    systemctl disable --now free-sleep-archive-raw.timer >/dev/null 2>&1 || true
+    rm -f /etc/systemd/system/free-sleep-archive-raw.service /etc/systemd/system/free-sleep-archive-raw.timer \
+      /etc/systemd/system/free-sleep.service.d/10-nightstand-limits.conf \
+      /etc/systemd/system/free-sleep-stream.service.d/10-nightstand-limits.conf
+    systemctl daemon-reload
+  fi
   say "SUCCESS: pod is serving v$TARGET_VERSION (rolled back from v$CUR_VERSION)"
   exit 0
 fi

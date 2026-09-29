@@ -22,6 +22,7 @@ function run(script: string, setup = '') {
     mkdirSync(path.join(dir, tree, 'server'), { recursive: true });
     writeFileSync(path.join(dir, tree, 'version'), tree === 'live' ? 'failed' : 'restored');
   }
+  mkdirSync(path.join(dir, 'persistent/free-sleep-data/lowdb'), { recursive: true });
   const env = { ...process.env, FIXTURE: dir };
   const fixtureScript = script.replaceAll('/home/dac/free-sleep', `${dir}/live`)
     .replaceAll('/persistent/', `${dir}/persistent/`);

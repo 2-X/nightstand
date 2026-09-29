@@ -42,6 +42,8 @@ STAGE=/home/dac/free-sleep-staging
 FAILED=/home/dac/free-sleep-failed
 ZIP=/home/dac/free-sleep-update.zip
 BACKUPS=/persistent/free-sleep-backups
+DATABASE_BACKUPS=/persistent/free-sleep-database-backups
+SQLITE_SAFETY="$(dirname "${BASH_SOURCE[0]}")/sqlite-safety.py"
 KEEP_BACKUPS=5
 NPM=/home/dac/.volta/bin/npm
 NPX=/home/dac/.volta/bin/npx
@@ -57,8 +59,7 @@ close_wan() {
     || sh "$PREV/scripts/block_internet_access.sh" >/dev/null 2>&1 || true
   WAN_OPEN=no
 }
-cleanup() { close_wan; rm -rf "$STAGE" "$STAGE.unzip" "$STAGE.health" "$ZIP"; }
-trap cleanup EXIT
+cleanup() { close_wan; rm -rf "$STAGE" "$STAGE.unzip" "$STAGE.health" "$STAGE.migrate.log" "$ZIP"; }
 
 fail() { say "FATAL: $*"; exit 1; }
 
@@ -70,6 +71,29 @@ fail() { say "FATAL: $*"; exit 1; }
 # nightstand-update-handoff: 1
 HANDOFF_MARKER='# nightstand-update-handoff: 1'
 HANDOFF="${NIGHTSTAND_UPDATE_HANDOFF:-}"
+
+# Keep the descriptor across updater exec handoffs; all three operations share it.
+if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
+  exec 9>"${NIGHTSTAND_OPERATION_LOCK:-/run/lock/free-sleep-operation.lock}" || fail "cannot open the update lock"
+  flock -n 9 || fail "another update, rollback or switch is already running"
+  export NIGHTSTAND_OPERATION_OWNER=$$
+fi
+trap cleanup EXIT
+
+if [ "$HANDOFF" != 1 ]; then
+# --- consume the target-version request file, if any -------------------------
+TARGET_VERSION=""
+ALLOW_DOWNGRADE=no
+if [ -f "$TARGET_FILE" ]; then
+  TARGET_JSON=$(cat "$TARGET_FILE")
+  rm -f "$TARGET_FILE"
+  TARGET_VERSION=$(printf '%s' "$TARGET_JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("version",""))' 2>/dev/null) || TARGET_VERSION=""
+  ALLOW_DOWNGRADE_RAW=$(printf '%s' "$TARGET_JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("allowDowngrade",False))' 2>/dev/null) || ALLOW_DOWNGRADE_RAW=False
+  [ "$ALLOW_DOWNGRADE_RAW" = True ] && ALLOW_DOWNGRADE=yes
+  [ -n "$TARGET_VERSION" ] && say "Target-version request: v$TARGET_VERSION (allowDowngrade=$ALLOW_DOWNGRADE)"
+fi
+
+fi
 
 # --- preflight ---------------------------------------------------------------
 [ -d "$LIVE" ] || fail "no live install at $LIVE"
@@ -94,17 +118,6 @@ else
 # Left unindented to the matching fi: the steps below carry inline python that
 # has to stay at column 0.
 
-# --- consume the target-version request file, if any -------------------------
-TARGET_VERSION=""
-ALLOW_DOWNGRADE=no
-if [ -f "$TARGET_FILE" ]; then
-  TARGET_JSON=$(cat "$TARGET_FILE")
-  rm -f "$TARGET_FILE"
-  TARGET_VERSION=$(printf '%s' "$TARGET_JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("version",""))' 2>/dev/null) || TARGET_VERSION=""
-  ALLOW_DOWNGRADE_RAW=$(printf '%s' "$TARGET_JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("allowDowngrade",False))' 2>/dev/null) || ALLOW_DOWNGRADE_RAW=False
-  [ "$ALLOW_DOWNGRADE_RAW" = True ] && ALLOW_DOWNGRADE=yes
-  [ -n "$TARGET_VERSION" ] && say "Target-version request: v$TARGET_VERSION (allowDowngrade=$ALLOW_DOWNGRADE)"
-fi
 
 if [ -n "$TARGET_VERSION" ]; then
   FLOOR_OK=$(python3 -c '
@@ -230,7 +243,7 @@ if [ "$HANDOFF" != 1 ]; then
   # target request already consumed and install the latest release instead of
   # the one asked for, so a downgrade would quietly become an upgrade. Without
   # the marker this script finishes the update itself, as before.
-  if grep -Fxq "$HANDOFF_MARKER" "$STAGE/scripts/update.sh" 2>/dev/null; then
+  if [ "$IS_DOWNGRADE" != yes ] && grep -Fxq "$HANDOFF_MARKER" "$STAGE/scripts/update.sh" 2>/dev/null; then
     say "Handing the rest of the update to the v$STAGED_VERSION updater"
     # exec replaces this process, so the cleanup trap would never run anyway;
     # cleared explicitly because it deletes the stage the new updater needs.
@@ -242,14 +255,26 @@ if [ "$HANDOFF" != 1 ]; then
   fi
 fi
 
+# Preserve archive retention before installing a version that ignores the config.
+if [ "$IS_DOWNGRADE" = yes ]; then
+  python3 "$(dirname "${BASH_SOURCE[0]}")/prepare-downgrade.py" \
+    "$STAGE/scripts/archive-raw.sh" /persistent/free-sleep-data/raw-archive.conf \
+    || fail "could not preserve archive retention; downgrade cancelled before the swap"
+fi
+
 # --- backup ------------------------------------------------------------------
 TS=$(date +%Y%m%d-%H%M%S)
 BK="$BACKUPS/${TS}_v${CUR_VERSION}"
 say "Backing up code + data to $BK"
 mkdir -p "$BK"
 tar czf "$BK/code.tar.gz" -C /home/dac --exclude free-sleep/server/node_modules free-sleep || fail "backup failed; aborting, nothing changed"
-cp /persistent/free-sleep-data/free-sleep.db "$BK/" 2>/dev/null || true
-cp -r /persistent/free-sleep-data/lowdb "$BK/lowdb" 2>/dev/null || true
+if [ -f /persistent/free-sleep-data/free-sleep.db ]; then
+  DB_BACKUP="$DATABASE_BACKUPS/${TS}_v${CUR_VERSION}_update.db"
+  python3 "$SQLITE_SAFETY" backup /persistent/free-sleep-data/free-sleep.db "$DB_BACKUP" \
+    || fail "database backup failed; live install untouched"
+  say "Database snapshot kept separately at $DB_BACKUP"
+fi
+cp -r /persistent/free-sleep-data/lowdb "$BK/lowdb" || fail "settings backup failed; live install untouched"
 ls -1dt "$BACKUPS"/*/ | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -rf
 
 # --- atomic swap ---------------------------------------------------------------
@@ -286,16 +311,35 @@ MIGRATION_FAILED=no
 SCHEMA_CHANGED=no
 cmp -s "$PREV/server/prisma/schema.prisma" "$LIVE/server/prisma/schema.prisma" || SCHEMA_CHANGED=yes
 if [ "$IS_DOWNGRADE" = yes ]; then
-  say "Downgrade: skipping prisma migrate (schema stays newer; migrations are additive by standing rule)"
+  say "Downgrade: skipping prisma migrate; keeping the newer database and generating the target client"
+  sudo -u dac bash -c "cd '$LIVE/server' && '$NPX' dotenv -e .env.pod -- npx prisma generate" \
+    || MIGRATION_FAILED=yes
 elif ! sudo -u dac bash -c "cd '$LIVE/server' && '$NPX' dotenv -e .env.pod -- npx prisma migrate status" >/dev/null 2>&1; then
   say "Database has unapplied migrations: migrate deploy + generate"
   PRISMA_OK=no
+  RESOLVED_FAILED=no
   for attempt in 1 2 3; do
-    if sudo -u dac bash -c "cd '$LIVE/server' && '$NPX' dotenv -e .env.pod -- npx prisma migrate deploy"; then
+    if sudo -u dac bash -c "cd '$LIVE/server' && '$NPX' dotenv -e .env.pod -- npx prisma migrate deploy" 2>&1 | tee "$STAGE.migrate.log"; then
       PRISMA_OK=yes
       break
     fi
     say "prisma migrate attempt $attempt failed"
+    if grep -q P3009 "$STAGE.migrate.log"; then
+      [ "$RESOLVED_FAILED" = no ] || break
+      RECOVERY_HELPER="$LIVE/scripts/sqlite-safety.py"
+      [ -f "$RECOVERY_HELPER" ] || RECOVERY_HELPER="$PREV/scripts/sqlite-safety.py"
+      FAILED_NAMES=$(python3 "$RECOVERY_HELPER" recoverable-migrations \
+        /persistent/free-sleep-data/free-sleep.db "$LIVE/server/prisma/migrations") || {
+        say "Failed migration needs manual recovery. Do not reset the database; preserve the backup and inspect the migration log."
+        break
+      }
+      RESOLVED_FAILED=yes
+      RESOLVE_OK=yes
+      while IFS= read -r migration; do
+        sudo -u dac bash -c "cd '$LIVE/server' && '$NPX' dotenv -e .env.pod -- npx prisma migrate resolve --rolled-back '$migration'" || RESOLVE_OK=no
+      done <<< "$FAILED_NAMES"
+      [ "$RESOLVE_OK" = yes ] || break
+    fi
     sleep 5
   done
   [ "$PRISMA_OK" = yes ] &&
@@ -383,8 +427,11 @@ if [ "$MIGRATION_FAILED" = yes ]; then
 fi
 
 if [ "$HEALTHY" = yes ]; then
-  say "SUCCESS: pod is serving v$STAGED_VERSION. Previous version kept at $PREV; backup at $BK"
-  exit 0
+  if sh "$LIVE/scripts/block_internet_access.sh"; then
+    say "SUCCESS: pod is serving v$STAGED_VERSION. Previous version kept at $PREV; backup at $BK"
+    exit 0
+  fi
+  say "New firewall could not be applied; restoring the previous version"
 fi
 
 # --- automatic rollback ---------------------------------------------------------
@@ -417,6 +464,7 @@ if [ "$STREAM_WAS_ACTIVE" = active ]; then
   systemctl restart free-sleep-stream 2>/dev/null || true
 fi
 sleep 8
+sh "$LIVE/scripts/block_internet_access.sh" || say "WARNING: restored firewall could not be applied"
 if curl -sf --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" >/dev/null; then
   fail "update failed but rollback OK (pod back on v$CUR_VERSION). Failed tree kept at $FAILED; see journalctl -u free-sleep"
 else
