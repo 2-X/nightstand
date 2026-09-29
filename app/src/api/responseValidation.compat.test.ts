@@ -74,3 +74,14 @@ it('strips future compatibility fixtures after defaults are backfilled', async (
     expect(input).toEqual(merge({}, defaults, fixture));
   }
 });
+
+// Shapes as the Pod serves them: times formatted in the Pod's timezone.
+it('accepts sleep and movement times with a timezone offset', () => {
+  const sleep = [{ id: 1, side: 'left', entered_bed_at: '2026-09-28T23:45:30-07:00', left_bed_at: '2026-09-29T05:40:14-07:00',
+    sleep_period_seconds: 20684, times_exited_bed: 1,
+    present_intervals: [['2026-09-28T23:45:30-07:00', '2026-09-29T05:28:40-07:00']],
+    not_present_intervals: [['2026-09-29T05:28:40-07:00', '2026-09-29T05:29:06-07:00']] }];
+  const movement = [{ id: 45189, timestamp: '2026-09-28T23:46:00-07:00', side: 'left', total_movement: 0 }];
+  expect(validateResponse('/metrics/sleep', sleep)).toEqual(sleep);
+  expect(validateResponse('/metrics/movement', movement)).toEqual(movement);
+});

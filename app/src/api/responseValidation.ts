@@ -59,7 +59,8 @@ const responseSchemas: Record<string, z.ZodTypeAny> = {
   '/metrics/sleep': sleepRecordSchema.refine(record => record.sleep_period_seconds >= 0
     && Date.parse(record.left_bed_at) >= Date.parse(record.entered_bed_at), 'Invalid sleep interval').array(),
   '/metrics/vitals': vitalsRecordSchema.array(),
-  '/metrics/movement': movementRecordSchema.array(),
+  // The Pod formats movement times in its own timezone, not as epoch seconds.
+  '/metrics/movement': movementRecordSchema.extend({ timestamp: z.string().datetime({ offset: true }) }).array(),
   '/metrics/vitals/summary': z.object({
     avgHeartRate: seconds,
     minHeartRate: seconds,
