@@ -38,6 +38,14 @@ describe('block_internet_access.sh', () => {
     }
   });
 
+  it('resets the firmware cloud connection before the final drop', () => {
+    const reset = src.indexOf('iptables -A OUTPUT -p tcp --dport 1337 -j REJECT --reject-with tcp-reset');
+    const drop = src.indexOf('iptables -A OUTPUT -j DROP');
+    const save = src.indexOf('iptables-save');
+    assert.ok(reset !== -1, 'no tcp-reset rule for port 1337');
+    assert.ok(reset < drop && drop < save, 'reset rule must come before the final drop and the save');
+  });
+
   it('still saves both rulesets', () => {
     assert.match(src, /iptables-save > \/etc\/iptables\/iptables\.rules/);
     assert.match(src, /ip6tables-save > \/etc\/iptables\/ip6tables\.rules/);

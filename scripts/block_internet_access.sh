@@ -91,6 +91,10 @@ else
 fi
 # -----------------------------------------------------------------------------------------------------
 
+# Reset the firmware's cloud connection instead of dropping it. Some firmware
+# blocks on a dropped connection, and an ICMP reject does not end one already open.
+iptables -A OUTPUT -p tcp --dport 1337 -j REJECT --reject-with tcp-reset
+
 # Block everything else
 iptables -A INPUT -j DROP
 iptables -A OUTPUT -j DROP

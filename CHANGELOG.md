@@ -8,6 +8,12 @@ is a hard fork; for the history of the projects it descends from, see
 
 ## [Unreleased]
 
+- Blocking internet access no longer leaves the firmware stuck on some Pod 3
+  units. The firewall now refuses the firmware's cloud connection right away
+  instead of silently ignoring it, which left the firmware waiting. Thanks to
+  @sim- for tracking this down
+  (https://github.com/LTimothy/nightstand/issues/1).
+
 - Alarms minutes apart no longer suppress one another. Overnight temperature
   changes, alarm replacements and sleep analysis use the full night window.
 
