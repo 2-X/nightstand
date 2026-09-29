@@ -6,6 +6,6 @@ import LogsPage from './LogsPage';
 describe('LogsPage', () => {
   it('renders the live server logs page', async () => {
     renderWithProviders(<LogsPage />, { initialRoute: '/data/logs' });
-    expect(await screen.findByText('Live Server Logs')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Logs', level: 1 })).toBeInTheDocument();
   });
 });

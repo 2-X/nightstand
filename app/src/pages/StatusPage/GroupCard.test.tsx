@@ -9,9 +9,9 @@ import { CORE_KEYS } from './statusMeta';
 it('counts every service state in its collapsed summary', () => {
   const data = { ...getServerStatus() };
   const states: Status[] = ['healthy', 'not_started', 'started', 'waiting_for_data', 'retrying', 'restarting', 'failed'];
-  CORE_KEYS.forEach((key, index) => { data[key] = { ...data[key]!, status: states[index] }; });
+  CORE_KEYS.forEach((key, index) => { data[key] = { ...data[key]!, status: states[index] ?? 'healthy' }; });
   renderWithProviders(<GroupCard label="Core services" keys={ CORE_KEYS } data={ data }/>);
   expect(screen.getByRole('button', {
-    name: 'Core services · 1 healthy, 1 starting, 1 running, 1 waiting for data, 1 retrying, 1 restarting, 1 failed',
+    name: 'Core services · 4 healthy, 1 starting, 1 running, 1 waiting for data, 1 retrying, 1 restarting, 1 failed',
   })).toBeVisible();
 });

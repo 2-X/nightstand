@@ -33,22 +33,24 @@ export default function RollbackRow({ runningVersion, rollbackVersion }: Props) 
           gap: 1.5,
           textAlign: 'left',
           justifyContent: 'flex-start',
-          mx: -2.5,
-          px: 2.5,
+          width: '100%',
+          minHeight: 44,
+          px: 0,
           py: 1.5,
           borderRadius: 1,
           '&:hover': { backgroundColor: 'action.hover' },
         } }
       >
         <RestorePageIcon sx={ { color: 'text.secondary' } }/>
-        <Typography sx={ { fontSize: '1rem' } }>
-          Roll back to v{ rollbackVersion } (instant, no download)
-        </Typography>
+        <Stack>
+          <Typography>Go back to v{ rollbackVersion }</Typography>
+          <Typography variant="body2" color="text.secondary">Instant, no download</Typography>
+        </Stack>
       </ButtonBase>
 
       <Dialog aria-labelledby={ titleId } open={ open } onClose={ () => { if (phase !== 'updating') { reset(); setOpen(false); } } }>
         <DialogTitle id={ titleId }>
-          { phase === 'idle' && `Roll back to v${rollbackVersion}?` }
+          { phase === 'idle' && `Go back to v${rollbackVersion}?` }
           { phase === 'updating' && 'Rolling back...' }
           { phase === 'failed' && 'Request failed' }
           { phase === 'timed_out' && 'Still not done' }
@@ -57,10 +59,8 @@ export default function RollbackRow({ runningVersion, rollbackVersion }: Props) 
           { phase === 'failed' && <Alert severity="error">{ error }</Alert> }
           { phase === 'idle' && (
             <DialogContentText>
-              Restore the previous installation, v{ rollbackVersion }, without a download.
-              Settings and sleep data are kept; database migrations are not reversed.
-              The app, schedules, and alarms pause during restart. If checks fail, the script
-              attempts to restore v{ runningVersion }; recovery may require SSH.
+              The Pod switches back to the version it kept. Settings and sleep data stay.
+              Schedules and alarms pause for about 2 minutes.
             </DialogContentText>
           ) }
           { phase === 'updating' && (
@@ -91,7 +91,7 @@ export default function RollbackRow({ runningVersion, rollbackVersion }: Props) 
           { phase === 'idle' && (
             <>
               <Button onClick={ () => setOpen(false) }>Cancel</Button>
-              <Button variant="contained" onClick={ rollback }>Roll back now</Button>
+              <Button variant="contained" onClick={ rollback }>Go back now</Button>
             </>
           ) }
           { (phase === 'timed_out' || phase === 'failed') && (

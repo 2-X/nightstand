@@ -39,9 +39,9 @@ describe('ReleasesManifestSchema', () => {
     expect(() => ReleasesManifestSchema.parse(bad)).toThrow();
   });
 
-  it('rejects an unknown kind', () => {
-    const bad = { channels: ['stable'], releases: [{ ...agent, kind: 'overlay' }] };
-    expect(() => ReleasesManifestSchema.parse(bad)).toThrow();
+  it('skips an unknown kind without losing known releases', () => {
+    const bad = { channels: ['stable'], releases: [{ ...agent, kind: 'overlay' }, bundle] };
+    expect(ReleasesManifestSchema.parse(bad).releases).toEqual([bundle]);
   });
 });
 
@@ -54,6 +54,14 @@ describe('latestForChannel', () => {
 
   it('shows a beta user the newest release of any kind', () => {
     expect(latestForChannel(manifest, 'beta')?.version).toBe('3.1.0');
+  });
+
+  it('sorts valid releases and excludes prereleases from stable', () => {
+    const mixed: ReleasesManifest = { channels: ['stable', 'beta'], releases: [
+      { ...agent, version: 'latest' }, agent, { ...agent, version: '4.0.0-rc.1' }, { ...agent, version: '3.5.0' },
+    ] };
+    expect(latestForChannel(mixed, 'stable')?.version).toBe('3.5.0');
+    expect(latestForChannel(mixed, 'beta')?.version).toBe('4.0.0-rc.1');
   });
 
   it('returns undefined when the manifest has not loaded', () => {

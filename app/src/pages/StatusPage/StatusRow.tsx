@@ -61,19 +61,19 @@ export default function StatusRow({ job, statusInfo, divider }: StatusRowProps) 
   return (
     <Box sx={ { pt: divider ? 1.5 : 0, pb: 1.5, borderTop: divider ? `1px solid ${palette.border.subtle}` : 'none' } }>
       <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 } }>
-        <Typography sx={ { fontSize: '0.95rem', fontWeight: 600, color: palette.text.primary, flex: 1, minWidth: 0 } }>
+        <Typography sx={ { fontSize: '1rem', fontWeight: 600, color: palette.text.primary, flex: 1, minWidth: 0 } }>
           { statusName(job, statusInfo) }
         </Typography>
         <StatusChip info={ statusInfo } optional={ job === 'biometricsInstallation' && statusInfo.status === 'not_started' } />
       </Box>
 
-      <Typography sx={ { fontSize: '0.8rem', color: palette.text.tertiary, mt: 0.5, lineHeight: 1.4 } }>
+      <Typography sx={ { fontSize: '0.8125rem', color: palette.text.tertiary, mt: 0.5, lineHeight: 1.4 } }>
         { meta.blurb }
       </Typography>
 
       <Typography
         sx={ {
-          fontSize: '0.8rem',
+          fontSize: '0.8125rem',
           color: statusInfo.status === 'failed' ? palette.status.error : palette.text.secondary,
           mt: 0.5,
           whiteSpace: 'pre-wrap',
@@ -90,13 +90,13 @@ export default function StatusRow({ job, statusInfo, divider }: StatusRowProps) 
       { calibrationSide && <CalibrationSubline view={ calibration?.[calibrationSide] }/> }
 
       { timestamp && (
-        <Typography sx={ { fontSize: '0.7rem', color: palette.text.tertiary, mt: 0.25, opacity: 0.7 } }>
+        <Typography sx={ { fontSize: '0.75rem', color: palette.text.secondary, mt: 0.5 } }>
           { job === 'express' ? `Started ${timestamp}` : timestamp }
         </Typography>
       ) }
 
       { isRunnable && (
-        <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5, mt: 1 } }>
+        <Box sx={ { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1.5, mt: 1 } }>
           <Typography sx={ { fontSize: '0.75rem', color: palette.text.tertiary, flex: 1, lineHeight: 1.4 } }>
             { meta.runHint }
           </Typography>
@@ -122,7 +122,7 @@ export default function StatusRow({ job, statusInfo, divider }: StatusRowProps) 
         </DialogContent>
         <DialogActions>
           <Button onClick={ () => setConfirmationOpen(false) }>Cancel</Button>
-          <Button onClick={ () => void startJob() }>{ actionLabel }</Button>
+          <Button variant="contained" onClick={ () => void startJob() }>{ actionLabel }</Button>
         </DialogActions>
       </Dialog>
     </Box>

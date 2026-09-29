@@ -52,8 +52,9 @@ it('puts a failed sensor before ongoing work within its group', async () => {
   data.analyzeSleepLeft = { name: 'Running analysis', status: 'started', description: '', message: '' };
   data.waterTank = { name: 'Water issue', status: 'failed', description: '', message: '' };
   server.use(http.get('/api/serverStatus', () => HttpResponse.json(data)));
-  renderWithProviders(<StatusPage />);
+  const { user } = renderWithProviders(<StatusPage />);
   const failure = await screen.findByText('Water issue');
+  await user.click(screen.getByRole('button', { name: /Sleep tracking/ }));
   const running = screen.getByText('Running analysis');
   expect(failure.compareDocumentPosition(running) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
@@ -161,7 +162,7 @@ it('names a starting core service and includes it in the group summary', async (
   })));
   renderWithProviders(<StatusPage/>);
   expect(await screen.findByText('Waiting for Franken monitor.')).toBeVisible();
-  expect(screen.getByRole('button', { name: 'Core services · 6 healthy, 1 starting' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Core services · 9 healthy, 1 starting' })).toBeVisible();
 });
 
 it('warns about a core service that has not started after the server grace period', async () => {
@@ -172,7 +173,7 @@ it('warns about a core service that has not started after the server grace perio
   }, { headers: { Date: new Date().toUTCString() } })));
   renderWithProviders(<StatusPage/>);
   expect(await screen.findByText('Franken monitor has not started. Check the service below or open Logs.')).toBeVisible();
-  expect(screen.getByText('Some services need attention')).toBeVisible();
+  expect(screen.getByText('Franken monitor needs attention')).toBeVisible();
   expect(screen.getByRole('button', { name: /Core services/ })).toHaveAttribute('aria-expanded', 'true');
 });
 
@@ -191,7 +192,7 @@ it.each([-3_600_000, 3_600_000])('uses the Pod clock with a %i ms offset from th
   }, { headers: { Date: new Date(podNow).toUTCString() } })));
   renderWithProviders(<StatusPage/>);
   expect(await screen.findByText('Waiting for core services')).toBeVisible();
-  expect(screen.queryByText('Some services need attention')).not.toBeInTheDocument();
+  expect(screen.queryByText('Franken monitor needs attention')).not.toBeInTheDocument();
 });
 
 it.each([-3_600_000, 3_600_000])('carries overdue attention through Settings and System at a %i ms Pod offset', async offset => {
@@ -205,8 +206,8 @@ it.each([-3_600_000, 3_600_000])('carries overdue attention through Settings and
   const device = await screen.findByRole('link', { name: 'Pod and diagnostics 1 items need attention' });
   expect((await screen.findAllByRole('link', { name: 'Settings, system needs attention' })).length).toBeGreaterThan(0);
   await user.click(device);
-  await user.click(await screen.findByRole('link', { name: 'System status' }));
-  expect(await screen.findByText('Some services need attention')).toBeVisible();
+  await user.click(await screen.findByRole('link', { name: /^System status/ }));
+  expect(await screen.findByText('Franken monitor needs attention')).toBeVisible();
   expect(screen.getByText('Franken monitor has not started. Check the service below or open Logs.')).toBeVisible();
 });
 
@@ -228,7 +229,7 @@ it.each([undefined, 'invalid'])('stays conservative without a usable Date header
     expect(screen.getByText('Waiting for core services')).toBeVisible();
     monotonic.mockReturnValue(131_000);
     await user.click(screen.getByRole('button', { name: 'Check again' }));
-    expect(await screen.findByText('Some services need attention')).toBeVisible();
+    expect(await screen.findByText('Franken monitor needs attention')).toBeVisible();
   } finally {
     monotonic.mockRestore();
   }
@@ -249,7 +250,7 @@ it('refreshes the Pod clock even when a later status response has identical serv
   expect(await screen.findByText('Waiting for core services')).toBeVisible();
   podNow = startedAt + 180_000;
   await user.click(screen.getByRole('button', { name: 'Check again' }));
-  expect(await screen.findByText('Some services need attention')).toBeVisible();
+  expect(await screen.findByText('Franken monitor needs attention')).toBeVisible();
 });
 
 it('does not carry missing-header clock evidence into another query cache', async () => {
@@ -266,12 +267,55 @@ it('does not carry missing-header clock evidence into another query cache', asyn
     expect(await screen.findByText('Waiting for core services')).toBeVisible();
     monotonic.mockReturnValue(131_000);
     await act(async () => { await first.queryClient.invalidateQueries({ queryKey: ['useServerStatus'] }); });
-    expect(await screen.findByText('Some services need attention')).toBeVisible();
+    expect(await screen.findByText('Franken monitor needs attention')).toBeVisible();
     first.unmount();
     renderWithProviders(<StatusPage/>);
     expect(await screen.findByText('Waiting for core services')).toBeVisible();
-    expect(screen.queryByText('Some services need attention')).not.toBeInTheDocument();
+    expect(screen.queryByText('Franken monitor needs attention')).not.toBeInTheDocument();
   } finally {
     monotonic.mockRestore();
   }
+});
+
+it('shows each simultaneous failure impact and keeps healthy details collapsed', async () => {
+  const data = getServerStatus();
+  server.use(http.get('/api/serverStatus', () => HttpResponse.json({ ...data,
+    pumpHealthLeft: { ...data.pumpHealthLeft, status: 'failed', message: 'Pump stalled' },
+    biometricsStream: { ...data.biometricsStream, status: 'failed', message: 'Stream stopped' },
+  })));
+  renderWithProviders(<StatusPage/>);
+  expect(await screen.findByText('A pump may be stalled. Temperature readings may be inaccurate.')).toBeVisible();
+  expect(screen.getByText('Sleep tracking stopped. New sleep data may not be recorded.')).toBeVisible();
+  expect(screen.queryByText('Connected to the hardware.')).not.toBeInTheDocument();
+  expect(screen.getAllByRole('button', { name: /Show .* healthy/ }).length).toBeGreaterThan(0);
+});
+
+it('keeps the connection error visible while another check is pending', async () => {
+  server.use(http.get('/api/serverStatus', () => new HttpResponse(null, { status: 503 })));
+  const { queryClient } = renderWithProviders(<StatusPage/>);
+  await screen.findByRole('alert');
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  server.use(http.get('/api/serverStatus', async () => { await pending; return HttpResponse.json(getServerStatus()); }));
+  let request!: Promise<void>;
+  act(() => { request = queryClient.refetchQueries({ queryKey: ['useServerStatus'] }); });
+  await waitFor(() => expect(queryClient.isFetching({ queryKey: ['useServerStatus'] })).toBe(1));
+  const keptError = !!screen.queryByRole('alert');
+  const showedSpinner = !!screen.queryByRole('progressbar', { name: 'Loading system status' });
+  release();
+  await act(async () => { await request; });
+  expect(keptError).toBe(true);
+  expect(showedSpinner).toBe(false);
+  expect(await screen.findByText('Everything is running')).toBeVisible();
+});
+
+it('names both pumps clearly and shows their shared impact once', async () => {
+  const data = getServerStatus();
+  server.use(http.get('/api/serverStatus', () => HttpResponse.json({ ...data,
+    pumpHealthLeft: { ...data.pumpHealthLeft, status: 'failed' },
+    pumpHealthRight: { ...data.pumpHealthRight, status: 'failed' },
+  })));
+  renderWithProviders(<StatusPage/>);
+  expect(await screen.findByText('Left pump, Right pump need attention')).toBeVisible();
+  expect(screen.getAllByText('A pump may be stalled. Temperature readings may be inaccurate.')).toHaveLength(1);
 });

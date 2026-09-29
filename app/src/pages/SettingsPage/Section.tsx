@@ -1,5 +1,6 @@
+import SectionHeading from '@components/SectionHeading';
 import { PropsWithChildren } from 'react';
-import { Typography, Card, CardContent } from '@mui/material';
+import { Card, CardContent } from '@mui/material';
 
 
 
@@ -14,10 +15,9 @@ export default function Section({ title, children }: SectionProps) {
         {
           title && (
             <>
-              <Typography variant='h6' component="h2" sx={ { textAlign: 'left' } }>
+              <SectionHeading sx={ { textAlign: 'left', mb: 1.5 } }>
                 { title }
-              </Typography>
-              <br />
+              </SectionHeading>
             </>
           )
         }

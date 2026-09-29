@@ -91,7 +91,7 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
     runHint: 'Recalibrates presence detection. Get off this side first: it assumes the side is empty.',
   },
   pumpHealthLeft: {
-    group: 'biometrics',
+    group: 'core',
     blurb: 'Watches for a stalled water pump while the heater/cooler is running, left side. '
       + 'A stalled pump can make the sensor read a false runaway temperature.',
     meaning: {
@@ -100,7 +100,7 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
     },
   },
   pumpHealthRight: {
-    group: 'biometrics',
+    group: 'core',
     blurb: 'Watches for a stalled water pump while the heater/cooler is running, right side. '
       + 'A stalled pump can make the sensor read a false runaway temperature.',
     meaning: {
@@ -109,7 +109,7 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
     },
   },
   waterTank: {
-    group: 'biometrics',
+    group: 'core',
     blurb: "The Pod's water tank sensor. Heating and cooling need water circulating.",
     meaning: {
       healthy: 'The tank has enough water.',
@@ -178,7 +178,8 @@ export function usableStatusKeys(data?: ServerStatus): ServerStatusKey[] {
     .filter(key => !!STATUS_META[key] && StatusInfoSchema.safeParse(data[key]).success) : [];
 }
 
-export const CORE_KEYS = (Object.keys(STATUS_META) as ServerStatusKey[]).filter(key => STATUS_META[key].group === 'core');
+export const CORE_KEYS: ServerStatusKey[] = (Object.keys(STATUS_META) as ServerStatusKey[])
+  .filter(key => STATUS_META[key].group === 'core');
 
 export function coreServicesReady(data?: ServerStatus): boolean {
   return CORE_KEYS.every(key => StatusInfoSchema.safeParse(data?.[key]).success && data?.[key]?.status === 'healthy');
@@ -195,7 +196,22 @@ export function overdueCoreKeys(data: ServerStatus | undefined, podNow: number |
 }
 
 export function statusName(key: ServerStatusKey, info?: StatusInfo): string {
+  if (key === 'pumpHealthLeft') return 'Left pump';
+  if (key === 'pumpHealthRight') return 'Right pump';
+  if (key === 'biometricsCalibrationLeft') return 'Left presence calibration';
+  if (key === 'biometricsCalibrationRight') return 'Right presence calibration';
   if (key === 'express') return 'Web server';
   if (key === 'franken') return 'Hardware link';
   return info?.name ?? key;
+}
+
+export function statusImpact(key: ServerStatusKey): string {
+  if (key === 'waterTank') return 'Heating and cooling need water. Check the tank below.';
+  if (key.startsWith('pumpHealth')) return 'A pump may be stalled. Temperature readings may be inaccurate.';
+  if (STATUS_META[key].group === 'schedules') return 'Some scheduled changes may not run. Review this service below.';
+  if (key === 'biometricsStream') return 'Sleep tracking stopped. New sleep data may not be recorded.';
+  if (key === 'franken') return 'Heating and cooling controls cannot reach the hardware.';
+  if (key === 'database') return 'Settings and sleep history may be unavailable.';
+  if (key === 'systemDate') return 'Scheduled changes may run at the wrong time.';
+  return STATUS_META[key].meaning?.failed ?? STATUS_META[key].blurb;
 }

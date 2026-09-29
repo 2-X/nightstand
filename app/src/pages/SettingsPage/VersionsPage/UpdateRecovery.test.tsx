@@ -1,3 +1,4 @@
+import { getDeviceStatus } from '../../../mocks/mockData';
 import { useState, type Dispatch, type SetStateAction, type ReactElement } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, screen, waitFor, within } from '@testing-library/react';
@@ -11,15 +12,15 @@ import RevertToStockRow from './RevertToStockRow';
 
 const release = { kind: 'agent', version: '3.2.0', channel: 'stable', date: '2026-09-28' } as const;
 const cases = [
-  { name: 'update', open: 'Update to 3.2.0', title: 'Update to v3.2.0?', confirm: 'Update now', log: 'update',
+  { name: 'update', open: 'Update to v3.2.0', title: 'Update to v3.2.0?', confirm: 'Update now', log: 'update',
     render: (runningVersion: string) => <UpdateFreeSleepButton runningVersion={ runningVersion }/> },
   { name: 'release install', open: 'Install', title: 'Install v3.2.0?', confirm: 'Install now', log: 'update',
     render: (runningVersion: string) => <ReleaseRow runningVersion={ runningVersion } release={ release } body={ undefined }/> },
-  { name: 'rollback', open: 'Roll back to v2.9.0 (instant, no download)',
-    title: 'Roll back to v2.9.0?', confirm: 'Roll back now', log: 'rollback',
+  { name: 'rollback', open: 'Go back to v2.9.0 Instant, no download',
+    title: 'Go back to v2.9.0?', confirm: 'Go back now', log: 'rollback',
     render: (runningVersion: string) => <RollbackRow runningVersion={ runningVersion } rollbackVersion="2.9.0"/> },
-  { name: 'upstream restore', open: 'Restore upstream free-sleep',
-    title: 'Restore upstream free-sleep?', confirm: 'Switch to upstream', log: 'revert',
+  { name: 'upstream restore', open: 'Switch to upstream free-sleep',
+    title: 'Switch to upstream free-sleep?', confirm: 'Switch to upstream free-sleep', log: 'revert',
     render: (runningVersion: string) => <RevertToStockRow runningVersion={ runningVersion }/> },
 ];
 
@@ -36,7 +37,9 @@ beforeEach(() => {
     http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json', () => HttpResponse.json({
       channels: ['stable', 'beta'], releases: [release],
     })),
-    http.get('*/deviceStatus', () => HttpResponse.json({ freeSleep: { version: '3.0.0' } })),
+    http.get('*/deviceStatus', () => HttpResponse.json({
+      ...getDeviceStatus(), freeSleep: { ...getDeviceStatus().freeSleep, version: '3.0.0' },
+    })),
     http.post('*/update', () => new HttpResponse(null, { status: 204 })),
     http.post('*/update/:action', () => new HttpResponse(null, { status: 204 })),
   );

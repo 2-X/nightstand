@@ -1,4 +1,5 @@
 import { useBaseStatus, useSetBasePosition, useSetBasePreset, useStopBase } from '@api/baseControl';
+import { Link } from 'react-router-dom';
 import BedVisualization from '@components/BedVisualization';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -19,7 +20,13 @@ const presets = {
 
 export default function BaseControlPage() {
   const { isUpdating } = useAppStore();
-  const { data: baseStatus, dataUpdatedAt, isLoading, isError } = useBaseStatus();
+  const { data: baseStatus, dataUpdatedAt, isLoading, isError, isSuccess } = useBaseStatus();
+  const [lastCheckFailed, setLastCheckFailed] = useState(false);
+  useEffect(() => {
+    if (isError) setLastCheckFailed(true);
+    else if (isSuccess) setLastCheckFailed(false);
+  }, [isError, isSuccess]);
+  const statusUnavailable = isError || lastCheckFailed;
   const positionMutation = useSetBasePosition();
   const presetMutation = useSetBasePreset();
   const stopMutation = useStopBase();
@@ -134,16 +141,17 @@ export default function BaseControlPage() {
   const moving = !!baseStatus?.isMoving;
   const showStop = requested || moving || stopFailed;
   const pending = positionMutation.isPending || presetMutation.isPending || stopMutation.isPending;
-  const unavailable = isLoading || isError || baseStatus?.isConfigured === false || !baseStatus;
+  const unavailable = isLoading || statusUnavailable || baseStatus?.isConfigured === false || !baseStatus;
 
   return (
     <PageContainer>
       <PageHeader title="Bed"/>
       <BedTabs/>
-      { isLoading && <CircularProgress size={ 24 } aria-label="Loading base position" /> }
-      { isError && <Alert severity="error">Could not load the base position.</Alert> }
+      { isLoading && !statusUnavailable && !baseStatus && <CircularProgress size={ 24 } aria-label="Loading base position" /> }
+      { statusUnavailable && <Alert severity="error">Could not load the base position.</Alert> }
       { baseStatus?.isConfigured === false && <Alert severity="info">
-        No adjustable base found. If one is connected, check Settings, Pod and diagnostics.
+        No adjustable base found. Pair an adjustable base in Eight Sleep's app before using Elevation.
+        <Button component={ Link } to="/" sx={ { display: 'flex', width: 'fit-content', px: 0 } }>Back to Temperature</Button>
       </Alert> }
       { error && <Alert severity="error" sx={ { width: '100%' } }>{ error }</Alert> }
       { baseStatus?.isConfigured !== false && <>

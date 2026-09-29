@@ -17,7 +17,7 @@ describe('RevertToStockRow', () => {
 
     const { user } = renderWithProviders(<RevertToStockRow runningVersion="3.0.0" />);
 
-    await user.click(screen.getByText('Restore upstream free-sleep'));
+    await user.click(screen.getByText('Switch to upstream free-sleep'));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -29,5 +29,5 @@ describe('RevertToStockRow', () => {
 
 it('exposes recovery as a keyboard-accessible button', () => {
   renderWithProviders(<RevertToStockRow runningVersion="3.0.0"/>);
-  expect(screen.getByRole('button', { name: 'Restore upstream free-sleep' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Switch to upstream free-sleep' })).toBeInTheDocument();
 });

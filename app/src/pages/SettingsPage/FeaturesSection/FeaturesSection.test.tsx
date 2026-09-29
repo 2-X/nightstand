@@ -42,3 +42,10 @@ describe('FeaturesSection', () => {
     expect(posted).toEqual({ features: { presenceAutoOff: false } });
   });
 });
+
+it.each([null, ''])('reports invalid settings instead of leaving features loading for %s', async body => {
+  server.use(http.get('*/settings', () => body === null ? HttpResponse.json(null) : new HttpResponse('')));
+  renderWithProviders(<FeaturesSection/>);
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not load features.');
+  expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+});

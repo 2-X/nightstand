@@ -1,3 +1,4 @@
+import { friendlyTimeZone } from '../../../lib/timeZone';
 import Box from '@mui/material/Box';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
@@ -25,7 +26,7 @@ export default function TimeZoneSelector({ settings, updateSettings }: TimeZoneS
   };
 
   return (
-    <Box sx={ { minWidth: 0, width: '100%', maxWidth: 300 } }>
+    <Box sx={ { minWidth: 0, width: '100%', maxWidth: '100%' } }>
       <FormControl fullWidth>
         <InputLabel id="time-zone-label">Time zone</InputLabel>
         <Select
@@ -38,7 +39,7 @@ export default function TimeZoneSelector({ settings, updateSettings }: TimeZoneS
         >
           {
             TIME_ZONES.map(zone => (
-              <MenuItem value={ zone } key={ zone }>{ zone }</MenuItem>
+              <MenuItem value={ zone } key={ zone }>{ friendlyTimeZone(zone) }</MenuItem>
             ))
           }
         </Select>

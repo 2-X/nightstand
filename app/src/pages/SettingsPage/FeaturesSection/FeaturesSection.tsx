@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, CircularProgress, Link, Typography } from '@mui/material';
 import Section from '../Section.tsx';
+import RawArchiveRetention from '../DeviceSettingsSection/RawArchiveRetention';
 import FeatureToggleRow from './FeatureToggleRow.tsx';
 import { Services, useServices, postServices } from '@api/services.ts';
 import { useSettings, postSettings } from '@api/settings.ts';
@@ -70,10 +71,21 @@ export default function FeaturesSection() {
         checked={ biometricsEnabled }
         onChange={ (next) => updateServices({ biometrics: { enabled: next } }) }
         description={
-          biometricsInstalled ? 'Installed. Process sleep and vital estimates on the Pod.'
+          biometricsInstalled ? 'Estimates sleep stages and heart rate on the Pod.'
             : 'Not installed. Optional sleep and vital estimates.'
         }
       />
+      { biometricsEnabled && <Box sx={ { pl: 2, my: 2, borderLeft: 1, borderColor: 'divider' } }>
+        <RawArchiveRetention
+          settings={ settings }
+          updateSettings={ patch => {
+            setError(null);
+            setIsUpdating(true);
+            postSettings(patch).then(() => refetchSettings())
+              .catch(() => setError('Could not save this change. Try again.'))
+              .finally(() => setIsUpdating(false));
+          } } />
+      </Box> }
       { !biometricsInstalled && <Accordion disableGutters>
         <AccordionSummary expandIcon={ <ExpandMoreIcon/> }>How to install</AccordionSummary>
         <AccordionDetails>
@@ -126,7 +138,7 @@ export default function FeaturesSection() {
         disabled={ isUpdating || !features }
         checked={ features?.oneOffAlarms ?? false }
         onChange={ (next) => updateFeature({ oneOffAlarms: next }) }
-        description="The single-fire alarm section on the Schedules page, separate from the recurring per-day alarm."
+        description="Adds a one-time alarm to Schedule, separate from the daily wake-up."
       />
     </Section>
   );

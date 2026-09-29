@@ -32,22 +32,23 @@ export default function RevertToStockRow({ runningVersion }: Props) {
           gap: 1.5,
           textAlign: 'left',
           justifyContent: 'flex-start',
-          mx: -2.5,
-          px: 2.5,
+          width: '100%',
+          minHeight: 44,
+          px: 0,
           py: 1.5,
           borderRadius: 1,
         } }
       >
         <WarningAmberIcon sx={ { color: 'text.secondary' } }/>
         <Typography sx={ { fontSize: '1rem' } }>
-          Restore upstream free-sleep
+          Switch to upstream free-sleep
         </Typography>
       </ButtonBase>
 
       <Dialog aria-labelledby={ titleId } open={ open } onClose={ () => { if (phase !== 'updating') { reset(); setOpen(false); } } }>
         <DialogTitle id={ titleId }>
-          { phase === 'idle' && 'Restore upstream free-sleep?' }
-          { phase === 'updating' && 'Restoring upstream...' }
+          { phase === 'idle' && 'Switch to upstream free-sleep?' }
+          { phase === 'updating' && 'Switching to upstream...' }
           { phase === 'failed' && 'Request failed' }
           { phase === 'timed_out' && 'Still not done' }
         </DialogTitle>
@@ -55,18 +56,13 @@ export default function RevertToStockRow({ runningVersion }: Props) {
           { phase === 'failed' && <Alert severity="error">{ error }</Alert> }
           { phase === 'idle' && (
             <DialogContentText component="div">
-              <Typography variant="body2" sx={ { mb: 1.5 } }>
-                Download the current build from the upstream free-sleep project and replace Nightstand.
-                This is an application change, not a factory firmware reset. Nightstand features
-                are removed; settings and sleep data remain on the Pod.
+              <Typography variant="body2" sx={ { mb: 2 } }>
+                Replace Nightstand with the current upstream free-sleep build. Nightstand features are removed,
+                but settings and sleep data remain on the Pod. Schedules and alarms pause during restart.
               </Typography>
-              <Typography variant="body2" sx={ { mb: 1.5 } }>
-                The script checks the server and hardware connection and attempts rollback if those
-                checks fail. Schedules and alarms pause during restart. Recovery may require SSH.
-              </Typography>
-              <Typography variant="body2" fontWeight={ 600 }>
-                There is no button to come back. Once stock is running, getting back
-                requires the migration tool from a computer with SSH access.
+              <Typography variant="body2">
+                Returning to Nightstand requires the migration tool from a computer with SSH access.
+                If installation checks fail, the Pod attempts rollback. Recovery may require SSH.
               </Typography>
             </DialogContentText>
           ) }
@@ -74,14 +70,14 @@ export default function RevertToStockRow({ runningVersion }: Props) {
             <Stack spacing={ 2 } alignItems="center" sx={ { py: 2 } }>
               <CircularProgress/>
               <Typography variant="body2" color="text.secondary">
-                Restoring upstream free-sleep. This page reloads by itself when done.
+                Switching to upstream free-sleep. This page reloads by itself when done.
               </Typography>
             </Stack>
           ) }
           { phase === 'timed_out' && (
             <Stack spacing={ 1.5 }>
               <DialogContentText>
-                  Restoring upstream free-sleep is not confirmed after 10 minutes.
+                  Switching to upstream free-sleep is not confirmed after 10 minutes.
                   Check the logs and current status before trying again.
               </DialogContentText>
               <Typography variant="body2">
@@ -94,11 +90,13 @@ export default function RevertToStockRow({ runningVersion }: Props) {
             </Stack>
           ) }
         </DialogContent>
-        <DialogActions>
+        <DialogActions
+          sx={ { flexDirection: { xs: 'column', sm: 'row' }, gap: 1, px: 3, pb: 3,
+            '& > :not(style) ~ :not(style)': { ml: 0 }, '& .MuiButton-root': { width: { xs: '100%', sm: 'auto' } } } }>
           { phase === 'idle' && (
             <>
               <Button onClick={ () => setOpen(false) }>Cancel</Button>
-              <Button color="error" variant="contained" onClick={ revert }>Switch to upstream</Button>
+              <Button color="error" variant="contained" onClick={ revert }>Switch to upstream free-sleep</Button>
             </>
           ) }
           { (phase === 'timed_out' || phase === 'failed') && (

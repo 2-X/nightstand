@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
+import semver from 'semver';
 import { z } from 'zod';
 import currentServerInfo from '../../../server/src/serverInfo.json';
 // Keep the release manifest independent of the full device-settings schema:
@@ -29,7 +30,12 @@ const ReleaseSchema = z.discriminatedUnion('kind', [AgentReleaseSchema, BundleRe
 
 export const ReleasesManifestSchema = z.object({
   channels: z.array(z.string()),
-  releases: z.array(ReleaseSchema),
+  releases: z.array(z.unknown()).transform(entries => entries.filter(entry => {
+    // Future release kinds are irrelevant to this client; malformed known
+    // kinds must still fail validation rather than becoming install targets.
+    return !(entry && typeof entry === 'object' && 'kind' in entry
+      && typeof entry.kind === 'string' && !['agent', 'bundle'].includes(entry.kind));
+  })).pipe(z.array(ReleaseSchema)),
 });
 
 export type Release = z.infer<typeof ReleaseSchema>;
@@ -45,24 +51,28 @@ const CHANNEL_RANK: Record<typeof RELEASE_CHANNELS[number], number> = { stable: 
 export const useReleases = () => useQuery<ReleasesManifest>({
   queryKey: ['useReleases'],
   queryFn: async ({ signal }) => {
-    const response = await axios.get<ReleasesManifest>(RELEASES_URL, { signal });
+    const response = await axios.get<ReleasesManifest>(RELEASES_URL, {
+      signal, responseType: 'json', transitional: { silentJSONParsing: false },
+    });
     return ReleasesManifestSchema.parse(response.data);
   },
   staleTime: 60_000,
   retry: false,
 });
 
-// Newest release visible on `channel`. releases.json is expected newest
-// first, and beta sees every release while stable only sees releases
-// promoted to stable. Undefined when the manifest hasn't loaded.
+// Both the update target and the picker use the same channel eligibility.
+export const releasesForChannel = (
+  manifest: ReleasesManifest | undefined,
+  channel: typeof RELEASE_CHANNELS[number]
+): Release[] => (manifest?.releases ?? [])
+  .filter(release => semver.valid(release.version) && CHANNEL_RANK[release.channel] <= CHANNEL_RANK[channel]
+    && (channel === 'beta' || semver.prerelease(release.version) === null))
+  .sort((left, right) => semver.rcompare(left.version, right.version));
+
 export const latestForChannel = (
   manifest: ReleasesManifest | undefined,
   channel: typeof RELEASE_CHANNELS[number]
-): Release | undefined => {
-  if (!manifest) return undefined;
-  const rank = CHANNEL_RANK[channel];
-  return manifest.releases.find(release => CHANNEL_RANK[release.channel] <= rank);
-};
+): Release | undefined => releasesForChannel(manifest, channel)[0];
 
 // The upstream release this build was made from, baked in at build time.
 export const podUpstreamBase = (): string => currentServerInfo.upstreamBase;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { http, HttpResponse } from 'msw';
 import { server } from '@test/setup';
@@ -8,7 +8,7 @@ import ChangelogPage from './ChangelogPage';
 describe('ChangelogPage', () => {
   it('renders the changelog page', async () => {
     renderWithProviders(<ChangelogPage />, { initialRoute: '/changelog' });
-    expect(await screen.findByText('Changelog')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Release notes', level: 1 })).toBeInTheDocument();
   });
 });
 
@@ -26,4 +26,35 @@ it('opens the exact release linked from the software screen', async () => {
   ] })));
   renderWithProviders(<ChangelogPage />, { initialRoute: '/changelog#release-v3.4.0' });
   expect(await screen.findByRole('button', { name: /^v3.4.0/ })).toHaveAttribute('aria-expanded', 'true');
+});
+
+it('sorts release versions newest first', async () => {
+  server.use(http.get('*/changelog', () => HttpResponse.json({ entries: [
+    { version: '3.0.0', date: '2026-09-28', body: 'Older release.' },
+    { version: '3.12.0', date: '2026-09-28', body: 'Newest release.' },
+    { version: '3.2.0', date: '2026-09-28', body: 'Middle release.' },
+  ] })));
+  renderWithProviders(<ChangelogPage />);
+  const rows = await screen.findAllByRole('button', { name: /^v3\./ });
+  expect(rows.map(row => row.querySelector('.MuiTypography-subtitle1')?.textContent)).toEqual(['v3.12.0', 'v3.2.0', 'v3.0.0']);
+});
+
+it('keeps one entry per version and prefers local release notes', async () => {
+  server.use(
+    http.get('*/changelog', () => HttpResponse.json({ entries: [
+      { version: '9.3.0', date: '2026-09-28', body: 'Local release details.' },
+      { version: '9.3.0', date: '2026-09-28', body: 'Duplicate local details.' },
+    ] })),
+    http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/CHANGELOG.md', () => HttpResponse.text(
+      '# Changelog\n\n## [9.4.0] - 2026-09-28\nRemote newest.\n\n'
+      + '## [9.4.0] - 2026-09-28\nDuplicate remote.\n\n'
+      + '## [9.3.0] - 2026-09-28\nRemote overlapping details.\n'
+    ))
+  );
+  renderWithProviders(<ChangelogPage />);
+  await waitFor(() => expect(screen.getAllByRole('button', { name: /^v9\./ })).toHaveLength(2));
+  expect(screen.getByRole('button', { name: /^v9.3.0/ })).toHaveTextContent('Local release details.');
+  expect(screen.queryByText('Remote overlapping details.')).not.toBeInTheDocument();
+  expect(document.querySelectorAll('[id="release-v9.3.0"]')).toHaveLength(1);
+  expect(document.querySelectorAll('[id="release-v9.4.0"]')).toHaveLength(1);
 });

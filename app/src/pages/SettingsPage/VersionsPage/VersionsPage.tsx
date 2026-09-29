@@ -1,15 +1,15 @@
+import SectionHeading from '@components/SectionHeading';
 import { useCallback, useMemo, useState } from 'react';
 import { useUpdateAttentionStore, type UpdateOutcome } from '@state/updateAttentionStore';
 import {
   Accordion, AccordionDetails, AccordionSummary,
-  Alert, Box, Button, Chip, Drawer, FormControlLabel, Radio, RadioGroup, Typography,
+  Alert, Box, Button, Drawer, FormControlLabel, List, ListItemButton, ListItemText, Radio, RadioGroup, Typography,
 } from '@mui/material';
 import semver from 'semver';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { Link } from 'react-router-dom';
 import moment from 'moment-timezone';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { SubpageShell } from '../../DataPage/Header.tsx';
 import Section from '../Section.tsx';
 import MarkdownBody from '@components/MarkdownBody.tsx';
@@ -20,7 +20,7 @@ import RevertToStockRow from './RevertToStockRow.tsx';
 import { useDeviceStatus } from '@api/deviceStatus.ts';
 import { useSettings, postSettings } from '@api/settings.ts';
 import { useLatestVersion } from '@api/useLatestVersion.ts';
-import { useReleases } from '@api/releases.ts';
+import { useReleases, releasesForChannel } from '@api/releases.ts';
 import { useChangelog, useRemoteChangelog, entriesNewerThan } from '@api/changelog.ts';
 import { useRollbackInfo } from '@api/update.ts';
 import { useServerStatus } from '@api/serverStatus.ts';
@@ -60,12 +60,11 @@ export default function VersionsPage() {
   const latestVersion = useLatestVersion();
 
   const running = deviceStatus?.freeSleep?.version;
-  const branch = deviceStatus?.freeSleep?.branch;
   const channel: UpdateChannelType = settings?.updateChannel ?? 'stable';
   const capable = !!running && semver.valid(running) && semver.gte(running, CAPABLE_FLOOR);
 
-  const eligibleVersions = new Set(releases?.releases
-    .filter(release => channel === 'beta' || release.channel === 'stable')
+  const eligibleReleases = releasesForChannel(releases, channel);
+  const eligibleVersions = new Set(eligibleReleases
     .map(release => release.version));
   const whatsNew = entriesNewerThan(remoteChangelog, running)
     .filter(entry => eligibleVersions.has(entry.version));
@@ -83,18 +82,7 @@ export default function VersionsPage() {
   return (
     <SubpageShell title="Software">
 
-      <Box sx={ { display: 'flex', gap: 1, alignItems: 'center' } }>
-        <Typography variant="body2">Nightstand</Typography>
-        { running && <Chip label={ `v${running}` } size="small"/> }
-        { branch && branch !== 'main' && <Chip label={ branch } size="small"/> }
-        {
-          latestVersion && !updateAvailable && (
-            <Chip icon={ <CheckCircleIcon/> } label="Up to date" color="success" variant="filled" size="small"/>
-          )
-        }
-      </Box>
-
-      { releasesFailed && <Alert severity="warning">Release information is unavailable. Try again when your browser can reach GitHub.</Alert> }
+      { releasesFailed && <Alert severity="warning">Release information is unavailable. Try checking again.</Alert> }
       { updateAvailable && (
         <Section title={ `Version ${latestVersion} is ready` }>
           <Typography variant="body2" sx={ { mb: 1 } }>
@@ -104,9 +92,9 @@ export default function VersionsPage() {
             <Accordion
               disableGutters
               square
-              sx={ { background: 'transparent', boxShadow: 'none', mb: 1, '&:before': { display: 'none' } } }
+              sx={ { background: 'transparent', boxShadow: 'none', border: 0, mb: 1, '&:before': { display: 'none' } } }
             >
-              <AccordionSummary expandIcon={ <ExpandMoreIcon/> } sx={ { px: 0, minHeight: 0 } }>
+              <AccordionSummary expandIcon={ <ExpandMoreIcon/> } sx={ { px: 0, minHeight: 44 } }>
                 <Typography variant="body2">What's new</Typography>
               </AccordionSummary>
               <AccordionDetails
@@ -114,7 +102,7 @@ export default function VersionsPage() {
               >
                 { whatsNew.map(entry => (
                   <Box key={ entry.version }>
-                    <Typography variant="caption" sx={ { fontWeight: 600 } }>
+                    <Typography variant="body2" sx={ { fontWeight: 600 } }>
                       v{ entry.version }, { entry.date }
                     </Typography>
                     <MarkdownBody markdown={ entry.body }/>
@@ -130,13 +118,13 @@ export default function VersionsPage() {
             retry={ updateProblem && updateOutcome === 'failed' }
           />
           <Typography variant="body2" color="text.secondary" sx={ { mt: 1 } }>
-            About 5 minutes. Schedules and alarms pause while the Pod restarts.
+            2 to 5 minutes. Schedules and alarms pause while the Pod restarts.
           </Typography>
         </Section>
       ) }
 
       { !updateAvailable && latestVersion && running && semver.valid(running) && !releasesFailed && <Section>
-        <Typography>You're on the latest version.</Typography>
+        <Typography>Nightstand v{ running } is up to date.</Typography>
         { dataUpdatedAt > 0 && <Typography variant="body2" color="text.secondary">
           Checked { moment(dataUpdatedAt).format('h:mm A') }
         </Typography> }
@@ -151,87 +139,92 @@ export default function VersionsPage() {
           <RollbackRow runningVersion={ running } rollbackVersion={ rollbackInfo.version }/>
         ) }
       </Alert> }
-      <Button onClick={ () => setChannelOpen(true) } sx={ { justifyContent: 'space-between', minHeight: 48 } }>
-        Updates <Box component="span" sx={ { display: 'flex', alignItems: 'center', gap: 1 } }>
-          { channel === 'stable' ? 'Stable' : 'Beta' }<ChevronRightIcon/>
-        </Box>
-      </Button>
-      <Button component={ Link } to="/changelog" endIcon={ <ChevronRightIcon/> } sx={ { justifyContent: 'space-between', minHeight: 48 } }>
-        Release notes
-      </Button>
-      <Drawer anchor="bottom" open={ channelOpen } onClose={ () => setChannelOpen(false) }>
-        <Box sx={ { p: 3, width: '100%', maxWidth: 720, mx: 'auto' } }>
-          <Typography variant="h2">Updates</Typography>
-          <Typography variant="body2" color="text.secondary" sx={ { my: 2 } }>
+      <List disablePadding sx={ { bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' } }>
+        <ListItemButton onClick={ () => setChannelOpen(true) } sx={ { minHeight: 44, borderBottom: 1, borderColor: 'divider' } }>
+          <ListItemText primary="Update channel" secondary={ channel === 'stable' ? 'Stable' : 'Beta' } />
+          <ChevronRightIcon />
+        </ListItemButton>
+        <ListItemButton component={ Link } to="/changelog" sx={ { minHeight: 44 } }>
+          <ListItemText primary="Release notes" /><ChevronRightIcon />
+        </ListItemButton>
+        <Drawer anchor="bottom" open={ channelOpen } onClose={ () => setChannelOpen(false) }>
+          <Box sx={ { p: 3, width: '100%', maxWidth: 720, mx: 'auto' } }>
+            <Typography variant="h2">Update channel</Typography>
+            <Typography variant="body2" color="text.secondary" sx={ { my: 2 } }>
             Beta gets every release right away. Stable waits for a week of real use.
-          </Typography>
-          <RadioGroup
-            aria-label="Update channel"
-            value={ channel }
-            onChange={ (_event, value) => {
-              setChannelError(undefined);
-              setSavingChannel(true);
-              postSettings({ updateChannel: value as UpdateChannelType })
-                .then(() => refetchSettings()).then(() => setChannelOpen(false))
-                .catch(() => setChannelError('Could not save the update channel. Try selecting it again.'))
-                .finally(() => setSavingChannel(false));
-            } }>
-            { UPDATE_CHANNELS.map(value => <FormControlLabel
-              key={ value }
-              value={ value }
-              disabled={ savingChannel }
-              control={ <Radio/> }
-              label={ value === 'stable' ? 'Stable' : 'Beta' }
-              sx={ { minHeight: 48 } }
-            />) }
-          </RadioGroup>
-          { channelError && <Alert severity="error">{ channelError }</Alert> }
-          <Button onClick={ () => setChannelOpen(false) }>Done</Button>
-        </Box>
-      </Drawer>
-      <Accordion disableGutters slotProps={ { transition: { unmountOnExit: true } } }>
-        <AccordionSummary expandIcon={ <ExpandMoreIcon/> }>Recovery</AccordionSummary>
-        <AccordionDetails sx={ { display: 'flex', flexDirection: 'column', gap: 2 } }>
-          { !capable && (
-            <Typography variant="body2" color="text.secondary">
+            </Typography>
+            <RadioGroup
+              aria-label="Update channel"
+              value={ channel }
+              onChange={ (_event, value) => {
+                setChannelError(undefined);
+                setSavingChannel(true);
+                postSettings({ updateChannel: value as UpdateChannelType })
+                  .then(() => refetchSettings()).then(() => setChannelOpen(false))
+                  .catch(() => setChannelError('Could not save the update channel. Try selecting it again.'))
+                  .finally(() => setSavingChannel(false));
+              } }>
+              { UPDATE_CHANNELS.map(value => <FormControlLabel
+                key={ value }
+                value={ value }
+                disabled={ savingChannel }
+                control={ <Radio/> }
+                label={ value === 'stable' ? 'Stable' : 'Beta' }
+                sx={ { minHeight: 44 } }
+              />) }
+            </RadioGroup>
+            { channelError && <Alert severity="error">{ channelError }</Alert> }
+          </Box>
+        </Drawer>
+        <Accordion
+          disableGutters
+          sx={ { border: 0, borderTop: 1, borderColor: 'divider', borderRadius: '0 !important' } }
+          slotProps={ { transition: { unmountOnExit: true } } }>
+          <AccordionSummary expandIcon={ <ExpandMoreIcon/> }>Recovery</AccordionSummary>
+          <AccordionDetails sx={ { display: 'flex', flexDirection: 'column', gap: 2 } }>
+            { !capable && (
+              <Typography variant="body2" color="text.secondary">
           Update to v{ CAPABLE_FLOOR } or later to unlock picking a specific version and instant
           rollback.
-            </Typography>
-          ) }
+              </Typography>
+            ) }
 
-          { capable && rollbackInfo?.available && rollbackInfo.version && (
-            <Section title="Previous installation">
-              <RollbackRow runningVersion={ running } rollbackVersion={ rollbackInfo.version }/>
-            </Section>
-          ) }
+            { capable && rollbackInfo?.available && rollbackInfo.version && (
+              <Box>
+                <SectionHeading sx={ { mb: 1.5 } }>Previous installation</SectionHeading>
+                <RollbackRow runningVersion={ running } rollbackVersion={ rollbackInfo.version }/>
+              </Box>
+            ) }
 
-          { capable && releases && (
-            <Section title="Install a specific version">
-              <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mb: 1 } }>
+            { capable && releases && (
+              <Box>
+                <SectionHeading sx={ { mb: 1.5 } }>Install a specific version</SectionHeading>
+                <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mb: 1 } }>
             Downgrading keeps your data (databases aren't rewritten). Installing any version
             replaces the instant-rollback slot above. Versions below v{ CAPABLE_FLOOR } can't be
             installed from here.
-              </Typography>
-              { releases.releases.map(release => (
-                <ReleaseRow
-                  key={ release.version }
-                  release={ release }
-                  runningVersion={ running }
-                  body={ bodyByVersion.get(release.version) }
-                  offerReinstall={ offerReinstall }
-                />
-              )) }
-            </Section>
-          ) }
+                </Typography>
+                { eligibleReleases.map(release => (
+                  <ReleaseRow
+                    key={ release.version }
+                    release={ release }
+                    runningVersion={ running }
+                    body={ bodyByVersion.get(release.version) }
+                    offerReinstall={ offerReinstall }
+                  />
+                )) }
+              </Box>
+            ) }
 
-          <Section title="Switch to upstream">
-            <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mb: 1 } }>
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mb: 1 } }>
           Replace Nightstand with the current upstream free-sleep build.
-            </Typography>
-            <RevertToStockRow runningVersion={ running }/>
-          </Section>
-        </AccordionDetails>
-      </Accordion>
+              </Typography>
+              <RevertToStockRow runningVersion={ running }/>
+            </Box>
+          </AccordionDetails>
+        </Accordion>
+      </List>
     </SubpageShell>
   );
 }

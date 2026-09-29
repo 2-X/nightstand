@@ -35,7 +35,7 @@ describe('SideSettings error handling', () => {
     const { user } = renderWithProviders(<SettingsPage/>, { initialRoute: '/settings/bed' });
 
     // Wait for the Side settings section (rendered after settings load).
-    await screen.findByText('Side settings');
+    await screen.findByText('Left side');
 
     // Default mock awayMode is false for both sides. Find the away-mode
     // switches specifically (there may be several switches on this page).

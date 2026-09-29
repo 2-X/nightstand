@@ -25,3 +25,9 @@ describe('DailyPriming', () => {
     expect(screen.getByRole('switch', { name: RESTART })).toBeDisabled();
   });
 });
+
+it.each([true, false, undefined])('uses the server reboot default when stored rebootDaily is %s', stored => {
+  const settings = { ...getSettings(), rebootDaily: stored } as ReturnType<typeof getSettings>;
+  renderWithProviders(<DailyPriming settings={ settings } updateSettings={ vi.fn() } />);
+  expect(screen.getByRole('switch', { name: RESTART })).toHaveProperty('checked', stored ?? true);
+});

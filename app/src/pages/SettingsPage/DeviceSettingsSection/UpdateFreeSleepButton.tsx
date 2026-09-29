@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { Alert, Button, CircularProgress, Stack, Typography } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { Accordion, AccordionSummary, AccordionDetails, Alert, Button, CircularProgress, Stack, Typography } from '@mui/material';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -56,10 +57,9 @@ export default function UpdateFreeSleepButton({ runningVersion, onProblem, onSta
         variant="contained"
         disabled={ !isNewer(latestVersion) }
         onClick={ () => { reset(); setTargetVersion(latestVersion); setOpen(true); } }
-        size="small"
-        sx={ { width: '100%', minHeight: 48, fontSize: 15 } }
+        sx={ { width: '100%' } }
       >
-        { retry ? 'Try again' : `Update${latestVersion ? ` to ${latestVersion}` : ''}` }
+        { retry ? 'Try again' : `Update${latestVersion ? ` to v${latestVersion}` : ''}` }
       </Button>
       <Dialog
         open={ open }
@@ -67,11 +67,10 @@ export default function UpdateFreeSleepButton({ runningVersion, onProblem, onSta
         slots={ {
           transition: Transition,
         } }
-        keepMounted
         onClose={ () => { if (phase !== 'updating') { reset(); setOpen(false); } } }
       >
         <DialogTitle id={ titleId }>
-          { phase === 'idle' && `Update to v${targetVersion}?` }
+          { phase === 'idle' && (targetVersion ? `Update to v${targetVersion}?` : 'Update Nightstand?') }
           { phase === 'updating' && 'Updating...' }
           { phase === 'failed' && 'Request failed' }
           { phase === 'timed_out' && 'Still not done' }
@@ -87,9 +86,12 @@ export default function UpdateFreeSleepButton({ runningVersion, onProblem, onSta
                 The Pod restarts to finish, and schedules and alarms pause for 2 to 5 minutes.
                 If the checks fail, it attempts to go back to v{ runningVersion } on its own.
               </DialogContentText>
-              <details><summary>If it doesn't come back</summary>
-                <Typography variant="body2">Recovery may require SSH. Check the update logs and system status before trying again.</Typography>
-              </details>
+              <Accordion>
+                <AccordionSummary expandIcon={ <ExpandMoreIcon/> }>If it doesn't come back</AccordionSummary>
+                <AccordionDetails>
+                  <Typography variant="body2">Recovery may require SSH. Check the update logs and system status before trying again.</Typography>
+                </AccordionDetails>
+              </Accordion>
             </>
           ) }
           { phase === 'updating' && (

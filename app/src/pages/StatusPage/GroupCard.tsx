@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Accordion, AccordionDetails, AccordionSummary, Typography } from '@mui/material';
+import { Accordion, AccordionDetails, AccordionSummary, Button, Typography } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import StatusRow from './StatusRow.tsx';
 import { ServerStatusKey, ServerStatus, StatusInfo, Status } from '@api/serverStatusSchema.ts';
@@ -18,6 +18,7 @@ type GroupCardProps = {
 };
 
 export default function GroupCard({ label, keys, data, attentionKeys = [] }: GroupCardProps) {
+  const [showHealthy, setShowHealthy] = useState(false);
   const [expanded, setExpanded] = useState<{ issues: string; value: boolean }>();
   const nonHealthy = keys.filter(key => data[key]?.status !== 'healthy')
     .sort((left, right) => STATUS_ORDER[data[left]!.status] - STATUS_ORDER[data[right]!.status]);
@@ -41,14 +42,19 @@ export default function GroupCard({ label, keys, data, attentionKeys = [] }: Gro
       slotProps={ { transition: { unmountOnExit: true } } }
     >
       <AccordionSummary expandIcon={ <ExpandMoreIcon/> }>
-        <Typography variant="body2">
+        <Typography sx={ { fontSize: 16, fontWeight: 500 } }>
           { label } · { counts }
         </Typography>
       </AccordionSummary>
       <AccordionDetails>
-        { [...nonHealthy, ...healthy].map((key, index) => (
+        { [...nonHealthy, ...(attention.length === 0 || showHealthy ? healthy : [])].map((key, index) => (
           <StatusRow key={ key } job={ key } statusInfo={ data[key] as StatusInfo } divider={ index > 0 }/>
         )) }
+        { attention.length > 0 && healthy.length > 0 && <Button
+          sx={ { px: 0, justifyContent: 'flex-start' } }
+          onClick={ () => setShowHealthy(value => !value) }>
+          { showHealthy ? 'Hide healthy services' : `Show ${healthy.length} healthy` }
+        </Button> }
       </AccordionDetails>
     </Accordion>
   );

@@ -25,7 +25,7 @@ export default function CalibrationSubline({ view }: Props) {
     && view.quality < LOW_QUALITY;
 
   return (
-    <Typography sx={ { fontSize: '0.75rem', color: palette.text.tertiary, mt: 0.25 } }>
+    <Typography sx={ { fontSize: '0.75rem', color: palette.text.tertiary, mt: 0.5 } }>
       { when ? `Calibrated ${when}. ` : '' }
       { view.summary }
       { isLowConfidence ? ' Low confidence, a longer empty stretch will improve it.' : '' }

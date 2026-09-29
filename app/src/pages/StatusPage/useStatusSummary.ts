@@ -4,6 +4,11 @@ import { coreServicesReady, needsAttention, overdueCoreKeys, usableStatusKeys } 
 
 export function useStatusSummary() {
   const query = useServerStatus(30_000);
+  const [lastCheckFailed, setLastCheckFailed] = useState(false);
+  useEffect(() => {
+    if (query.isError) setLastCheckFailed(true);
+    else if (query.isSuccess) setLastCheckFailed(false);
+  }, [query.isError, query.isSuccess]);
   const [, setTick] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => setTick(tick => tick + 1), 10_000);
@@ -14,5 +19,5 @@ export function useStatusSummary() {
   const podNow = clock ? clock.podTime + Math.max(0, performance.now() - clock.receivedAt) : undefined;
   const overdue = overdueCoreKeys(data, podNow);
   const attention = keys.filter(key => needsAttention(data?.[key]?.status) || overdue.includes(key));
-  return { ...query, keys, overdue, attention, coreReady: coreServicesReady(data), now: Date.now() };
+  return { ...query, isError: query.isError || lastCheckFailed, keys, overdue, attention, coreReady: coreServicesReady(data), now: Date.now() };
 }

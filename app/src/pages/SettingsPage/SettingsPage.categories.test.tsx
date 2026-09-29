@@ -3,7 +3,7 @@ import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
-import { getServerStatus, getServices } from '../../mocks/mockData';
+import { getServerStatus, getServices, getSettings } from '../../mocks/mockData';
 import SettingsPage from './SettingsPage';
 
 it('exposes four named categories without loading every control into the index', async () => {
@@ -24,11 +24,13 @@ it('reports a rejected settings save and lets the user try again', async () => {
   expect(toggle).toBeEnabled();
 });
 
-it('keeps software actions on Software and links there from Device', async () => {
+it('keeps software actions on Software without repeating its link on Device', async () => {
   renderWithProviders(<SettingsPage/>, { initialRoute: '/settings/device' });
-  expect(await screen.findByRole('link', { name: 'Software and updates' })).toHaveAttribute('href', '/settings/versions');
+  expect(await screen.findByRole('link', { name: /System status/ })).toHaveAttribute('href', '/settings/system');
+  expect(screen.queryByRole('link', { name: 'Software and updates' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('switch', { name: 'Reboot once a day' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /^Update(?: to.*)?$/ })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /Roll back|Restore upstream/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Go back|Switch to upstream/ })).not.toBeInTheDocument();
 });
 
 it('keeps optional toggles together and bed maintenance with the sides', async () => {
@@ -65,4 +67,23 @@ it('does not count dependent feature switches while biometrics is off', async ()
   server.use(http.get('*/services', () => HttpResponse.json({ ...services, biometrics: { ...services.biometrics, enabled: false } })));
   renderWithProviders(<SettingsPage/>, { initialRoute: '/settings' });
   expect(await screen.findByText('2 of 5 on')).toBeVisible();
+});
+
+
+it('credits the source projects and contributors in About', async () => {
+  renderWithProviders(<SettingsPage/>, { initialRoute: '/settings/about' });
+  expect(await screen.findByText(/community project/)).toBeVisible();
+  for (const name of ['throwaway31265/free-sleep', 'jmew/free-sleep', 'bobobo1618', 'LTimothy/nightstand']) {
+    expect(screen.getByRole('link', { name })).toHaveAttribute('href', `https://github.com/${name}`);
+  }
+  expect(screen.queryByText(/Jailbreak/)).not.toBeInTheDocument();
+});
+
+it('isolates names from the surrounding settings summary', async () => {
+  const settings = getSettings();
+  server.use(http.get('*/settings', () => HttpResponse.json({ ...settings,
+    left: { ...settings.left, name: '\u202eAlex' },
+  })));
+  renderWithProviders(<SettingsPage/>, { initialRoute: '/settings' });
+  expect((await screen.findByText('\u202eAlex')).tagName).toBe('BDI');
 });

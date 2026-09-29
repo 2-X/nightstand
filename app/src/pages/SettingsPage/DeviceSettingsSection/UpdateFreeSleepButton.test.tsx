@@ -22,6 +22,7 @@ describe('UpdateFreeSleepButton', () => {
     );
 
     const { user } = renderWithProviders(<UpdateFreeSleepButton runningVersion="3.0.0"/>);
+    expect(screen.queryByText('Update to vundefined?')).not.toBeInTheDocument();
 
     await waitFor(() => expect(screen.getByRole('button', { name: /^Update(?: to.*)?$/ })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: /^Update(?: to.*)?$/ }));

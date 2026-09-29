@@ -5,7 +5,6 @@ import {
   DialogContentText, DialogTitle, Stack, Typography,
 } from '@mui/material';
 import semver from 'semver';
-import MarkdownBody from '@components/MarkdownBody.tsx';
 import { postUpdate } from '@api/update.ts';
 import { migrationsApplied, useUpdateProgress } from '@api/useUpdateProgress.ts';
 import type { Release } from '@api/releases.ts';
@@ -20,7 +19,7 @@ type Props = {
   offerReinstall?: boolean;
 };
 
-export default function ReleaseRow({ release, runningVersion, body, offerReinstall = false }: Props) {
+export default function ReleaseRow({ release, runningVersion, offerReinstall = false }: Props) {
   const [open, setOpen] = useState(false);
   const titleId = useId();
   const isRunning = release.version === runningVersion;
@@ -35,7 +34,7 @@ export default function ReleaseRow({ release, runningVersion, body, offerReinsta
 
   return (
     <Box sx={ { py: 1.5, borderBottom: `1px solid ${palette.border.subtle}` } }>
-      <Box sx={ { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, mb: body ? 1 : 0 } }>
+      <Box sx={ { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, mb: 0 } }>
         <Typography sx={ { fontWeight: 600 } }>v{ release.version }</Typography>
         <Typography variant="caption" color="text.secondary">{ release.date }</Typography>
         <Chip label={ release.channel } size="small" variant="outlined"/>
@@ -47,13 +46,6 @@ export default function ReleaseRow({ release, runningVersion, body, offerReinsta
           </Button>
         ) }
       </Box>
-      { body && (
-        <details>
-          <summary>Release notes</summary>
-          <MarkdownBody markdown={ body }/>
-          <Button component={ Link } to={ `/changelog#release-v${release.version}` } size="small">View in changelog</Button>
-        </details>
-      ) }
 
       <Dialog aria-labelledby={ titleId } open={ open } onClose={ () => { if (phase !== 'updating') { reset(); setOpen(false); } } }>
         <DialogTitle id={ titleId }>
@@ -70,9 +62,9 @@ export default function ReleaseRow({ release, runningVersion, body, offerReinsta
                 ? `This reinstalls v${release.version} to finish database changes an earlier update left ` +
                   'undone. Your data is kept, and the new updater applies what is missing.'
                 : isDowngrade
-                  ? `This downgrades from v${runningVersion} to v${release.version}. Your data is kept ` +
+                  ? `This downgrades from v${runningVersion} to v${release.version}. Your data is kept. ` +
                   'Database migrations are not reversed. The running installation becomes the rollback slot.'
-                  : `The pod will download v${release.version}, back itself up, install, and verify its own ` +
+                  : `The Pod will download v${release.version}, back itself up, install, and verify its own ` +
                   'health. It attempts rollback if the new build fails health checks.' }
               { ' ' }The app, schedules, and alarms pause during restart. Recovery may require SSH.
             </DialogContentText>

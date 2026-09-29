@@ -1,4 +1,4 @@
-import { ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import { Box, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
 import { DeepPartial } from 'ts-essentials';
 
 import { Settings } from '@api/settingsSchema.ts';
@@ -14,13 +14,12 @@ export default function TemperatureFormatSelector({ settings, updateSettings }: 
   const format = settings?.temperatureFormat ?? 'fahrenheit';
 
   return (
-    <>
+    <Box>
       <Typography variant="body2">Temperature display</Typography>
       <ToggleButtonGroup
         sx={ { flexWrap: 'wrap', gap: 0.5, '& .MuiToggleButton-root': { minHeight: 44 } } }
         color="primary"
         exclusive
-        size="small"
         value={ format }
         disabled={ isUpdating }
         onChange={ (_event, next) => {
@@ -29,8 +28,8 @@ export default function TemperatureFormatSelector({ settings, updateSettings }: 
       >
         <ToggleButton value="fahrenheit">Fahrenheit</ToggleButton>
         <ToggleButton value="celsius">Celsius</ToggleButton>
-        { settings?.features.levelTemps && <ToggleButton value="level">Level (-10 to +10)</ToggleButton> }
+        { settings?.features.levelTemps && <ToggleButton value="level">Level</ToggleButton> }
       </ToggleButtonGroup>
-    </>
+    </Box>
   );
 }

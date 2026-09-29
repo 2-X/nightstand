@@ -4,7 +4,6 @@ import { palette } from '@design/tokens';
 import { formatBytes } from '../../lib/formatBytes.ts';
 
 type UsageBarProps = {
-  icon: ReactNode;
   label: string;
   usedBytes: number;
   totalBytes: number;
@@ -12,7 +11,7 @@ type UsageBarProps = {
   caption?: ReactNode;
 };
 
-export default function UsageBar({ icon, label, usedBytes, totalBytes, usedPercent, caption }: UsageBarProps) {
+export default function UsageBar({ label, usedBytes, totalBytes, usedPercent, caption }: UsageBarProps) {
   const barColor = usedPercent >= 90
     ? palette.status.error
     : usedPercent >= 75
@@ -21,12 +20,11 @@ export default function UsageBar({ icon, label, usedBytes, totalBytes, usedPerce
 
   return (
     <Box sx={ { mb: 1.5 } }>
-      <Box sx={ { display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 } }>
-        { icon }
+      <Box sx={ { display: 'flex', alignItems: 'center', gap: 1, mb: 1 } }>
         <Typography sx={ { fontSize: '1rem', color: palette.text.primary, flex: 1 } }>
           { label }
         </Typography>
-        <Typography sx={ { fontSize: '0.85rem', color: palette.text.secondary } }>
+        <Typography sx={ { fontSize: '0.875rem', color: palette.text.secondary } }>
           { formatBytes(usedBytes) } of { formatBytes(totalBytes) } used
         </Typography>
       </Box>
@@ -36,14 +34,14 @@ export default function UsageBar({ icon, label, usedBytes, totalBytes, usedPerce
         value={ Math.min(usedPercent, 100) }
         sx={ {
           height: 6,
-          borderRadius: 3,
+          borderRadius: 999,
           backgroundColor: palette.bg.elevated,
-          '& .MuiLinearProgress-bar': { backgroundColor: barColor, borderRadius: 3 },
+          '& .MuiLinearProgress-bar': { backgroundColor: barColor, borderRadius: 999 },
         } }
       />
 
       { caption && (
-        <Typography sx={ { fontSize: '0.75rem', color: palette.text.tertiary, mt: 0.75 } }>
+        <Typography sx={ { fontSize: '0.75rem', color: palette.text.tertiary, mt: 1 } }>
           { caption }
         </Typography>
       ) }

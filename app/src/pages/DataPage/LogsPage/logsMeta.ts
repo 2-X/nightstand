@@ -11,7 +11,7 @@ const LOG_DESCRIPTIONS: Array<{ pattern: RegExp; description: string }> = [
   },
   {
     pattern: /^free-sleep\d*\.log$/,
-    description: 'The main Node server log (JSON): HTTP requests, job scheduling, and the hardware (Franken) connection.',
+    description: 'The main server log: HTTP requests, job scheduling, and the hardware (Franken) connection.',
   },
   {
     pattern: /^sleep-analyzer\d*\.log$/,

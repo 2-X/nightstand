@@ -20,10 +20,10 @@ export default function LedBrightnessSlider() {
     setSettingsCopy(newSettings);
   };
 
-  const handleSave = () => {
+  const handleSave = (_event: Event | React.SyntheticEvent, value: number | number[]) => {
     setIsUpdating(true);
     postDeviceStatus({
-      settings: settingsCopy,
+      settings: { ...settingsCopy, ledBrightness: value as number },
     })
       .then(() => {
         // Wait 1 second before refreshing the device status
@@ -42,28 +42,32 @@ export default function LedBrightnessSlider() {
   };
   return (
 
-    <Box sx={ { display: 'flex', flexDirection: 'column', gap: 1, width: '90%' } }>
-      <Typography sx={ { } }>
+    <Box sx={ { display: 'flex', flexDirection: 'column', gap: 1, width: '100%' } }>
+      <Typography variant="body2">
         LED brightness
       </Typography>
-      <Slider
-        value={ settingsCopy?.ledBrightness || 0 }
-        onChangeCommitted={ handleSave }
-        onChange={ (_, newValue) => {
-          handleChange({
-            ledBrightness: newValue as number,
-          });
-        } }
-        min={ 0 }
-        max={ 100 }
-        step={ 1 }
-        marks={ [
-          { value: 0, label: 'Off' },
-          { value: 100, label: '100%' },
-        ] }
-        disabled={ isUpdating }
-        sx={ { width: '100%', ml: 2 } }
-      />
+      <Box>
+        <Slider
+          aria-label="LED brightness"
+          value={ settingsCopy?.ledBrightness || 0 }
+          onChangeCommitted={ handleSave }
+          onChange={ (_, newValue) => {
+            handleChange({
+              ledBrightness: newValue as number,
+            });
+          } }
+          min={ 0 }
+          max={ 100 }
+          step={ 1 }
+          marks={ [
+            { value: 0, label: 'Off' },
+            { value: 100, label: '100%' },
+          ] }
+          disabled={ isUpdating }
+          sx={ { width: '100%', '& .MuiSlider-markLabel[data-index="0"]': { transform: 'none' },
+            '& .MuiSlider-markLabel[data-index="1"]': { transform: 'translateX(-100%)' } } }
+        />
+      </Box>
     </Box>
   );
 }

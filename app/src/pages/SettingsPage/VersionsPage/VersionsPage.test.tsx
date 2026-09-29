@@ -19,7 +19,7 @@ describe('VersionsPage', () => {
 it('shows a failed channel save and retains the saved channel', async () => {
   server.use(http.post('*/settings', () => new HttpResponse(null, { status: 500 })));
   const { user } = renderWithProviders(<VersionsPage />);
-  await user.click(await screen.findByRole('button', { name: /Updates Stable/ }));
+  await user.click(await screen.findByRole('button', { name: /Update channel Stable/ }));
   await user.click(await screen.findByRole('radio', { name: 'Beta' }));
   expect(await screen.findByText(/Could not save the update channel/)).toBeInTheDocument();
   expect(screen.getByRole('radio', { name: 'Stable' })).toBeChecked();
@@ -29,9 +29,9 @@ it('keeps recovery actions collapsed until requested', async () => {
   const { user } = renderWithProviders(<VersionsPage />);
   const recovery = await screen.findByRole('button', { name: 'Recovery' });
   expect(recovery).toHaveAttribute('aria-expanded', 'false');
-  expect(screen.queryByRole('button', { name: 'Restore upstream free-sleep' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Switch to upstream free-sleep' })).not.toBeInTheDocument();
   await user.click(recovery);
-  expect(await screen.findByRole('button', { name: 'Restore upstream free-sleep' })).toBeVisible();
+  expect(await screen.findByRole('button', { name: 'Switch to upstream free-sleep' })).toBeVisible();
 });
 
 it('surfaces a rejected update on Software after closing the dialog', async () => {
@@ -47,12 +47,12 @@ it('surfaces a rejected update on Software after closing the dialog', async () =
     http.post('*/api/update', () => new HttpResponse(null, { status: 500 })),
   );
   const { user } = renderWithProviders(<VersionsPage/>);
-  await user.click(await screen.findByRole('button', { name: 'Update to 3.2.0' }));
+  await user.click(await screen.findByRole('button', { name: 'Update to v3.2.0' }));
   await user.click(await screen.findByRole('button', { name: 'Update now' }));
   await user.click(await screen.findByRole('button', { name: 'Close' }));
   expect(await screen.findByText(/The Pod did not accept the update request. Nothing was installed./)).toBeVisible();
   expect(await screen.findByRole('button', { name: 'Try again' })).toBeVisible();
-  expect(screen.queryByRole('button', { name: /Roll back/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Go back/ })).not.toBeInTheDocument();
   expect(await screen.findByRole('link', { name: 'Open update logs' })).toHaveAttribute('href', '/settings/logs?file=free-sleep-update.log');
 });
 
@@ -69,7 +69,7 @@ it('keeps a known failure and the Settings badge when navigating away and back',
     http.post('*/api/update', () => new HttpResponse(null, { status: 500 })),
   );
   const { user } = renderApp('/settings/versions');
-  await user.click(await screen.findByRole('button', { name: 'Update to 3.2.0' }));
+  await user.click(await screen.findByRole('button', { name: 'Update to v3.2.0' }));
   await user.click(await screen.findByRole('button', { name: 'Update now' }));
   await user.click(await screen.findByRole('button', { name: 'Close' }));
   const settingsLinks = await screen.findAllByRole('link', { name: 'Settings, update needs attention' });
@@ -96,7 +96,7 @@ it('clears known update attention only when a retry actually starts', async () =
   );
   useUpdateAttentionStore.setState({ updateAttention: true });
   const { user } = renderWithProviders(<VersionsPage/>);
-  await user.click(await screen.findByRole('button', { name: 'Update to 3.2.0' }));
+  await user.click(await screen.findByRole('button', { name: 'Update to v3.2.0' }));
   expect(useUpdateAttentionStore.getState().updateAttention).toBe(true);
   await user.click(await screen.findByRole('button', { name: 'Update now' }));
   expect(useUpdateAttentionStore.getState().updateAttention).toBe(false);
@@ -124,5 +124,5 @@ it('keeps recovery available after an accepted update times out', async () => {
   useUpdateAttentionStore.getState().setUpdateAttention(true, 'timed_out', '3.0.0');
   renderWithProviders(<VersionsPage/>);
   expect(await screen.findByText(/The last update did not finish/)).toBeVisible();
-  expect(await screen.findByRole('button', { name: 'Roll back to v2.9.0 (instant, no download)' })).toBeVisible();
+  expect(await screen.findByRole('button', { name: 'Go back to v2.9.0 Instant, no download' })).toBeVisible();
 });

@@ -19,7 +19,7 @@ describe('RollbackRow', () => {
       <RollbackRow runningVersion="3.0.0" rollbackVersion="2.9.0" />,
     );
 
-    await user.click(screen.getByText('Roll back to v2.9.0 (instant, no download)'));
+    await user.click(screen.getByRole('button', { name: 'Go back to v2.9.0 Instant, no download' }));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -31,5 +31,5 @@ describe('RollbackRow', () => {
 
 it('exposes recovery as a keyboard-accessible button', () => {
   renderWithProviders(<RollbackRow runningVersion="3.0.0" rollbackVersion="2.9.0"/>);
-  expect(screen.getByRole('button', { name: 'Roll back to v2.9.0 (instant, no download)' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Go back to v2.9.0 Instant, no download' })).toBeInTheDocument();
 });
