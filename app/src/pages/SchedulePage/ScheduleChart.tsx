@@ -218,7 +218,7 @@ export default function TemperatureScheduleChart() {
         }] }
         margin={ {
           right: 32,
-          left: 36,
+          left: 44,
           top: 5,
           bottom: 24
         } }

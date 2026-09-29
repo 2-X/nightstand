@@ -27,23 +27,9 @@ export default function DayTabs({ beforeDayChange }: { beforeDayChange?: (day: n
           <Tab
             key={ index }
             disabled={ isUpdating }
-            label={
-              <Box
-                sx={ {
-                  display: 'flex',
-                  justifyContent: 'center',
-                  width: '100%',
-                } }
-              >
-                { /* Mobile: 3 letters | Larger screens: full name */ }
-                <Box sx={ { display: { xs: 'block', sm: 'none' } } }>
-                  { formatDayLabel(day.substring(0, 3)) }
-                </Box>
-                <Box sx={ { display: { xs: 'none', sm: 'block' } } }>
-                  { formatDayLabel(day) }
-                </Box>
-              </Box>
-            }
+            // Full names crowd the strip at every width the page uses.
+            label={ formatDayLabel(day.substring(0, 3)) }
+            aria-label={ formatDayLabel(day) }
             sx={ {
               flex: 1,
               minWidth: 0,

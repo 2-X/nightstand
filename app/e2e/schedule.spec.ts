@@ -53,7 +53,7 @@ test('new rows stay focused and changing days requires discarding the draft', as
   const focused = page.locator('input[data-time]:focus');
   await expect(focused).toHaveCount(1);
   await expect(focused).toBeInViewport();
-  const day = page.getByRole('tab').filter({ hasText: 'Tuesday' });
+  const day = page.getByRole('tab', { name: 'Tuesday' });
   await day.click();
   await expect(page.getByRole('dialog', { name: 'Discard changes to Monday?' })).toBeVisible();
   await page.getByRole('button', { name: 'Keep editing' }).click();
