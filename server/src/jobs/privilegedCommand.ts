@@ -66,4 +66,3 @@ export async function runPrivilegedCommand(command: readonly string[], unit: str
     if (operation) operationStarting = false;
   }
 }
-

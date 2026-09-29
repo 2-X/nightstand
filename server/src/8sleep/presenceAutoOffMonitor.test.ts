@@ -56,10 +56,19 @@ let stopPresenceAutoOff: typeof import('./presenceAutoOffMonitor.js')['stopPrese
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 const MINUTE = 60_000;
+const pendingReads = new Set<Promise<void>>();
 
 before(async () => {
   ({ default: settingsDB } = await import('../db/settings.js'));
   ({ default: schedulesDB } = await import('../db/schedules.js'));
+  for (const db of [settingsDB, schedulesDB]) {
+    const read = db.read.bind(db);
+    mock.method(db, 'read', async () => {
+      const pending = read();
+      pendingReads.add(pending);
+      try { await pending; } finally { pendingReads.delete(pending); }
+    });
+  }
   ({ startPresenceAutoOff, stopPresenceAutoOff } = await import('./presenceAutoOffMonitor.js'));
 });
 
@@ -88,17 +97,14 @@ beforeEach(async () => {
   await schedulesDB.write();
 });
 
-// Drives N monitor ticks. The monitor only runs inside setInterval, so we
-// fake setInterval + Date, then yield to the real microtask/IO queue so the
-// awaits inside tick() (lowdb reads) settle before we assert.
-// tick() awaits two lowdb file reads, so a couple of microtask turns is not
-// enough: we need real event-loop turns (setTimeout is left unmocked) or a
-// tick's tail can land in the next test and corrupt the monitor's state.
+// Let the status promise start the real lowdb reads, then drain each read
+// and its continuations before advancing the fake clock. A fixed sleep can
+// leave a tick running into the next minute or test on a busy machine.
 async function flush() {
-  for (let i = 0; i < 4; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 1));
+  do {
+    await Promise.all([...pendingReads]);
     await new Promise((resolve) => setImmediate(resolve));
-  }
+  } while (pendingReads.size > 0);
 }
 
 // The monitor keeps module-level per-side state (prevIsOn / lastSeenOnAt)
@@ -119,13 +125,13 @@ async function resetMonitorState(startEpochMs: number) {
   powerOffCalls = [];
 }
 
-async function runTicks(startEpochMs: number, tickCount: number, onBeforeTick?: (i: number) => void) {
+async function runTicks(startEpochMs: number, tickCount: number, onBeforeTick?: (i: number) => void | Promise<void>) {
   await resetMonitorState(startEpochMs);
   mock.timers.enable({ apis: ['setInterval', 'Date'], now: startEpochMs });
   try {
     startPresenceAutoOff();
     for (let i = 0; i < tickCount; i++) {
-      onBeforeTick?.(i);
+      await onBeforeTick?.(i);
       mock.timers.tick(MINUTE);
       // real (unmocked) macrotask turns so tick()'s async work completes
       await flush();
@@ -169,11 +175,11 @@ describe('presenceAutoOffMonitor', () => {
     await settingsDB.read();
     settingsDB.data.features.presenceAutoOff = false;
     await settingsDB.write();
-    await runTicks(at('2026-03-02T14:00:00'), 50, (i) => {
+    await runTicks(at('2026-03-02T14:00:00'), 50, async (i) => {
       heartbeatAbsent();
       if (i === 40) {
         settingsDB.data.features.presenceAutoOff = true;
-        void settingsDB.write();
+        await settingsDB.write();
       }
     });
     assert.ok(powerOffCalls.length > 0, 'expected auto-off to fire soon after re-enabling');
