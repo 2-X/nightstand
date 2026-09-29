@@ -137,6 +137,8 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
     <Box
       sx={ {
         position: 'relative',
+        height: 64,
+        mt: -5,
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',

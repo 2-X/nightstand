@@ -38,7 +38,8 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
   const span = Math.abs(clampedTarget - clampedCurrent) / (MAX_TEMP_F - MIN_TEMP_F) * 240;
   const activeArc = `M ${current.x} ${current.y} A 122 122 0 ${span > 180 ? 1 : 0} `
     + `${target >= currentTemperatureF ? 1 : 0} ${requested.x} ${requested.y}`;
-  return <Box sx={ { width: '100%', maxWidth: 'min(280px, 38dvh, calc(100% - 32px))' } }>
+  // Off, the next control tucks into the dial's open bottom, as the stepper does when on.
+  return <Box sx={ { width: '100%', maxWidth: 'min(280px, 38dvh, calc(100% - 32px))', mb: isOn ? 0 : -5 } }>
     <Box sx={ { position: 'relative', width: '100%', aspectRatio: '1 / 1', maxHeight: 320 } }>
       <svg viewBox="0 0 280 280" width="100%" height="100%" aria-hidden="true" style={ { pointerEvents: 'none' } }>
         <defs><linearGradient
@@ -74,12 +75,10 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
         currentTemperatureF={ currentTemperatureF }
         format={ format }/>
     </Box>
-    <Box sx={ { height: 64, mt: -5, position: 'relative' } }>
-      { isOn && <TemperatureButtons
-        key={ side }
-        statusUnavailable={ statusUnavailable }
-        refetch={ refetch }
-        currentTargetTemp={ currentTargetTemp }/> }
-    </Box>
+    { isOn && <TemperatureButtons
+      key={ side }
+      statusUnavailable={ statusUnavailable }
+      refetch={ refetch }
+      currentTargetTemp={ currentTargetTemp }/> }
   </Box>;
 }

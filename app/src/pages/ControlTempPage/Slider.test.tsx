@@ -23,3 +23,9 @@ it('clamps the active arc endpoints before deciding which arc to draw', () => {
   const { container } = render(<Slider isOn currentTargetTemp={ 83 } currentTemperatureF={ -100 } refetch={ vi.fn() } format="level"/>);
   expect(container.querySelectorAll('path')[1].getAttribute('d')).toContain('A 122 122 0 0 1');
 });
+
+it('leaves no empty stepper row when the side is off', () => {
+  const { container } = render(<Slider isOn={ false } currentTargetTemp={ 83 } currentTemperatureF={ 75 } refetch={ vi.fn() } format="level"/>);
+  expect(screen.queryByText('Temperature stepper')).not.toBeInTheDocument();
+  expect(container.firstElementChild?.children).toHaveLength(1);
+});
