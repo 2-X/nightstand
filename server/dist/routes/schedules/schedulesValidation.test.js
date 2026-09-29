@@ -111,4 +111,16 @@ describe('POST /schedules alarm validation', () => {
         assert.equal(res.status, 200, `expected 200 at the cap, got ${res.status}: ${JSON.stringify(res.body)}`);
     });
 });
+it('allows editing and reducing existing oversized days without spreading or growing them', async () => {
+    schedulesDB.data.left.saturday.alarms = Array.from({ length: 12 }, () => ({ ...validAlarm, vibrationPattern: 'rise' }));
+    await schedulesDB.write();
+    const alarms = Array.from({ length: 12 }, () => ({ ...validAlarm, time: '08:00' }));
+    assert.equal((await postSchedules({ left: { saturday: { alarms } } })).status, 200);
+    assert.equal((await postSchedules({ left: { friday: { alarms } } })).status, 400);
+    assert.equal((await postSchedules({ left: { saturday: { alarms: [...alarms, validAlarm] } } })).status, 400);
+    assert.equal((await postSchedules({ left: { saturday: { alarms: alarms.slice(1) } } })).status, 200);
+    assert.equal((await postSchedules({ left: { saturday: { alarms } } })).status, 400);
+    const invalidAlarms = alarms.slice(1).map(alarm => ({ ...alarm, duration: 999 }));
+    assert.equal((await postSchedules({ left: { saturday: { alarms: invalidAlarms } } })).status, 400);
+});
 //# sourceMappingURL=schedulesValidation.test.js.map

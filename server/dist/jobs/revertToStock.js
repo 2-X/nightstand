@@ -1,11 +1,5 @@
-import { spawn } from 'child_process';
-import logger from '../logger.js';
+import { runPrivilegedCommand } from './privilegedCommand.js';
 export function triggerRevertToStockService() {
-    logger.debug('Starting free-sleep-revert.service...');
-    const child = spawn('sudo', ['/bin/systemctl', 'start', 'free-sleep-revert.service', '--no-block'], {
-        stdio: 'ignore',
-        detached: true,
-    });
-    child.unref();
+    return runPrivilegedCommand(['/bin/systemctl', 'start', 'free-sleep-revert.service', '--no-block'], 'free-sleep-revert.service');
 }
 //# sourceMappingURL=revertToStock.js.map

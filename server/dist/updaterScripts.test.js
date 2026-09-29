@@ -245,10 +245,11 @@ describe('update.sh hands the rest of an update to the version it installs', () 
     });
     it('never re-reads the target request or downloads again once handed off', () => {
         assertOrder([
+            'if [ "$HANDOFF" != 1 ]; then',
+            'rm -f "$TARGET_FILE"',
             'if [ "$HANDOFF" = 1 ]; then',
             'TARGET_VERSION="${NIGHTSTAND_HANDOFF_TARGET:-}"',
             'else',
-            'rm -f "$TARGET_FILE"',
             'curl -fL --max-time 300 -o "$ZIP"',
         ], 'handed-off-run-skips-fetch');
     });

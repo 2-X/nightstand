@@ -2,6 +2,7 @@ import express from 'express';
 import logger from '../../logger.js';
 const router = express.Router();
 import servicesDB, { updateServices } from '../../db/services.js';
+import { PrivilegedCommandError } from '../../jobs/privilegedCommand.js';
 import { ServicesSchema } from '../../db/servicesSchema.js';
 import { shouldDisableBiometrics, triggerBiometricsDisable } from '../../jobs/biometrics.js';
 router.get('/services', async (req, res) => {
@@ -24,7 +25,14 @@ router.post('/services', async (req, res) => {
     // (see scripts/disable_biometrics.sh). Idempotent, so it's safe to fire on
     // every `enabled: false` write rather than diffing against the prior value.
     if (shouldDisableBiometrics(validationResult.data)) {
-        triggerBiometricsDisable();
+        try {
+            await triggerBiometricsDisable();
+        }
+        catch (error) {
+            logger.error('Failed to disable biometrics', error);
+            res.status(500).json({ error: error instanceof PrivilegedCommandError ? error.message : 'Unable to disable biometrics' });
+            return;
+        }
     }
     // Merge the validated/stripped result, not the raw body: StatusInfoSchema
     // (nested under biometrics.jobs.*) isn't `.strict()`, so extra properties

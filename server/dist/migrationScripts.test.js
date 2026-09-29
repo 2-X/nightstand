@@ -95,7 +95,7 @@ describe('fork-switch tool scripts', () => {
         });
         it('starts the installer detached (systemd-run, falling back to nohup)', () => {
             assert.match(src, /systemd-run --unit=free-sleep-migrate/);
-            assert.match(src, /nohup bash \/home\/dac\/migrate\/pod-installer\.sh/);
+            assert.match(src, /nohup setsid bash \/home\/dac\/migrate\/pod-installer\.sh/);
         });
         it('the pod-generation gate matrix refuses Pod 1/2 with no override', () => {
             assert.match(src, /Pod 1\/2 have no free-sleep lineage.*no override|fail "Pod 1\/2/);

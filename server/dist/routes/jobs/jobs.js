@@ -5,6 +5,7 @@ import { executeCalibrateSensors } from '../../jobs/calibrateSensors.js';
 import moment from 'moment-timezone';
 import { JobKeyListSchema } from './jobsSchema.js';
 import update from '../../jobs/update.js';
+import { PrivilegedCommandError } from '../../jobs/privilegedCommand.js';
 import reboot from '../../jobs/reboot.js';
 const router = express.Router();
 const analyzeSleepLeft = () => executeAnalyzeSleep('left', moment().subtract(24, 'hours').toISOString(), moment().add(1, 'hours').toISOString());
@@ -35,9 +36,19 @@ router.post('/jobs', async (req, res) => {
         });
         return;
     }
-    body.forEach((job) => {
-        JOB_MAP[job]();
-    });
+    try {
+        for (const job of validationResult.data) {
+            if (job === 'update')
+                await update();
+            else
+                JOB_MAP[job]();
+        }
+    }
+    catch (error) {
+        logger.error('Failed to start job', error);
+        res.status(500).json({ message: error instanceof PrivilegedCommandError ? error.message : 'Unable to start job' });
+        return;
+    }
     res.status(204).end();
 });
 export default router;

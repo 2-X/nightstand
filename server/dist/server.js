@@ -115,6 +115,9 @@ const initFrankenMonitor = async () => {
 // Main startup function
 async function startServer() {
     metrics.registerFrankenQueueDepth(getFrankenQueueDepth);
+    // Older updaters can boot new code after a migration was blocked.
+    // Report that immediately; Recovery offers Reinstall to apply it safely.
+    void serverStatus.updateDB();
     setupMiddleware(app);
     setupRoutes(app);
     // Listen on desired port

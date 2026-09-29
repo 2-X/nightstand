@@ -70,32 +70,6 @@ const settingsDB = new Low(file, defaultData);
 await settingsDB.read();
 // Allows us to add default values to the settings if users have existing settingsDB.json data
 settingsDB.data = _.merge({}, defaultData, settingsDB.data);
-// Migration: drop the retired logsViewer flag. Logs are baseline now, so the
-// key means nothing, and the merge above would otherwise keep a stored copy
-// alive forever against a schema that no longer has it.
-delete settingsDB.data.features.logsViewer;
-// Migration: bump temperature tap amount from old default of 1 to 2.
-for (const sideKey of ['left', 'right']) {
-    for (const gesture of ['doubleTap', 'tripleTap']) {
-        const tap = settingsDB.data[sideKey].taps[gesture];
-        if (tap.type === 'temperature' && tap.amount === 1) {
-            tap.amount = 2;
-        }
-    }
-}
-// Migration: force-upgrade quadTap from 'alarm' to 'base_control' if it's
-// still the old default (a user who deliberately picked 'alarm' would have
-// a different snoozeDuration/inactiveAlarmBehavior than the stock default,
-// but there is no such per-user UI yet, so any 'alarm' quadTap is the old
-// default, not a preference to preserve).
-if (settingsDB.data.left.taps.quadTap.type === 'alarm') {
-    const baseControlTap = {
-        type: 'base_control',
-        behavior: 'toggle_preset',
-    };
-    settingsDB.data.left.taps.quadTap = baseControlTap;
-    settingsDB.data.right.taps.quadTap = baseControlTap;
-}
 await settingsDB.write();
 export const updateSettings = createSerializedUpdate(settingsDB);
 export default settingsDB;

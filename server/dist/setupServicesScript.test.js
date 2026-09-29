@@ -53,6 +53,9 @@ function serverSudoCommands() {
         for (const m of src.matchAll(/spawn\(\s*'sudo',\s*\[([^\]]*)\]/g)) {
             commands.push([...m[1].matchAll(/'([^']*)'/g)].map((arg) => arg[1]).join(' '));
         }
+        for (const match of src.matchAll(/runPrivilegedCommand\(\s*\[([^\]]*)\]/g)) {
+            commands.push([...match[1].matchAll(/'([^']*)'/g)].map(argument => argument[1]).join(' '));
+        }
         for (const m of src.matchAll(/exec\(\s*'sudo ([^']*)'/g))
             commands.push(m[1]);
     }
