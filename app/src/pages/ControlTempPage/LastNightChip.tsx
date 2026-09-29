@@ -1,8 +1,7 @@
 import { useMemo } from 'react';
 import moment from 'moment-timezone';
-import { Chip, Box } from '@mui/material';
+import { Button, Typography } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import BedIcon from '@mui/icons-material/Bed';
 
 import { useAppStore } from '@state/appStore.tsx';
 import { useSleepRecords } from '@api/sleep.ts';
@@ -36,24 +35,12 @@ export default function LastNightChip() {
   if (!sleepScoreEnabled || !last || !score?.active || score.score === null) return null;
 
   return (
-    <Box display="flex" justifyContent="center" sx={ { width: '100%' } }>
-      <Chip
-        icon={ <BedIcon sx={ { color: `${'text.secondary'} !important`, fontSize: 18 } }/> }
-        label={ `Last night: estimated score ${score.score}. View Sleep` }
-        clickable
-        onClick={ () => navigate('/sleep') }
-        sx={ {
-          maxWidth: '100%',
-          height: 'auto',
-          minHeight: 44,
-          backgroundColor: 'rgba(255,255,255,0.04)',
-          border: 'none',
-          color: 'text.secondary',
-          fontWeight: 600,
-          '& .MuiChip-icon': { color: 'text.secondary' },
-          '& .MuiChip-label': { whiteSpace: 'normal', py: 0.5 },
-        } }
-      />
-    </Box>
+    <Button
+      fullWidth
+      onClick={ () => navigate('/sleep') }
+      sx={ { justifyContent: 'space-between', gap: 1, px: 2, color: 'text.secondary', bgcolor: 'background.paper' } }>
+      <Typography component="span" variant="body2">Last night, estimated score { score.score }</Typography>
+      <Typography component="span" variant="body2" sx={ { whiteSpace: 'nowrap' } }>View sleep</Typography>
+    </Button>
   );
 }

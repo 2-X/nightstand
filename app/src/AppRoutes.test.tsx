@@ -89,3 +89,11 @@ it.each([
   renderWithProviders(<><AppRoutes/><CurrentRoute/></>, { initialRoute: route });
   await waitFor(() => expect(screen.getByLabelText('Current route').textContent).toBe(destination), { timeout: 15000 });
 });
+
+
+it('gives an unknown route the shared full-size page title', async () => {
+  renderApp('/missing-page');
+  const heading = await screen.findByRole('heading', { level: 1, name: 'Page not found' });
+  expect(heading).toHaveStyle({ fontSize: '1.75rem', fontWeight: 600 });
+  expect(screen.getByRole('link', { name: 'Go to Bed' })).toHaveAttribute('href', '/');
+});

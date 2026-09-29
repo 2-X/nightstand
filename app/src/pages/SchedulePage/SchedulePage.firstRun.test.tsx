@@ -13,17 +13,6 @@ beforeEach(() => {
   useScheduleStore.setState(useScheduleStore.getInitialState(), true);
 });
 
-it('starts a complete editable draft when no saved night exists', async () => {
-  server.use(http.get('*/schedules', () => HttpResponse.json({})));
-  renderWithProviders(<SchedulePage/>);
-  fireEvent.click(await screen.findByRole('button', { name: 'Set bedtime and wake time' }));
-  expect(screen.getByLabelText('Turn on at')).toHaveValue('21:00');
-  expect(screen.getByLabelText('Alarm time')).toHaveValue('07:00');
-  expect(useScheduleStore.getState().isValid()).toBe(true);
-  expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
-});
-
-
 it('offers setup for an unused side and preserves its saved times when starting', async () => {
   const schedules = structuredClone(getSchedules());
   for (const day of Object.values(schedules.left)) {

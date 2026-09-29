@@ -69,7 +69,8 @@ function NightVitals({ record, side, timeZone }: { record: SleepRecord; side: Si
               <Box sx={ { display: 'flex', justifyContent: 'space-between', width: '100%', gap: 1 } }>
                 <Typography>{ item.label }</Typography>
                 <Typography color="text.secondary" variant="body2">
-                  { Number.isFinite(value) && value! > 0 ? `${Math.round(value!)} ${item.unit}` : 'No estimate' }
+                  { isError ? 'Measurements unavailable'
+                    : Number.isFinite(value) && value! > 0 ? `${Math.round(value!)} ${item.unit}` : 'No estimate' }
                 </Typography>
               </Box>
             </AccordionSummary>

@@ -1,3 +1,4 @@
+import { getDeviceStatus } from '../../../mocks/mockData';
 import { beforeEach, describe, it, expect } from 'vitest';
 import { act, screen, waitFor } from '@testing-library/react';
 import { renderApp, renderWithProviders } from '@test/renderWithProviders';
@@ -35,7 +36,9 @@ it('keeps recovery actions collapsed until requested', async () => {
 
 it('surfaces a rejected update on Software after closing the dialog', async () => {
   server.use(
-    http.get('*/api/deviceStatus', () => HttpResponse.json({ freeSleep: { version: '3.0.0' } })),
+    http.get('*/api/deviceStatus', () => HttpResponse.json({
+      ...getDeviceStatus(), freeSleep: { ...getDeviceStatus().freeSleep, version: '3.0.0' },
+    })),
     http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json', () => HttpResponse.json({
       channels: ['stable', 'beta'],
       releases: [{ kind: 'agent', version: '3.2.0', channel: 'stable', date: '2026-09-28' }],
@@ -55,7 +58,9 @@ it('surfaces a rejected update on Software after closing the dialog', async () =
 
 it('keeps a known failure and the Settings badge when navigating away and back', async () => {
   server.use(
-    http.get('*/api/deviceStatus', () => HttpResponse.json({ freeSleep: { version: '3.0.0' } })),
+    http.get('*/api/deviceStatus', () => HttpResponse.json({
+      ...getDeviceStatus(), freeSleep: { ...getDeviceStatus().freeSleep, version: '3.0.0' },
+    })),
     http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json', () => HttpResponse.json({
       channels: ['stable', 'beta'],
       releases: [{ kind: 'agent', version: '3.2.0', channel: 'stable', date: '2026-09-28' }],
@@ -80,7 +85,9 @@ it('keeps a known failure and the Settings badge when navigating away and back',
 
 it('clears known update attention only when a retry actually starts', async () => {
   server.use(
-    http.get('*/api/deviceStatus', () => HttpResponse.json({ freeSleep: { version: '3.0.0' } })),
+    http.get('*/api/deviceStatus', () => HttpResponse.json({
+      ...getDeviceStatus(), freeSleep: { ...getDeviceStatus().freeSleep, version: '3.0.0' },
+    })),
     http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json', () => HttpResponse.json({
       channels: ['stable', 'beta'],
       releases: [{ kind: 'agent', version: '3.2.0', channel: 'stable', date: '2026-09-28' }],
@@ -96,7 +103,9 @@ it('clears known update attention only when a retry actually starts', async () =
 });
 
 it('clears a timed out notice when a later check reports another running version', async () => {
-  server.use(http.get('*/deviceStatus', () => HttpResponse.json({ freeSleep: { version: '3.0.0' } })));
+  server.use(http.get('*/deviceStatus', () => HttpResponse.json({
+    ...getDeviceStatus(), freeSleep: { ...getDeviceStatus().freeSleep, version: '3.0.0' },
+  })));
   useUpdateAttentionStore.setState({ updateAttention: true, updateOutcome: 'timed_out', updateStartVersion: '3.0.0' });
   const { queryClient } = renderApp('/settings/versions');
   expect(await screen.findByText(/The last update did not finish/)).toBeVisible();
@@ -107,7 +116,9 @@ it('clears a timed out notice when a later check reports another running version
 
 it('keeps recovery available after an accepted update times out', async () => {
   server.use(
-    http.get('*/deviceStatus', () => HttpResponse.json({ freeSleep: { version: '3.0.0' } })),
+    http.get('*/deviceStatus', () => HttpResponse.json({
+      ...getDeviceStatus(), freeSleep: { ...getDeviceStatus().freeSleep, version: '3.0.0' },
+    })),
     http.get('*/update/rollback-info', () => HttpResponse.json({ available: true, version: '2.9.0' })),
   );
   useUpdateAttentionStore.getState().setUpdateAttention(true, 'timed_out', '3.0.0');

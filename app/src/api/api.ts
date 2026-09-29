@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { validateResponse } from './responseValidation';
 
 const inDev = import.meta.env.VITE_ENV === 'dev';
 
@@ -14,6 +15,16 @@ const baseURL = inDev && import.meta.env.VITE_POD_IP ? `http://${import.meta.env
 
 const axiosInstance = axios.create({
   baseURL: `${baseURL}/api/`,
+  responseType: 'json',
+  transitional: { silentJSONParsing: false },
+});
+
+axiosInstance.interceptors.response.use(response => {
+  if (response.config.method === 'get') {
+    if (response.data === '' || response.data == null) throw new Error('The server returned an empty response.');
+    response.data = validateResponse(response.config.url ?? '', response.data);
+  }
+  return response;
 });
 
 export default axiosInstance;

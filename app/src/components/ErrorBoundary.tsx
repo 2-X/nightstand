@@ -25,7 +25,7 @@ const ErrorMessage = ({ componentName, errorInfo }: ErrorMessageProps) => {
     return (
       <Alert severity='error'>
 
-        <Typography color='text.secondary' sx={ { fontFamily: 'monospace' } }>
+        <Typography color='text.secondary' sx={ { fontFamily: 'monospace', overflowWrap: 'anywhere', minWidth: 0 } }>
           ERROR: &nbsp;
           { errorMessage }
           <br />

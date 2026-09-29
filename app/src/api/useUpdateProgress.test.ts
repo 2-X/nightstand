@@ -1,3 +1,4 @@
+import { getDeviceStatus } from '../mocks/mockData';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -25,7 +26,10 @@ afterEach(() => {
 });
 
 const deviceVersion = (version: string) =>
-  server.use(http.get('*/deviceStatus', () => HttpResponse.json({ freeSleep: { version } })));
+  server.use(http.get('*/deviceStatus',
+    () => HttpResponse.json({ ...getDeviceStatus(),
+      freeSleep: { ...getDeviceStatus().freeSleep,
+        version } })));
 
 const unapplied = (names: string[]) =>
   server.use(http.get('*/serverStatus', () => HttpResponse.json({

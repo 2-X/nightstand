@@ -1,6 +1,4 @@
 import moment from 'moment-timezone';
-import AlarmIcon from '@mui/icons-material/Alarm';
-import AlarmOffIcon from '@mui/icons-material/AlarmOff';
 import { Alert, Box, Button, Typography } from '@mui/material';
 import { useAppStore } from '@state/appStore.tsx';
 import { useSchedules } from '@api/schedules.ts';
@@ -39,14 +37,14 @@ export default function AlarmNotification() {
   const replacement = night.start.clone().hour(Number(time.split(':')[0])).minute(Number(time.split(':')[1]));
   if (time < night.start.format('HH:mm')) replacement.add(1, 'day');
   const replacementFinished = hasOverride && !!override.timeOverride && replacement.isBefore(moment());
-  const scope = `${settings[side].name || (side === 'left' ? 'Left' : 'Right')} · ${night.start.format('ddd, MMM D')} night`;
+  const scope = <><bdi>{ settings[side].name || (side === 'left' ? 'Left' : 'Right') }</bdi> · { night.start.format('ddd, MMM D') } night</>;
   const alarmDate = hasOverride && override.timeOverride ? replacement : night.alarms[0].at;
   const now = moment.tz(settings.timeZone);
   const alarmDay = alarmDate?.isSame(now, 'day') ? 'today'
     : alarmDate?.isSame(now.clone().add(1, 'day'), 'day') ? 'tomorrow' : alarmDate?.format('ddd');
   return (
     <Alert
-      icon={ disabled ? <AlarmOffIcon /> : <AlarmIcon /> }
+      icon={ false }
       severity="info"
       sx={ { width: '100%', p: 0, background: 'transparent', border: 0, color: 'text.primary', '& .MuiAlert-message': { width: '100%' } } }>
       <AlarmOverride
@@ -64,11 +62,11 @@ export default function AlarmNotification() {
         alarmDisabled={ disabled }
         nightEnd={ night.end.format() }
         scope={ scope } />
-      <Box display="flex" flexWrap="wrap" alignItems="center" justifyContent="space-between" gap={ 1 }>
+      <Box display="flex" flexDirection="column" alignItems="flex-start" gap={ 1 }>
         { disabled ? <Typography variant="body2">Recurring alarms skipped</Typography>
           : replacementFinished ? <Typography variant="body2">Recurring alarms replaced for this night</Typography>
             : <Typography variant="body2">Alarm { alarmDay } at { moment(time, 'HH:mm').format('h:mm A') }</Typography> }
-        <Box sx={ { display: 'flex', gap: 1 } }>
+        <Box sx={ { display: 'flex', gap: 1, ml: -1 } }>
           { !disabled && !replacementFinished && <Button size="small" onClick={ () => setOverrideOpen(true) }>Change</Button> }
           <Button size="small" onClick={ () => setDisabledOpen(true) }>{ disabled ? 'Restore alarm' : 'Skip' }</Button>
         </Box>

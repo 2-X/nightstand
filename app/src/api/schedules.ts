@@ -1,7 +1,7 @@
 import axios from './api';
 import { useQuery } from '@tanstack/react-query';
 import { DeepPartial } from 'ts-essentials';
-import { Schedules } from '@api/schedulesSchema.ts';
+import { Schedules, SchedulesUpdateSchema } from '@api/schedulesSchema.ts';
 
 
 export const useSchedules = () => useQuery<Schedules>({
@@ -13,8 +13,8 @@ export const useSchedules = () => useQuery<Schedules>({
 });
 
 
-export const postSchedules = (schedules: DeepPartial<Schedules>) => {
-  return axios.post('/schedules', schedules);
+export const postSchedules = async (schedules: DeepPartial<Schedules>) => {
+  return axios.post('/schedules', SchedulesUpdateSchema.parse(schedules));
 };
 
 

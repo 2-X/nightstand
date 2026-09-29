@@ -144,7 +144,9 @@ it('uses the same nightly average in the HRV row and expanded detail', async () 
       { side: 'left', timestamp: 1790143200, heart_rate: 60, hrv: 100, breathing_rate: 15 },
       { side: 'left', timestamp: 1790146800, heart_rate: 70, hrv: 74, breathing_rate: 17 },
     ])),
-    http.get('*/metrics/vitals/summary', () => HttpResponse.json({ avgHeartRate: 63, avgHRV: 63, avgBreathingRate: 14 })),
+    http.get('*/metrics/vitals/summary', () => HttpResponse.json({
+      avgHeartRate: 63, minHeartRate: 60, maxHeartRate: 70, avgHRV: 63, avgBreathingRate: 14,
+    })),
   );
   const { user } = renderWithProviders(<SleepPage />);
   expect(await screen.findByRole('button', { name: 'HRV 87 ms' })).toBeInTheDocument();
@@ -160,7 +162,7 @@ it('keeps the night summary visible when measurements are malformed', async () =
   vi.spyOn(console, 'error').mockImplementation(() => {});
   server.use(http.get('*/metrics/vitals', () => HttpResponse.json([null])));
   renderWithProviders(<SleepPage />);
-  expect(await screen.findByText('Night measurements failed to load')).toBeInTheDocument();
+  expect(await screen.findAllByText('Measurements unavailable')).toHaveLength(3);
   expect(screen.getByText('8h 0m')).toBeInTheDocument();
   expect(screen.getByRole('group', { name: 'Nights in selected week' })).toBeInTheDocument();
 });

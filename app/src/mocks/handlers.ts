@@ -204,12 +204,12 @@ export const handlers = [
     await delay(120);
     return HttpResponse.json(records);
   }),
-  http.get('/api/metrics/vitals', async () => {
-    // const filters = toFilters(request);
+  http.get('/api/metrics/vitals', async ({ request }) => {
+    const filters = toFilters(request);
     const records = listVitalsRecords();
-    // const filtered = filterByQuery(records, filters, (record: VitalsRecord) => record.timestamp * 1000);
+    const filtered = filterByQuery(records, filters, record => record.timestamp * 1000);
     await delay(120);
-    return HttpResponse.json(records);
+    return HttpResponse.json(filtered);
   }),
   http.get('/api/metrics/presence', () => HttpResponse.json(presence)),
   http.get('/api/calibration', () => HttpResponse.json(mockCalibration)),
@@ -229,6 +229,8 @@ export const handlers = [
     await delay(150);
     return HttpResponse.json(deepClone(getSchedules()));
   }),
+  http.post('/api/update/revert-to-stock', () => HttpResponse.json({ success: true })),
+  http.post('/api/update/rollback', () => HttpResponse.json({ success: true })),
   http.post('/api/jobs', async ({ request }) => {
     const jobs = (await request.json()) as Jobs;
     handleJobs(jobs);
@@ -276,4 +278,3 @@ export const handlers = [
   http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/CHANGELOG.md', () =>
     HttpResponse.text(remoteChangelogMarkdown)),
 ];
-

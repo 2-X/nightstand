@@ -1,9 +1,24 @@
-import { Outlet } from 'react-router-dom';
+import { Suspense, useLayoutEffect, useRef } from 'react';
+import RouteFallback from './RouteFallback';
+import ErrorBoundary from './ErrorBoundary';
+import { useScheduleStore } from '../pages/SchedulePage/scheduleStore';
+import { Outlet, useLocation } from 'react-router-dom';
 import Navbar from './Navbar';
 import Box from '@mui/material/Box';
 
 
 export default function Layout() {
+  const { pathname } = useLocation();
+  const previousPath = useRef(pathname);
+  useLayoutEffect(() => {
+    if (previousPath.current === '/schedules' && pathname !== '/schedules') {
+      useScheduleStore.getState().reloadScheduleData();
+    }
+    previousPath.current = pathname;
+  }, [pathname]);
+  const pageName = pathname === '/schedules' ? 'Schedule'
+    : pathname.includes('logs') ? 'Logs' : pathname === '/changelog' ? 'Release notes'
+      : pathname.startsWith('/settings') ? 'Settings' : 'Page';
   return (
     <Box
       id="Layout"
@@ -22,7 +37,9 @@ export default function Layout() {
       } }
     >
       { /* Renders current route */ }
-      <Outlet/>
+      <ErrorBoundary key={ pathname } componentName={ pageName }>
+        <Suspense fallback={ <RouteFallback/> }><Outlet/></Suspense>
+      </ErrorBoundary>
       <Navbar/>
     </Box>
   );

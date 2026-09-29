@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Dispatch, SetStateAction, useState } from 'react';
 import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material';
 import { postSettings, useSettings } from '@api/settings.ts';
@@ -7,7 +8,7 @@ interface AlarmDisabledDialogProps {
   open: boolean;
   setOpen: Dispatch<SetStateAction<boolean>>;
   nightEnd: string;
-  scope: string;
+  scope: ReactNode;
   alarmDisabled: boolean;
 }
 

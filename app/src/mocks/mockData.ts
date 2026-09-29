@@ -1,6 +1,6 @@
 import moment from 'moment-timezone';
 import type { Services } from '@api/services.ts';
-import type { Schedules } from '@api/schedulesSchema.ts';
+import type { DayOfWeek, Schedules } from '@api/schedulesSchema.ts';
 import { defaultFeatures, type Settings } from '@api/settingsSchema.ts';
 import type { DeviceStatus } from '@api/deviceStatusSchema';
 import type { MovementRecord } from '@api/movement.ts';
@@ -110,7 +110,8 @@ const createMovementRecords = (): MovementRecord[] => {
 
 const createVitalsRecords = (): VitalsRecord[] => {
   const records: VitalsRecord[] = [];
-  const sampleHours = 12;
+  // Include all three recorded nights, not only the hours after the last one.
+  const sampleHours = 4 * 24;
   const intervalMinutes = 15;
   for (let index = 0; index <= (sampleHours * 60) / intervalMinutes; index += 1) {
     const timestamp = Math.floor((now.getTime() - index * intervalMinutes * MINUTES_TO_MS) / 1000);
@@ -717,6 +718,11 @@ export const updateServices = (partial: Partial<Services>) => {
 export const getSchedules = () => schedules;
 export const updateSchedules = (partial: Partial<Schedules>) => {
   schedules = mergeDeep(clone(schedules), partial) as Schedules;
+  for (const side of ['left', 'right'] as const) {
+    for (const [day, update] of Object.entries(partial[side] ?? {})) {
+      if (update?.temperatures) schedules[side][day as DayOfWeek].temperatures = clone(update.temperatures);
+    }
+  }
   return schedules;
 };
 
@@ -763,12 +769,7 @@ const changelogEntries: ChangelogEntry[] = [
   {
     version: '3.1.0',
     date: '2026-07-10',
-    body: '### Fixed\n- Reverted a Cancel-priming button that didn\'t actually stop priming.',
-  },
-  {
-    version: '3.1.0',
-    date: '2026-07-10',
-    body: '### Added\n- Pump-stall detection, surfaced on the Status page.\n- Cancel priming from Settings.',
+    body: '### Added\n- Pump-stall detection, surfaced on the Status page.',
   },
 ];
 
@@ -902,4 +903,3 @@ export const mockCalibration = {
     lastRunStatus: null,
   },
 };
-

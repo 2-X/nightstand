@@ -1,3 +1,4 @@
+import SectionHeading from '@components/SectionHeading';
 import { useEffect, useState } from 'react';
 import moment from 'moment-timezone';
 import { Box, Button, Typography } from '@mui/material';
@@ -9,7 +10,7 @@ import { formatTemperature } from '@lib/temperatureConversions.ts';
 import { nextBedEvent } from './bedEvents';
 import AlarmNotification from './AlarmNotification';
 
-export default function UpcomingNight() {
+export default function UpcomingNight({ isOn }: { isOn?: boolean }) {
   const { side } = useAppStore();
   const { data: schedules } = useSchedules();
   const { data: settings } = useSettings();
@@ -19,7 +20,9 @@ export default function UpcomingNight() {
     return () => clearInterval(timer);
   }, []);
   if (!settings || !schedules) return null;
-  const event = !settings[side].awayMode && nextBedEvent(schedules[side], settings.timeZone);
+  const next = !settings[side].awayMode && nextBedEvent(schedules[side], settings.timeZone);
+  const event = isOn === false && next && next.kind === 'on'
+    ? nextBedEvent(schedules[side], settings.timeZone, next.at.clone().add(1, 'millisecond')) : next;
   const temperature =
     event && event.temperature !== undefined ? formatTemperature(event.temperature, settings.temperatureFormat) : '';
   const override = settings[side].scheduleOverrides.temperatureSchedules;
@@ -40,11 +43,11 @@ export default function UpcomingNight() {
     + (event.kind === 'on' ? eventPaused ? ' and keeps your manual temperature' : `, set to ${temperature}` : '')
     + (event.kind === 'temperature' && eventPaused ? ' (currently paused)' : '');
   return (
-    <Box sx={ { width: '100%', bgcolor: 'background.paper', borderRadius: 2, p: 2 } }>
+    <Box sx={ { width: '100%', bgcolor: 'background.paper', borderRadius: '12px', border: 1, borderColor: 'divider', p: 2 } }>
       <Box sx={ { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' } }>
-        <Typography component="h2" variant="h6">
+        <SectionHeading>
           { tonight ? 'Tonight' : 'Upcoming' }
-        </Typography>
+        </SectionHeading>
         <Button component={ Link } to="/schedules" size="small">
           Edit schedule
         </Button>

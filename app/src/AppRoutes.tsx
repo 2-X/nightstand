@@ -1,8 +1,11 @@
-import { lazy, Suspense } from 'react';
+import { lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import SideRoute from './components/SideRoute';
-import RouteFallback from './components/RouteFallback.tsx';
+import { Link } from 'react-router-dom';
+import { Button } from '@mui/material';
+import PageHeader from './components/PageHeader';
+import PageContainer from './pages/PageContainer';
 
 // Pages are lazy-loaded so each route ships only what it needs. The shell
 // (Layout, AppStoreProvider, theme, query client) stays in the entry chunk so
@@ -19,36 +22,40 @@ const StatusPage = lazy(() => import('./pages/StatusPage/StatusPage.tsx'));
 
 export default function AppRoutes() {
   return (
-    <Suspense fallback={ <RouteFallback /> }>
-      <Routes>
-        <Route path="/" element={ <Layout/> }>
-          <Route index element={ <ControlTempPage/> }/>
-          <Route path="temperature" element={ <ControlTempPage/> }/>
-          <Route path="left" element={ <SideRoute side="left"/> }/>
-          <Route path="right" element={ <SideRoute side="right"/> }/>
-          <Route path="status" element={ <Navigate to="/settings/system" replace/> }/>
-          <Route path="settings/system" element={ <StatusPage/> }/>
-          <Route path="elevation" element={ <BaseControlPage/> }/>
+    <Routes>
+      <Route path="/" element={ <Layout/> }>
+        <Route index element={ <ControlTempPage/> }/>
+        <Route path="temperature" element={ <ControlTempPage/> }/>
+        <Route path="left" element={ <SideRoute side="left"/> }/>
+        <Route path="right" element={ <SideRoute side="right"/> }/>
+        <Route path="status" element={ <Navigate to="/settings/system" replace/> }/>
+        <Route path="settings/system" element={ <StatusPage/> }/>
+        <Route path="elevation" element={ <BaseControlPage/> }/>
 
-          <Route path="sleep" element={ <SleepPage/> }/>
-          <Route path="data" element={ <Navigate to="/sleep" replace/> }/>
-          <Route path="data/sleep" element={ <Navigate to="/sleep" replace/> }/>
-          <Route path="data/vitals" element={ <Navigate to="/sleep?metric=heart_rate" replace/> }/>
-          <Route path="data/logs" element={ <Navigate to="/settings/logs" replace/> }/>
-          <Route path="settings/logs" element={ <LogsPage/> }/>
+        <Route path="sleep" element={ <SleepPage/> }/>
+        <Route path="data" element={ <Navigate to="/sleep" replace/> }/>
+        <Route path="data/sleep" element={ <Navigate to="/sleep" replace/> }/>
+        <Route path="data/vitals" element={ <Navigate to="/sleep?metric=heart_rate" replace/> }/>
+        <Route path="data/logs" element={ <Navigate to="/settings/logs" replace/> }/>
+        <Route path="settings/logs" element={ <LogsPage/> }/>
 
-          <Route path="changelog" element={ <ChangelogPage/> }/>
+        <Route path="changelog" element={ <ChangelogPage/> }/>
 
-          <Route path="settings/versions" element={ <VersionsPage/> }/>
+        <Route path="settings/versions" element={ <VersionsPage/> }/>
 
-          <Route path="settings/people" element={ <Navigate to="/settings/bed" replace/> }/>
-          <Route path="settings/automation" element={ <Navigate to="/settings/bed" replace/> }/>
-          <Route path="settings/sleep-data" element={ <Navigate to="/settings/features" replace/> }/>
-          <Route path="settings" element={ <SettingsPage/> }/>
-          <Route path="settings/:category" element={ <SettingsPage/> }/>
-          <Route path="schedules" element={ <SchedulePage/> }/>
-        </Route>
-      </Routes>
-    </Suspense>
+        <Route path="settings/people" element={ <Navigate to="/settings/bed" replace/> }/>
+        <Route path="settings/automation" element={ <Navigate to="/settings/bed" replace/> }/>
+        <Route path="settings/sleep-data" element={ <Navigate to="/settings/features" replace/> }/>
+        <Route path="settings" element={ <SettingsPage/> }/>
+        <Route path="settings/:category" element={ <SettingsPage/> }/>
+        <Route path="schedules" element={ <SchedulePage/> }/>
+        <Route
+          path="*"
+          element={ <PageContainer>
+            <PageHeader title="Page not found"/>
+            <Button component={ Link } to="/">Go to Bed</Button>
+          </PageContainer> }/>
+      </Route>
+    </Routes>
   );
 }

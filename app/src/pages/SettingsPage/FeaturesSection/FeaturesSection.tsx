@@ -12,7 +12,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 export default function FeaturesSection() {
   const [error, setError] = useState<string | null>(null);
   const { data: services, refetch: refetchServices, isLoading: servicesLoading, isError: servicesError } = useServices();
-  const { data: settings, refetch: refetchSettings, isLoading: settingsLoading } = useSettings();
+  const { data: settings, refetch: refetchSettings, isLoading: settingsLoading, isError: settingsError } = useSettings();
   const setIsUpdating = useAppStore((state) => state.setIsUpdating);
   const isUpdating = useAppStore((state) => state.isUpdating);
 
@@ -42,7 +42,9 @@ export default function FeaturesSection() {
       .finally(() => setIsUpdating(false));
   };
 
-  if (servicesError) return <Alert severity="warning" action={ <Button onClick={ () => void refetchServices() }>Retry</Button> }>
+  if (servicesError || settingsError) return <Alert
+    severity="warning"
+    action={ <Button onClick={ () => { void refetchServices(); void refetchSettings(); } }>Retry</Button> }>
     Could not load features.
   </Alert>;
   if (servicesLoading || settingsLoading || !services || !settings) return <CircularProgress />;

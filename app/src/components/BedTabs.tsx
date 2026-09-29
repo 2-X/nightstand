@@ -6,16 +6,16 @@ export default function BedTabs() {
   const configured = useBaseConfigured();
   const { pathname } = useLocation();
   const selectedPath = pathname === '/elevation' ? '/elevation' : '/';
-  if (!configured && pathname !== '/elevation') return null;
+  if (!configured) return null;
   const destinations = [{ to: '/', label: 'Temperature' }, { to: '/elevation', label: 'Elevation' }];
   return (
-    <Box component="nav" aria-label="Bed controls" sx={ { display: 'flex', width: '100%', maxWidth: 480, px: 2 } }>
+    <Box component="nav" aria-label="Bed controls" sx={ { display: 'flex', width: '100%', px: 0, borderBottom: 1, borderColor: 'divider' } }>
       { destinations.map(({ to, label }) => <Button
         key={ to }
         component={ Link }
         to={ to }
         aria-current={ selectedPath === to ? 'page' : undefined }
-        sx={ { minHeight: 48, px: 2, borderRadius: 0, borderBottom: 2,
+        sx={ { minHeight: 44, flex: 1, px: 0, borderRadius: 0, borderBottom: 2,
           borderColor: selectedPath === to ? 'primary.main' : 'transparent',
           color: selectedPath === to ? 'primary.main' : 'text.secondary' } }
       >{ label }</Button>) }

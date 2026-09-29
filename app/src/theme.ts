@@ -21,7 +21,7 @@ const typography = {
     letterSpacing: '-0.01em',
   },
   h2: {
-    fontSize: '1.375rem',
+    fontSize: '1.125rem',
     fontWeight: HEADING_WEIGHT,
   },
   h3: {
@@ -88,7 +88,8 @@ const buildComponents = (mode: PaletteMode) => {
     },
     MuiSlider: { styleOverrides: { root: { padding: '20px 0' }, thumb: { '&::after': { width: 44, height: 44 } } } },
     MuiSwitch: {
-      styleOverrides: { root: { width: 64, height: 44, padding: 15 }, switchBase: { padding: 12 } },
+      styleOverrides: { root: { width: 64, height: 44, padding: 15 },
+        switchBase: { padding: 12, color: mode === 'dark' ? palette.text.secondary : undefined } },
     },
     MuiRadio: { styleOverrides: { root: { minWidth: 44, minHeight: 44 } } },
     MuiCheckbox: { styleOverrides: { root: { minWidth: 44, minHeight: 44 } } },
@@ -98,16 +99,33 @@ const buildComponents = (mode: PaletteMode) => {
         root: {
           textTransform: 'none',
           minHeight: 44,
+          paddingBlock: 8,
+          fontSize: 16,
+          lineHeight: 1.5,
+          '&.Mui-selected': { backgroundColor: mode === 'dark' ? palette.bg.selected : undefined },
         },
       },
     },
+    MuiTabs: { styleOverrides: { root: { minHeight: 44 } } },
     MuiTab: {
       styleOverrides: {
         root: {
+          minHeight: 44,
           textTransform: 'none',
         },
       },
     },
+    MuiFormControl: { defaultProps: { variant: 'standard' } },
+    MuiCardContent: { styleOverrides: { root: { padding: 16, '&:last-child': { paddingBottom: 16 } } } },
+    MuiAccordion: { styleOverrides: { root: {
+      '&&': { borderRadius: 12, margin: 0 }, '&:before': { display: 'none' },
+    } } },
+    MuiAccordionSummary: { styleOverrides: { root: { fontFamily: 'inherit', fontSize: 16, fontWeight: 500, minHeight: 44,
+      '&.Mui-expanded': { minHeight: 44 } }, content: { margin: '8px 0', '&.Mui-expanded': { margin: '8px 0' } } } },
+    MuiDialogTitle: { styleOverrides: { root: { fontSize: 16, fontWeight: 600 } } },
+    MuiListItemText: { styleOverrides: { root: { marginBlock: 2 } } },
+    MuiListItemButton: { styleOverrides: { root: { minHeight: 44,
+      '&.Mui-selected': { backgroundColor: mode === 'dark' ? palette.bg.selected : undefined } } } },
     MuiFormControlLabel: {
       styleOverrides: {
         label: {
@@ -139,7 +157,7 @@ const buildComponents = (mode: PaletteMode) => {
     MuiFormHelperText: {
       styleOverrides: {
         root: {
-          fontSize: '0.9rem',
+          fontSize: '0.875rem',
         },
       },
     },
@@ -154,6 +172,7 @@ const buildComponents = (mode: PaletteMode) => {
       styleOverrides: { root: { minHeight: 44 }, input: { minHeight: 44, boxSizing: 'border-box' } },
     },
     MuiSelect: {
+      defaultProps: { variant: 'standard' },
       styleOverrides: {
         select: {
           minHeight: '44px !important',
@@ -217,6 +236,7 @@ const buildPalette = (mode: PaletteMode): ThemeOptions['palette'] => ({
     primary: { main: palette.lamp }, secondary: { main: palette.lamp },
     success: { main: palette.status.ok }, warning: { main: palette.status.warn },
     error: { main: palette.status.error }, info: { main: palette.status.info },
+    action: { active: palette.text.secondary, disabled: palette.text.disabled, hover: palette.bg.hover },
     text: { primary: palette.text.primary, secondary: palette.text.secondary, disabled: palette.text.disabled },
   } : {}),
   background:

@@ -1,3 +1,4 @@
+import { getDeviceStatus } from '../mocks/mockData';
 import { expect, it } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -13,7 +14,10 @@ const manifest = { channels: ['stable', 'beta'], releases: [
 for (const running of ['3.1.0', '3.2.0', '3.3.0']) {
   it(`offers only a newer channel release when running ${running}`, async () => {
     server.use(
-      http.get('*/deviceStatus', () => HttpResponse.json({ freeSleep: { version: running } })),
+      http.get('*/deviceStatus',
+        () => HttpResponse.json({ ...getDeviceStatus(),
+          freeSleep: { ...getDeviceStatus().freeSleep,
+            version: running } })),
       http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json', () => HttpResponse.json(manifest)),
     );
     const { queryClient } = renderWithProviders(<VersionStatus/>);

@@ -31,15 +31,15 @@ export default function TemperatureLabel({
   const event = settings && schedules && !settings[side].awayMode
     ? nextBedEvent(schedules[side], settings.timeZone, moment.tz(settings.timeZone), isOn ? 'off' : 'on') : undefined;
   const now = moment.tz(settings?.timeZone ?? 'UTC');
-  const eventDay = event && !event.at.isSame(now, 'day')
-    ? event.at.isSame(now.clone().add(1, 'day'), 'day') ? ' tomorrow' : ` ${event.at.format('ddd')}` : '';
+  const eventDay = event && (event.at.isSame(now, 'day') ? event.at.hour() >= 17 ? ' tonight' : ' today'
+    : event.at.isSame(now.clone().add(1, 'day'), 'day') ? ' tomorrow' : ` ${event.at.format('ddd')}`);
   return <Box
     sx={ {
       position: 'absolute', inset: '18% 5% 15%', textAlign: 'center', display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', gap: 0.5,
     } }>
     { isOn ? <>
-      <Typography color="text.secondary">{ topTitle }</Typography>
+      <Typography variant="body2" color="text.secondary">{ topTitle }</Typography>
       <Typography
         component="h2"
         sx={ {

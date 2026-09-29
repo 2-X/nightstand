@@ -6,33 +6,47 @@ import { useControlTempStore } from './controlTempStore.tsx';
 import { useAppStore } from '@state/appStore.tsx';
 import { postDeviceStatus } from '@api/deviceStatus.ts';
 import { useSettings } from '@api/settings.ts';
-import { MIN_TEMP_F, MAX_TEMP_F, fahrenheitToLevel, levelToFahrenheit } from '@lib/temperatureConversions.ts';
+import { MIN_TEMP_F, MAX_TEMP_F } from '@lib/temperatureConversions.ts';
+import { stepTemperature, TemperatureStepState } from '@lib/temperatureStep';
 
 type TemperatureButtonsProps = {
   refetch: any;
   currentTargetTemp: number;
+  statusUnavailable?: boolean;
 }
 
 const DEBOUNCE_MS = 400;
-export default function TemperatureButtons({ refetch, currentTargetTemp }: TemperatureButtonsProps) {
+export default function TemperatureButtons({ refetch, currentTargetTemp, statusUnavailable = false }: TemperatureButtonsProps) {
   const { side, setIsUpdating } = useAppStore();
   const { deviceStatus, setDeviceStatus, beginEdit, endEdit } = useControlTempStore();
   const { data: settings } = useSettings();
+  const format = settings?.temperatureFormat ?? 'fahrenheit';
+  const steps = useRef<{ side: typeof side; state?: TemperatureStepState }>({ side });
+  if (steps.current.side !== side || steps.current.state?.value !== deviceStatus?.[side]?.targetTemperatureF
+    || steps.current.state?.format !== format) steps.current = { side };
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editOpenRef = useRef(false);
   const inFlight = useRef(false);
   const ready = useRef(false);
   const mounted = useRef(true);
   const savedTarget = useRef(currentTargetTemp);
+  const statusUnavailableRef = useRef(statusUnavailable);
+  statusUnavailableRef.current = statusUnavailable;
   useEffect(() => {
     if (!editOpenRef.current && !inFlight.current) savedTarget.current = currentTargetTemp;
   }, [currentTargetTemp]);
 
   const postUpdate = useCallback(async () => {
     if (inFlight.current || !ready.current || !mounted.current) return;
+    const target = useControlTempStore.getState().deviceStatus?.[side]?.targetTemperatureF;
+    if (statusUnavailableRef.current || !Number.isFinite(target)) {
+      ready.current = false;
+      if (editOpenRef.current) { editOpenRef.current = false; endEdit(); }
+      setIsUpdating(false);
+      return;
+    }
     inFlight.current = true;
     ready.current = false;
-    const target = useControlTempStore.getState().deviceStatus?.[side]?.targetTemperatureF;
     setIsUpdating(true);
     try {
       await postDeviceStatus({ [side]: { targetTemperatureF: target } });
@@ -82,27 +96,19 @@ export default function TemperatureButtons({ refetch, currentTargetTemp }: Tempe
     };
   }, [endEdit, setIsUpdating]);
 
-  const isInAwayMode = settings?.[side].awayMode;
+  const isInAwayMode = settings?.[side]?.awayMode;
   if (isInAwayMode) return null;
 
-  const disabled = isInAwayMode;
+  const disabled = statusUnavailable || isInAwayMode || !Number.isFinite(deviceStatus?.[side]?.targetTemperatureF);
   const borderColor = palette.border.control;
   const iconColor = palette.lamp;
 
-  // When the user is viewing in 'level' mode (-10..+10), one click should
-  // change the displayed level by 1, which is 2.75F under the hood (the
-  // scale spans 55..110F = 55F over 20 levels). Snap to the nearest integer
-  // level so successive clicks stay on integer levels. In fahrenheit or
-  // celsius mode a click is a plain 1F step.
-  const isLevel = settings?.temperatureFormat === 'level';
   const handleClick = (direction: 1 | -1) => {
-    if (!deviceStatus) return;
+    if (!deviceStatus || disabled) return;
     const currentF = useControlTempStore.getState().deviceStatus![side].targetTemperatureF;
-    const rawNextF = isLevel
-      ? levelToFahrenheit(fahrenheitToLevel(currentF) + direction)
-      : currentF + direction;
-    // Clamp rapid taps to the supported range.
-    const nextF = Math.min(MAX_TEMP_F, Math.max(MIN_TEMP_F, rawNextF));
+    if (!Number.isFinite(currentF)) return;
+    steps.current.state = stepTemperature(currentF, format, direction, steps.current.state);
+    const nextF = steps.current.state.value;
     if (nextF === currentF) return;
     if (!editOpenRef.current) {
       editOpenRef.current = true;
@@ -131,7 +137,6 @@ export default function TemperatureButtons({ refetch, currentTargetTemp }: Tempe
     <Box
       sx={ {
         position: 'relative',
-        mt: -3,
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',

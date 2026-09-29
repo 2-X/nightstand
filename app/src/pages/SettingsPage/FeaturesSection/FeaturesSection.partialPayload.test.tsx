@@ -20,7 +20,7 @@ describe('FeaturesSection partial payload handling', () => {
   beforeEach(() => window.addEventListener('unhandledrejection', swallowRejection));
   afterEach(() => window.removeEventListener('unhandledrejection', swallowRejection));
 
-  it('does not crash when the settings payload is missing the features object', async () => {
+  it('reports an error when the settings payload is missing the features object', async () => {
     const settingsWithoutFeatures: Record<string, unknown> = { ...getSettings() };
     delete settingsWithoutFeatures.features;
     server.use(
@@ -29,26 +29,24 @@ describe('FeaturesSection partial payload handling', () => {
 
     renderWithProviders(<FeaturesSection />);
 
-    expect(await screen.findByRole('switch', { name: 'Biometrics' })).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load features.');
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
 
-    // Unknown feature state degrades to off and untouchable rather than
-    // guessing a value the user might then save back.
-    const toggle = await screen.findByRole('switch', { name: 'One-time alarm' }) as HTMLInputElement;
-    expect(toggle.checked).toBe(false);
-    expect(toggle.disabled).toBe(true);
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
   });
 
-  it('does not crash when the settings payload is an empty object', async () => {
+  it('reports an error when the settings payload is an empty object', async () => {
     server.use(
       http.get('*/api/settings', () => HttpResponse.json({})),
     );
 
     renderWithProviders(<FeaturesSection />);
 
-    expect(await screen.findByRole('switch', { name: 'Biometrics' })).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load features.');
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
-  it('does not crash when the services payload is missing biometrics', async () => {
+  it('reports an error when the services payload is missing biometrics', async () => {
     const servicesWithoutBiometrics: Record<string, unknown> = { ...getServices() };
     delete servicesWithoutBiometrics.biometrics;
     server.use(
@@ -57,12 +55,9 @@ describe('FeaturesSection partial payload handling', () => {
 
     renderWithProviders(<FeaturesSection />);
 
-    expect(await screen.findByRole('switch', { name: 'Biometrics' })).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load features.');
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
 
-    // No biometrics service means nothing to install against, so the toggle
-    // reads off and stays disabled.
-    const toggle = await screen.findByRole('switch', { name: 'Biometrics' }) as HTMLInputElement;
-    expect(toggle.checked).toBe(false);
-    expect(toggle.disabled).toBe(true);
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
   });
 });

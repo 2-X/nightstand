@@ -10,6 +10,7 @@ import { palette } from '@design/tokens';
 
 type SliderProps = {
   isOn: boolean;
+  statusUnavailable?: boolean;
   currentTargetTemp: number;
   currentTemperatureF: number;
   refetch: () => unknown;
@@ -22,7 +23,7 @@ function position(temperature: number) {
   return { x: 140 + 122 * Math.cos(angle), y: 140 + 122 * Math.sin(angle) };
 }
 
-export default function Slider({ isOn, currentTargetTemp, refetch, currentTemperatureF, format }: SliderProps) {
+export default function Slider({ isOn, currentTargetTemp, refetch, currentTemperatureF, format, statusUnavailable }: SliderProps) {
   const { side } = useAppStore();
   const target = useControlTempStore(state => state.deviceStatus?.[side]?.targetTemperatureF) ?? currentTargetTemp;
   const color = temperatureColor(fahrenheitToLevel(target));
@@ -37,7 +38,7 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
   const span = Math.abs(clampedTarget - clampedCurrent) / (MAX_TEMP_F - MIN_TEMP_F) * 240;
   const activeArc = `M ${current.x} ${current.y} A 122 122 0 ${span > 180 ? 1 : 0} `
     + `${target >= currentTemperatureF ? 1 : 0} ${requested.x} ${requested.y}`;
-  return <Box sx={ { width: '100%', maxWidth: { xs: 280, sm: 320 } } }>
+  return <Box sx={ { width: '100%', maxWidth: 'min(280px, 38dvh, calc(100% - 32px))' } }>
     <Box sx={ { position: 'relative', width: '100%', aspectRatio: '1 / 1', maxHeight: 320 } }>
       <svg viewBox="0 0 280 280" width="100%" height="100%" aria-hidden="true" style={ { pointerEvents: 'none' } }>
         <defs><linearGradient
@@ -73,6 +74,12 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
         currentTemperatureF={ currentTemperatureF }
         format={ format }/>
     </Box>
-    { isOn && <TemperatureButtons key={ side } refetch={ refetch } currentTargetTemp={ currentTargetTemp }/> }
+    <Box sx={ { height: 64, mt: -5, position: 'relative' } }>
+      { isOn && <TemperatureButtons
+        key={ side }
+        statusUnavailable={ statusUnavailable }
+        refetch={ refetch }
+        currentTargetTemp={ currentTargetTemp }/> }
+    </Box>
   </Box>;
 }

@@ -21,7 +21,13 @@ export const useDeviceStatus = () => useQuery<DeviceStatus>({
 });
 
 
-export const postDeviceStatus = (deviceStatus: DeepPartial<DeviceStatus>) => {
+export const postDeviceStatus = async (deviceStatus: DeepPartial<DeviceStatus>) => {
+  for (const side of ['left', 'right'] as const) {
+    const target = deviceStatus[side]?.targetTemperatureF;
+    if (target !== undefined && (!Number.isFinite(target) || target < 55 || target > 110)) {
+      throw new Error('Invalid target temperature.');
+    }
+  }
   return axios.post('/deviceStatus', deviceStatus);
 };
 

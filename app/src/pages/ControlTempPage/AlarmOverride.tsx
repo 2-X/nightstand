@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Dispatch, SetStateAction, useState } from 'react';
 import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Typography } from '@mui/material';
 import moment from 'moment-timezone';
@@ -10,7 +11,7 @@ interface AlarmOverrideProps {
   scheduledAlarmTimeHhMm: string;
   nightStart: string;
   nightEnd: string;
-  scope: string;
+  scope: ReactNode;
   setAlarmTimeLocalOverride: Dispatch<SetStateAction<string>>;
   setOverrideOpen: Dispatch<SetStateAction<boolean>>;
 }

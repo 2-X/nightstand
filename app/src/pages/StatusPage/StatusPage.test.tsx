@@ -104,7 +104,7 @@ it('labels optional installation status without counting it as attention', async
 it('does not report an empty status response as healthy', async () => {
   server.use(http.get('/api/serverStatus', () => HttpResponse.json({})));
   renderWithProviders(<StatusPage/>);
-  expect(await screen.findByText('No status checks are available yet.')).toBeVisible();
+  expect(await screen.findByRole('alert')).toHaveTextContent("Can't reach the Pod");
   expect(screen.queryByText('Everything is running')).not.toBeInTheDocument();
 });
 

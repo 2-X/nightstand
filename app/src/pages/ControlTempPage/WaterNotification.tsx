@@ -1,5 +1,4 @@
 import Alert from '@mui/material/Alert';
-import Link from '@mui/material/Link';
 import { useDeviceStatus } from '@api/deviceStatus.ts';
 
 
@@ -10,16 +9,14 @@ export default function WaterNotification() {
   if (deviceStatus?.waterLevel === 'false') {
     return (
       <Alert severity="warning">
-        Water tank is low or empty, refill the water tank
+        Water tank is low. Refill it to keep heating and cooling.
       </Alert>
     );
   }
   if (![undefined, 'true'].includes(deviceStatus?.waterLevel)) {
     return (
       <Alert severity="warning">
-        { `Unhandled deviceStatus.waterLevel: '${deviceStatus?.waterLevel}'` }
-        <br />
-        Please create an issue and include the message above <Link href='https://github.com/LTimothy/nightstand/issues'>here</Link>
+        Water level could not be read. Refresh to try again.
       </Alert>
     );
   }

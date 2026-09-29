@@ -1,0 +1,76 @@
+import { z } from 'zod';
+import { DeviceStatusSchema } from './deviceStatusSchema';
+import { SettingsSchema } from './settingsSchema';
+import { SchedulesSchema } from './schedulesSchema';
+import { ServicesSchema } from '../../../server/src/db/servicesSchema';
+import { sleepRecordSchema } from './sleepSchema';
+import { ChangelogResponseSchema } from './changelogSchema';
+import { MemoryInfoSchema } from './memorySchema';
+import { StorageInfoSchema } from './storageSchema';
+import { StatusInfoSchema } from './serverStatusSchema';
+import { vitalsRecordSchema } from '../../../server/src/db/vitalsRecordSchema';
+import { movementRecordSchema } from '../../../server/src/db/movementRecordSchema';
+
+const seconds = z.number().finite().nonnegative();
+const percentage = seconds.max(100);
+const stages = <T extends z.ZodTypeAny>(value: T) => z.object({ awake: value, rem: value, light: value, deep: value });
+const scoreComponent = z.object({ score: percentage, weight: seconds, value: z.string(), available: z.boolean() });
+const presenceSide = z.object({
+  present: z.boolean(),
+  lastUpdatedAt: z.string().optional(),
+  stateChangedAt: z.string().optional(),
+  lastPresenceAt: z.string().optional(),
+});
+const calibrationSide = z.object({
+  state: z.enum(['none', 'imported', 'calibrated']),
+  summary: z.string(),
+  quality: z.number().nullable(),
+  calibratedAt: z.number().nullable(),
+  lastRunStatus: z.string().nullable(),
+});
+
+// Validate before responses reach query caches or controls. The Pod's schemas
+// remain the source of truth; local schemas cover responses with only TS types.
+const responseSchemas: Record<string, z.ZodTypeAny> = {
+  '/deviceStatus': DeviceStatusSchema,
+  '/settings': SettingsSchema,
+  '/schedules': SchedulesSchema,
+  '/services': ServicesSchema,
+  '/metrics/sleep': sleepRecordSchema.refine(record => record.sleep_period_seconds >= 0
+    && Date.parse(record.left_bed_at) >= Date.parse(record.entered_bed_at), 'Invalid sleep interval').array(),
+  '/metrics/vitals': vitalsRecordSchema.array(),
+  '/metrics/movement': movementRecordSchema.array(),
+  '/metrics/vitals/summary': z.object({
+    avgHeartRate: seconds,
+    minHeartRate: seconds,
+    maxHeartRate: seconds,
+    avgHRV: seconds,
+    avgBreathingRate: seconds,
+  }),
+  '/metrics/sleep-stages': z.object({
+    active: z.boolean(), epochs: z.array(z.object({ startUnix: seconds, endUnix: seconds, stage: z.enum(['awake', 'rem', 'light', 'deep']) })),
+    totals: stages(seconds), percentages: stages(percentage), totalSeconds: seconds,
+  }),
+  '/metrics/sleep-score': z.object({
+    active: z.boolean(), score: percentage.nullable(),
+    components: z.object({
+      duration: scoreComponent.optional(),
+      continuity: scoreComponent.optional(),
+      hrv: scoreComponent.optional(),
+      restingHr: scoreComponent.optional(),
+    }),
+  }),
+  '/metrics/presence': z.object({ left: presenceSide, right: presenceSide }),
+  '/calibration': z.object({ left: calibrationSide, right: calibrationSide }),
+  '/logs': z.object({ logs: z.array(z.string()) }),
+  '/changelog': ChangelogResponseSchema,
+  '/memory': MemoryInfoSchema,
+  '/storage': StorageInfoSchema,
+  '/serverStatus': z.record(StatusInfoSchema).refine(status => Object.keys(status).length > 0, 'Missing status checks'),
+  '/update/rollback-info': z.object({ available: z.boolean(), version: z.string().nullable().optional() }),
+};
+
+export function validateResponse(path: string, data: unknown): unknown {
+  const schema = responseSchemas[path.split('?')[0]];
+  return schema ? schema.parse(data) : data;
+}

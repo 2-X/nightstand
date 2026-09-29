@@ -25,7 +25,7 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
   const setDeviceStatus = useControlTempStore(state => state.setDeviceStatus);
   const beginEdit = useControlTempStore(state => state.beginEdit);
   const endEdit = useControlTempStore(state => state.endEdit);
-  const isInAwayMode = settings?.[side].awayMode;
+  const isInAwayMode = settings?.[side]?.awayMode;
   const disabled = isUpdating || isInAwayMode;
   const [showAnalyzeSleep, setShowAnalyzeSleep] = useState(false);
 
@@ -36,6 +36,7 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
     const scheduledTargetTemperature = powerOn
       ? getScheduledTargetTemperature(schedules?.[side], settings?.timeZone ?? undefined)
       : undefined;
+    if (scheduledTargetTemperature !== undefined && !Number.isFinite(scheduledTargetTemperature)) return;
     const deviceStatus: DeepPartial<DeviceStatus> = {
       [side]: {
         isOn: powerOn,
@@ -82,7 +83,7 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
 
   return (
     <Box sx={ { width: '100%', mt: 0, display: 'flex', flexDirection: 'column', gap: 2 } }>
-      <Button fullWidth sx={ { minHeight: 48 } } variant="outlined" disabled={ disabled } onClick={ () => handleOnClick(!isOn) }>
+      <Button fullWidth variant="outlined" disabled={ disabled } onClick={ () => handleOnClick(!isOn) }>
         { isOn ? 'Turn off' : 'Turn on' }
       </Button>
       {

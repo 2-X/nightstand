@@ -7,6 +7,7 @@ import { useAppStore } from '@state/appStore';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import PageContainer from '../PageContainer';
 import BedTabs from '@components/BedTabs';
+import PageHeader from '@components/PageHeader';
 
 interface BasePosition { head: number; feet: number }
 const presets = {
@@ -136,62 +137,71 @@ export default function BaseControlPage() {
   const unavailable = isLoading || isError || baseStatus?.isConfigured === false || !baseStatus;
 
   return (
-    <PageContainer sx={ { maxWidth: '500px', width: '100%', justifyContent: 'flex-start', gap: 2 } }>
-      <Typography component="h1" variant="h1" sx={ { alignSelf: 'flex-start' } }>Bed</Typography>
+    <PageContainer>
+      <PageHeader title="Bed"/>
       <BedTabs/>
       { isLoading && <CircularProgress size={ 24 } aria-label="Loading base position" /> }
       { isError && <Alert severity="error">Could not load the base position.</Alert> }
       { baseStatus?.isConfigured === false && <Alert severity="info">
-        No adjustable base was reported by this Pod. Check the connection in Settings &gt; Device.
+        No adjustable base found. If one is connected, check Settings, Pod and diagnostics.
       </Alert> }
       { error && <Alert severity="error" sx={ { width: '100%' } }>{ error }</Alert> }
-      <Box sx={ { width: '100%', maxWidth: 280 } }>
-        <BedVisualization headPosition={ baseStatus?.head ?? 0 } feetPosition={ baseStatus?.feet ?? 0 } />
-      </Box>
-      <Typography role="status" variant="body2" color="text.secondary">
-        { moving ? 'Base is moving...' : requested ? 'Movement requested. Waiting for feedback.' : feedback || 'Reported position' }
-      </Typography>
-      <Stack direction="row" spacing={ 2 } sx={ { width: '100%', justifyContent: 'center' } }>
-        { (['head', 'feet'] as const).map(axis => (
-          <Box key={ axis } sx={ { textAlign: 'center', minWidth: 0 } }>
-            <Typography variant="body2">{ axis === 'head' ? 'Head' : 'Feet' } angle</Typography>
-            <Stack direction="row" alignItems="center">
-              <IconButton
-                aria-label={ `Decrease ${axis} angle` }
-                disabled={ unavailable || isUpdating || pending || position[axis] <= 0 }
-                onClick={ () => updatePosition({ ...position, [axis]: Math.max(0, position[axis] - 1) }) }>
-                <RemoveIcon />
-              </IconButton>
-              <Typography sx={ { minWidth: 40, fontSize: '1.5rem', fontVariantNumeric: 'tabular-nums' } }>{ position[axis] }°</Typography>
-              <IconButton
-                aria-label={ `Increase ${axis} angle` }
-                disabled={ unavailable || isUpdating || pending || position[axis] >= (axis === 'head' ? 45 : 30) }
-                onClick={ () => updatePosition({ ...position, [axis]: Math.min(axis === 'head' ? 45 : 30, position[axis] + 1) }) }>
-                <AddIcon />
-              </IconButton>
-            </Stack>
-          </Box>
-        )) }
-      </Stack>
-      { showStop && <Button variant="contained" color="error" fullWidth onClick={ () => void handleStop() } disabled={ stopMutation.isPending }>
-        { stopMutation.isPending ? 'Stopping...' : 'Stop Movement' }
-      </Button> }
-      <Box sx={ { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1, width: '100%' } }>
-        { Object.entries(presets).map(([name, preset]) => {
-          const active = baseStatus?.head === preset.head && baseStatus?.feet === preset.feet;
-          return <Paper key={ name } variant="outlined" sx={ { borderColor: active ? 'primary.main' : 'divider' } }>
-            <Button
-              fullWidth
-              aria-pressed={ active }
-              disabled={ unavailable || isUpdating || pending || moving || (requested && !queued) }
-              onClick={ () => void handlePreset(name as keyof typeof presets) }
-              sx={ { flexDirection: 'column', py: 1.5 } }>
-              <Typography component="span">{ name.charAt(0).toUpperCase() + name.slice(1) }</Typography>
-              <Typography component="span" variant="caption" color="text.secondary">Head { preset.head }° · Feet { preset.feet }°</Typography>
-            </Button>
-          </Paper>;
-        }) }
-      </Box>
+      { baseStatus?.isConfigured !== false && <>
+        <Box sx={ { width: '100%', maxWidth: 280 } }>
+          <BedVisualization headPosition={ baseStatus?.head ?? 0 } feetPosition={ baseStatus?.feet ?? 0 } />
+        </Box>
+        { (moving || requested || feedback) && <Typography role="status" variant="body2" color="text.secondary">
+          { moving ? 'Base is moving...' : requested ? 'Movement requested. Waiting for feedback.' : feedback }
+        </Typography> }
+        <Stack direction="row" spacing={ 2 } sx={ { width: '100%', justifyContent: 'center' } }>
+          { (['head', 'feet'] as const).map(axis => (
+            <Box key={ axis } sx={ { textAlign: 'center', minWidth: 0 } }>
+              <Typography variant="body2">{ axis === 'head' ? 'Head' : 'Feet' } angle</Typography>
+              <Stack direction="row" alignItems="center">
+                <IconButton
+                  aria-label={ `Decrease ${axis} angle` }
+                  disabled={ unavailable || isUpdating || pending || position[axis] <= 0 }
+                  onClick={ () => updatePosition({ ...position, [axis]: Math.max(0, position[axis] - 1) }) }>
+                  <RemoveIcon />
+                </IconButton>
+                <Typography sx={ { minWidth: 40, fontSize: '1.5rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums' } }>
+                  { position[axis] }°
+                </Typography>
+                <IconButton
+                  aria-label={ `Increase ${axis} angle` }
+                  disabled={ unavailable || isUpdating || pending || position[axis] >= (axis === 'head' ? 45 : 30) }
+                  onClick={ () => updatePosition({ ...position, [axis]: Math.min(axis === 'head' ? 45 : 30, position[axis] + 1) }) }>
+                  <AddIcon />
+                </IconButton>
+              </Stack>
+            </Box>
+          )) }
+        </Stack>
+        { showStop && <Button
+          variant="contained"
+          color="error"
+          fullWidth
+          onClick={ () => void handleStop() }
+          disabled={ stopMutation.isPending }>
+          { stopMutation.isPending ? 'Stopping...' : 'Stop Movement' }
+        </Button> }
+        <Box sx={ { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1, width: '100%' } }>
+          { Object.entries(presets).map(([name, preset]) => {
+            const active = baseStatus?.head === preset.head && baseStatus?.feet === preset.feet;
+            return <Paper key={ name } variant="outlined" sx={ { borderColor: active ? 'primary.main' : 'divider' } }>
+              <Button
+                fullWidth
+                aria-pressed={ active }
+                disabled={ unavailable || isUpdating || pending || moving || (requested && !queued) }
+                onClick={ () => void handlePreset(name as keyof typeof presets) }
+                sx={ { flexDirection: 'column', py: 1.5 } }>
+                <Typography component="span">{ name.charAt(0).toUpperCase() + name.slice(1) }</Typography>
+                <Typography component="span" variant="caption" color="text.secondary">Head { preset.head }°, feet { preset.feet }°</Typography>
+              </Button>
+            </Paper>;
+          }) }
+        </Box>
+      </> }
     </PageContainer>
   );
 }

@@ -18,7 +18,8 @@ function presenceLabel(observation: PresenceSide | undefined): string | undefine
   return minutes < 1 ? 'In bed less than a minute' : `In bed ${minutes} min`;
 }
 
-export default function SideControl({ compact = true, mergeAwaySides = true, beforeSideChange }: {
+export default function SideControl({ compact = true, mergeAwaySides = true, beforeSideChange, captions }: {
+  captions?: Partial<Record<'left' | 'right', string>>;
   compact?: boolean;
   mergeAwaySides?: boolean;
   beforeSideChange?: (side: 'left' | 'right') => boolean;
@@ -47,7 +48,7 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
       } }
       sx={ {
         width: '100%', display: 'grid', gridTemplateColumns: both ? '1fr' : '1fr 1fr', gap: 1,
-        ...(!compact && { p: 0.5, border: `1px solid ${palette.border.control}`, borderTopWidth: 4, borderRadius: 3 }),
+
       } }>
       { keys.map(key => {
         const selected = side === key;
@@ -57,10 +58,10 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
         const temperature = status ? formatTemperature(status.targetTemperatureF, format) : '';
         const direction = status && (status.currentTemperatureF > status.targetTemperatureF ? 'cooling'
           : status.currentTemperatureF < status.targetTemperatureF ? 'warming' : 'holding');
-        const state = away ? 'Away' : !status ? 'Status unavailable' : !status.isOn ? 'Off'
-          : `${temperature}, ${direction}`;
+        const state = captions?.[key] ?? (away ? 'Away' : !status ? 'Status unavailable' : !status.isOn ? 'Off'
+          : `${temperature}, ${direction}`);
         const calibration = services?.biometrics?.jobs?.[key === 'left' ? 'calibrateLeft' : 'calibrateRight'];
-        const occupancy = !compact && !away && services?.biometrics.enabled && calibration?.status === 'healthy'
+        const occupancy = !captions && !compact && !away && services?.biometrics?.enabled && calibration?.status === 'healthy'
           ? presenceLabel(presence?.[key]) : undefined;
         const title = both ? 'Both sides' : name;
         return <Box
@@ -68,7 +69,7 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
           key={ key }
           sx={ {
             position: 'relative', display: 'flex', alignItems: 'center', gap: 1, minWidth: 0,
-            minHeight: compact ? 48 : 88, py: compact ? 0.5 : 1, px: compact ? 1 : 1.5, cursor: 'pointer', borderRadius: 2,
+            minHeight: compact ? 48 : 88, py: compact ? 0.5 : 1, px: compact ? 1 : 1.5, cursor: 'pointer', borderRadius: '24px',
             bgcolor: selected ? palette.bg.selected : palette.bg.elevated,
             border: `2px solid ${selected ? palette.lamp : palette.border.subtle}`,
             '&:has(input:focus-visible)': { outline: `2px solid ${palette.lamp}`, outlineOffset: 3 },
@@ -81,22 +82,23 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
             } } }
             sx={ { position: 'absolute', inset: 0, opacity: 0, p: 0, '& input': { width: '100%', height: '100%' } } }/>
           <Box sx={ { minWidth: 0, flex: 1 } }>
-            <Typography fontWeight={ 600 } sx={ { fontSize: 16, pr: 1.5, overflowWrap: 'anywhere', lineHeight: compact ? 1.2 : 1.5 } }>
-              { title }
+            <Typography fontWeight={ 600 } sx={ { fontSize: 16, pr: 2.5, overflowWrap: 'anywhere', lineHeight: compact ? 1.2 : 1.5 } }>
+              <bdi>{ title }</bdi>
             </Typography>
             <Box sx={ { display: 'flex', alignItems: 'center', gap: 0.5 } }>
               <Typography
                 variant="caption"
-                color={ status?.isOn && !away ? temperatureColor(fahrenheitToLevel(status.targetTemperatureF)) : 'text.secondary' }
+                color={ !captions?.[key] && status?.isOn && !away
+                  ? temperatureColor(fahrenheitToLevel(status.targetTemperatureF)) : 'text.secondary' }
                 sx={ { lineHeight: compact ? 1.2 : 1.5 } }>
-                { compact && status?.isOn && !away ? temperature : state }
+                { captions?.[key] ?? (compact && status?.isOn && !away ? temperature : state) }
               </Typography>
             </Box>
             { occupancy && <Typography variant="caption" color="text.secondary">{ occupancy }</Typography> }
           </Box>
           { selected && <CheckCircleOutline
             aria-hidden
-            sx={ { position: 'absolute', top: 4, right: 4, fontSize: 18, color: palette.lamp, pointerEvents: 'none' } }/> }
+            sx={ { position: 'absolute', top: 10, right: 10, fontSize: 18, color: palette.lamp, pointerEvents: 'none' } }/> }
         </Box>;
       }) }
     </RadioGroup>

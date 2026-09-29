@@ -6,16 +6,15 @@ import { server } from '@test/setup';
 import SchedulePage from './SchedulePage';
 
 describe('SchedulePage empty schedule data robustness', () => {
-  it('renders without throwing when /schedules returns an empty object', async () => {
+  it('shows an error instead of setup controls when /schedules returns an empty object', async () => {
     server.use(
       http.get('*/schedules', () => HttpResponse.json({})),
     );
 
     renderWithProviders(<SchedulePage />, { initialRoute: '/schedules' });
 
-    // The day tabs (static UI) render regardless of data shape; this proves
-    // the page survived the render + effect pass without an unhandled throw.
-    expect(await screen.findByRole('button', { name: 'Set bedtime and wake time' })).toBeInTheDocument();
-    expect(await screen.findAllByRole('tab')).toHaveLength(7);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load the schedule and Pod timezone.');
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Set bedtime and wake time' })).not.toBeInTheDocument();
   });
 });

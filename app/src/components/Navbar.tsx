@@ -12,14 +12,12 @@ import { useEffect } from 'react';
 import { useAppStore } from '@state/appStore.tsx';
 import { useUpdateAttentionStore } from '@state/updateAttentionStore';
 import { useDeviceStatus } from '@api/deviceStatus';
-import { useEventStreamStore } from '@api/eventStream.ts';
 import { useStatusSummary } from '../pages/StatusPage/useStatusSummary';
 import { PAGES, primaryRoute } from './pages';
 
 export default function Navbar() {
   const { pathname } = useLocation();
   const { isUpdating } = useAppStore();
-  const wsState = useEventStreamStore((s) => s.state);
   const { attention } = useStatusSummary();
   const unhealthy = attention.length > 0;
   const updateAttention = useUpdateAttentionStore(state => state.updateAttention);
@@ -42,22 +40,6 @@ export default function Navbar() {
           sx={ { position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1300 } }
         />
       ) }
-      { wsState === 'reconnecting' && (
-        <Box
-          role="status"
-          sx={ {
-            position: 'fixed',
-            top: 'calc(8px + env(safe-area-inset-top, 0px))',
-            right: 16,
-            px: 1,
-            bgcolor: 'background.paper',
-            color: 'warning.light',
-            zIndex: 1202,
-          } }
-        >
-          Reconnecting...
-        </Box>
-      ) }
       <Box
         component="nav"
         aria-label="Primary desktop"
@@ -77,22 +59,25 @@ export default function Navbar() {
           zIndex: 1100,
         } }
       >
-        <Typography sx={ { fontWeight: 600 } }>Nightstand</Typography>
-        <Box sx={ { display: 'flex', gap: 1 } }>
-          { PAGES.map((page) => (
-            <Button
-              key={ page.route }
-              component={ Link }
-              to={ page.route }
-              aria-current={ selected === page.route ? 'page' : undefined }
-              aria-label={ page.route === '/settings' && settingsAttention ? settingsLabel : undefined }
-              variant={ selected === page.route ? 'outlined' : 'text' }
-            >
-              <Badge color={ unhealthy ? 'error' : 'warning' } variant="dot" invisible={ !(page.route === '/settings' && settingsAttention) }>
-                { page.title }
-              </Badge>
-            </Button>
-          )) }
+        <Box sx={ { width: '100%', maxWidth: 672, mx: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' } }>
+          <Typography sx={ { fontWeight: 600 } }>Nightstand</Typography>
+          <Box sx={ { display: 'flex', gap: 1 } }>
+            { PAGES.map((page) => (
+              <Button
+                key={ page.route }
+                component={ Link }
+                to={ page.route }
+                aria-current={ selected === page.route ? 'page' : undefined }
+                aria-label={ page.route === '/settings' && settingsAttention ? settingsLabel : undefined }
+                variant="text"
+                sx={ { color: selected === page.route ? 'primary.main' : 'text.secondary', fontWeight: selected === page.route ? 600 : 500 } }
+              >
+                <Badge color={ unhealthy ? 'error' : 'warning' } variant="dot" invisible={ !(page.route === '/settings' && settingsAttention) }>
+                  { page.title }
+                </Badge>
+              </Button>
+            )) }
+          </Box>
         </Box>
       </Box>
       <BottomNavigation
@@ -133,7 +118,7 @@ export default function Navbar() {
               flex: 1,
               px: 0.5,
               color: 'text.secondary',
-              '& .MuiBottomNavigationAction-label': { fontSize: '0.75rem', '&.Mui-selected': { fontSize: '0.75rem' } },
+              '& .MuiBottomNavigationAction-label': { fontSize: '0.75rem', '&.Mui-selected': { fontSize: '0.75rem', fontWeight: 600 } },
             } }
           />
         )) }

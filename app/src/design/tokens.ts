@@ -26,18 +26,9 @@ export const radius = {
   sm: 8,
   md: 12,
   lg: 16,
-  xl: 20, // primary card radius
+  xl: 12, // primary card radius
   xxl: 24,
   pill: 9999,
-};
-
-export const space = {
-  // Numeric values for direct sx usage (multiplies of MUI's 8px base).
-  // sx={{ p: space.cardPadding }} etc.
-  cardPadding: 2.5, // 20px
-  cardGap: 2, // 16px
-  sectionGap: 3, // 24px
-  inlineGap: 1, // 8px
 };
 
 export const typography = {
@@ -47,26 +38,11 @@ export const typography = {
     lineHeight: 1,
     letterSpacing: '-0.03em',
   },
-  largeTitle: {
-    fontSize: '1.75rem',
-    fontWeight: 600,
-    letterSpacing: '-0.01em',
-    lineHeight: 1.15,
-  },
-  title: {
-    fontSize: '1.375rem',
-    fontWeight: 600,
-    letterSpacing: '-0.01em',
-  },
-  metricLarge: { fontSize: '2.5rem', fontWeight: 400 },
+  metricLarge: { fontSize: '3.5rem', fontWeight: 500 },
   metricValue: {
     fontSize: '1.5rem',
     fontWeight: 500,
     fontVariantNumeric: 'tabular-nums',
-  },
-  body: {
-    fontSize: '1rem',
-    fontWeight: 400,
   },
   caption: {
     fontSize: '0.8125rem',
@@ -85,7 +61,7 @@ export const sx = {
   glassCard: {
     width: '100%',
     borderRadius: `${radius.xl}px`,
-    p: space.cardPadding,
+    p: 2,
     background: palette.bg.elevated,
     border: `1px solid ${palette.border.subtle}`,
     boxShadow: 'none',
@@ -103,11 +79,11 @@ export const sx = {
     '&.Mui-expanded': { margin: 0 },
     '& .MuiAccordionSummary-root': {
       borderRadius: `${radius.xl}px`,
-      px: space.cardPadding,
+      px: 2,
     },
     '& .MuiAccordionDetails-root': {
-      px: space.cardPadding,
-      pb: space.cardPadding,
+      px: 2,
+      pb: 2,
     },
   },
   sectionLabel: {

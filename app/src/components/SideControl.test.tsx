@@ -63,3 +63,10 @@ it('keeps an away side available when browsing its history', () => {
   fireEvent.click(screen.getByRole('radio', { name: 'Sam. Away.' }));
   expect(fixture.setSide).toHaveBeenCalledWith('right');
 });
+
+it('uses the selected night captions instead of live bed states when supplied', () => {
+  render(<SideControl mergeAwaySides={ false } captions={ { left: '86, 6h 30m', right: 'No recording' } }/>);
+  expect(screen.getByRole('radio', { name: 'Alex. 86, 6h 30m.' })).toBeChecked();
+  expect(screen.getByRole('radio', { name: 'Sam. No recording.' })).toBeInTheDocument();
+  expect(screen.queryByText('Off')).not.toBeInTheDocument();
+});

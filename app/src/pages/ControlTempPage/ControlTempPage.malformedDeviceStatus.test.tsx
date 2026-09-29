@@ -32,7 +32,7 @@ describe('ControlTempPage malformed deviceStatus robustness', () => {
     renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
     expect(await screen.findByRole('heading', { name: 'Bed' })).toBeInTheDocument();
     // An unknown side state must not look like a confirmed powered-off bed.
-    expect(await screen.findByText('Bed status unavailable. Refresh to try again.')).toBeInTheDocument();
+    expect(await screen.findByText('Could not load bed status.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Turn on' })).not.toBeInTheDocument();
   });
 });
