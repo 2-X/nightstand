@@ -117,6 +117,10 @@ before starting.
 If either side of the bed is on, the tool asks you to type a confirmation
 before going ahead.
 
+Switching in keeps upstream's four-tap alarm action (`quadTap: alarm`). To change
+it, send the desired per-side tap configuration to `POST /api/settings`
+(`left.taps.quadTap` or `right.taps.quadTap`); there is no tap editor in the app.
+
 ## Going back
 
 - **To your previous install:** Settings > Software has a Roll back

@@ -52,7 +52,9 @@ is a hard fork; for the history of the projects it descends from, see
   without it, new outbound connections remain blocked except time sync.
   Updates apply the installed version's rules after the swap, and rollback
   applies the restored version's rules. If you set up Tailscale later, run the
-  block script again once it is running. From Kris's fork, 2-X/nightstand.
+  block script again once it is running. Applying the rules removes hand-added
+  INPUT and OUTPUT rules, including custom VPN exceptions. From Kris's fork,
+  2-X/nightstand.
 
 - After a restart, replayed sensor records no longer show old temperatures on
   the Status page or trip a false pump alert. From Kris's fork, 2-X/nightstand.
