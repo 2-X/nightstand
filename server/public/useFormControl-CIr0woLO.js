@@ -1,0 +1,2 @@
+import{r as u}from"./index.js";function d(n,r=166){let t;function o(...e){const i=()=>{n.apply(this,e)};clearTimeout(t),t=setTimeout(i,r)}return o.clear=()=>{clearTimeout(t)},o}function l({props:n,states:r,muiFormControl:t}){return r.reduce((o,e)=>(o[e]=n[e],t&&typeof n[e]>"u"&&(o[e]=t[e]),o),{})}const f=u.createContext(void 0);function a(){return u.useContext(f)}export{f as F,d,l as f,a as u};
+//# sourceMappingURL=useFormControl-CIr0woLO.js.map

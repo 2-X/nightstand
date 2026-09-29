@@ -54,6 +54,7 @@ export const STOCK_CONTRACT = {
     packages: [
         'react',
         'react-router-dom',
+        'zustand',
         'axios',
         'semver',
         '@mui/material',
@@ -75,6 +76,7 @@ export const AGENT_MANIFEST = [
     { path: 'app/src/api/releases.ts', mode: 'add', why: 'fetches and validates the release manifest' },
     { path: 'app/src/api/update.ts', mode: 'add', why: 'update, rollback and revert API client' },
     { path: 'app/src/api/updateSchema.ts', mode: 'add', why: 'shared update request and response types' },
+    { path: 'app/src/state/updateAttentionStore.ts', mode: 'add', why: 'retains update request outcomes while navigating the app' },
     { path: 'app/src/api/useUpdateProgress.ts', mode: 'add', why: 'polls for the pod coming back on a new version' },
     { path: 'app/src/components/VersionStatus.tsx', mode: 'copy', why: 'hosts the update prompt and the rollback and revert rows' },
     { path: 'app/src/pages/SettingsPage/DeviceSettingsSection/UpdateFreeSleepButton.tsx', mode: 'copy', why: 'triggers the pod self-updater' },

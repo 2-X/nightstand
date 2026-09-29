@@ -33,7 +33,8 @@ fail() { echo "$*"; exit 1; }
 sleep() { :; }
 chown() { :; }
 nice() { shift 2; "$@"; }
-export -f nice
+ionice() { shift 4; "$@"; }
+export -f nice ionice
 curl() { return 0; }
 systemctl() { echo "$* $(cat "$LIVE/version")" >> "$FIXTURE/services"; }
 ssh_cmd() { echo "$*" >> "$FIXTURE/ssh"; echo 0; }

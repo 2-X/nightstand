@@ -9,6 +9,7 @@ import servicesDB from '../db/services.js';
 import memoryDB from '../db/memoryDB.js';
 import settingsDB from '../db/settings.js';
 import { isTempScheduleOverridden } from './scheduleOverride.js';
+import { SLEEP_ANALYSIS_HOUR, SLEEP_ANALYSIS_MINUTE } from '../sleepAnalysisSchedule.js';
 export const schedulePowerOn = (settingsData, side, day, power) => {
     if (!power.enabled)
         return;
@@ -54,8 +55,6 @@ export const schedulePowerOn = (settingsData, side, day, power) => {
     });
 };
 // Analyze a full sleep day for each side, independent of temperature schedules.
-const SLEEP_ANALYSIS_HOUR = 12;
-const SLEEP_ANALYSIS_MINUTE = 0;
 export const scheduleSleepAnalysis = (settingsData, side) => {
     if (settingsData[side].awayMode)
         return;

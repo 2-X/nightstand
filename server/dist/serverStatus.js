@@ -31,6 +31,7 @@ class ServerStatus {
                 name: 'Express',
                 status: 'not_started',
                 description: 'The back-end server',
+                timestamp: new Date().toISOString(),
                 message: '',
             },
             franken: {
@@ -119,7 +120,7 @@ class ServerStatus {
                     this.status.database.status = 'failed';
                     this.status.database.message =
                         `Some database changes this version needs were never applied (${unapplied.join(', ')}). ` +
-                            'To apply them, open Settings, then Versions, and choose Reinstall on the running version.';
+                            'To apply them, open Settings, then Software, expand Recovery, and choose Reinstall on the running version.';
                     this.status.database.unappliedMigrations = unapplied;
                 }
                 else {

@@ -1,0 +1,1 @@
+{"version":3,"file":"sleepAnalysisSchedule.js","sourceRoot":"/","sources":["sleepAnalysisSchedule.ts"],"names":[],"mappings":"AAAA,MAAM,CAAC,MAAM,mBAAmB,GAAG,EAAE,CAAC;AACtC,MAAM,CAAC,MAAM,qBAAqB,GAAG,CAAC,CAAC","sourcesContent":["export const SLEEP_ANALYSIS_HOUR = 12;\nexport const SLEEP_ANALYSIS_MINUTE = 0;\n"]}
