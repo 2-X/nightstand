@@ -49,3 +49,20 @@ test('zero HRV and breathing rate are read as missing estimates', () => {
     { timestamp: 1, heart_rate: 70, hrv: 42, breathing_rate: 14 },
   );
 });
+
+test('unknown buckets right after the last sleep stay asleep, but not after a real waking', () => {
+  // A restless hour before sleep sets the calm-movement threshold, as on a real night.
+  const restless = Array<number | null>(16).fill(90);
+  const asleep = Array<number | null>(12).fill(60);
+  const quiet = (from: number) => (bucket: number) => bucket < 16 ? 100 : bucket === from ? 500 : 1;
+  const stillSleeping = nightFrom([...restless, ...asleep, null, null, null], quiet(-1));
+  assert.deepEqual(stillSleeping.epochs.slice(-3).map(e => e.stage === 'awake'), [false, false, false]);
+  const wokeUp = nightFrom([...restless, ...asleep, 95, null, null], quiet(28));
+  assert.deepEqual(wokeUp.epochs.slice(-3).map(e => e.stage), ['awake', 'awake', 'awake']);
+});
+
+test('a night with almost no recorded movement still finds sleep onset', () => {
+  const summary = nightFrom([90, 90, 90, 90, ...Array<number | null>(12).fill(60)], () => 0);
+  assert.deepEqual(summary.epochs.slice(0, 4).map(e => e.stage), ['awake', 'awake', 'awake', 'awake']);
+  assert.notEqual(summary.epochs[4].stage, 'awake');
+});

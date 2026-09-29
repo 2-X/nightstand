@@ -45,8 +45,8 @@ export type StageMovement = { timestamp: number; total_movement: number };
 //
 // Approach (still no ML, fully deterministic):
 //   - baselineHR = 10th-percentile HR across the night = "deep sleep HR"
-//   - calmMoveThreshold = 50th percentile of bucket movement = "low restless"
-//   - sleep onset = first epoch where (HR ≤ baseline+5) AND (movement < calm)
+//   - calm movement = not restless (below the 85th percentile or at most 50)
+//   - sleep onset = first epoch where (HR ≤ baseline+5) AND calm movement
 //     stays true for ≥3 consecutive epochs (~15 min)
 //
 // Validation against polysomnography would require data we don't have, so
@@ -146,7 +146,7 @@ function classifyStages(
     const hrv = v?.hrv ?? null;
 
     const hrCalm = hr !== null && hr <= baselineHR + SLEEP_HR_DELTA_BPM;
-    const moveCalm = movement < calmMoveThreshold;
+    const moveCalm = !(movement >= calmMoveThreshold && movement > 50);
     const isCalm = hrCalm && moveCalm;
     const isNeutral = hr === null && moveCalm;
 
@@ -228,10 +228,15 @@ function classifyStages(
   let offsetIdx = working.length;
   let sleepRun = 0;
   let sleepRunEnd = -1;
+  // Unknown buckets directly after the final sleep block stay asleep.
+  let unknownTailEnd = -1;
   for (let i = working.length - 1; i >= 0; i--) {
-    if (working[i].isNeutral) continue;
+    if (working[i].isNeutral) {
+      if (sleepRun === 0 && unknownTailEnd === -1) unknownTailEnd = i;
+      continue;
+    }
     if (working[i].stage !== 'awake') {
-      if (sleepRun === 0) sleepRunEnd = i;
+      if (sleepRun === 0) sleepRunEnd = unknownTailEnd === -1 ? i : unknownTailEnd;
       sleepRun++;
       if (sleepRun >= OFFSET_REQUIRED_SLEEP_BUCKETS) {
         // First epoch AFTER the sustained sleep block, walking forward.
@@ -240,6 +245,7 @@ function classifyStages(
       }
     } else {
       sleepRun = 0;
+      unknownTailEnd = -1;
     }
   }
 
