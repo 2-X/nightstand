@@ -1,38 +1,20 @@
 import express, { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
-import moment from 'moment-timezone';
 import { sleepRecordSchema, SleepRecord } from '../../db/sleepRecordsSchema.js';
 import { loadSleepRecords } from '../../db/loadSleepRecords.js';
 import { prisma } from '../../db/prisma.js';
+import { parseMetricsQuery } from './metricsQuery.js';
 
 const router = express.Router();
 
-// Define query params
-interface SleepQuery {
-  side?: string;
-  startTime?: string;
-  endTime?: string;
-}
-
-
-router.get('/sleep', async (req: Request<object, object, object, SleepQuery>, res: Response) => {
-  const { startTime, endTime, side } = req.query;
+router.get('/sleep', async (req: Request, res: Response) => {
+  const range = parseMetricsQuery(req.query);
+  if (!range) return res.status(400).json({ error: 'Invalid side, startTime or endTime' });
   const query: Prisma.sleep_recordsWhereInput = {
-    entered_bed_at: {},
-    left_bed_at: {},
+    side: range.side,
+    left_bed_at: { gte: range.start },
+    entered_bed_at: { lte: range.end },
   };
-
-  if (side) query.side = side;
-  if (startTime) {
-    query.left_bed_at = {
-      gte: moment(startTime).unix(),
-    };
-  }
-  if (endTime) {
-    query.entered_bed_at = {
-      lte: moment(endTime).unix(),
-    };
-  }
 
   const sleepRecords = await prisma.sleep_records.findMany({
     where: query,

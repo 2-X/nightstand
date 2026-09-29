@@ -1,34 +1,15 @@
 import express, { Request, Response } from 'express';
 import { Prisma, vitals as VitalRecord } from '@prisma/client';
-import moment from 'moment-timezone';
+import { parseMetricsQuery } from './metricsQuery.js';
 import { prisma } from '../../db/prisma.js';
 
 
 const router = express.Router();
 
-// Define query params
-interface VitalsQuery {
-  side?: string;
-  startTime?: string;
-  endTime?: string;
-}
-
-
-router.get('/vitals', async (req: Request<object, object, object, VitalsQuery>, res: Response) => {
-  const { side, startTime, endTime } = req.query;
-  const query: Prisma.vitalsWhereInput = {};
-
-  if (side) query.side = side;
-
-  query.timestamp = {};
-  if (startTime) {
-    // @ts-ignore
-    query.timestamp.gte = moment(startTime).unix();
-  }
-  if (endTime) {
-    // @ts-ignore
-    query.timestamp.lte = moment(endTime).unix();
-  }
+router.get('/vitals', async (req: Request, res: Response) => {
+  const range = parseMetricsQuery(req.query);
+  if (!range) return res.status(400).json({ error: 'Invalid side, startTime or endTime' });
+  const query: Prisma.vitalsWhereInput = { side: range.side, timestamp: { gte: range.start, lte: range.end } };
 
 
   // Use Prisma's generated type for the records
@@ -47,22 +28,10 @@ router.get('/vitals', async (req: Request<object, object, object, VitalsQuery>, 
 });
 
 
-router.get('/vitals/summary', async (req: Request<object, object, object, VitalsQuery>, res: Response) => {
-  const { side, startTime, endTime } = req.query;
-
-  const query: Prisma.vitalsWhereInput = {};
-
-  if (side) query.side = side;
-
-  query.timestamp = {};
-  if (startTime) {
-    // @ts-ignore
-    query.timestamp.gte = moment(startTime).unix();
-  }
-  if (endTime) {
-    // @ts-ignore
-    query.timestamp.lte = moment(endTime).unix();
-  }
+router.get('/vitals/summary', async (req: Request, res: Response) => {
+  const range = parseMetricsQuery(req.query);
+  if (!range) return res.status(400).json({ error: 'Invalid side, startTime or endTime' });
+  const query: Prisma.vitalsWhereInput = { side: range.side, timestamp: { gte: range.start, lte: range.end } };
 
   // Query: Min & Max Heart Rate
   const heartRateSummary = await prisma.vitals.aggregate({

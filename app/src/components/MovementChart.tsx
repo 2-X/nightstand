@@ -100,7 +100,7 @@ export default function MovementAreaChart({
 
     // Sort & normalize input
     const raw = [...movementRecords]
-      .map(r => ({ t: new Date(r.timestamp).getTime(), v: Number(r.total_movement) }))
+      .map(r => ({ t: r.timestamp * 1000, v: Number(r.total_movement) }))
       .sort((a, b) => a.t - b.t);
 
     // Time-based max pooling

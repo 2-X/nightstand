@@ -93,15 +93,14 @@ const createMovementRecords = (): MovementRecord[] => {
   const records: MovementRecord[] = [];
   for (let i = 0; i < H; i++) {
     const frac = i / (H - 1); // 0 → 1 across 8 points
-    const ts = start.clone().add(i, 'hours').format(); // "YYYY-MM-DDTHH:mm:ssZ"
+    const ts = start.clone().add(i, 'hours').unix();
     const value = Math.round(clamp(interp(frac), 1, 1400));
     const side: Side = i % 2 === 0 ? 'left' : 'right';
 
     records.push({
       id: i + 1,
       side,
-      // @ts-expect-error
-      timestamp: ts, // e.g. "2025-11-06T23:50:00-08:00"
+      timestamp: ts,
       total_movement: value, // 1 → 1400 following the 50→300→1400→50 curve
     });
   }
