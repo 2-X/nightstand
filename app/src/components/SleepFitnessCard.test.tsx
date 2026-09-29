@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
 import SleepFitnessCard from './SleepFitnessCard';
 
@@ -49,20 +49,17 @@ it('uses a presence label when classification has no epochs', () => {
   expect(screen.queryByText(/asleep/)).not.toBeInTheDocument();
 });
 
-it('formats duration consistently and explains the filtered HRV contributor', () => {
-  renderWithProviders(<SleepFitnessCard sleepRecord={ record } timeZone="UTC"/>);
-  expect(screen.getByText('Duration')).toBeInTheDocument();
-  expect(screen.getByText('7h 30m')).toBeInTheDocument();
-  expect(screen.queryByText('7.5h')).not.toBeInTheDocument();
-  expect(screen.getByText('HRV (filtered)')).toBeInTheDocument();
-  expect(screen.getByText('63 ms')).toBeInTheDocument();
-  expect(screen.getByText(/Score uses HRV readings from 30 to 120 ms/)).toBeInTheDocument();
-  expect(screen.getByRole('progressbar', { name: 'HRV (filtered) contribution' })).toHaveAttribute('aria-valuenow', '70');
-});
-
-it.each(['52bpm', '52 bpm'])('separates the resting heart rate and its unit for %s', value => {
-  fixture.restingHr = value;
-  renderWithProviders(<SleepFitnessCard sleepRecord={ record } timeZone="UTC"/>);
-  expect(screen.getByText('52 bpm')).toBeInTheDocument();
-  expect(screen.getByText('63 ms')).toBeInTheDocument();
+it('shows contributor bands and keeps their measurements in the info sheet', async () => {
+  fixture.restingHr = '52bpm';
+  const { user } = renderWithProviders(<SleepFitnessCard sleepRecord={ record } timeZone="UTC"/>);
+  expect(screen.getByText('Good')).toBeInTheDocument();
+  expect(screen.getAllByText('Fair')).toHaveLength(3);
+  expect(screen.queryByText('63 ms')).not.toBeInTheDocument();
+  expect(screen.queryByText('52 bpm')).not.toBeInTheDocument();
+  expect(screen.getByRole('progressbar', { name: 'HRV contribution' })).toHaveAttribute('aria-valuenow', '70');
+  await user.click(screen.getByRole('button', { name: 'About the sleep estimate' }));
+  const dialog = screen.getByRole('dialog');
+  expect(within(dialog).getByText('Duration: 7h 30m in bed')).toBeInTheDocument();
+  expect(within(dialog).getByText('HRV: 63 ms')).toBeInTheDocument();
+  expect(within(dialog).getByText('Resting HR: 52 bpm')).toBeInTheDocument();
 });

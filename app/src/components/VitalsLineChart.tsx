@@ -1,34 +1,26 @@
 import { useMemo } from 'react';
 import moment from 'moment-timezone';
 import { VitalsRecord } from '@api/vitals.ts';
-import MetricChartCard from '@design/MetricChartCard';
+import { Box, Typography } from '@mui/material';
 import { palette } from '@design/tokens';
 import TimeSeriesChart, { TimeSeriesPoint } from '@design/TimeSeriesChart';
 import { vitalsRecordsToPoints, VitalsMetric as Metric } from '@lib/vitalsPoints.ts';
 type VitalsLineChartProps = {
   vitalsRecords?: VitalsRecord[];
+  points?: TimeSeriesPoint[];
   metric: Metric;
   /** Average of this metric over the 7 days leading up to the selected
    *  night, computed from the vitals-summary endpoint by the parent. */
   sevenDayAvg?: number;
   timeZone?: string;
+  startTime?: string;
+  endTime?: string;
 };
 
-// Display config per metric: section labels + units + healthy target band.
-// The target ranges below are general adult sleep references - used only as a
-// faint background band on the chart for visual context, not a medical claim.
-const METRIC_CONFIG: Record<
-  Metric,
-  {
-    title: string;
-    primaryLabel: string;
-    unit: string;
-    targetRange?: [number, number];
-  }
-> = {
-  heart_rate:    { title: 'HEART RATE', primaryLabel: 'SELECTED NIGHT', unit: 'bpm' },
-  hrv:           { title: 'HRV', primaryLabel: 'SELECTED NIGHT', unit: 'ms', targetRange: [50, 100] },
-  breathing_rate:{ title: 'BREATHING RATE', primaryLabel: 'SELECTED NIGHT', unit: 'brpm', targetRange: [12, 20] },
+const METRIC_CONFIG: Record<Metric, { unit: string; targetRange?: [number, number] }> = {
+  heart_rate: { unit: 'bpm' },
+  hrv: { unit: 'ms', targetRange: [50, 100] },
+  breathing_rate: { unit: 'breaths/min', targetRange: [12, 20] },
 };
 
 // Bucket-aggregate timestamped points: split into ~maxPoints contiguous
@@ -48,55 +40,32 @@ function bucketAggregate(arr: TimeSeriesPoint[], maxPoints: number): TimeSeriesP
   return out;
 }
 
-export default function VitalsLineChart({ vitalsRecords, metric, sevenDayAvg, timeZone }: VitalsLineChartProps) {
+export default function VitalsLineChart({
+  vitalsRecords, points: suppliedPoints, metric, sevenDayAvg, timeZone, startTime, endTime,
+}: VitalsLineChartProps) {
   const cfg = METRIC_CONFIG[metric];
-
-  const { points, primaryValue } = useMemo(() => {
-    if (!vitalsRecords || vitalsRecords.length === 0) {
-      return { points: [] as TimeSeriesPoint[], primaryValue: '\u2014' };
-    }
-    const cleaned = vitalsRecordsToPoints(vitalsRecords, metric);
-
-    if (cleaned.length === 0) {
-      return { points: [] as TimeSeriesPoint[], primaryValue: '\u2014' };
-    }
-
-    const downsampled = bucketAggregate(cleaned, 50);
-    const primary = Math.round(cleaned.reduce((sum, point) => sum + point.value, 0) / cleaned.length);
-
-    return {
-      points: downsampled,
-      primaryValue: `${primary} ${cfg.unit}`,
-    };
-  }, [vitalsRecords, metric, cfg.unit]);
-
-  const sevenDayValue =
-    sevenDayAvg && sevenDayAvg > 0 ? `${Math.round(sevenDayAvg)} ${cfg.unit}` : '\u2014';
-
-  if (points.length === 0) return null;
-
-  // A single night's data reads fine as bare times, but
-  // once the window covers more than one day, identical hour labels repeat
-  // with nothing to tell the days apart.
-  const spanMs =
-    points[points.length - 1].timestamp.getTime() - points[0].timestamp.getTime();
+  const points = useMemo(() => bucketAggregate(
+    suppliedPoints ?? vitalsRecordsToPoints(vitalsRecords ?? [], metric, { startTime, endTime }), 50,
+  ), [suppliedPoints, vitalsRecords, metric, startTime, endTime]);
+  if (!points.length) return null;
+  const spanMs = points[points.length - 1].timestamp.getTime() - points[0].timestamp.getTime();
   const timeFormat = spanMs > 24 * 60 * 60 * 1000 ? 'ddd h:mm A' : 'h:mm A';
 
   return (
-    <MetricChartCard
-      title={ cfg.title }
-      stats={ [
-        { label: cfg.primaryLabel, value: primaryValue },
-        { label: '7 DAY AVERAGE', value: sevenDayValue },
-      ] }
-    >
+    <Box>
+      { !!sevenDayAvg && sevenDayAvg > 0 && (
+        <Typography variant="body2" color="text.secondary" sx={ { mb: 1 } }>
+          7-night average { Math.round(sevenDayAvg) } { cfg.unit }
+        </Typography>
+      ) }
       <TimeSeriesChart
         data={ points }
+        startTime={ startTime }
+        endTime={ endTime }
         lineColor={ palette.lamp }
         targetRange={ cfg.targetRange }
-        xValueFormatter={ (d) => (timeZone ? moment.tz(d, timeZone) : moment(d)).format(timeFormat) }
-        yValueFormatter={ (n) => Math.round(n).toString() }
-      />
-    </MetricChartCard>
+        xValueFormatter={ date => (timeZone ? moment.tz(date, timeZone) : moment(date)).format(timeFormat) }
+        yValueFormatter={ value => Math.round(value).toString() }/>
+    </Box>
   );
 }

@@ -1,5 +1,5 @@
 import axios from './api';
-import { useQuery } from '@tanstack/react-query';
+import { queryOptions, useQuery } from '@tanstack/react-query';
 
 export type SleepStage = 'awake' | 'rem' | 'light' | 'deep';
 
@@ -26,8 +26,8 @@ type Args = {
   endTime?: string;
 };
 
-export const useSleepStages = ({ side, startTime, endTime }: Args, enabled = true) => {
-  return useQuery<SleepStagesResponse>({
+export const sleepStagesQueryOptions = ({ side, startTime, endTime }: Args, enabled = true) =>
+  queryOptions({
     queryKey: ['useSleepStages', side, startTime, endTime],
     queryFn: async ({ signal }) => {
       const response = await axios.get<SleepStagesResponse>('/metrics/sleep-stages', {
@@ -37,8 +37,9 @@ export const useSleepStages = ({ side, startTime, endTime }: Args, enabled = tru
       return response.data;
     },
     gcTime: 60 * 60 * 1000,
-    staleTime: 60 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
     retry: 1,
     enabled: enabled && !!startTime && !!endTime,
   });
-};
+
+export const useSleepStages = (args: Args, enabled = true) => useQuery(sleepStagesQueryOptions(args, enabled));

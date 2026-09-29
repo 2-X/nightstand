@@ -16,24 +16,25 @@ type AnalysisRequest = {
 
 export default function useAnalyzeSleep() {
   const { side, isUpdating } = useAppStore();
-  const { data: settings } = useSettings();
-  const { data: services } = useServices();
+  const { data: settings, isError: settingsError } = useSettings();
+  const { data: services, isError: servicesError } = useServices();
   const queryClient = useQueryClient();
   const [requests, setRequests] = useState<Partial<Record<Side, AnalysisRequest>>>({});
   const submitting = useRef<Partial<Record<Side, number>>>({});
   const nextRequestId = useRef(0);
   const previousJobs = useRef<Record<string, { status: string; timestamp?: string }>>({});
   const request = requests[side];
-  const job = services?.biometrics.jobs?.[side === 'left' ? 'analyzeSleepLeft' : 'analyzeSleepRight'];
+  const job = services?.biometrics?.jobs?.[side === 'left' ? 'analyzeSleepLeft' : 'analyzeSleepRight'];
   const isRunning = job && ['started', 'retrying', 'restarting'].includes(job.status);
   const awaitingJob = request?.awaitingJob && request.timestamp === job?.timestamp;
   const isPending = !!request?.submitting || !!isRunning || !!awaitingJob;
   const error = !!request?.error;
-  const canAnalyze = !!settings && !!services?.biometrics.enabled && !settings[side].awayMode && !isUpdating && !isPending;
+  const canAnalyze = !settingsError && !servicesError && !!settings && !!services?.biometrics?.enabled
+    && !settings[side]?.awayMode && !isUpdating && !isPending;
 
   useEffect(() => {
     for (const jobSide of ['left', 'right'] as const) {
-      const latestJob = services?.biometrics.jobs?.[jobSide === 'left' ? 'analyzeSleepLeft' : 'analyzeSleepRight'];
+      const latestJob = services?.biometrics?.jobs?.[jobSide === 'left' ? 'analyzeSleepLeft' : 'analyzeSleepRight'];
       const previous = previousJobs.current[jobSide];
       if (!latestJob) continue;
       previousJobs.current[jobSide] = { status: latestJob.status, timestamp: latestJob.timestamp };

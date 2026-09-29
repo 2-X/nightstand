@@ -16,9 +16,12 @@ it('leads with classified sleep and labels bed presence separately without dupli
         id: 1, side: 'left', entered_bed_at: '2026-09-28T00:00:00Z', left_bed_at: '2026-09-28T07:30:00Z',
         sleep_period_seconds: 27000, times_exited_bed: 0, present_intervals: [], not_present_intervals: [],
       } }/>
-    <SleepStagesCard startTime="2026-09-28T00:00:00Z" endTime="2026-09-28T07:30:00Z"/>
+    <SleepStagesCard timeZone="UTC" startTime="2026-09-28T00:00:00Z" endTime="2026-09-28T07:30:00Z"/>
   </>);
   expect(screen.getByText(/7h 30m in bed/)).toBeInTheDocument();
   expect(screen.getAllByText('6h 30m asleep')).toHaveLength(1);
-  expect(screen.getByText('Within your 6.5 to 9 hour range')).toBeInTheDocument();
+  expect(screen.queryByText(/your .* range/)).not.toBeInTheDocument();
+  expect(screen.getByText('Awake')).toBeInTheDocument();
+  expect(screen.getByText('3:00 AM')).toBeInTheDocument();
+  expect(screen.queryByText('Sleep interruptions')).not.toBeInTheDocument();
 });

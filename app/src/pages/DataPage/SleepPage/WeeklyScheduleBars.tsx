@@ -1,35 +1,55 @@
 import moment from 'moment-timezone';
-import { Box, Typography } from '@mui/material';
+import { Box, ButtonBase, Typography } from '@mui/material';
 import type { SleepRecord } from '@api/sleepSchema';
-import GlassCard from '@design/GlassCard';
+import { palette } from '@design/tokens';
 import { recordForNight } from './sleepContext';
 
-type Props = { records: SleepRecord[]; weekStart: moment.Moment; timeZone: string };
+type Props = { records: SleepRecord[]; weekStart: moment.Moment; timeZone: string; onSelectDay?: (date: string) => void };
 
-export default function WeeklyScheduleBars({ records, weekStart, timeZone }: Props) {
+export default function WeeklyScheduleBars({ records, weekStart, timeZone, onSelectDay }: Props) {
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const day = weekStart.clone().add(index, 'days');
+    const record = recordForNight(records, day.format('YYYY-MM-DD'), timeZone);
+    const anchor = day.clone().subtract(1, 'day').hour(12);
+    return {
+      day, record,
+      start: record ? moment(record.entered_bed_at).diff(anchor, 'minutes') : 0,
+      end: record ? moment(record.left_bed_at).diff(anchor, 'minutes') : 0,
+    };
+  });
+  const minimum = Math.min(0, ...days.filter(day => day.record).map(day => day.start));
+  const maximum = Math.max(1440, ...days.map(day => day.end));
   return (
-    <GlassCard label="Weekly timing">
-      <Typography variant="body2" color="text.secondary" sx={ { mb: 1 } }>In bed / out of bed, by wake date</Typography>
-      { Array.from({ length: 7 }, (_, index) => {
-        const day = weekStart.clone().add(index, 'days');
-        const record = recordForNight(records, day.format('YYYY-MM-DD'), timeZone);
+    <Box aria-label="Bedtime to wake time by night">
+      { days.map(({ day, record, start, end }) => {
+        const future = day.isAfter(moment.tz(timeZone), 'day');
+        const times = record
+          ? `${moment.tz(record.entered_bed_at, timeZone).format('h:mm A')} to ${moment.tz(record.left_bed_at, timeZone).format('h:mm A')}`
+          : future ? 'Upcoming' : 'No recording';
         return (
-          <Box
+          <ButtonBase
             key={ day.format('YYYY-MM-DD') }
+            disabled={ future || !onSelectDay }
+            onClick={ () => onSelectDay?.(day.format('YYYY-MM-DD')) }
             sx={ {
-              display: 'flex', justifyContent: 'space-between', gap: 2, py: 1, borderBottom: '1px solid', borderColor: 'divider',
+              width: '100%', display: 'grid', gridTemplateColumns: '64px minmax(0, 1fr)', gap: 1,
+              textAlign: 'left', py: 1, minHeight: 44, borderTop: `1px solid ${palette.border.subtle}`,
+              '&.Mui-focusVisible': { outline: `2px solid ${palette.lamp}` },
             } }>
-            <Typography variant="body2">{ day.format('ddd D') }</Typography>
-            <Typography variant="body2" color={ record ? 'text.primary' : 'text.secondary' }>
-              { record ? (
-                <>
-                  { moment.tz(record.entered_bed_at, timeZone).format('h:mm A') } / { moment.tz(record.left_bed_at, timeZone).format('h:mm A') }
-                </>
-              ) : 'No recording' }
-            </Typography>
-          </Box>
+            <Typography variant="body2" sx={ { whiteSpace: 'nowrap' } }>{ day.format('ddd D') }</Typography>
+            <Box sx={ { width: '100%', minWidth: 0 } }>
+              <Typography variant="body2" color="text.secondary">{ times }</Typography>
+              { record && <Box
+                aria-hidden
+                sx={ {
+                  mt: 0.5, height: 8, borderRadius: '4px', bgcolor: palette.lamp,
+                  ml: `${(start - minimum) / (maximum - minimum) * 100}%`,
+                  width: `${(end - start) / (maximum - minimum) * 100}%`,
+                } }/> }
+            </Box>
+          </ButtonBase>
         );
       }) }
-    </GlassCard>
+    </Box>
   );
 }

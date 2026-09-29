@@ -1,9 +1,9 @@
 // The helper components below are private to this file and used only by its
 // default export, so they stay next to their only consumer.
 /* eslint-disable react/no-multi-comp */
-import { useMemo } from 'react';
+import SectionHeading from '@components/SectionHeading';
 import moment from 'moment-timezone';
-import { Box, Typography } from '@mui/material';
+import { Alert, Box, Button, Typography } from '@mui/material';
 import CircularProgress from '@mui/material/CircularProgress';
 
 import { useAppStore } from '@state/appStore.tsx';
@@ -11,6 +11,7 @@ import { useSleepStages, SleepStage, StageEpoch } from '@api/sleepStages.ts';
 import { useSleepScoreEnabled } from '@api/sleepScore.ts';
 import GlassCard from '@design/GlassCard';
 import { palette, typography } from '@design/tokens';
+import { formatSleepDuration } from '../pages/DataPage/SleepPage/sleepContext';
 
 type Props = {
   startTime: string;
@@ -27,19 +28,11 @@ const STAGE_Y: Record<SleepStage, number> = {
   deep:  0.82,
 };
 const STAGE_LABEL: Record<SleepStage, string> = {
-  awake: 'Sleep interruptions',
+  awake: 'Awake',
   rem:   'REM',
   light: 'Light',
   deep:  'Deep',
 };
-
-const TARGET_HOURS = [6.5, 9];
-
-function formatHM(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  return `${h}h ${m}m`;
-}
 
 // Merge consecutive epochs of the same stage into a single segment so we
 // don't render hundreds of overlapping blocks. e.g. ten 5-min Light epochs
@@ -74,18 +67,18 @@ function StatBlock({
     <Box sx={ { minWidth: 0 } }>
       <Typography
         sx={ {
-          fontSize: '0.95rem',
-          color: palette.text.primary,
+          fontSize: '0.875rem',
+          color: palette.text.secondary,
           fontWeight: 400,
           mb: 0.5,
         } }
       >
         { label }
       </Typography>
-      <Box sx={ { display: 'flex', alignItems: 'baseline', gap: { xs: 0.75, sm: 1 } } }>
+      <Box sx={ { display: 'flex', alignItems: 'baseline', gap: 1 } }>
         <Typography
           sx={ {
-            fontSize: { xs: '1.25rem', sm: '1.6rem' },
+            fontSize: '1.5rem',
             fontWeight: 500,
             letterSpacing: '-0.01em',
             color: palette.text.primary,
@@ -99,12 +92,12 @@ function StatBlock({
         <Typography
           component="span"
           sx={ {
-            fontSize: { xs: '0.9rem', sm: '1.1rem' },
+            fontSize: '0.875rem',
             color: palette.text.primary,
             opacity: 0.85,
             fontWeight: 400,
             borderLeft: `1px solid ${palette.border.subtle}`,
-            pl: { xs: 0.75, sm: 1 },
+            pl: 1,
             display: 'flex',
             alignItems: 'center',
             gap: 0.5,
@@ -114,15 +107,6 @@ function StatBlock({
           { pct }
         </Typography>
       </Box>
-    </Box>
-  );
-}
-
-function LegendItem({ color, label }: { color: string; label: string }) {
-  return (
-    <Box sx={ { display: 'flex', alignItems: 'center', gap: 0.75 } }>
-      <Box sx={ { width: 10, height: 10, borderRadius: 0.4, backgroundColor: color } }/>
-      <Typography sx={ { fontSize: '0.8rem', color: palette.text.tertiary } }>{ label }</Typography>
     </Box>
   );
 }
@@ -147,11 +131,21 @@ function StagesChart({ epochs, periodStart, periodEnd }: {
   const merged = mergeAdjacent(epochs);
 
   return (
-    <Box sx={ { width: '100%', mb: 1, touchAction: 'pan-y' } }>
+    <Box sx={ { width: '100%', mb: 1, touchAction: 'pan-y', display: 'grid', gridTemplateColumns: '44px minmax(0, 1fr)' } }>
+      <Box sx={ { position: 'relative', height: 140 } }>
+        { (Object.keys(STAGE_Y) as SleepStage[]).map(stage => (
+          <Typography
+            key={ stage }
+            sx={ {
+              position: 'absolute', top: `${STAGE_Y[stage] * 100}%`, transform: 'translateY(-50%)',
+              fontSize: 12, color: palette.text.secondary,
+            } }>{ STAGE_LABEL[stage] }</Typography>
+        )) }
+      </Box>
       <svg
         viewBox={ `0 0 ${VB_W} ${VB_H}` }
         preserveAspectRatio="none"
-        style={ { display: 'block', width: '100%', height: 200, touchAction: 'pan-y' } }
+        style={ { display: 'block', width: '100%', height: 140, touchAction: 'pan-y' } }
       >
         { /* Connecting vertical lines between adjacent segments of different stages */ }
         { merged.map((seg, i) => {
@@ -222,35 +216,37 @@ function StagesChart({ epochs, periodStart, periodEnd }: {
 export default function SleepStagesCard({ startTime, endTime, timeZone }: Props) {
   const { side } = useAppStore();
   const sleepScoreEnabled = useSleepScoreEnabled();
-  const { data, isFetching } = useSleepStages({ side, startTime, endTime }, sleepScoreEnabled);
+  const { data, isPending, isError, refetch } = useSleepStages({ side, startTime, endTime }, sleepScoreEnabled);
 
   const periodStart = moment(startTime).unix();
   const periodEnd = moment(endTime).unix();
 
-  const totalDurationSeconds = useMemo(() => data
-    ? data.totals.light + data.totals.rem + data.totals.deep
-    : 0, [data]);
-
   if (!sleepScoreEnabled) return null;
-  const totalHours = totalDurationSeconds / 3600;
-  const inRange = totalHours >= TARGET_HOURS[0] && totalHours <= TARGET_HOURS[1];
+  const firstHour = (timeZone ? moment.tz(startTime, timeZone) : moment(startTime)).startOf('hour');
+  if (firstHour.unix() < periodStart) firstHour.add(1, 'hour');
+  const stepHours = Math.max(1, Math.ceil((periodEnd - periodStart) / 3600 / 3));
+  const ticks: number[] = [];
+  for (const tick = firstHour.clone(); tick.unix() <= periodEnd; tick.add(stepHours, 'hours')) ticks.push(tick.unix());
 
   return (
     <GlassCard>
-      <Typography component="h2" variant="h6" sx={ { mb: 2 } }>Sleep stages</Typography>
-      { isFetching && <CircularProgress sx={ { display: 'block', mx: 'auto', my: 4 } } /> }
+      <SectionHeading sx={ { mb: 1.5 } }>Sleep stages</SectionHeading>
+      { isError && (
+        <Alert severity="error" action={ <Button onClick={ () => refetch() }>Retry</Button> }>Sleep stages could not be loaded.</Alert>
+      ) }
+      { isPending && !isError && <CircularProgress sx={ { display: 'block', mx: 'auto', my: 4 } } /> }
 
-      { !isFetching && data && data.epochs.length > 0 && (
+      { !isError && data && data.epochs.length > 0 && (
         <>
-          <Box sx={ { display: 'flex', gap: { xs: 2.5, sm: 5 }, mb: 2.5, flexWrap: 'wrap' } }>
+          <Box sx={ { display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' } }>
             <StatBlock
               label="Deep sleep"
-              duration={ formatHM(data.totals.deep) }
+              duration={ formatSleepDuration(data.totals.deep) }
               pct={ `${data.percentages.deep}%` }
             />
             <StatBlock
               label="REM"
-              duration={ formatHM(data.totals.rem) }
+              duration={ formatSleepDuration(data.totals.rem) }
               pct={ `${data.percentages.rem}%` }
             />
           </Box>
@@ -261,46 +257,23 @@ export default function SleepStagesCard({ startTime, endTime, timeZone }: Props)
             periodEnd={ periodEnd }
           />
 
-          { /* X-axis time labels */ }
-          <Box sx={ { display: 'flex', justifyContent: 'space-between', mb: 2 } }>
-            { [0, 0.33, 0.66, 1].map((frac, i) => {
-              const t = periodStart + frac * (periodEnd - periodStart);
-              return (
-                <Typography
-                  key={ i }
-                  sx={ { fontSize: '0.75rem', color: palette.text.tertiary, fontVariantNumeric: 'tabular-nums' } }
-                >
-                  { (timeZone ? moment.unix(t).tz(timeZone) : moment.unix(t)).format('h:mm A') }
-                </Typography>
-              );
-            }) }
+          <Box sx={ { position: 'relative', height: 20, ml: '44px' } }>
+            { ticks.map(tick => (
+              <Typography
+                key={ tick }
+                sx={ {
+                  position: 'absolute', left: `${(tick - periodStart) / (periodEnd - periodStart) * 100}%`,
+                  transform: 'translateX(-50%)', fontSize: 12, color: palette.text.tertiary,
+                  fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+                } }>
+                { (timeZone ? moment.unix(tick).tz(timeZone) : moment.unix(tick)).format('h:mm A') }
+              </Typography>
+            )) }
           </Box>
-
-          <Box
-            sx={ {
-              display: 'flex',
-              gap: 2,
-              flexWrap: 'wrap',
-              justifyContent: 'center',
-              borderTop: `1px solid ${palette.border.subtle}`,
-              borderBottom: `1px solid ${palette.border.subtle}`,
-              py: 1.5,
-              mb: 2,
-            } }
-          >
-            <LegendItem color={ STAGE_COLOR.awake } label={ STAGE_LABEL.awake } />
-            <LegendItem color={ STAGE_COLOR.rem } label={ STAGE_LABEL.rem } />
-            <LegendItem color={ STAGE_COLOR.light } label={ STAGE_LABEL.light } />
-            <LegendItem color={ STAGE_COLOR.deep } label={ STAGE_LABEL.deep } />
-          </Box>
-
-          <Typography variant="body2" color="text.secondary">
-            { inRange ? 'Within' : 'Outside' } your { TARGET_HOURS[0] } to { TARGET_HOURS[1] } hour range
-          </Typography>
         </>
       ) }
 
-      { !isFetching && (!data || data.epochs.length === 0) && (
+      { !isPending && !isError && (!data || data.epochs.length === 0) && (
         <Typography sx={ { ...typography.caption, color: palette.text.tertiary, textAlign: 'center', py: 4 } }>
           No sleep stages data available for this period
         </Typography>

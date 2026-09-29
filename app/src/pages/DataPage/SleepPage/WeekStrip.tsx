@@ -5,12 +5,12 @@ import type { SleepRecord } from '@api/sleepSchema';
 import { useSleepStages } from '@api/sleepStages';
 import { useSleepScoreEnabled } from '@api/sleepScore';
 import { palette } from '@design/tokens';
-import { formatSleepDuration, recordForNight } from './sleepContext';
+import { formatSleepDuration, nightDuration, recordForNight, SLEEP_GOAL_MIN_SECONDS, SLEEP_GOAL_MAX_SECONDS } from './sleepContext';
 import type { MissingNightState } from './MissingNightCard';
 
 type Props = {
   weekStart: moment.Moment;
-  selectedDate: string;
+  selectedDate?: string;
   timeZone: string;
   records: SleepRecord[];
   currentNightState?: MissingNightState;
@@ -25,9 +25,9 @@ function NightButton({ day, selected, record, disabled, onSelect, missingState }
   const { data: stages } = useSleepStages({
     side: record?.side === 'right' ? 'right' : 'left', startTime: record?.entered_bed_at, endTime: record?.left_bed_at,
   }, enabled && !!record);
-  const classified = enabled && stages?.active && stages.epochs.length > 0;
-  const duration = classified ? stages.totals.light + stages.totals.rem + stages.totals.deep : record?.sleep_period_seconds;
-  const description = duration === undefined ? 'no recording' : `recorded, ${formatSleepDuration(duration)} ${classified ? 'asleep' : 'in bed'}`;
+  const result = record ? nightDuration(record.sleep_period_seconds, enabled ? stages : undefined) : undefined;
+  const duration = result?.seconds;
+  const description = disabled ? 'upcoming' : result ? `recorded, ${formatSleepDuration(result.seconds)} ${result.kind}` : 'no recording';
   const pending = missingState === 'pending' || missingState === 'analyzing';
   const statusText = missingState === 'failed' ? ', analysis failed' : pending ? ', analysis pending' : '';
   return (
@@ -38,21 +38,22 @@ function NightButton({ day, selected, record, disabled, onSelect, missingState }
       onClick={ onSelect }
       variant="text"
       sx={ {
-        flex: 1, minWidth: 44, minHeight: 84, px: 0.25, flexDirection: 'column',
+        flex: 1, minWidth: 0, minHeight: 84, px: 0, py: 0, flexDirection: 'column',
         border: '1px solid', borderColor: selected ? palette.lamp : 'transparent',
-        color: selected ? palette.text.primary : palette.text.secondary, fontWeight: selected ? 600 : 400,
+        color: selected ? palette.text.primary : palette.text.secondary, fontWeight: 400,
       } }>
-      <Typography component="span" variant="caption">{ day.format('ddd') }</Typography>
-      <Typography component="span" sx={ { fontWeight: 'inherit' } }>{ day.date() }</Typography>
-      <Box component="span" aria-hidden sx={ { height: 24, display: 'flex', alignItems: 'flex-end', mt: 0.5 } }>
-        <Box
+      <Typography component="span" variant="caption" sx={ { lineHeight: 1.2 } }>{ day.format('ddd') }</Typography>
+      <Typography component="span" sx={ { fontWeight: 'inherit', lineHeight: 1.2 } }>{ day.date() }</Typography>
+      <Box component="span" aria-hidden sx={ { height: 40, display: 'flex', alignItems: 'flex-end', mt: 0.5 } }>
+        { !disabled && <Box
           component="span"
           sx={ {
-            height: duration === undefined ? 6 : Math.max(2, Math.min(24, duration / 3600 * 2.4)),
+            height: duration === undefined ? 6 : Math.max(4, Math.min(40,
+              12 + (duration - SLEEP_GOAL_MIN_SECONDS) * 28 / (SLEEP_GOAL_MAX_SECONDS - SLEEP_GOAL_MIN_SECONDS))),
             width: 12, borderRadius: '2px', border: `1px ${pending ? 'dashed' : 'solid'}`,
             borderColor: missingState === 'failed' ? palette.status.error : 'currentColor',
             bgcolor: duration === undefined || duration === 0 ? 'transparent' : palette.lamp,
-          } }/>
+          } }/> }
       </Box>
     </Button>
   );
@@ -65,7 +66,7 @@ export default function WeekStrip({ weekStart, selectedDate, timeZone, records, 
       role="group"
       aria-label="Nights in selected week"
       sx={ {
-        display: 'flex', width: { xs: 'calc(100% + 32px)', sm: '100%' }, mx: { xs: -2, sm: 0 }, gap: { xs: 0, sm: 0.5 },
+        display: 'flex', width: '100%', gap: 0,
       } }>
       { Array.from({ length: 7 }, (_, index) => {
         const day = weekStart.clone().add(index, 'days');

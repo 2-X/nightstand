@@ -11,32 +11,26 @@ export type TimeSeriesPoint = {
 type TimeSeriesChartProps = {
   data: TimeSeriesPoint[];
   height?: number;
+  startTime?: string;
+  endTime?: string;
   /** Format an x-axis tick (timestamp). Default = "HH:MM" / "Mon" / etc. */
   xValueFormatter?: (date: Date) => string;
   /** Format a y-axis tick. Default = integer string. */
   yValueFormatter?: (n: number) => string;
-  /** Optional [min, max] range for a translucent green target band. */
+  /** Optional [min, max] range for a translucent target band. */
   targetRange?: [number, number];
-  /** Color of the line + markers. Default white. */
+  /** Color of the line. */
   lineColor?: string;
 };
 
-/**
- * Time-series line chart for nightly metrics (HR, HRV, breathing rate,
- * etc.).
- *
- * Visual conventions:
- *   - White line + small white-stroked markers
- *   - Dotted grey grid lines
- *   - Y-axis labels right-aligned, X-axis at bottom, both dim grey
- *   - Optional translucent green band for "in target range"
- */
 export default function TimeSeriesChart({
   data,
   height = 220,
   xValueFormatter,
   yValueFormatter,
   targetRange,
+  startTime,
+  endTime,
   lineColor = palette.lamp,
 }: TimeSeriesChartProps) {
   const { width = 320, ref } = useResizeDetector();
@@ -55,7 +49,7 @@ export default function TimeSeriesChart({
 
   return (
     <Box ref={ ref } sx={ { width: '100%', position: 'relative', touchAction: 'pan-y' } }>
-      { /* Translucent green target band, drawn behind the chart */ }
+      { /* Translucent target band, drawn behind the chart */ }
       { targetRange && (
         <Box
           sx={ {
@@ -66,7 +60,7 @@ export default function TimeSeriesChart({
             top: 12,
             bottom: 40,
             left: 38,
-            right: 12,
+            right: 24,
             pointerEvents: 'none',
             // Vertical position within the plot area is computed by mapping
             // the target range to a percentage of [padded[0], padded[1]].
@@ -77,8 +71,8 @@ export default function TimeSeriesChart({
               return `linear-gradient(to bottom,
                 transparent 0%,
                 transparent ${topPct}%,
-                rgba(108, 203, 142, 0.12) ${topPct}%,
-                rgba(108, 203, 142, 0.12) ${topPct + heightPct}%,
+                ${palette.bg.selected} ${topPct}%,
+                ${palette.bg.selected} ${topPct + heightPct}%,
                 transparent ${topPct + heightPct}%
               )`;
             })(),
@@ -88,20 +82,17 @@ export default function TimeSeriesChart({
       <LineChart
         width={ width }
         height={ height }
-        // Left margin = room for y-axis labels (up to 3 digits like "100").
-        // Previous config put labels on the right with position:'right' and
-        // a 56px right margin, but MUI x-charts didn't honor that on every
-        // build of the lib - labels rendered at x=0 and got clipped to just
-        // the trailing digit (e.g. "60" → "0"). Putting them back on the
-        // left with explicit margin is the boring known-good config.
-        margin={ { top: 12, bottom: 32, left: 38, right: 12 } }
+        margin={ { top: 12, bottom: 32, left: 38, right: 24 } }
         colors={ [lineColor] }
         dataset={ data.map((p) => ({ ...p })) }
         xAxis={ [{
           dataKey: 'timestamp',
           scaleType: 'time',
+          min: startTime ? new Date(startTime) : undefined,
+          max: endTime ? new Date(endTime) : undefined,
+          tickNumber: 3,
           valueFormatter: (v) => fmtX(v as Date),
-          tickLabelStyle: { fill: palette.text.tertiary, fontSize: 11 },
+          tickLabelStyle: { fill: palette.text.tertiary, fontSize: 12 },
           stroke: 'transparent',
           tickSize: 0,
         }] }
@@ -110,17 +101,14 @@ export default function TimeSeriesChart({
           max: padded[1],
           position: 'left',
           valueFormatter: fmtY,
-          tickLabelStyle: { fill: palette.text.tertiary, fontSize: 11 },
+          tickLabelStyle: { fill: palette.text.tertiary, fontSize: 12 },
           stroke: 'transparent',
           tickSize: 0,
         }] }
         grid={ { horizontal: true, vertical: true } }
         series={ [{
           dataKey: 'value',
-          // Pre-aggregation upstream (VitalsLineChart.bucketAggregate) keeps
-          // `data` at a sensible density, so we don't need a second-stage
-          // every-Nth filter in here anymore. Show a marker per point.
-          showMark: true,
+          showMark: false,
           curve: 'linear',
           valueFormatter: (v) => (v == null ? '' : fmtY(v)),
         }] }
@@ -128,7 +116,7 @@ export default function TimeSeriesChart({
           '& .MuiChartsAxis-line': { stroke: 'transparent' },
           '& .MuiChartsAxis-tick': { stroke: 'transparent' },
           '& .MuiChartsGrid-line': {
-            stroke: 'rgba(255,255,255,0.06)',
+            stroke: palette.border.subtle,
             strokeDasharray: '2 4',
           },
           '& .MuiLineElement-root': {
@@ -137,7 +125,7 @@ export default function TimeSeriesChart({
           '& .MuiMarkElement-root': {
             stroke: lineColor,
             strokeWidth: 1,
-            fill: '#000',
+            fill: palette.bg.base,
             r: 1.5,
           },
           '& .MuiChartsLegend-root': { display: 'none' },

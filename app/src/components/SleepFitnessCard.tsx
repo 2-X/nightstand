@@ -1,3 +1,4 @@
+import SectionHeading from '@components/SectionHeading';
 import { useState } from 'react';
 import moment from 'moment-timezone';
 import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, LinearProgress, Typography } from '@mui/material';
@@ -7,18 +8,20 @@ import { useSettings } from '@api/settings';
 import { useSleepScore, useSleepScoreEnabled } from '@api/sleepScore';
 import { useSleepStages } from '@api/sleepStages';
 import GlassCard from '@design/GlassCard';
-import { palette } from '@design/tokens';
-import { formatSleepDuration } from '../pages/DataPage/SleepPage/sleepContext';
+import { palette, typography } from '@design/tokens';
+import {
+  contributorBand, formatSleepDuration, nightDuration, SLEEP_GOAL_MIN_SECONDS, SLEEP_GOAL_MAX_SECONDS,
+} from '../pages/DataPage/SleepPage/sleepContext';
 
-type Props = { sleepRecord: SleepRecord; timeZone?: string };
+type Props = { sleepRecord: SleepRecord; timeZone?: string; title?: string; timeZoneLabel?: string };
 const CONTRIBUTORS = [
   { key: 'duration', label: 'Duration' },
   { key: 'continuity', label: 'Continuity' },
-  { key: 'hrv', label: 'HRV (filtered)' },
+  { key: 'hrv', label: 'HRV' },
   { key: 'restingHr', label: 'Resting HR' },
 ] as const;
 
-export default function SleepFitnessCard({ sleepRecord, timeZone }: Props) {
+export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZoneLabel }: Props) {
   const { data: settings } = useSettings();
   const zone = timeZone ?? settings?.timeZone ?? 'UTC';
   const enabled = useSleepScoreEnabled();
@@ -26,20 +29,22 @@ export default function SleepFitnessCard({ sleepRecord, timeZone }: Props) {
   const { data: score, isPending, isError } = useSleepScore(query, enabled);
   const { data: stages } = useSleepStages(query, enabled);
   const [infoOpen, setInfoOpen] = useState(false);
-  const classified = enabled && stages?.active && stages.epochs.length > 0;
-  const asleep = classified ? stages.totals.light + stages.totals.rem + stages.totals.deep : undefined;
+  const duration = nightDuration(sleepRecord.sleep_period_seconds, enabled ? stages : undefined);
+  const asleep = duration.kind === 'asleep' ? duration.seconds : undefined;
   const hasScore = enabled && score?.active && score.score !== null && Number.isFinite(score?.score);
   const band = hasScore ? score.score! >= 85 ? 'Good night' : score.score! >= 70 ? 'Fair night' : 'Rough night' : undefined;
 
   return (
     <GlassCard aria-label="Night summary">
+      { title && <SectionHeading sx={ { color: 'text.secondary', mb: 1.5 } }>{ title }</SectionHeading> }
+      { timeZoneLabel && <Typography variant="body2" color="text.secondary" sx={ { mb: 1 } }>{ timeZoneLabel }</Typography> }
       { enabled && (
         <>
           { hasScore ? (
             <Box sx={ { display: 'flex', gap: 2, alignItems: 'baseline' } }>
               <Typography
                 sx={ {
-                  fontSize: '3.5rem', fontWeight: 500, lineHeight: 1.1, color: palette.lamp, fontVariantNumeric: 'tabular-nums',
+                  ...typography.metricLarge, lineHeight: 1.1, color: palette.lamp, fontVariantNumeric: 'tabular-nums',
                 } }>
                 { score.score }
               </Typography>
@@ -54,7 +59,7 @@ export default function SleepFitnessCard({ sleepRecord, timeZone }: Props) {
           </Box>
         </>
       ) }
-      <Typography sx={ { fontSize: enabled ? '1.5rem' : '2rem', fontWeight: 500 } }>
+      <Typography sx={ typography.metricValue }>
         { asleep !== undefined ? `${formatSleepDuration(asleep)} asleep` : formatSleepDuration(sleepRecord.sleep_period_seconds) }
       </Typography>
       { asleep === undefined && <Typography variant="body2" color="text.secondary">Detected time in bed</Typography> }
@@ -65,8 +70,14 @@ export default function SleepFitnessCard({ sleepRecord, timeZone }: Props) {
         <Box component="span">{ moment.tz(sleepRecord.left_bed_at, zone).format('h:mm A') }</Box>
         { asleep !== undefined && `, ${formatSleepDuration(sleepRecord.sleep_period_seconds)} in bed` }
       </Typography>
+      { (duration.seconds < SLEEP_GOAL_MIN_SECONDS || duration.seconds > SLEEP_GOAL_MAX_SECONDS) && (
+        <Typography variant="body2" color="text.secondary" sx={ { mt: 1 } }>
+          { duration.seconds < SLEEP_GOAL_MIN_SECONDS ? 'Under' : 'Over' } your 6h 30m to 9h range
+          { duration.kind === 'in bed' ? ' for time in bed' : '' }
+        </Typography>
+      ) }
       { enabled && (
-        <Box sx={ { display: 'grid', gap: 1.5, mt: 2.5 } }>
+        <Box sx={ { display: 'grid', gap: 1.5, mt: 2 } }>
           { CONTRIBUTORS.map(({ key, label }) => {
             const component = score?.components?.[key];
             return (
@@ -74,9 +85,7 @@ export default function SleepFitnessCard({ sleepRecord, timeZone }: Props) {
                 <Box sx={ { display: 'flex', justifyContent: 'space-between', gap: 1, mb: 0.5 } }>
                   <Typography variant="body2">{ label }</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    { component?.available ? key === 'duration' ? formatSleepDuration(sleepRecord.sleep_period_seconds)
-                      : key === 'hrv' ? component.value.replace(/\s*ms$/, ' ms')
-                        : key === 'restingHr' ? component.value.replace(/\s*bpm$/, ' bpm') : component.value : 'Not enough data' }
+                    { component?.available ? contributorBand(component.score) : 'Not enough data' }
                   </Typography>
                 </Box>
                 { component?.available && <LinearProgress
@@ -90,9 +99,6 @@ export default function SleepFitnessCard({ sleepRecord, timeZone }: Props) {
               </Box>
             );
           }) }
-          <Typography variant="caption" color="text.secondary">
-            Score uses HRV readings from 30 to 120 ms. Night measurements use all valid readings.
-          </Typography>
         </Box>
       ) }
       <Dialog open={ infoOpen } onClose={ () => setInfoOpen(false) } aria-labelledby="sleep-estimate-title">
@@ -101,6 +107,18 @@ export default function SleepFitnessCard({ sleepRecord, timeZone }: Props) {
           <Typography>
             Estimated from movement and heart signals picked up by the bed. The score has not been validated
             and is not a medical measurement. Use it to compare your own nights.
+          </Typography>
+          { CONTRIBUTORS.map(({ key, label }) => {
+            const component = score?.components?.[key];
+            return component?.available ? (
+              <Typography key={ key } variant="body2" sx={ { mt: 2 } }>
+                { label }: { key === 'duration' ? `${formatSleepDuration(sleepRecord.sleep_period_seconds)} in bed`
+                  : component.value.replace(/\s*(ms|bpm)$/, ' $1') }
+              </Typography>
+            ) : null;
+          }) }
+          <Typography variant="body2" color="text.secondary" sx={ { mt: 2 } }>
+            The duration contribution uses time in bed. HRV uses readings from 30 to 120 ms.
           </Typography>
         </DialogContent>
         <DialogActions><Button onClick={ () => setInfoOpen(false) }>Close</Button></DialogActions>

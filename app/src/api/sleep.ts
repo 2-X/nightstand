@@ -11,6 +11,7 @@ interface SleepRecordQueryParams {
 
 export const useSleepRecords = (params?: SleepRecordQueryParams) => {
   return useQuery<SleepRecord[]>({
+    staleTime: 5 * 60 * 1000,
     queryKey: ['useSleepRecords', params],
     queryFn: async ({ signal }) => {
       const queryParams = new URLSearchParams();

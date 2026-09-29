@@ -32,14 +32,14 @@ export default function LastNightChip() {
     sleepScoreEnabled && !!last,
   );
 
-  if (!sleepScoreEnabled || !last || !score?.active || score.score === null) return null;
+  if (!sleepScoreEnabled || !last || !score?.active || !Number.isFinite(score.score) || score.score === null) return null;
 
   return (
     <Button
       fullWidth
       onClick={ () => navigate('/sleep') }
-      sx={ { justifyContent: 'space-between', gap: 1, px: 2, color: 'text.secondary', bgcolor: 'background.paper' } }>
-      <Typography component="span" variant="body2">Last night, estimated score { score.score }</Typography>
+      sx={ { justifyContent: 'space-between', gap: 1, px: 1.5, color: 'text.secondary', bgcolor: 'background.paper' } }>
+      <Typography component="span" variant="body2" sx={ { whiteSpace: 'nowrap' } }>Last night estimate { score.score }</Typography>
       <Typography component="span" variant="body2" sx={ { whiteSpace: 'nowrap' } }>View sleep</Typography>
     </Button>
   );

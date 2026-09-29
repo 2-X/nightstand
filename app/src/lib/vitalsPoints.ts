@@ -16,9 +16,12 @@ export type VitalsPoint = { timestamp: Date; value: number };
 export function vitalsRecordsToPoints(
   records: VitalsRecord[],
   metric: VitalsMetric,
+  window?: { startTime?: string; endTime?: string },
 ): VitalsPoint[] {
   return records
     .filter((r) => Number.isFinite(r.timestamp) && Number.isFinite(r[metric] as number))
     .map((r) => ({ timestamp: new Date(r.timestamp * 1000), value: Number(r[metric]) }))
-    .filter((r) => r.value > 0);
+    .filter((r) => r.value > 0)
+    .filter(point => (!window?.startTime || point.timestamp.getTime() >= Date.parse(window.startTime))
+      && (!window?.endTime || point.timestamp.getTime() <= Date.parse(window.endTime)));
 }

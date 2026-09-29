@@ -1,4 +1,5 @@
 /* eslint-disable react/no-multi-comp */
+import SectionHeading from '@components/SectionHeading';
 import { useMemo, useState } from 'react';
 import moment from 'moment-timezone';
 import { useSearchParams } from 'react-router-dom';
@@ -13,8 +14,8 @@ import VitalsLineChart from '@components/VitalsLineChart';
 import SleepStagesCard from '@components/SleepStagesCard';
 import SleepBalanceCard from '@components/SleepBalanceCard';
 import SleepFitnessCard from '@components/SleepFitnessCard';
-import SleepConsistencyCard from '@components/SleepConsistencyCard';
-import SideControl from '@components/SideControl';
+import PageHeader from '@components/PageHeader';
+import SleepSideControl from './SleepSideControl';
 import ErrorBoundary from '@components/ErrorBoundary';
 import { useAppStore, Side } from '@state/appStore';
 import { useSleepRecords } from '@api/sleep';
@@ -26,7 +27,6 @@ import type { VitalsMetric } from '@lib/vitalsPoints';
 import { vitalsRecordsToPoints } from '@lib/vitalsPoints';
 import PageContainer from '../../PageContainer';
 import WeekStrip from './WeekStrip';
-import WeeklyScheduleBars from './WeeklyScheduleBars';
 import { recordForNight, recordsInWeek } from './sleepContext';
 import MissingNightCard, { MissingNightState } from './MissingNightCard';
 import useAnalyzeSleep from '@lib/useAnalyzeSleep';
@@ -46,6 +46,9 @@ function NightVitals({ record, side, timeZone }: { record: SleepRecord; side: Si
   const { data: weekSummary } = useVitalsSummary({
     side, startTime: moment.tz(record.left_bed_at, timeZone).subtract(7, 'days').toISOString(), endTime: record.left_bed_at,
   });
+  const metricPoints = useMemo(() => METRICS.map(item =>
+    vitalsRecordsToPoints(vitals ?? [], item.key, { startTime: record.entered_bed_at, endTime: record.left_bed_at }),
+  ), [vitals, record.entered_bed_at, record.left_bed_at]);
   const selectMetric = (next: VitalsMetric, expanded: boolean) => {
     const nextParams = new URLSearchParams(params);
     if (expanded) nextParams.set('metric', next);
@@ -53,37 +56,40 @@ function NightVitals({ record, side, timeZone }: { record: SleepRecord; side: Si
     setParams(nextParams, { replace: true });
   };
   return (
-    <Box sx={ { minWidth: 0 } }>
-      <Typography component="h2" variant="h6" sx={ { mb: 1 } }>Night measurements</Typography>
-      { METRICS.map(item => {
-        const points = vitalsRecordsToPoints(vitals ?? [], item.key);
+    <Box sx={ { minWidth: 0, display: 'grid', gap: 2 } }>
+      <Typography variant="body2" color="text.secondary">Estimates from bed sensors, not a medical measurement.</Typography>
+      { METRICS.map((item, index) => {
+        const points = metricPoints[index];
         const value = points.length ? points.reduce((sum, point) => sum + point.value, 0) / points.length : undefined;
         return (
           <Accordion
             key={ item.key }
+            sx={ { minWidth: 0 } }
             expanded={ metric === item.key }
             onChange={ (_, expanded) => selectMetric(item.key, expanded) }
             slotProps={ { transition: { mountOnEnter: true, unmountOnExit: true } } }
             disableGutters>
             <AccordionSummary expandIcon={ <ExpandMoreIcon/> } id={ `metric-${item.key}` } aria-controls={ `detail-${item.key}` }>
               <Box sx={ { display: 'flex', justifyContent: 'space-between', width: '100%', gap: 1 } }>
-                <Typography>{ item.label }</Typography>
+                <Typography variant="inherit" component="span">{ item.label }</Typography>
                 <Typography color="text.secondary" variant="body2">
-                  { isError ? 'Measurements unavailable'
+                  { isError ? 'Measurements unavailable' : isPending ? 'Loading measurements'
                     : Number.isFinite(value) && value! > 0 ? `${Math.round(value!)} ${item.unit}` : 'No estimate' }
                 </Typography>
               </Box>
             </AccordionSummary>
             <AccordionDetails>
               <ErrorBoundary componentName={ item.label }>
-                { isPending ? <CircularProgress size={ 24 } aria-label="Loading measurements"/> : isError ? (
+                { isError ? (
                   <Alert severity="error" action={ <Button onClick={ () => refetch() }>Retry</Button> }>Measurements could not be loaded.</Alert>
-                ) : vitalsRecordsToPoints(vitals ?? [], item.key).length ? (
+                ) : isPending ? <CircularProgress size={ 24 } aria-label="Loading measurements"/> : points.length ? (
                   <VitalsLineChart
-                    vitalsRecords={ vitals }
+                    points={ points }
                     metric={ item.key }
                     sevenDayAvg={ weekSummary?.[item.summary] }
-                    timeZone={ timeZone }/>
+                    timeZone={ timeZone }
+                    startTime={ record.entered_bed_at }
+                    endTime={ record.left_bed_at }/>
                 ) : <Typography color="text.secondary">No { item.label.toLowerCase() } estimate for this recording.</Typography> }
               </ErrorBoundary>
             </AccordionDetails>
@@ -95,22 +101,23 @@ function NightVitals({ record, side, timeZone }: { record: SleepRecord; side: Si
 }
 
 // Keep explicit date selection across side changes.
-function SleepContext({ side, timeZone, sleeper }: { side: Side; timeZone: string; sleeper: string }) {
+function SleepContext({ side, timeZone }: { side: Side; timeZone: string }) {
   const [weekDate, setWeekDate] = useState<string>();
   const [chosenDate, setChosenDate] = useState<string>();
   const [view, setView] = useState('night');
   const { data, isPending, isError, refetch } = useSleepRecords({ side });
   const sideRecords = isError ? [] : data?.filter(record => record.side === side) ?? [];
-  const newest = [...sideRecords].sort((left, right) => Date.parse(right.left_bed_at) - Date.parse(left.left_bed_at))[0];
-  const { data: services } = useServices();
-  const job = services?.biometrics.jobs?.[side === 'left' ? 'analyzeSleepLeft' : 'analyzeSleepRight'];
+  const latestRecord = [...sideRecords].sort((left, right) => Date.parse(right.left_bed_at) - Date.parse(left.left_bed_at))[0];
+  const newest = latestRecord && recordForNight(sideRecords, moment.tz(latestRecord.left_bed_at, timeZone).format('YYYY-MM-DD'), timeZone);
+  const { data: services, isError: servicesError, refetch: refetchServices } = useServices();
+  const job = services?.biometrics?.jobs?.[side === 'left' ? 'analyzeSleepLeft' : 'analyzeSleepRight'];
   const analysis = useAnalyzeSleep();
   const today = moment.tz(timeZone);
   const todayDate = today.format('YYYY-MM-DD');
   const latestMissing = !recordForNight(sideRecords, todayDate, timeZone);
   const jobIsToday = !!job?.timestamp && moment.tz(job.timestamp, timeZone).isSame(today, 'day');
   const analysisTime = today.clone().startOf('day').hour(SLEEP_ANALYSIS_HOUR).minute(SLEEP_ANALYSIS_MINUTE);
-  const currentState: MissingNightState = services?.biometrics.enabled === false ? 'off'
+  const currentState: MissingNightState = services?.biometrics?.enabled === false ? 'off'
     : analysis.isPending ? 'analyzing'
       : analysis.error || (job?.status === 'failed' && jobIsToday) ? 'failed'
         : (today.isBefore(analysisTime) && !jobIsToday) || job?.status === 'not_started'
@@ -130,7 +137,7 @@ function SleepContext({ side, timeZone, sleeper }: { side: Side; timeZone: strin
   const selected = recordForNight(records, selectedDate, timeZone);
   const isLatestDate = selectedDate === todayDate;
   const missingState: MissingNightState = selected?.sleep_period_seconds === 0 ? 'zero'
-    : services?.biometrics.enabled === false ? 'off' : isLatestDate ? currentState : 'empty';
+    : services?.biometrics?.enabled === false ? 'off' : isLatestDate ? currentState : 'empty';
   const fallback = !selected && isLatestDate
     && (['pending', 'analyzing', 'failed'].includes(missingState) || (missingState === 'empty' && completedToday)) ? newest : undefined;
   const displayed = selected?.sleep_period_seconds === 0 ? undefined : selected ?? fallback;
@@ -144,6 +151,14 @@ function SleepContext({ side, timeZone, sleeper }: { side: Side; timeZone: strin
 
   return (
     <>
+      { servicesError && (
+        <Alert severity="error" action={ <Button onClick={ () => refetchServices() }>Retry</Button> }>
+          Sleep tracking status could not be loaded.
+        </Alert>
+      ) }
+      <SleepSideControl
+        selectedDate={ displayed ? moment.tz(displayed.left_bed_at, timeZone).format('YYYY-MM-DD') : selectedDate }
+        timeZone={ timeZone }/>
       <Box sx={ { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }>
         <IconButton aria-label="Previous week" onClick={ () => changeWeek(-1) }><NavigateBeforeIcon/></IconButton>
         <Typography>{ weekTitle }</Typography>
@@ -155,7 +170,7 @@ function SleepContext({ side, timeZone, sleeper }: { side: Side; timeZone: strin
       <WeekStrip
         weekStart={ weekStart }
         timeZone={ timeZone }
-        selectedDate={ selectedDate }
+        selectedDate={ view === 'night' ? selectedDate : undefined }
         records={ records }
         currentNightState={ currentState }
         onSelectDay={ date => {
@@ -166,31 +181,28 @@ function SleepContext({ side, timeZone, sleeper }: { side: Side; timeZone: strin
         <Tab value="night" label="Night" id="sleep-night" aria-controls="sleep-panel"/>
         <Tab value="week" label="Week" id="sleep-week" aria-controls="sleep-panel"/>
       </Tabs>
-      <Box>
-        <Typography component="h2" variant="h6">{ view === 'week' ? weekTitle : nightTitle(selectedDate) }</Typography>
-        <Typography variant="body2" color="text.secondary">{ sleeper } · Dates show when you woke</Typography>
-        { phoneZone !== timeZone && (
-          <Typography variant="body2" color="text.secondary">Times shown in Pod time ({ podZoneLabel })</Typography>
-        ) }
-      </Box>
       <Box role="tabpanel" id="sleep-panel" aria-labelledby={ `sleep-${view}` }>
-        { isPending ? <CircularProgress aria-label="Loading sleep records"/> : isError ? (
+        { isError ? (
           <Alert severity="error" action={ <Button onClick={ () => refetch() }>Retry</Button> }>Sleep records could not be loaded.</Alert>
-        ) : view === 'week' ? (
-          <Box sx={ { display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } } }>
-            <ErrorBoundary componentName="Sleep balance">
-              <SleepBalanceCard records={ records } weekStart={ weekStart } timeZone={ timeZone }/>
-            </ErrorBoundary>
-            <ErrorBoundary componentName="Sleep consistency">
-              <SleepConsistencyCard weekRecords={ records } weekStart={ weekStart } timeZone={ timeZone }/>
-            </ErrorBoundary>
-            <ErrorBoundary componentName="Weekly schedule">
-              <WeeklyScheduleBars records={ records } weekStart={ weekStart } timeZone={ timeZone }/>
-            </ErrorBoundary>
-          </Box>
+        ) : isPending ? <CircularProgress aria-label="Loading sleep records"/> : view === 'week' ? (
+          <ErrorBoundary componentName="Weekly sleep">
+            <SleepBalanceCard
+              records={ records }
+              weekStart={ weekStart }
+              timeZone={ timeZone }
+              onSelectDay={ date => {
+                setChosenDate(date);
+                setWeekDate(weekStart.format('YYYY-MM-DD'));
+                setView('night');
+              } }/>
+          </ErrorBoundary>
         ) : (
-          <>
-            { (!selected || selected.sleep_period_seconds === 0 || services?.biometrics.enabled === false) && (
+          <Box sx={ { display: 'grid', gap: 2 } }>
+            { (!selected || selected.sleep_period_seconds === 0) && (
+              <SectionHeading>{ nightTitle(selectedDate) }</SectionHeading>
+            ) }
+            { (!servicesError || selected?.sleep_period_seconds === 0)
+              && (!selected || selected.sleep_period_seconds === 0 || services?.biometrics?.enabled === false) && (
               <MissingNightCard
                 state={ missingState }
                 canAnalyze={ analysis.canAnalyze }
@@ -199,9 +211,6 @@ function SleepContext({ side, timeZone, sleeper }: { side: Side; timeZone: strin
             { fallback && displayed && (
               <Box sx={ { mb: 2 } }>
                 <Typography variant="body2" color="text.secondary">Most recent recording</Typography>
-                <Typography component="h2" variant="h6">
-                  { nightTitle(moment.tz(displayed.left_bed_at, timeZone).format('YYYY-MM-DD')) }
-                </Typography>
               </Box>
             ) }
             { displayed && (
@@ -212,18 +221,24 @@ function SleepContext({ side, timeZone, sleeper }: { side: Side; timeZone: strin
                 } }>
                 <Box sx={ { display: 'grid', gap: 2, minWidth: 0 } }>
                   <ErrorBoundary componentName="Night summary">
-                    <SleepFitnessCard sleepRecord={ displayed } timeZone={ timeZone }/>
+                    <SleepFitnessCard
+                      sleepRecord={ displayed }
+                      timeZone={ timeZone }
+                      title={ nightTitle(moment.tz(displayed.left_bed_at, timeZone).format('YYYY-MM-DD')) }
+                      timeZoneLabel={ phoneZone !== timeZone ? `Times shown in Pod time (${podZoneLabel})` : undefined }/>
                   </ErrorBoundary>
+                </Box>
+                <Box sx={ { display: 'grid', gap: 2, minWidth: 0 } }>
                   <ErrorBoundary componentName="Sleep stages">
                     <SleepStagesCard startTime={ displayed.entered_bed_at } endTime={ displayed.left_bed_at } timeZone={ timeZone }/>
                   </ErrorBoundary>
+                  <ErrorBoundary key={ `${side}-${displayed.id}` } componentName="Night measurements">
+                    <NightVitals record={ displayed } side={ side } timeZone={ timeZone }/>
+                  </ErrorBoundary>
                 </Box>
-                <ErrorBoundary key={ `${side}-${displayed.id}` } componentName="Night measurements">
-                  <NightVitals record={ displayed } side={ side } timeZone={ timeZone }/>
-                </ErrorBoundary>
               </Box>
             ) }
-          </>
+          </Box>
         ) }
       </Box>
     </>
@@ -232,20 +247,22 @@ function SleepContext({ side, timeZone, sleeper }: { side: Side; timeZone: strin
 
 export default function SleepPage() {
   const { side } = useAppStore();
-  const { data: settings, isError, refetch } = useSettings();
+  const { data: settings, isError, isFetched, refetch } = useSettings();
   return (
     <ErrorBoundary componentName="Sleep page">
       <PageContainer sx={ { mb: 12, gap: 2, alignItems: 'stretch' } }>
-        <Typography component="h1" variant="h1">Sleep</Typography>
-        <SideControl mergeAwaySides={ false }/>
-        { isError ? (
-          <Alert severity="error" action={ <Button onClick={ () => refetch() }>Retry</Button> }>Pod settings could not be loaded.</Alert>
-        ) : settings ? (
+        <PageHeader title="Sleep"/>
+        { isError || (isFetched && !settings) ? (
+          <Alert severity="error" action={ <Button onClick={ () => refetch() }>Retry</Button> }>
+            Pod settings could not be loaded.{ ' ' }
+            { settings ? 'Using the last known Pod timezone.' : 'Times shown in UTC until settings are available.' }
+          </Alert>
+        ) : null }
+        { settings || isFetched ? (
           <SleepContext
-            key={ settings.timeZone }
+            key={ settings?.timeZone ?? 'UTC' }
             side={ side }
-            timeZone={ settings.timeZone }
-            sleeper={ settings[side].name || `${side === 'left' ? 'Left' : 'Right'} side` }/>
+            timeZone={ settings?.timeZone ?? 'UTC' }/>
         ) : <CircularProgress aria-label="Loading Pod timezone"/> }
       </PageContainer>
     </ErrorBoundary>

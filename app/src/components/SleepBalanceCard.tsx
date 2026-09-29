@@ -1,35 +1,53 @@
 import moment from 'moment-timezone';
-import { Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import type { SleepRecord } from '@api/sleepSchema';
 import GlassCard from '@design/GlassCard';
-import { formatSleepDuration, recordsInWeek } from '../pages/DataPage/SleepPage/sleepContext';
+import { typography } from '@design/tokens';
+import {
+  formatSleepDuration, recordForNight, summarizeDurations, SLEEP_GOAL_MIN_SECONDS, SLEEP_GOAL_MAX_SECONDS,
+} from '../pages/DataPage/SleepPage/sleepContext';
+import useNightDurations from '../pages/DataPage/SleepPage/useNightDurations';
+import WeeklyScheduleBars from '../pages/DataPage/SleepPage/WeeklyScheduleBars';
 
-type Props = { records: SleepRecord[]; weekStart: moment.Moment; timeZone: string };
+type Props = { records: SleepRecord[]; weekStart: moment.Moment; timeZone: string; onSelectDay?: (date: string) => void };
 
-export default function SleepBalanceCard({ records, weekStart, timeZone }: Props) {
-  const recorded = recordsInWeek(records, weekStart, timeZone);
-  const nights = new Set(recorded.map(record => moment.tz(record.left_bed_at, timeZone).format('YYYY-MM-DD'))).size;
-  const total = recorded.reduce((seconds, record) => seconds + record.sleep_period_seconds, 0);
-  const average = nights ? total / nights : 0;
-  const belowRange = average < 6.5 * 3600;
-  const aboveRange = average > 9 * 3600;
+export default function SleepBalanceCard({ records, weekStart, timeZone, onSelectDay }: Props) {
+  const recorded = Array.from({ length: 7 }, (_, index) => recordForNight(
+    records, weekStart.clone().add(index, 'days').format('YYYY-MM-DD'), timeZone,
+  )).filter((record): record is SleepRecord => !!record);
+  const { durations, isPending } = useNightDurations(recorded);
+  const summaries = summarizeDurations(durations);
+  const today = moment.tz(timeZone).startOf('day');
+  const elapsedDays = Array.from({ length: 7 }, (_, index) => weekStart.clone().add(index, 'days'))
+    .filter(day => day.isSameOrBefore(today, 'day'));
+  const missingPastNight = elapsedDays.some(day => !recordForNight(recorded, day.format('YYYY-MM-DD'), timeZone));
   return (
-    <GlassCard label="Sleep balance">
-      <Typography>{ nights } of 7 nights recorded</Typography>
-      { nights > 0 && (
-        <>
-          <Typography sx={ { fontSize: '1.5rem', my: 1 } }>
-            { formatSleepDuration(total / nights) } average
+    <GlassCard label="Weekly sleep">
+      <Typography>{ recorded.length } of 7 nights recorded</Typography>
+      { isPending ? <Typography variant="body2" color="text.secondary">Loading sleep durations</Typography> : summaries.map(summary => (
+        <Box key={ summary.kind } sx={ { my: 1 } }>
+          <Typography sx={ typography.metricValue }>
+            { formatSleepDuration(summary.average) } { summary.kind } on average
           </Typography>
-          <Typography variant="body2">
-            { belowRange ? `${formatSleepDuration(6.5 * 3600 - average)} below`
-              : aboveRange ? `${formatSleepDuration(average - 9 * 3600)} above` : 'Within' } your 6.5 to 9 hour range per recorded night.
+          { summaries.length > 1 && (
+            <Typography variant="body2" color="text.secondary">
+              { summary.nights } { summary.nights === 1 ? 'night' : 'nights' }{ ' ' }
+              { summary.kind === 'asleep' ? 'with sleep stages' : 'without sleep stages' }
+            </Typography>
+          ) }
+          <Typography variant="body2" color="text.secondary">
+            { summary.average < SLEEP_GOAL_MIN_SECONDS ? 'Under' : summary.average > SLEEP_GOAL_MAX_SECONDS ? 'Over' : 'Within' }{ ' ' }
+            your 6h 30m to 9h range
+            { summary.kind === 'in bed' ? ' for time in bed' : '' }.
           </Typography>
-        </>
-      ) }
-      <Typography variant="body2" color="text.secondary" sx={ { mt: 1 } }>
-        { nights < 7 ? 'Incomplete coverage. Missing nights are not counted as zero sleep.' : 'Full recorded-night coverage for this week.' }
+        </Box>
+      )) }
+      <Typography variant="body2" color="text.secondary" sx={ { mt: 1, mb: 2 } }>
+        { missingPastNight ? 'Incomplete coverage. Missing nights are not counted as zero sleep.'
+          : elapsedDays.length < 7 ? 'All nights so far recorded. Upcoming nights are not counted.'
+            : 'Full recorded-night coverage for this week.' }
       </Typography>
+      <WeeklyScheduleBars records={ recorded } weekStart={ weekStart } timeZone={ timeZone } onSelectDay={ onSelectDay }/>
     </GlassCard>
   );
 }

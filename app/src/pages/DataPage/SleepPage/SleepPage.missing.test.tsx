@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import moment from 'moment-timezone';
@@ -189,4 +189,71 @@ it('keeps an explicit older selection when today analysis completes without a re
   expect(screen.getByRole('button', { name: /Saturday, September 26/ })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByLabelText('Night summary')).toBeInTheDocument();
   expect(screen.queryByText('Nothing recorded')).not.toBeInTheDocument();
+});
+
+
+it('keeps the side tile aligned with the most recent displayed recording', async () => {
+  settings.features.sleepScore = false;
+  server.use(http.get('*/metrics/sleep', () => HttpResponse.json([older])));
+  renderWithProviders(<SleepPage/>);
+  await screen.findByText('Most recent recording');
+  expect(screen.getAllByRole('radio', { name: /8h in bed/ })[0]).toBeChecked();
+});
+
+it('keeps the night summary when settings fail and explicitly labels the fallback timezone', async () => {
+  server.use(
+    http.get('*/settings', () => HttpResponse.json({}, { status: 500 })),
+    http.get('*/metrics/sleep', () => HttpResponse.json([older])),
+  );
+  renderWithProviders(<SleepPage/>);
+  expect(await screen.findByLabelText('Night summary')).toBeInTheDocument();
+  expect(screen.getByText(/Pod settings could not be loaded/)).toBeInTheDocument();
+  expect(screen.getByText(/Times shown in UTC/)).toBeInTheDocument();
+});
+
+it('shows service failure without losing the night summary', async () => {
+  server.use(
+    http.get('*/services', () => HttpResponse.json({}, { status: 500 })),
+    http.get('*/metrics/sleep', () => HttpResponse.json([older])),
+  );
+  renderWithProviders(<SleepPage/>);
+  expect(await screen.findByLabelText('Night summary')).toBeInTheDocument();
+  expect(screen.getByText('Sleep tracking status could not be loaded.')).toBeInTheDocument();
+});
+
+it('shows measurement failures in collapsed vitals instead of no estimate', async () => {
+  server.use(
+    http.get('*/metrics/sleep', () => HttpResponse.json([older])),
+    http.get('*/metrics/vitals', () => HttpResponse.json({}, { status: 500 })),
+  );
+  renderWithProviders(<SleepPage/>);
+  await screen.findByLabelText('Night summary');
+  expect(await screen.findAllByText('Measurements unavailable')).toHaveLength(3);
+  expect(within(screen.getByRole('button', { name: /Heart rate/ })).queryByText('No estimate')).not.toBeInTheDocument();
+});
+
+
+it('uses the same longest session for the fallback summary and side tile', async () => {
+  settings.features.sleepScore = false;
+  server.use(http.get('*/metrics/sleep', () => HttpResponse.json([older, {
+    ...older, id: 2, entered_bed_at: '2026-09-26T20:00:00Z', left_bed_at: '2026-09-26T21:00:00Z', sleep_period_seconds: 3600,
+  }])));
+  renderWithProviders(<SleepPage/>);
+  await screen.findByText('Most recent recording');
+  expect(within(screen.getByLabelText('Night summary')).getByText('8h')).toBeInTheDocument();
+  expect(screen.getAllByRole('radio', { name: /8h in bed/ })[0]).toBeChecked();
+});
+
+it('shows failed stage data as an error while preserving the summary and vitals caveat', async () => {
+  settings.features.sleepScore = true;
+  services.biometrics.enabled = true;
+  server.use(
+    http.get('*/metrics/sleep', () => HttpResponse.json([older])),
+    http.get('*/metrics/sleep-stages', () => HttpResponse.json({}, { status: 500 })),
+  );
+  renderWithProviders(<SleepPage/>);
+  expect(await screen.findByText('Sleep stages could not be loaded.', {}, { timeout: 3000 })).toBeInTheDocument();
+  expect(screen.getByLabelText('Night summary')).toBeInTheDocument();
+  expect(screen.getByText('Estimates from bed sensors, not a medical measurement.')).toBeInTheDocument();
+  expect(screen.queryByText('No sleep stages data available for this period')).not.toBeInTheDocument();
 });

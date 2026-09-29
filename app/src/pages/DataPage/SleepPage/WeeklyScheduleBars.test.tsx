@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import moment from 'moment-timezone';
 import { screen } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
@@ -21,11 +21,22 @@ describe('WeeklyScheduleBars', () => {
   });
   it('formats bedtime and wake time in the Pod timezone using a 12-hour clock', () => {
     renderWithProviders(<WeeklyScheduleBars records={ records } weekStart={ weekStart } timeZone={ timeZone }/>);
-    expect(screen.getByText('10:30 PM / 6:45 AM')).toBeInTheDocument();
+    expect(screen.getByText('10:30 PM to 6:45 AM')).toBeInTheDocument();
   });
   it('does not show a record from an adjacent fetched week', () => {
     renderWithProviders(<WeeklyScheduleBars records={ records } weekStart={ weekStart.clone().subtract(1, 'week') } timeZone={ timeZone }/>);
-    expect(screen.queryByText('10:30 PM / 6:45 AM')).not.toBeInTheDocument();
+    expect(screen.queryByText('10:30 PM to 6:45 AM')).not.toBeInTheDocument();
     expect(screen.getAllByText('No recording')).toHaveLength(7);
   });
+});
+
+it('opens the selected wake date from its timing row', async () => {
+  const onSelectDay = vi.fn();
+  const { user } = renderWithProviders(<WeeklyScheduleBars
+    records={ records }
+    weekStart={ weekStart }
+    timeZone={ timeZone }
+    onSelectDay={ onSelectDay }/>);
+  await user.click(screen.getByRole('button', { name: 'Tue 22 10:30 PM to 6:45 AM' }));
+  expect(onSelectDay).toHaveBeenCalledWith('2026-09-22');
 });

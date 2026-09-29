@@ -32,6 +32,7 @@ type Args = {
 
 export const useSleepScore = ({ side, startTime, endTime }: Args, enabled = true) => {
   return useQuery<SleepScore>({
+    staleTime: 5 * 60 * 1000,
     queryKey: ['useSleepScore', side, startTime, endTime],
     queryFn: async ({ signal }) => {
       const response = await axios.get<SleepScore>('/metrics/sleep-score', {
@@ -50,5 +51,5 @@ export const useSleepScore = ({ side, startTime, endTime }: Args, enabled = true
 export const useSleepScoreEnabled = (): boolean => {
   const { data: settings } = useSettings();
   const { data: services } = useServices();
-  return !!settings?.features.sleepScore && !!services?.biometrics.enabled;
+  return !!settings?.features?.sleepScore && !!services?.biometrics?.enabled;
 };

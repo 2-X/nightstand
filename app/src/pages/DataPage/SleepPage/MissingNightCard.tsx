@@ -1,3 +1,4 @@
+import SectionHeading from '@components/SectionHeading';
 import { Box, Button, CircularProgress, Typography } from '@mui/material';
 import { Link } from 'react-router-dom';
 import GlassCard from '@design/GlassCard';
@@ -22,7 +23,7 @@ export default function MissingNightCard({ state, canAnalyze, onAnalyze }: Props
     <GlassCard role="status" sx={ { mb: 2 } }>
       <Box sx={ { display: 'flex', alignItems: 'center', gap: 1 } }>
         { state === 'analyzing' && <CircularProgress size={ 20 } aria-label="Analysis running"/> }
-        <Typography component="h2" variant="h6">{ copy.title }</Typography>
+        <SectionHeading>{ copy.title }</SectionHeading>
       </Box>
       <Typography color="text.secondary" variant="body2" sx={ { mt: 0.5 } }>{ copy.description }</Typography>
       { (state === 'pending' || state === 'failed') && (

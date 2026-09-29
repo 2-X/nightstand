@@ -1,5 +1,6 @@
+import SectionHeading from '@components/SectionHeading';
 import { useMemo } from 'react';
-import { Card, Typography } from '@mui/material';
+import { Card } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { LineChart, lineElementClasses, areaElementClasses } from '@mui/x-charts/LineChart';
 import { useResizeDetector } from 'react-resize-detector';
@@ -122,7 +123,7 @@ export default function MovementAreaChart({
 
   return (
     <Card sx={ { pt: 1, mt: 2, pl: 2 } }>
-      <Typography variant="h6" gutterBottom>{ label }</Typography>
+      <SectionHeading gutterBottom>{ label }</SectionHeading>
 
       <LineChart
         ref={ ref }

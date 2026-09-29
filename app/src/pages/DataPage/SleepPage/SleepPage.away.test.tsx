@@ -53,8 +53,8 @@ it('keeps an away partner history selectable on Sleep', async () => {
     )),
   );
   const { user } = renderWithProviders(<SleepPage/>);
-  await screen.findByText('8h 0m');
-  await user.click(screen.getByRole('radio', { name: /Partner.*Away/ }));
-  expect(await screen.findByText('9h 0m')).toBeInTheDocument();
-  expect(screen.getByRole('radio', { name: /Partner.*Away/ })).toBeChecked();
+  await screen.findByText('8h');
+  await user.click(screen.getByRole('radio', { name: /Partner/ }));
+  expect(await screen.findByText('9h')).toBeInTheDocument();
+  expect(screen.getByRole('radio', { name: /Partner/ })).toBeChecked();
 });
