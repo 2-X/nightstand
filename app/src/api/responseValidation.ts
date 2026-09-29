@@ -44,10 +44,15 @@ const calibrationSide = z.object({
   lastRunStatus: z.string().nullable(),
 });
 
+// HTTP and WebSocket status reads share the same compatibility boundary.
+export const deviceStatusResponseSchema = responseSchema(DeviceStatusSchema.extend({
+  sensorTemps: DeviceStatusSchema.shape.sensorTemps.optional(),
+}));
+
 // Validate before responses reach query caches or controls. The Pod's schemas
 // remain the source of truth; local schemas cover responses with only TS types.
 const responseSchemas: Record<string, z.ZodTypeAny> = {
-  '/deviceStatus': responseSchema(DeviceStatusSchema.extend({ sensorTemps: DeviceStatusSchema.shape.sensorTemps.optional() })),
+  '/deviceStatus': deviceStatusResponseSchema,
   '/settings': responseSchema(settingsResponse),
   '/schedules': responseSchema(SchedulesSchema.extend({ left: sideResponse, right: sideResponse })),
   '/services': responseSchema(servicesResponse),

@@ -11,9 +11,7 @@ export function downgradeWarnings(release: Release, runningVersion: string | und
       + 'Updating again restores the newer rules.');
   }
   if (semver.lt(release.version, '3.3.0')) {
-    warnings.push('This target normally deletes archived sensor data after 36 hours. '
-      + 'This updater preserves your configured retention or stops with an error. '
-      + 'Downgrades started on 3.3.x do not have this protection.');
+    warnings.push(`Version ${release.version} keeps sensor recordings for at most 14 days and does not check free space.`);
   }
   if (semver.gte(runningVersion, '3.5.0') && semver.lt(release.version, '3.5.0')) {
     warnings.push('Rhythms and pause are not honoured by this target. Its regular schedules may run even if a newer version paused them.');

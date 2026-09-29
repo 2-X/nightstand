@@ -167,7 +167,7 @@ export default function VersionsPage() {
               { UPDATE_CHANNELS.map(value => <FormControlLabel
                 key={ value }
                 value={ value }
-                disabled={ savingChannel }
+                disabled={ savingChannel || settings?.updateChannel === undefined }
                 control={ <Radio/> }
                 label={ value === 'stable' ? 'Stable' : 'Beta' }
                 sx={ { minHeight: 44 } }

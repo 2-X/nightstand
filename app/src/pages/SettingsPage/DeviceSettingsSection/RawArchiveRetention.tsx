@@ -28,7 +28,7 @@ export default function RawArchiveRetention({ settings, updateSettings }: RawArc
           labelId="raw-retention-label"
           label="Keep raw sensor recordings"
           value={ settings?.rawArchiveRetentionDays ?? 14 }
-          disabled={ isUpdating || !settings }
+          disabled={ isUpdating || settings?.rawArchiveRetentionDays === undefined }
           onChange={ (event) => updateSettings({ rawArchiveRetentionDays: Number(event.target.value) }) }
         >
           { OPTIONS.map(({ days, label }) => <MenuItem key={ days } value={ days }>{ label }</MenuItem>) }

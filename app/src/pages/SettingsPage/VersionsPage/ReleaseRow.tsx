@@ -31,6 +31,8 @@ export default function ReleaseRow({ release, runningVersion, offerReinstall = f
 
   const isDowngrade = !!runningVersion && !!semver.valid(runningVersion) && semver.lt(release.version, runningVersion);
 
+  const warnings = downgradeWarnings(release, runningVersion);
+
   const install = () => start(() => postUpdate({ targetVersion: release.version, allowDowngrade: isDowngrade }));
 
   return (
@@ -70,8 +72,8 @@ export default function ReleaseRow({ release, runningVersion, offerReinstall = f
               { ' ' }The app, schedules, and alarms pause during restart. Recovery may require SSH.
             </DialogContentText>
           ) }
-          { phase === 'idle' && isDowngrade && <Alert severity="warning" sx={ { mt: 2 } }>
-            <ul>{ downgradeWarnings(release, runningVersion).map(warning => <li key={ warning }>{ warning }</li>) }</ul>
+          { phase === 'idle' && warnings.length > 0 && <Alert severity="warning" sx={ { mt: 2 } }>
+            <ul>{ warnings.map(warning => <li key={ warning }>{ warning }</li>) }</ul>
           </Alert> }
           { phase === 'updating' && (
             <Stack spacing={ 2 } alignItems="center" sx={ { py: 2 } }>

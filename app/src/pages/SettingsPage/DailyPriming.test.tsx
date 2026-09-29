@@ -31,3 +31,9 @@ it.each([true, false, undefined])('uses the server reboot default when stored re
   renderWithProviders(<DailyPriming settings={ settings } updateSettings={ vi.fn() } />);
   expect(screen.getByRole('switch', { name: RESTART })).toHaveProperty('checked', stored ?? true);
 });
+
+it('disables restart when the server omits rebootDaily', () => {
+  const settings = { ...getSettings(), rebootDaily: undefined } as unknown as ReturnType<typeof getSettings>;
+  renderWithProviders(<DailyPriming settings={ settings } updateSettings={ vi.fn() }/>);
+  expect(screen.getByRole('switch', { name: 'Restart the Pod an hour before priming' })).toBeDisabled();
+});

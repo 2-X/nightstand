@@ -40,3 +40,14 @@ describe('FeaturesSection error handling', () => {
     await waitFor(() => expect(toggle.checked).toBe(true));
   });
 });
+
+it('shows the backend repair hint when a biometrics change fails', async () => {
+  const message = 'Cannot run free-sleep-stream.service: its service or sudo permission is missing. '
+    + 'A successful update repairs these rules and services.';
+  server.use(http.post('*/api/services', () => HttpResponse.json({ error: message }, { status: 500 })));
+  const { user } = renderWithProviders(<FeaturesSection />);
+  const toggle = await screen.findByRole('switch', { name: 'Biometrics' });
+  await user.click(toggle);
+  expect(await screen.findByRole('alert')).toHaveTextContent(message);
+  expect(toggle).toBeChecked();
+});

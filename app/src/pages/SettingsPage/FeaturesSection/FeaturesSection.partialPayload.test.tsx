@@ -63,3 +63,17 @@ describe('FeaturesSection partial payload handling', () => {
     expect(screen.queryByRole('switch')).not.toBeInTheDocument();
   });
 });
+
+it.each([
+  ['sleepScore', 'Sleep score and stages'], ['presenceAutoOff', 'Presence auto-off'],
+  ['levelTemps', 'Level temperature display'], ['oneOffAlarms', 'One-time alarm'],
+])('disables only the missing feature %s', async (key, name) => {
+  const settings = getSettings();
+  const features: Record<string, unknown> = { ...settings.features };
+  delete features[key];
+  server.use(http.get('*/api/settings', () => HttpResponse.json({ ...settings, features })));
+  renderWithProviders(<FeaturesSection />);
+  expect(await screen.findByRole('switch', { name })).toBeDisabled();
+  expect(screen.getByRole('switch', { name: 'Biometrics' })).toBeEnabled();
+  if (key !== 'oneOffAlarms') expect(screen.getByRole('switch', { name: 'One-time alarm' })).toBeEnabled();
+});

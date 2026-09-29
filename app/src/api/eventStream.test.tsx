@@ -145,6 +145,19 @@ describe('eventStream device-status payload handling', () => {
     expect(cached.left).toBeDefined();
   });
 
+  it('accepts future fields and missing optional sensor temperatures in pushes', async () => {
+    const { queryClient } = renderWithProviders(<Probe />);
+    await waitFor(() => expect(queryClient.getQueryData(['useDeviceStatus'])).toBeTruthy());
+    const current = queryClient.getQueryData(['useDeviceStatus']) as DeviceStatus;
+    const next = { ...current, sensorTemps: undefined, future: true,
+      left: { ...current.left, targetTemperatureF: 98, future: true } };
+    latest().simulateMessage(JSON.stringify({ channel: 'device-status', payload: next }));
+    const cached = queryClient.getQueryData(['useDeviceStatus']) as DeviceStatus;
+    expect(cached.left.targetTemperatureF).toBe(98);
+    expect(cached).not.toHaveProperty('future');
+    expect(cached.left).not.toHaveProperty('future');
+  });
+
   it('writes a valid device-status frame straight to the cache', async () => {
     const { queryClient } = renderWithProviders(<Probe />);
 

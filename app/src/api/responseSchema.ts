@@ -21,6 +21,30 @@ export function responseSchema<T extends z.ZodTypeAny>(schema: T): T {
       options: definition.options.map(responseSchema),
       optionsMap: new Map([...definition.optionsMap].map(([key, value]) => [key, responseSchema(value)])),
     }) as unknown as T;
+  case z.ZodFirstPartyTypeKind.ZodEffects: {
+    const effects = definition as z.ZodEffectsDef<z.ZodTypeAny>;
+    return new (schema.constructor as typeof z.ZodEffects)({ ...effects, schema: responseSchema(effects.schema) }) as unknown as T;
+  }
+  case z.ZodFirstPartyTypeKind.ZodLazy: {
+    const lazy = definition as z.ZodLazyDef<z.ZodTypeAny>;
+    return new (schema.constructor as typeof z.ZodLazy)({ ...lazy, getter: () => responseSchema(lazy.getter()) }) as unknown as T;
+  }
+  case z.ZodFirstPartyTypeKind.ZodIntersection: {
+    const intersection = definition as z.ZodIntersectionDef<z.ZodTypeAny, z.ZodTypeAny>;
+    return new (schema.constructor as typeof z.ZodIntersection)({
+      ...intersection, left: responseSchema(intersection.left), right: responseSchema(intersection.right),
+    }) as unknown as T;
+  }
+  case z.ZodFirstPartyTypeKind.ZodPipeline: {
+    const pipeline = definition as z.ZodPipelineDef<z.ZodTypeAny, z.ZodTypeAny>;
+    return new (schema.constructor as typeof z.ZodPipeline)({
+      ...pipeline, in: responseSchema(pipeline.in), out: responseSchema(pipeline.out),
+    }) as unknown as T;
+  }
+  case z.ZodFirstPartyTypeKind.ZodReadonly: {
+    const readonly = definition as z.ZodReadonlyDef<z.ZodTypeAny>;
+    return new (schema.constructor as typeof z.ZodReadonly)({ ...readonly, innerType: responseSchema(readonly.innerType) }) as unknown as T;
+  }
   case z.ZodFirstPartyTypeKind.ZodOptional:
     return new (schema.constructor as typeof z.ZodOptional)({
       ...definition, innerType: responseSchema(definition.innerType),

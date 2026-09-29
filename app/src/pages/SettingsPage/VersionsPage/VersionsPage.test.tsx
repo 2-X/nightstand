@@ -1,4 +1,4 @@
-import { getDeviceStatus } from '../../../mocks/mockData';
+import { getDeviceStatus, getSettings } from '../../../mocks/mockData';
 import { beforeEach, describe, it, expect } from 'vitest';
 import { act, screen, waitFor } from '@testing-library/react';
 import { renderApp, renderWithProviders } from '@test/renderWithProviders';
@@ -20,7 +20,8 @@ it('shows a failed channel save and retains the saved channel', async () => {
   server.use(http.post('*/settings', () => new HttpResponse(null, { status: 500 })));
   const { user } = renderWithProviders(<VersionsPage />);
   await user.click(await screen.findByRole('button', { name: /Update channel Stable/ }));
-  await user.click(await screen.findByRole('radio', { name: 'Beta' }));
+  await waitFor(() => expect(screen.getByRole('radio', { name: 'Beta' })).toBeEnabled());
+  await user.click(screen.getByRole('radio', { name: 'Beta' }));
   expect(await screen.findByText(/Could not save the update channel/)).toBeInTheDocument();
   expect(screen.getByRole('radio', { name: 'Stable' })).toBeChecked();
 });
@@ -125,4 +126,12 @@ it('keeps recovery available after an accepted update times out', async () => {
   renderWithProviders(<VersionsPage/>);
   expect(await screen.findByText(/The last update did not finish/)).toBeVisible();
   expect(await screen.findByRole('button', { name: 'Go back to v2.9.0 Instant, no download' })).toBeVisible();
+});
+
+it('disables update channel selection when the server omits the setting', async () => {
+  server.use(http.get('*/api/settings', () => HttpResponse.json({ ...getSettings(), updateChannel: undefined })));
+  const { user, queryClient } = renderWithProviders(<VersionsPage />);
+  await waitFor(() => expect(queryClient.getQueryData(['useSettings'])).toBeTruthy());
+  await user.click(await screen.findByRole('button', { name: /Update channel Stable/ }));
+  expect(await screen.findByRole('radio', { name: 'Beta' })).toBeDisabled();
 });

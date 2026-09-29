@@ -20,3 +20,22 @@ it('recurses through containers while preserving array bounds and required value
   expect(responseSchema(schema).safeParse({ ...input, maybe: null }).success).toBe(true);
   expect(responseSchema(schema).safeParse({ ...input, choice: { value: 0 } }).success).toBe(false);
 });
+
+const wrappedObject = z.object({ value: z.number().min(1) }).strict();
+it.each([
+  ['refinement', wrappedObject.refine(value => value.value < 5)],
+  ['transform', wrappedObject.transform(value => ({ ...value, doubled: value.value * 2 }))],
+  ['lazy', z.lazy(() => wrappedObject)],
+  ['intersection', z.intersection(wrappedObject, z.object({ value: z.number() }).strict())],
+  ['pipeline', wrappedObject.pipe(wrappedObject)],
+  ['readonly', wrappedObject.readonly()],
+] as const)('accepts future keys inside %s without weakening value validation', (_name, schema) => {
+  expect(responseSchema(schema).safeParse({ value: 2, future: true }).success).toBe(true);
+  expect(responseSchema(schema).safeParse({ value: 0, future: true }).success).toBe(false);
+  expect(schema.safeParse({ value: 2, future: true }).success).toBe(false);
+});
+
+it('preserves refinement and transformation behavior', () => {
+  expect(responseSchema(wrappedObject.refine(value => value.value < 5)).safeParse({ value: 6 }).success).toBe(false);
+  expect(responseSchema(wrappedObject.transform(value => value.value * 2)).parse({ value: 2, future: true })).toBe(4);
+});

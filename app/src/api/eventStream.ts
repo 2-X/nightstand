@@ -10,7 +10,7 @@ import { useEffect } from 'react';
 import { create } from 'zustand';
 import { useQueryClient, QueryClient } from '@tanstack/react-query';
 import { baseURL } from './api';
-import { DeviceStatusSchema } from './deviceStatusSchema';
+import { deviceStatusResponseSchema } from './responseValidation';
 
 type ConnectionState = 'idle' | 'connecting' | 'open' | 'reconnecting';
 
@@ -56,7 +56,7 @@ function applyEvent(env: EventEnvelope, qc: QueryClient): void {
     // garbage frame would quietly show the bed as off rather than as broken,
     // and the 60s refetch would leave it that way for a minute. Ignoring the
     // frame keeps the last good status until the next valid push or poll.
-    const parsed = DeviceStatusSchema.safeParse(env.payload);
+    const parsed = deviceStatusResponseSchema.safeParse(env.payload);
     if (!parsed.success) {
       console.warn('[eventStream] ignoring invalid device-status payload');
       break;

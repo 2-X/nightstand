@@ -18,3 +18,9 @@ describe('RawArchiveRetention', () => {
     expect(updateSettings).toHaveBeenCalledWith({ rawArchiveRetentionDays: 30 });
   });
 });
+
+it('disables retention when the server omits the setting', () => {
+  const settings = { ...getSettings(), rawArchiveRetentionDays: undefined } as unknown as ReturnType<typeof getSettings>;
+  renderWithProviders(<RawArchiveRetention settings={ settings } updateSettings={ vi.fn() }/>);
+  expect(screen.getByRole('combobox', { name: 'Keep raw sensor recordings' })).toHaveAttribute('aria-disabled', 'true');
+});

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { isAxiosError } from 'axios';
 import { Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, CircularProgress, Link, Typography } from '@mui/material';
 import Section from '../Section.tsx';
 import RawArchiveRetention from '../DeviceSettingsSection/RawArchiveRetention';
@@ -25,7 +26,8 @@ export default function FeaturesSection() {
       .then(() => refetchServices())
       .catch((error) => {
         console.error(error);
-        setError('Could not save this change. Try again.');
+        const message = isAxiosError(error) ? error.response?.data?.error : undefined;
+        setError(typeof message === 'string' && message.trim() ? message : 'Could not save this change. Try again.');
       })
       .finally(() => setIsUpdating(false));
   };
@@ -103,7 +105,7 @@ export default function FeaturesSection() {
       <Box sx={ { pl: 2, borderLeft: 1, borderColor: 'divider' } }>
         <FeatureToggleRow
           label="Sleep score and stages"
-          disabled={ isUpdating || !features || !biometricsEnabled }
+          disabled={ isUpdating || features?.sleepScore === undefined || !biometricsEnabled }
           checked={ features?.sleepScore ?? false }
           onChange={ (next) => updateFeature({ sleepScore: next }) }
           description={
@@ -116,7 +118,7 @@ export default function FeaturesSection() {
       <Box sx={ { pl: 2, borderLeft: 1, borderColor: 'divider' } }>
         <FeatureToggleRow
           label="Presence auto-off"
-          disabled={ isUpdating || !features || !biometricsEnabled }
+          disabled={ isUpdating || features?.presenceAutoOff === undefined || !biometricsEnabled }
           checked={ features?.presenceAutoOff ?? false }
           onChange={ (next) => updateFeature({ presenceAutoOff: next }) }
           description={
@@ -128,14 +130,14 @@ export default function FeaturesSection() {
       </Box>
       <FeatureToggleRow
         label="Level temperature display"
-        disabled={ isUpdating || !features }
+        disabled={ isUpdating || features?.levelTemps === undefined }
         checked={ features?.levelTemps ?? false }
         onChange={ (next) => updateFeature({ levelTemps: next }) }
         description="Show the -10 to +10 scale as a temperature option."
       />
       <FeatureToggleRow
         label="One-time alarm"
-        disabled={ isUpdating || !features }
+        disabled={ isUpdating || features?.oneOffAlarms === undefined }
         checked={ features?.oneOffAlarms ?? false }
         onChange={ (next) => updateFeature({ oneOffAlarms: next }) }
         description="Adds a one-time alarm to Schedule, separate from the daily wake-up."

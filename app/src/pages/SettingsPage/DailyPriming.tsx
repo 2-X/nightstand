@@ -28,7 +28,7 @@ export default function DailyPriming({ settings, updateSettings }: PrimePodSched
     />
     <FeatureToggleRow
       label="Restart the Pod an hour before priming"
-      disabled={ isUpdating || settings?.primePodDaily?.enabled === false }
+      disabled={ isUpdating || settings?.rebootDaily === undefined || settings?.primePodDaily?.enabled === false }
       checked={ settings?.rebootDaily ?? true }
       onChange={ next => updateSettings({ rebootDaily: next }) }
     />
