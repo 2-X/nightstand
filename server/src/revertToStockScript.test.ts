@@ -76,9 +76,9 @@ describe('revert-to-stock.sh', () => {
 
   it('removes fork-only systemd units after a successful revert', () => {
     const src = readFileSync(path.join(repoRoot, SCRIPT), 'utf8');
-    const successIdx = src.indexOf('SUCCESS: pod is serving stock');
-    assert.ok(successIdx >= 0);
-    const rest = src.slice(successIdx);
+    const successIdx = src.indexOf('if [ "$HEALTHY" = yes ]; then');
+    assert.ok(successIdx >= 0, 'expected the successful health-check branch');
+    const rest = src.slice(successIdx, src.indexOf('  exit 0', successIdx));
     assert.match(rest, /free-sleep-rollback\.service/);
     assert.match(rest, /free-sleep-revert\.service/);
     assert.match(rest, /free-sleep\.service\.d\/10-nightstand-limits\.conf/);

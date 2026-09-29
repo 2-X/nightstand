@@ -150,7 +150,7 @@ These exceptions remain after Tailscale stops, until the firewall is reapplied
 or changed. Rerun the block script after changing Tailscale setup; stopping
 Tailscale and reapplying it removes the broad exceptions.
 
-As noted in [installation step 19](../INSTALLATION.md#19-add-firewall-rules-to-block-internet-access-optional-but-recommended), these rules leave the Pod able to reach any HTTPS host. Masking the update services in [installation step 11](../INSTALLATION.md#11-disable-software-updates) is what prevents forced firmware updates.
+As noted in [installation step 19](../INSTALLATION.md#19-add-firewall-rules-to-block-internet-access-optional-but-recommended), these rules leave the Pod able to reach any HTTPS host. Masking the update services in [installation step 11](../INSTALLATION.md#11-disable-software-updates) is what prevents automatic firmware updates.
 
 ## 6 Use the pod from your phone
 

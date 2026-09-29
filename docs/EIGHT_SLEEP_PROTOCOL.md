@@ -140,8 +140,8 @@ temperature.
 
 This is a real, reported failure mode: a free-sleep user hit 102°F overnight
 against an 84°F setpoint, cleared by a power cycle; sleepypod/core
-independently documented the same root cause in their ADR 0022. free-sleep
-v3.1.0+ watches `frzHealth` for this (TEC actively drawing current + pump
+independently documented the same root cause in their ADR 0022. Nightstand
+v3.0.0+ watches `frzHealth` for this (TEC actively drawing current + pump
 RPM near zero or `water: false`, sustained for a dwell window) and surfaces
 it in Settings > Pod and diagnostics > System status as "Pump health." Detection and visibility only,
 no automatic power-off, since a safe automatic response is a bigger call

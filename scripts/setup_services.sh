@@ -1,8 +1,8 @@
 #!/bin/bash
-# Installs the systemd units and sudoers rules behind the app's Update,
-# Roll back, Revert to stock, Reboot, and biometrics controls. Shared by
-# install.sh, update.sh, and the fork-switch and agent installers, so every
-# path onto this fork ends up with the same set. Idempotent.
+# Installs the systemd units and sudoers rules for updates, rollback,
+# switching to upstream free-sleep, reboot, and biometrics controls.
+# Shared by install.sh, update.sh, and the fork-switch and agent installers
+# so every install path sets up the same controls. Idempotent.
 #
 # Usage: setup_services.sh [repo_dir]   (run as root, default /home/dac/free-sleep)
 # Exits non-zero if any piece could not be installed; callers treat that as a

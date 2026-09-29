@@ -4,12 +4,11 @@
 # started detached (systemd-run, falling back to nohup) so a dropped laptop
 # connection changes nothing here.
 #
-# DESIGN CREED: this tool must be unable to make anyone's night worse. Every
-# stage below is either read-only, staged-and-reversible, or covered by an
-# automatic restore that fires even if this script itself is killed. The
-# firmware and temperature control are never touched (ops/ANTIBRICK.md), the
-# worst reachable state is "the free-sleep web layer is down and the
-# original install comes back on its own."
+# The installer stages the replacement and keeps the previous install.
+# A timed restore attempts to bring it back if migration stops.
+# It does not modify Eight Sleep's firmware files; it does block the Pod's
+# internet access. Schedules and alarms pause while the server is stopped.
+# Recovery can still require SSH or a firmware reset. See ops/ANTIBRICK.md.
 #
 # Ordering principle: everything expensive and failable happens BEFORE the
 # swap, while their server is still running untouched. By the time we stop
@@ -351,7 +350,7 @@ fi
 # ==============================================================================
 say "Health check passed on v$STAGED_VERSION."
 # The same units, sudoers rules, memory limits, and shortcuts install.sh sets
-# up, so the app's Update, Roll back, and Revert to stock controls work without
+# up, so updates, rollback, and switching to upstream free-sleep work without
 # relying on whatever the previous fork left. Done only after the health check,
 # so a failed install restores their fork without any of it. The memory limits
 # apply from the service's next restart.

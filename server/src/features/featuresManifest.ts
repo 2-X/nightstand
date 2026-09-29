@@ -29,7 +29,7 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
   {
     id: 'agent',
     title: 'Updates and rollback',
-    description: 'In-app updates, rollback, revert to stock, and the Settings > Software & updates page. The floor every other feature sits on.',
+    description: 'In-app updates, rollback, switching to upstream free-sleep, and the Settings > Software & updates page.',
     category: 'platform',
     version: '3.0.0',
     flag: null,
@@ -139,13 +139,12 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     reversible: true,
     tests: ['server/src/routes/metrics/sleepScoreGuard.test.ts'],
     upstream_offer: false,
-    rationale: 'The clearest real dependency edge in the set: neither route had '
-      + 'depends_on-biometrics enforcement before 3.1.0, both always fabricated a result '
-      + 'from whatever window they were given even with no real measurements behind it.',
+    rationale: 'Before 3.1.0, neither route required biometrics to be enabled, so both could '
+      + 'report a result without data. They now require biometrics and sufficient measurements.',
   },
   {
     id: 'honest-status',
-    title: 'Honest status',
+    title: 'Clear status',
     description: 'Status page shows waiting_for_data and calibration-skip as calm states, not failures; false-alarm fixes.',
     category: 'safety',
     version: '3.0.0',
@@ -331,7 +330,7 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     reversible: true,
     tests: ['server/src/resourceLimitsScript.test.ts'],
     upstream_offer: false,
-    rationale: 'Always on, as a safety measure. Revert to stock removes the limits.',
+    rationale: 'Always on, as a safety measure. Switching to upstream free-sleep removes the limits.',
   },
 
   {

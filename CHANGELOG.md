@@ -68,9 +68,9 @@ is a hard fork; for the history of the projects it descends from, see
   next to daily priming. It was already a setting, with no control in the app.
 
 - A Pod switched over from another fork now gets the same services and
-  permissions as a fresh install, so Roll back, Revert to stock, and turning
-  biometrics off work right away instead of after the first update. The
-  permissions file is also checked before it is replaced.
+  permissions as a fresh install. Roll back, switching to upstream free-sleep,
+  and turning biometrics off work right away instead of after the first
+  update. The permissions file is also checked before it is replaced.
 
 - Switching from another fork now downloads the migration tool's two helper
   files along with it, and the tool checks for them before it changes

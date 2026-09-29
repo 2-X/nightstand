@@ -5,7 +5,7 @@
 #
 # Runs via free-sleep-revert.service. Re-adopting this fork afterward means
 # re-running scripts/migrate/switch-to-this-fork.sh; there's no way back
-# from inside the app once stock is running.
+# from inside the app once upstream free-sleep is running.
 set -uo pipefail
 
 UPSTREAM_ZIP_URL="https://github.com/throwaway31265/free-sleep/archive/refs/heads/main.zip"
@@ -87,7 +87,7 @@ cp -r /persistent/free-sleep-data/lowdb "$BK/lowdb" 2>/dev/null || true
 ls -1dt "$BACKUPS"/*/ | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -rf
 
 # --- atomic swap -----------------------------------------------------------------
-say "Installing stock v$STAGED_VERSION (service stops now)"
+say "Installing upstream free-sleep v$STAGED_VERSION (service stops now)"
 STREAM_WAS_ACTIVE=$(systemctl is-active free-sleep-stream 2>/dev/null || true)
 systemctl stop free-sleep-stream 2>/dev/null || true
 systemctl stop free-sleep
@@ -146,11 +146,11 @@ rm -f "$HBODY"
 [ "$HEALTHY" = yes ] && systemctl is-active free-sleep >/dev/null || HEALTHY=no
 
 if [ "$HEALTHY" = yes ]; then
-  say "SUCCESS: pod is serving stock v$STAGED_VERSION. This fork kept at $PREV (no in-app way back; re-adopt via scripts/migrate/switch-to-this-fork.sh). Backup at $BK"
+  say "SUCCESS: pod is serving upstream free-sleep v$STAGED_VERSION. This fork kept at $PREV (no in-app way back; re-adopt via scripts/migrate/switch-to-this-fork.sh). Backup at $BK"
   # These units point at scripts that no longer exist in $LIVE.
   say "Removing fork-only systemd units (instant rollback, this revert service)"
   rm -f /etc/systemd/system/free-sleep-rollback.service /etc/systemd/system/free-sleep-revert.service
-  # Stock never installs these. They take effect at the next service start.
+  # Upstream free-sleep never installs these. They take effect at the next service start.
   rm -f /etc/systemd/system/free-sleep.service.d/10-nightstand-limits.conf \
     /etc/systemd/system/free-sleep-stream.service.d/10-nightstand-limits.conf
   systemctl daemon-reload >/dev/null 2>&1 || true
@@ -159,7 +159,7 @@ fi
 
 # --- automatic rollback to this fork ---------------------------------------------
 say "Health check FAILED: rolling back to this fork v$CUR_VERSION"
-say "Last 60 server log lines from the failed stock build (for diagnosis):"
+say "Last 60 server log lines from the failed upstream free-sleep build (for diagnosis):"
 tail -n 60 /persistent/free-sleep-data/logs/free-sleep.log 2>/dev/null || say "  (no server log available)"
 systemctl stop free-sleep || true
 systemctl stop free-sleep-stream 2>/dev/null || true
@@ -188,7 +188,7 @@ if [ "$STREAM_WAS_ACTIVE" = active ]; then
 fi
 sleep 8
 if curl -sf --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" >/dev/null; then
-  fail "revert to stock failed but rollback OK (pod back on this fork v$CUR_VERSION). Failed tree kept at $FAILED; see journalctl -u free-sleep"
+  fail "revert to upstream free-sleep failed but rollback OK (pod back on this fork v$CUR_VERSION). Failed tree kept at $FAILED; see journalctl -u free-sleep"
 else
-  fail "revert to stock failed AND rollback health check failed. Backup tarball: $BK. Check journalctl -u free-sleep. The bed hardware itself keeps running regardless."
+  fail "revert to upstream free-sleep failed AND rollback health check failed. Backup tarball: $BK. Check journalctl -u free-sleep. Schedules and alarms remain unavailable until the server is restored."
 fi

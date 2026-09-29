@@ -4,35 +4,29 @@
 # changes nothing here.
 #
 # This is the smaller sibling of pod-installer.sh. That tool migrates a pod
-# from another fork onto this whole tree; this one takes a pod running stock
-# upstream and adds only the agent: the updater, rollback and revert
-# machinery. Nothing else changes, which is the whole claim of this rung.
+# from another fork onto this whole tree; this one adds the updater, rollback
+# and revert tools to a pod running upstream free-sleep.
 #
-# DESIGN CREED, inherited verbatim from pod-installer.sh and not diluted here:
-# this tool must be unable to make anyone's night worse. Every stage below is
-# either read-only, staged-and-reversible, or covered by an automatic restore
-# that fires even if this script itself is killed. The firmware and temperature
-# control are never touched (ops/ANTIBRICK.md), and the worst reachable state
-# is "the free-sleep web layer is down and the original install comes back on
-# its own".
+# The installer stages the overlay and keeps the previous install.
+# A timed restore attempts to bring it back if installation stops.
+# It does not modify Eight Sleep's firmware files. The updater it installs
+# blocks the Pod's internet access after downloading updates. Schedules and
+# alarms pause while the server is stopped. Recovery can still require SSH
+# or a firmware reset. See ops/ANTIBRICK.md.
 #
 # Ordering principle, same as its sibling: everything expensive and failable
 # happens BEFORE the running service is touched. By the time their service
 # stops, the staged tree is already assembled and verified.
 #
-# The overlay is applied to a COPY of the pod's own stock install, never to a
-# tree we shipped wholesale. That matters: the agent's claim is zero behavior
-# change against the stock a pod already runs, and swapping in our own idea of
-# stock would quietly replace their upstream code with ours.
+# Apply the overlay to a copy of the Pod's existing upstream free-sleep
+# install. Preserve that source outside the files named in the manifest.
 set -uo pipefail
 
 LIVE=/home/dac/free-sleep
 PREV=/home/dac/free-sleep-prev
 # Same constants as pod-installer.sh on purpose. Both tools swap LIVE and PREV
 # and both are one-at-a-time operations, so they share restore-original-fork.sh
-# unchanged rather than each carrying its own copy of that careful logic. The
-# name reads correctly here too: the original install IS stock, and restoring
-# puts stock back.
+# unchanged. Restoring the original install puts upstream free-sleep back.
 PREEXISTING_PREV=/home/dac/free-sleep-prev-preexisting
 SWAP_MARKER=/home/dac/free-sleep-migrate-swapped
 STAGE=/home/dac/free-sleep-agent-staging
@@ -80,31 +74,30 @@ for unit in free-sleep-update.service free-sleep-rollback.service; do
   fi
 done
 
-[ -d "$LIVE" ] || fail "no install at $LIVE; the agent overlays an existing stock install, it does not create one"
+[ -d "$LIVE" ] || fail "no install at $LIVE; the agent overlays an existing upstream free-sleep install, it does not create one"
 [ -f "$LIVE/server/package.json" ] || fail "no server/package.json under $LIVE; this does not look like a free-sleep install"
 [ -d "$PAYLOAD" ] || fail "no agent payload at $PAYLOAD; the laptop half should have pushed it"
 [ -f "$PAYLOAD/MANIFEST" ] || fail "payload has no MANIFEST; refusing to guess which files are the agent"
 
-# Refuse anything that is not stock. An agent on top of a tree that already
-# carries the agent, or on top of another fork, is not this rung and its
-# reversibility story does not hold.
+# Refuse a tree that already carries the agent. This installer expects
+# upstream free-sleep and has not been validated for overlaying other forks.
 if [ -f "$LIVE/server/src/routes/update/update.ts" ] || [ -d "$LIVE/server/src/agent" ]; then
   fail "this pod already carries agent files; use the in-app updater, not the bootstrap"
 fi
 if grep -q "routes/update/update.js" "$LIVE/server/src/setup/routes.ts" 2>/dev/null; then
-  fail "this pod's routes.ts already registers an update route; not stock, refusing"
+  fail "this pod's routes.ts already registers an update route; not upstream free-sleep, refusing"
 fi
 
 ROOT_FREE=$(df -m / | awk 'NR==2{print $4}')
 [ "${ROOT_FREE:-0}" -gt 1000 ] || fail "low disk on / (${ROOT_FREE}M free), aborting before touching anything"
 
 # ==============================================================================
-# Stage: a copy of THEIR stock, with the agent applied to the copy.
+# Stage: a copy of THEIR upstream free-sleep, with the agent applied to the copy.
 # ==============================================================================
-write_status "stage" "in_progress" "copying the stock install"
-say "Copying the pod's own stock install to $STAGE (their tree stays untouched)"
+write_status "stage" "in_progress" "copying the upstream free-sleep install"
+say "Copying the pod's own upstream free-sleep install to $STAGE (their tree stays untouched)"
 rm -rf "$STAGE"
-cp -a "$LIVE" "$STAGE" || fail "could not copy the stock install; nothing was touched"
+cp -a "$LIVE" "$STAGE" || fail "could not copy the upstream free-sleep install; nothing was touched"
 
 say "Applying the agent overlay to the copy"
 while IFS='|' read -r mode path; do
@@ -113,12 +106,12 @@ while IFS='|' read -r mode path; do
   dest="$STAGE/$path"
   case "$mode" in
     add)
-      [ -e "$dest" ] && fail "manifest says add but $path already exists in stock; the base moved"
+      [ -e "$dest" ] && fail "manifest says add but $path already exists in upstream free-sleep; the base moved"
       mkdir -p "$(dirname "$dest")"
       cp "$src" "$dest" || fail "could not add $path"
       ;;
     copy)
-      [ -e "$dest" ] || fail "manifest says copy but $path is absent from stock; the base moved"
+      [ -e "$dest" ] || fail "manifest says copy but $path is absent from upstream free-sleep; the base moved"
       cp "$src" "$dest" || fail "could not replace $path"
       ;;
     patch)
@@ -153,13 +146,13 @@ grep -q "routes/update/update.js" "$ROUTES" || fail "routes.ts import patch did 
 grep -q "app.use('/api/', update);" "$ROUTES" || fail "routes.ts registration patch did not apply"
 
 # Patch 2: the test script entry. The agent carries the first test files this
-# install has ever had, and stock has no runner entry to run them with.
+# install has ever had, and upstream free-sleep has no runner entry to run them with.
 python3 - "$STAGE/server/package.json" "$PAYLOAD/test-script" <<'PY' || fail "package.json patch failed"
 import json, sys
 pkg_path, script_path = sys.argv[1], sys.argv[2]
 pkg = json.load(open(pkg_path))
 if pkg.get("scripts", {}).get("test"):
-    sys.exit("stock already has a test script; the patch is obsolete")
+    sys.exit("upstream free-sleep already has a test script; the patch is obsolete")
 pkg.setdefault("scripts", {})["test"] = open(script_path).read().strip()
 open(pkg_path, "w").write(json.dumps(pkg, indent=2) + "\n")
 PY
@@ -167,7 +160,7 @@ PY
 [ -f "$STAGE/server/dist/server.js" ] || fail "staged tree is missing server/dist/server.js"
 [ -f "$STAGE/server/public/index.html" ] || fail "staged tree is missing server/public/index.html"
 chown -R dac:dac "$STAGE"
-write_status "stage" "ok" "agent applied to a copy of stock"
+write_status "stage" "ok" "agent applied to a copy of upstream free-sleep"
 
 # ==============================================================================
 # Dead-man sentinel, armed immediately before we touch their service.
@@ -233,8 +226,9 @@ mv "$STAGE" "$LIVE" || { restore_and_report "could not move the staged tree into
 chown -R dac:dac "$LIVE"
 
 # NB: the rollback and revert units are STATIC, on-demand oneshots the app
-# starts when the user clicks Roll back or Revert to stock. Never `enable --now`
-# them: that would run the action immediately. setup_services.sh installs them,
+# starts when the user requests rollback or switches to upstream free-sleep.
+# Never `enable --now` them: that would run the action immediately.
+# setup_services.sh installs them,
 # without starting them, once the health check below has passed.
 
 systemctl start free-sleep || { restore_and_report "the service failed to start after the overlay"; exit 1; }
@@ -254,14 +248,15 @@ if [ "$HEALTHY" != "1" ]; then
   exit 1
 fi
 
-# Stock grants sudo for the updater and reboot only; Roll back, Revert to
-# stock, and turning biometrics off need their own units and rules. Done after
-# the health check so a failed overlay restores stock without any of it.
+# Upstream free-sleep grants sudo for the updater and reboot only. Rollback,
+# switching to upstream free-sleep, and disabling biometrics need extra units
+# and rules. Install them after the health check so a failed overlay restores
+# the original install before any of these changes.
 say "Installing the updater, rollback, and revert services and their sudoers rules..."
 bash "$LIVE/scripts/setup_services.sh" "$LIVE" \
   || say "WARNING: some services or sudoers rules could not be installed; the next in-app update retries them"
 
 rm -f "$SWAP_MARKER"
 disarm_sentinel
-say "Agent bootstrap complete. Their stock tree is kept at $PREV for instant rollback."
-write_status "install" "ok" "agent installed on stock"
+say "Agent bootstrap complete. Their upstream free-sleep tree is kept at $PREV for instant rollback."
+write_status "install" "ok" "agent installed on upstream free-sleep"

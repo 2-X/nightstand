@@ -164,7 +164,7 @@ rollback restores code, not an earlier database or the Eight Sleep firmware.
 
 ### Can I go back to the Eight Sleep app?
 
-A firmware reset restores Eight Sleep's stock software. Follow the procedure
+A firmware reset restores Eight Sleep's software. Follow the procedure
 for your model in [How to revert](INSTALLATION.md#how-to-revert-changes-and-go-back-to-using-your-eight-sleep-through-their-app).
 Pod 5 reset steps are not documented here yet. Switching to upstream
 free-sleep from Settings installs another community application; it does not
@@ -175,7 +175,7 @@ restore Eight Sleep software.
 I'm not aware of any bricked Pods on Pod 3 without an SD card, Pod 4, or
 Pod 5. There are fewer reports for Pod 3 with an SD card, which uses a
 different install method. If an install goes wrong, a firmware reset restores
-the stock software. Read the
+Eight Sleep's software. Read the
 [reset instructions for your model](INSTALLATION.md#how-to-revert-changes-and-go-back-to-using-your-eight-sleep-through-their-app)
 before installing; Pod 5 reset steps are not documented here yet. Proceed
 at your own risk.

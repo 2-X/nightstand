@@ -3,17 +3,17 @@
 # throwaway31265 (upstream), jmew, or another fork
 # on their own pod, who wants to move to LTimothy/nightstand.
 #
-# DESIGN CREED: this tool must be unable to make anyone's night worse. Every
-# stage is either read-only, staged-and-reversible, or covered by an
-# automatic restore that fires even if the tool itself is killed. The
-# firmware and temperature control are never touched (ops/ANTIBRICK.md);
-# the worst reachable state is "the free-sleep web layer is down and your
-# original install comes back automatically."
+# The tool stages the replacement and keeps backups of the current install.
+# A timed restore attempts to bring back that install if migration stops.
+# It does not modify Eight Sleep's firmware files; it does block the Pod's
+# internet access. Schedules and alarms pause while the server is stopped.
+# Recovery can still require SSH or a firmware reset. See ops/ANTIBRICK.md.
+# Keep the backup and confirm the controls work after migration completes.
 #
-# Download this script, read it if you like, then run it, it's meant to be
-# safe to run point-blank: nothing is modified before an explicit typed
-# confirmation. Run with --dry-run first to see the full report without
-# changing anything.
+# Read this script before running it. It requires typed confirmation before
+# changing the Pod. Run with --dry-run first to inspect the migration report
+# without changing the Pod.
+# Dry-run still reads the current install over SSH.
 #
 # Usage:
 #   switch-to-this-fork.sh [--ip <addr>] [--dry-run] [--assume-model podN]

@@ -239,9 +239,9 @@ systemctl enable --now free-sleep-archive-raw.timer
 echo ""
 
 # -----------------------------------------------------------------------------------------------------
-# Units and sudoers rules for the app's Update, Roll back, Revert to stock,
-# Reboot, and biometrics controls (shared with update.sh and the migration
-# installers)
+# Units and sudoers rules for updates, rollback, switching to upstream
+# free-sleep, reboot, and biometrics controls (shared with update.sh and
+# the migration installers)
 
 echo "Installing the updater, rollback, and revert services and their sudoers rules..."
 bash "$REPO_DIR/scripts/setup_services.sh" "$REPO_DIR" \

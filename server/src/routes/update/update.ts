@@ -67,14 +67,14 @@ router.post('/rollback', async (_req, res) => {
 
 // Full revert to plain upstream free-sleep, undoing Nightstand entirely.
 // Reversible only by re-adopting via scripts/migrate/switch-to-this-fork.sh
-// afterward. There's no in-app way back once stock code is running.
+// afterward. There's no in-app way back once upstream free-sleep is running.
 router.post('/revert-to-stock', async (_req, res) => {
   try {
     triggerRevertToStockService();
     res.status(204).end();
   } catch (error) {
-    logger.error('Failed to start revert to stock', error);
-    res.status(500).json({ message: 'Unable to start revert to stock' });
+    logger.error('Could not start switching to upstream free-sleep.', error);
+    res.status(500).json({ message: 'Could not start switching to upstream free-sleep.' });
   }
 });
 

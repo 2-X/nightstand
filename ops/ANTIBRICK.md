@@ -14,7 +14,7 @@ check before installing.
 ## Rules for every change
 
 - Deploy unpublished changes through `ops/deploy.sh`. Never edit code live on
-  the Pod. The stock installer and in-app updater install published code and
+  the Pod. The release installer and in-app updater install published code and
   can replace a development build.
 - Deploy committed code from a clean checkout. The script ships `HEAD`, even
   with `--force`; it never includes uncommitted files.

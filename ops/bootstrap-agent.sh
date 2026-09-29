@@ -1,12 +1,11 @@
 #!/bin/bash
-# Laptop-side half of the agent bootstrap: take a pod running stock upstream
+# Laptop-side half of the agent bootstrap: take a pod running upstream
 # free-sleep and add the agent to it, the updater/rollback/revert machinery and
 # nothing else. Rung 2 of the install ladder.
 #
 # This is the smaller sibling of scripts/migrate/switch-to-this-fork.sh. That
 # tool moves a pod from another fork onto this whole tree; this one leaves the
-# pod's stock code exactly where it is and overlays a small, reversible set of
-# files on top.
+# pod's upstream free-sleep code in place and overlays the agent files.
 #
 # The agent tree is built HERE, not on the pod. Generating it needs git, a full
 # upstream clone and a node toolchain, and putting those failure modes on an
@@ -49,9 +48,9 @@ done
 ssh_pod() { ssh -o ConnectTimeout=10 -o BatchMode=no -p "$SSH_PORT" "root@$POD_IP" "$@"; }
 
 # ==============================================================================
-# Stage 1: confirm the target is stock, before building anything
+# Stage 1: confirm the target is upstream free-sleep, before building anything
 # ==============================================================================
-say "Checking $POD_IP is running stock upstream"
+say "Checking $POD_IP is running upstream free-sleep"
 if ! ssh_pod "true" >/dev/null 2>&1; then
   # A dry run is worth something without a pod: it still builds the payload and
   # proves the generator and manifest agree. Only a real run needs the target.
@@ -74,7 +73,7 @@ fi
 
 case "$REMOTE_STATE" in
   skipped) ;;
-  stock) say "Target looks like stock upstream" ;;
+  stock) say "Target looks like upstream free-sleep" ;;
   no-install)   fail "no free-sleep install at /home/dac/free-sleep. The agent overlays an existing install; use the project's own install.sh first." ;;
   unrecognized) fail "the install at /home/dac/free-sleep is not recognizable. Refusing to overlay something this tool does not understand." ;;
   already-agent) fail "this pod already carries the agent. Use the in-app updater rather than bootstrapping again." ;;
@@ -88,7 +87,7 @@ WORK=$(mktemp -d)
 AGENT_TREE="$WORK/agent-tree"
 PAYLOAD="$WORK/payload"
 
-say "Generating the agent tree from stock at the pinned base"
+say "Generating the agent tree from upstream free-sleep at the pinned base"
 "$REPO_ROOT/ops/build-agent.sh" --out "$AGENT_TREE" --skip-validate \
   || fail "the generator failed; nothing was sent to the pod"
 

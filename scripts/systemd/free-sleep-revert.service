@@ -1,5 +1,5 @@
 [Unit]
-Description=Nightstand Revert To Stock Upstream
+Description=Switch Nightstand to upstream free-sleep
 After=free-sleep.service
 
 [Service]
