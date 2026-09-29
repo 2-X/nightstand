@@ -26,7 +26,8 @@ export default function FeaturesSection() {
       .then(() => refetchServices())
       .catch((error) => {
         console.error(error);
-        const message = isAxiosError(error) ? error.response?.data?.error : undefined;
+        const status = isAxiosError(error) ? error.response?.status : undefined;
+        const message = status && status >= 500 && status < 600 ? error.response?.data?.error : undefined;
         setError(typeof message === 'string' && message.trim() ? message : 'Could not save this change. Try again.');
       })
       .finally(() => setIsUpdating(false));

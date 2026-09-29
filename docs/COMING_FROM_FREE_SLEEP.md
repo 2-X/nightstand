@@ -120,6 +120,24 @@ before going ahead.
 Switching in keeps upstream's four-tap alarm action (`quadTap: alarm`). To change
 it, send the desired per-side tap configuration to `POST /api/settings`
 (`left.taps.quadTap` or `right.taps.quadTap`); there is no tap editor in the app.
+Send the whole tap object, including its `type` and all fields for that action.
+For example, this makes four taps on the left dismiss an alarm and do nothing
+when no alarm is active:
+
+```json
+{
+  "left": {
+    "taps": {
+      "quadTap": {
+        "type": "alarm",
+        "behavior": "dismiss",
+        "snoozeDuration": 300,
+        "inactiveAlarmBehavior": "none"
+      }
+    }
+  }
+}
+```
 
 ## Going back
 

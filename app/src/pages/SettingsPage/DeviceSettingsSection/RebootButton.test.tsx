@@ -25,3 +25,15 @@ it('shows restart failures and keeps the dialog dismissible', async () => {
   expect(within(dialog).getByRole('link', { name: 'System status' })).toHaveAttribute('href', '/settings/system');
   expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeEnabled();
 });
+
+it.each([
+  { message: 'An update, rollback or switch is already running. Wait for it to finish.', error: 'Fallback text' },
+  { error: 'Cannot check running operations.' },
+])('shows the server refusal instead of a generic restart failure: %j', async (data) => {
+  vi.mocked(postJobs).mockRejectedValue({ isAxiosError: true, response: { status: 500, data } });
+  const { user } = renderWithProviders(<RebootButton/>);
+  await user.click(screen.getByRole('button', { name: 'Restart Pod' }));
+  const dialog = screen.getByRole('dialog', { name: 'Restart Pod?' });
+  await user.click(within(dialog).getByRole('button', { name: 'Restart Pod' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(data.message ?? data.error);
+});

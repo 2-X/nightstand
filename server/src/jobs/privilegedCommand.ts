@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 
 export class PrivilegedCommandError extends Error {}
+export class OperationCheckError extends PrivilegedCommandError {}
 
 function execute(file: string, args: readonly string[], timeout = 30_000): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -25,7 +26,7 @@ async function assertOperationUnitsIdle() {
     try {
       state = (await execute('/bin/systemctl', ['show', unit, '--property=ActiveState', '--value'])).trim();
     } catch {
-      throw new PrivilegedCommandError('Cannot check running operations. Check the service logs before trying again.');
+      throw new OperationCheckError('Cannot check running operations. Check the service logs before trying again.');
     }
     if (!['inactive', 'failed'].includes(state)) {
       throw new PrivilegedCommandError('An update, rollback or switch is already running. Wait for it to finish.');

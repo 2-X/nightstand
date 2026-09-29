@@ -51,3 +51,10 @@ it('shows the backend repair hint when a biometrics change fails', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent(message);
   expect(toggle).toBeChecked();
 });
+
+it('keeps client validation failures generic', async () => {
+  server.use(http.post('*/api/services', () => HttpResponse.json({ error: 'Internal validation detail' }, { status: 400 })));
+  const { user } = renderWithProviders(<FeaturesSection />);
+  await user.click(await screen.findByRole('switch', { name: 'Biometrics' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not save this change. Try again.');
+});

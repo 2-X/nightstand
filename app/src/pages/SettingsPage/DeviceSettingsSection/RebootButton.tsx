@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { isAxiosError } from 'axios';
 import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material';
 import { Link } from 'react-router-dom';
 import { postJobs } from '@api/jobs.ts';
@@ -7,21 +8,25 @@ export default function RebootButton() {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [requested, setRequested] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const restart = async () => {
     setPending(true);
-    setError(false);
+    setError(null);
     try {
       await postJobs(['reboot']);
       setRequested(true);
-    } catch {
-      setError(true);
+    } catch (failure) {
+      const data = isAxiosError(failure) ? failure.response?.data : undefined;
+      const message = [data?.message, data?.error].find(
+        (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0,
+      );
+      setError(message ?? 'Could not confirm the restart. Check System status before retrying.');
     } finally {
       setPending(false);
     }
   };
   return <>
-    <Button variant="outlined" size="small" onClick={ () => { setOpen(true); setError(false); setRequested(false); } }>Restart Pod</Button>
+    <Button variant="outlined" size="small" onClick={ () => { setOpen(true); setError(null); setRequested(false); } }>Restart Pod</Button>
     <Dialog open={ open } onClose={ () => !pending && setOpen(false) } aria-labelledby="restart-title" fullWidth maxWidth="xs">
       <DialogTitle id="restart-title">Restart Pod?</DialogTitle>
       <DialogContent>
@@ -30,7 +35,7 @@ export default function RebootButton() {
           Wait for it to reconnect before sending more commands.
         </Typography>
         { requested && <Typography role="status" sx={ { mt: 2 } }>Restart requested. Completion has not been confirmed.</Typography> }
-        { error && <Alert severity="error" sx={ { mt: 2 } }>Could not confirm the restart. Check System status before retrying.</Alert> }
+        { error && <Alert severity="error" sx={ { mt: 2 } }>{ error }</Alert> }
         { (requested || error) && <Button component={ Link } to="/settings/system">System status</Button> }
       </DialogContent>
       <DialogActions>

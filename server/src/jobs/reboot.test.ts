@@ -3,6 +3,7 @@ import { it, mock } from 'node:test';
 
 const reboots: string[] = [];
 const logs: string[] = [];
+const warnings: string[] = [];
 let activeUnit = '';
 let checkFailed = false;
 let dailyJob: (() => Promise<void>) | undefined;
@@ -13,6 +14,7 @@ mock.module('child_process', { namedExports: {
   },
 } });
 mock.module(new URL('../logger.js', import.meta.url).href, { defaultExport: {
+  warn: (message: string) => warnings.push(message),
   debug: () => {}, info: (message: string) => logs.push(message), error: () => {},
 } });
 mock.module('node-schedule', { defaultExport: {
@@ -36,6 +38,7 @@ for (const unit of ['free-sleep-update.service', 'free-sleep-rollback.service', 
     activeUnit = unit;
     reboots.length = 0;
     logs.length = 0;
+    warnings.length = 0;
     await assert.rejects(reboot(), /already running/);
     const settings = {
       timeZone: 'UTC', primePodDaily: { enabled: true, time: '14:00' },
@@ -45,6 +48,7 @@ for (const unit of ['free-sleep-update.service', 'free-sleep-rollback.service', 
     await dailyJob();
     assert.equal(reboots.length, 0);
     assert.ok(logs.some(message => /Skipping daily reboot.*already running/.test(message)));
+    assert.equal(warnings.length, 0);
     activeUnit = '';
   });
 }
@@ -54,4 +58,18 @@ it('fails closed when operation state cannot be read and reboots when idle', asy
   checkFailed = false;
   await reboot();
   assert.deepEqual(reboots, ['sudo /sbin/reboot']);
+});
+
+it('warns when the daily reboot operation check fails', async () => {
+  checkFailed = true;
+  warnings.length = 0;
+  reboots.length = 0;
+  try {
+    assert.ok(dailyJob);
+    await dailyJob();
+    assert.equal(reboots.length, 0);
+    assert.ok(warnings.some(message => /Skipping daily reboot.*Cannot check/.test(message)));
+  } finally {
+    checkFailed = false;
+  }
 });
