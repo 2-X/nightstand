@@ -16,9 +16,10 @@ Nightstand keeps free-sleep's on-disk layout to ease migration:
 - Your data stays under `/persistent/free-sleep-data/`: the SQLite database,
   the lowdb JSON files that hold settings and schedules, and the logs.
 
-The migration checks settings and schedule formats before installation and
-keeps the existing data. If the database check finds incompatible migration
-histories, the tool stops and attempts to restore the original application.
+The migration checks settings and schedule formats and tries the target
+migrations against a database copy before installation. If that check finds
+incompatible migration histories, the tool stops before swapping application
+code. It keeps the existing data.
 Compare the two forks' migrations and resolve compatibility before retrying;
 do not reset the database.
 
@@ -56,6 +57,8 @@ You need:
   `free-sleep.service` is not active.
 - More than 2 GB free on the Pod's `/` and `/persistent` partitions, and on
   your computer for the backup copy.
+- Outbound HTTPS from the Pod for the release and its dependencies. SSH
+  access alone is not enough.
 
 ## Running it
 
@@ -89,7 +92,9 @@ it:
 3. Backs up application code and installed server dependencies, the SQLite
    database and LowDB settings/schedules to `/persistent/free-sleep-backups/`
    on the Pod. It copies the archive to the folder you ran the tool from and
-   checks both archives. Logs and RAW sensor archives are not included.
+   checks both archives. A separate SQLite snapshot is kept in
+   `/persistent/free-sleep-database-backups/`, outside code-backup rotation.
+   Logs and RAW sensor archives are not included.
 4. Downloads the newest Nightstand release on the Pod and checks your
    current settings and schedules against Nightstand's formats. It stops if
    anything can't carry over, before your install is touched.
@@ -117,24 +122,60 @@ before going ahead.
 - **To your previous install:** Settings > Software has a Roll back
   action. Right after migrating, it rolls back to your old install. Installing
   any other Nightstand version replaces that slot, so use the laptop backup
-  after that.
+  after that. Pods migrated with the 3.3.1 tool need a successful Nightstand
+  update first to install missing permissions and service units.
 - **From the backup on your computer:** this works even if the web app is
   down, as long as SSH works.
   ```bash
   ./switch-to-this-fork.sh --restore <backup-tarball> --ip <POD_IP>
   ```
   Restore checks the archive before stopping the app and keeps the replaced
-  tree at the path it prints. Archives from older tools that omitted
+  tree at the path it prints. It restores code, not database rows or settings.
+  See [manual data recovery](../ops/ANTIBRICK.md#restore-a-database-snapshot).
+  Archives from older tools that omitted
   `server/node_modules` are refused; use Roll back if the previous install
   is still available.
 - **Switch to upstream free-sleep:** the action in Settings > Software
-  replaces Nightstand with the current throwaway31265/free-sleep and retains
-  the data directory, subject to upstream schema compatibility. It installs
+  replaces the application with the current throwaway31265/free-sleep. It installs
   the original project, not jmew's or another fork. There's no button to come
-  back afterward; run the migration tool again.
+  back afterward; run the migration tool again. Read the limits below first.
 - **Restore Eight Sleep software:** reset the firmware as described in
   [INSTALLATION.md](../INSTALLATION.md#how-to-revert-changes-and-go-back-to-using-your-eight-sleep-through-their-app).
   This is separate from application rollback.
+
+### Switching to upstream
+
+Before the switch, code and JSON settings are backed up under
+`/persistent/free-sleep-backups/<timestamp>_v<version>_prerevert-to-stock/`.
+SQLite snapshots are kept separately under
+`/persistent/free-sleep-database-backups/`. The switch keeps the first enabled
+alarm per day, caps its duration at 180 seconds, changes level display to
+Fahrenheit, and maps base-control taps to alarm dismissal with no action when
+there is no alarm. Extra and one-time alarms do not run upstream; the backup
+keeps the original settings.
+
+The archive timer is disabled. `raw-archive/` stays in place, and the switch
+log prints its size; you can remove it if you no longer need those recordings.
+Switching does not uninstall every Nightstand change. Shared services,
+sudoers rules, firewall rules, any manually enabled watchdog setting, Python
+and Node dependencies, backups, and archived data remain. Nightstand's
+archive/rollback/revert units and service memory-limit drop-ins are removed.
+
+Upstream's first update can print a "reset, all data will be lost" message
+because its migration history differs. Do not follow that reset prompt.
+The data can remain intact; inspect migration status and use the
+[recovery steps](../ops/ANTIBRICK.md#failed-database-migrations) instead.
+Upstream and jmew installers also remove SQLite WAL files; keep a verified
+snapshot before using their reinstall or reset paths.
+
+Remote app access through Tailscale ends at upstream's first update because
+its installer replaces the service configuration. Keep local access available.
+Downgrading within Nightstand restores the target's older firewall and feature
+behavior. In particular, 3.3.x to 3.2.x can reduce RAW retention to 36 hours;
+the current downgrade path protects retention, but those older updaters do not.
+
+Nightstand does not automatically arm the hardware watchdog. Its setup helper
+is manual. A Pod 5 firmware reset still has no verified procedure here.
 
 ## Reporting problems
 

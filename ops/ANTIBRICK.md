@@ -94,14 +94,86 @@ If restarting does not resolve the problem:
    installed dependencies. Database and LowDB restoration is a separate
    manual operation. Inspect compatibility before restoring data.
 3. **Switch to upstream free-sleep.** Settings > Software can install
-   `throwaway31265/free-sleep`, retaining the data directory. This removes
-   Nightstand, not the Eight Sleep firmware. There is no in-app route back;
+   `throwaway31265/free-sleep`, retaining the data directory and preparing
+   compatible settings. It replaces the application, not every system change
+   Nightstand made. Read the [switch limits](../docs/COMING_FROM_FREE_SLEEP.md#switching-to-upstream).
+   There is no in-app route back;
    use the [migration tool](../docs/COMING_FROM_FREE_SLEEP.md) to return.
    If the app is unavailable but SSH works, the corresponding Pod command is
    `systemctl start free-sleep-revert.service`.
 4. **Restore Eight Sleep software.** Follow the model-specific firmware-reset
    [procedure](../INSTALLATION.md#how-to-revert-changes-and-go-back-to-using-your-eight-sleep-through-their-app).
    It is separate from restoring an application backup.
+
+Pods migrated with the 3.3.1 tool can lack permissions or units for Roll back,
+Switch to upstream, and turning biometrics off. The app reports the missing
+prerequisite. A successful update installs the missing rules and units.
+
+### Restore a database snapshot
+
+In-app updates and switches save consistent SQLite snapshots, including
+committed WAL data, under `/persistent/free-sleep-database-backups/`.
+Code-backup rotation does not delete these snapshots. Check their disk usage
+and remove older copies yourself once you have a verified recovery copy.
+Older code backups can contain incomplete databases if data was still in WAL;
+check their contents before relying on them.
+
+Restoring a snapshot replaces newer measurements with the saved data. Choose
+a snapshot compatible with the installed code. Older and upstream trees lack
+`sqlite-safety.py`; obtain a trusted copy from the retained Nightstand tree or
+its code archive and set `SAFETY` to that path. Check it before stopping services.
+Run the following as root on
+the Pod while the bed is idle, replacing the example snapshot path:
+
+```bash
+set -e
+DB=/persistent/free-sleep-data/free-sleep.db
+SNAPSHOT=/persistent/free-sleep-database-backups/<chosen-snapshot>.db
+SAFETY=/home/dac/free-sleep/scripts/sqlite-safety.py
+test -f "$SNAPSHOT"
+test -f "$SAFETY"
+python3 -c 'import sqlite3'
+systemctl stop free-sleep free-sleep-stream
+python3 "$SAFETY" backup "$DB" "$DB.before-restore-$(date +%Y%m%d-%H%M%S)"
+python3 "$SAFETY" checkpoint "$DB"
+install -o dac -g dac -m 660 "$SNAPSHOT" "$DB.restore"
+mv "$DB.restore" "$DB"
+rm -f "$DB-wal" "$DB-shm"
+systemctl start free-sleep
+```
+
+Restart `free-sleep-stream` only if biometrics was enabled before recovery.
+Check the logs and the Sleep page afterward. Settings and schedules are in
+the separate `lowdb/` backup; restoring code or SQLite does not restore them.
+The migration tool's `--restore` also restores code only.
+
+### Failed database migrations
+
+A Prisma `P3009` error means a previous migration did not finish. Do not reset
+the database or repeatedly mark that migration as rolled back. Older shipped
+migrations were not transactional and may have left partial tables.
+
+The updater resolves a verified P3009 failure once, then retries deployment,
+after checking its checksum and transaction wrapper. For manual recovery, stop the server and streamer,
+save a database snapshot as above, and run the trusted helper (adjusting its
+path if Nightstand is no longer installed):
+
+```bash
+python3 /home/dac/free-sleep/scripts/sqlite-safety.py recoverable-migrations \
+  /persistent/free-sleep-data/free-sleep.db \
+  /home/dac/free-sleep/server/prisma/migrations
+```
+
+If it succeeds, use each printed migration name with
+`npx dotenv -e .env.pod -- npx prisma migrate resolve --rolled-back <name>`
+from the server directory, then run `npx dotenv -e .env.pod -- npx prisma
+migrate deploy`, `npx prisma generate`, and `npx dotenv -e .env.pod -- npx
+prisma migrate status` before restarting. These checks target the selected
+Nightstand migration directory; do not use an older fork's `npm run migrate`,
+which may invoke Prisma's development/reset workflow.
+If the check refuses recovery, inspect the failed SQL and database together,
+or restore a compatible snapshot. A code rollback alone cannot repair a
+partial database migration.
 
 ## Network behavior
 
@@ -110,6 +182,17 @@ Browser internet access is separate from the Pod firewall. Deployment opens
 Pod internet access for changed dependencies; the updater opens it for its
 downloads and attempts to reapply the block afterward.
 
+The current updater applies the installed version's firewall after a
+successful swap; rollback applies the restored version's rules. Downgrading
+therefore restores older firewall behavior, including broader outbound
+access and the older Pod 3 connection handling, until updated again.
+
+Current downgrade and rollback paths preserve configured RAW retention when
+installing an older archive script, or stop before swapping if they cannot.
+Moves from 3.3.x to 3.2.x made by those older versions still revert to 36-hour
+retention and can delete older sensor archives. Older versions also do not
+honor features introduced later, including the presence auto-off toggle.
+
 The firewall permits local access, established connections and time sync.
 If `tailscaled` is active when the block script runs, it also permits outbound
 UDP, DNS and HTTPS to any host. The rules remain until reapplied or changed;
@@ -117,6 +200,10 @@ they are not confined to Tailscale servers. See the
 [remote-access guide](../docs/REMOTE_ACCESS.md) before changing Tailscale setup.
 
 ## Standing state to remember
+
+The hardware-watchdog helper is manual. Install, update and migration do not
+arm it. Automatic activation is a separate future change. There is still no
+verified Pod 5 firmware-reset procedure.
 
 - The development Pod is a Pod 5 on the local network, with root SSH on port
   8822.

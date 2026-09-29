@@ -194,6 +194,13 @@ runs against the newer schema. This works because migrations are additive,
 which is a standing rule. A new migration must never drop or rename a column
 or table that an older, still-installable release reads.
 
+New SQLite migrations must use one `BEGIN; ... COMMIT;` transaction. Never
+edit a shipped migration: tests pin its checksum. The compatibility check
+allows new tables, non-unique indexes, and additive columns; a required column
+on an existing table needs a non-null default. Drops, renames, new constraints
+on existing tables, and table rebuilds are refused. Test an upgrade and an
+older reader against a copy of the resulting database before release.
+
 ## Release ritual
 
 1. Bump the version in `server/src/serverInfo.json`.

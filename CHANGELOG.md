@@ -49,7 +49,9 @@ is a hard fork; for the history of the projects it descends from, see
 
 - Re-running the firewall script no longer piles up duplicate rules, and the
   outbound rules Tailscale needs are only added while Tailscale is running, so
-  a Pod without it stays fully blocked. If you set up Tailscale later, run the
+  without it, new outbound connections remain blocked except time sync.
+  Updates apply the installed version's rules after the swap, and rollback
+  applies the restored version's rules. If you set up Tailscale later, run the
   block script again once it is running. From Kris's fork, 2-X/nightstand.
 
 - After a restart, replayed sensor records no longer show old temperatures on
