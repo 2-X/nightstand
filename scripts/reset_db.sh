@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 print_yellow() {
   echo -e "\033[0;33m$1\033[0m"
@@ -12,6 +13,14 @@ read -p "Are you sure you want to continue? (y/N): " confirm
 
 if [[ "$confirm" =~ ^[Yy]$ ]]; then
   systemctl stop free-sleep free-sleep-stream
+  DATABASE="/persistent/free-sleep-data/free-sleep.db"
+  if [ -f "$DATABASE" ]; then
+    SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+    BACKUP="/persistent/free-sleep-database-backups/$(date -u +%Y%m%dT%H%M%SZ)-$$-reset.db"
+    python3 "$SCRIPT_DIR/sqlite-safety.py" checkpoint "$DATABASE"
+    python3 "$SCRIPT_DIR/sqlite-safety.py" backup "$DATABASE" "$BACKUP"
+    echo "Database backup saved to $BACKUP"
+  fi
   rm -f /persistent/free-sleep-data/free-sleep.db-shm \
         /persistent/free-sleep-data/free-sleep.db-wal \
         /persistent/free-sleep-data/free-sleep.db-journal \

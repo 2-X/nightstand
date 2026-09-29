@@ -30,6 +30,25 @@ echo "Setting up the installation directory..."
 # rather than hardcoding it.
 SRC_DIR=$(find "$UNZIP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)
 [ -d "$SRC_DIR" ] || { echo "unexpected zip layout"; exit 1; }
+# Stop both database writers before replacing any files. Missing units are
+# normal on a first install; a failed stop for an existing unit is fatal.
+biometrics_enabled="false"
+if systemctl is-active --quiet free-sleep-stream; then
+  biometrics_enabled="true"
+fi
+for service in free-sleep free-sleep-stream; do
+  if systemctl cat "$service" >/dev/null 2>&1; then
+    systemctl stop "$service"
+  fi
+done
+SRC="/persistent/free-sleep-data/free-sleep.db"
+if [ -f "$SRC" ]; then
+  python3 "$SRC_DIR/scripts/sqlite-safety.py" checkpoint "$SRC"
+  mkdir -p /persistent/free-sleep-database-backups
+  DEST="/persistent/free-sleep-database-backups/$(date -u +%Y%m%dT%H%M%SZ)-$$-install.db"
+  python3 "$SRC_DIR/scripts/sqlite-safety.py" backup "$SRC" "$DEST"
+  echo "Database backup saved to $DEST"
+fi
 rm -rf "$REPO_DIR"
 mv "$SRC_DIR" "$REPO_DIR"
 rm -rf "$UNZIP_DIR"
@@ -135,33 +154,7 @@ echo ""
 # Run Prisma migrations
 
 
-# Stop the free-sleep-stream service if it was running
-# This is needed to close out the lock files for the SQLite file
-biometrics_enabled="false"
-if systemctl is-active --quiet free-sleep-stream && systemctl list-unit-files | grep -q "^free-sleep-stream.service"; then
-  biometrics_enabled="true"
-  echo "Stopping biometrics service..."
-  systemctl stop free-sleep-stream
-  sleep 5
-fi
-
-SRC="/persistent/free-sleep-data/free-sleep.db"
-DEST="/persistent/free-sleep-data/free-sleep-copy.db"
-
-if [ -f "$SRC" ]; then
-  cp "$SRC" "$DEST"
-  echo "Making a backup up database prior to migrations"
-  echo "Database copied to $DEST"
-else
-  echo "Source database not found, skipping copying database."
-fi
-
-
-
-
-rm -f /persistent/free-sleep-data/free-sleep.db-shm \
-      /persistent/free-sleep-data/free-sleep.db-wal \
-      /persistent/free-sleep-data/free-sleep.db-journal
+# The database and its WAL were checkpointed and backed up before the swap.
 
 migration_failed="false"
 
@@ -272,5 +265,5 @@ echo -e "\033[0;32mInstallation complete! The Nightstand server is running and w
 echo -e "\033[0;32mSee logs with: journalctl -u free-sleep --no-pager --output=cat\033[0m"
 
 if [ "$migration_failed" = "true" ]; then
-  echo -e "\033[33mWARNING: Prisma migrations failed! A backup of your database prior to the migration was saved to /persistent/free-sleep-data/free-sleep-copy.db \033[0m"
+  echo -e "\033[33mWARNING: Prisma migrations failed! A backup of your database prior to the migration was saved to ${DEST:-/persistent/free-sleep-database-backups} \033[0m"
 fi

@@ -359,6 +359,8 @@ def watch_stream():
 
 
 if __name__ == '__main__':
+    from shutdown import install_shutdown_handlers
+    install_shutdown_handlers()
     # Give time for the express.js server to boot
     print('Sleeping for 30 seconds before starting stream service...')
     time.sleep(30)
