@@ -1,5 +1,6 @@
+import SectionHeading from '@components/SectionHeading';
 import _ from 'lodash';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, CircularProgress, Dialog, DialogTitle, DialogActions, Typography,
 } from '@mui/material';
@@ -23,6 +24,9 @@ import { useScheduleStore } from './scheduleStore.tsx';
 import { useSettings } from '@api/settings';
 import { LOWERCASE_DAYS } from './days.ts';
 import TemperatureScheduleChart from './ScheduleChart.tsx';
+import PageHeader from '@components/PageHeader';
+import { validateSchedule } from './scheduleValidation';
+import { friendlyTimeZone } from '@lib/timeZone';
 import ErrorBoundary from '@components/ErrorBoundary.tsx';
 
 
@@ -61,8 +65,29 @@ export default function SchedulePage() {
   const changesPresent = useScheduleStore(state => state.changesPresent);
   const titleDay = selectedDay.charAt(0).toUpperCase() + selectedDay.slice(1);
   const nextDay = LOWERCASE_DAYS[(LOWERCASE_DAYS.indexOf(selectedDay) + 1) % 7];
-  const sideLabel = side === 'left' ? 'Left' : 'Right';
+  const sideLabel = settings?.[side]?.name || (side === 'left' ? 'Left side' : 'Right side');
   const affectedDays = _.uniq([selectedDay, ...Object.keys(selectedDays).filter(day => selectedDays[day as DayOfWeek])]);
+  const { invalidTimes, schemaIssues } = validateSchedule(selectedSchedule);
+  const [showSchemaError, setShowSchemaError] = useState(false);
+  const schemaIssue = schemaIssues[0];
+  const schemaField = schemaIssue?.path.join('.') === 'power.onTemperature' ? 'Bedtime temperature'
+    : schemaIssue?.path[0] === 'temperatures' ? `Temperature at ${schemaIssue.path[1]}`
+      : schemaIssue?.path[0] === 'power' ? 'Bedtime and turn-off settings' : 'Alarm settings';
+  const draftLabel = `Unsaved: ${affectedDays.map(day => day.charAt(0).toUpperCase() + day.slice(1)).join(', ')}, ${sideLabel}`;
+  const keepFocusVisible = (target: HTMLElement) => {
+    if (target.closest('[data-schedule-draft]')) return;
+    const bounds = target.getBoundingClientRect();
+    if (bounds.bottom > window.innerHeight - 160 || bounds.top < 8) target.scrollIntoView?.({ block: 'center', behavior: 'auto' });
+  };
+  useLayoutEffect(() => {
+    if (!changesPresent) return;
+    const root = document.documentElement;
+    const previous = root.style.scrollPaddingBottom;
+    root.style.scrollPaddingBottom = '160px';
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.closest('#PageContainer')) keepFocusVisible(active);
+    return () => { root.style.scrollPaddingBottom = previous; };
+  }, [changesPresent, selectedSchedule]);
   const unusedSide = !changesPresent && !!schedules?.[side] && Object.values(schedules[side]).every(day =>
     !day.power.enabled && Object.keys(day.temperatures).length === 0
     && !(day.alarms.length ? day.alarms : [day.alarm]).some(alarm => alarm.enabled));
@@ -102,6 +127,13 @@ export default function SchedulePage() {
   };
 
   const showInvalidRow = () => {
+    if (schemaIssue) {
+      setShowSchemaError(true);
+      const control = document.querySelector<HTMLElement>(`[role="spinbutton"][aria-label="${schemaField}"]`);
+      control?.scrollIntoView?.({ block: 'center', behavior: 'auto' });
+      control?.focus({ preventScroll: true });
+      return;
+    }
     const row = document.querySelector<HTMLElement>('[data-invalid="true"]');
     row?.scrollIntoView({ block: 'center', behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     row?.querySelector<HTMLElement>('input[type="time"], [role="combobox"]')?.focus({ preventScroll: true });
@@ -146,7 +178,7 @@ export default function SchedulePage() {
 
   // Editing requires schedules and the Pod timezone.
   if (!settings || !schedules) return <PageContainer>
-    <Typography component="h1" variant="h1">Schedule</Typography>
+    <PageHeader title="Schedule"/>
     { schedulesError || settingsError ? <Alert
       severity="error"
       action={ <Button
@@ -159,55 +191,70 @@ export default function SchedulePage() {
 
   return (
     <PageContainer
-      sx={ {
-        width: '100%',
-        maxWidth: { xs: '100%', sm: '800px' },
-        mx: 'auto',
-        mb: 15,
-      } }
-    >
-      <Typography component="h1" variant="h1" sx={ { alignSelf: 'flex-start', mb: 1 } }>Schedule</Typography>
+      containerProps={ { onFocusCapture: event => { if (changesPresent) keepFocusVisible(event.target as HTMLElement); } } }
+      sx={ { mb: changesPresent ? 9 : 0,
+        '& input, & button, & [tabindex]': { scrollMarginBottom: changesPresent ? '160px' : '88px', scrollMarginTop: '16px' } } }>
+      <PageHeader title="Schedule"/>
       <SideControl beforeSideChange={ nextSide => confirmDiscard({ side: nextSide }) }/>
       <DayTabs beforeDayChange={ day => confirmDiscard({ day }) }/>
-      <Box sx={ { width: '100%', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 2 } }>
-        <Box>
-          <Typography variant="subtitle1">
+      <Box sx={ { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 } }>
+        <Box sx={ { flex: 1, minWidth: 0 } }>
+          <SectionHeading>
             { titleDay } night{ selectedSchedule && selectedSchedule.power.off < selectedSchedule.power.on
               ? ` to ${nextDay.charAt(0).toUpperCase() + nextDay.slice(1)} morning` : '' }
-          </Typography>
-          { settings.timeZone !== moment.tz.guess() && <Typography variant="caption" color="text.secondary">{ settings.timeZone }</Typography> }
+          </SectionHeading>
+          { settings.timeZone !== moment.tz.guess() && <Typography variant="caption" color="text.secondary">
+            { friendlyTimeZone(settings.timeZone) }
+          </Typography> }
         </Box>
         { !firstRun && <EnabledSwitch/> }
       </Box>
-      { !firstRun ? <>
+      { !firstRun ? selectedSchedule?.power.enabled ? <>
         <ErrorBoundary componentName="Scheduling chart"><TemperatureScheduleChart/></ErrorBoundary>
         <ScheduleTimeline key={ `${side}-${selectedDay}` } format={ format }/>
-        <ApplyToOtherDaysAccordion/>
-      </> : <Box sx={ { width: '100%', p: 3, border: 1, borderColor: 'divider', borderRadius: 2 } }>
-        <Typography component="h2" variant="h6">Set a bedtime and a wake time</Typography>
+      </> : <Typography color="text.secondary" sx={ { width: '100%' } }>This night is off</Typography> : <Box
+        sx={ { width: '100%', p: 2, border: 1, borderColor: 'divider', borderRadius: 1 } }>
+        <SectionHeading>Set a bedtime and a wake time</SectionHeading>
         <Typography color="text.secondary" sx={ { my: 2 } }>
           Choose when the bed turns on and when you wake up, then adjust the temperature and vibration for this night.
         </Typography>
         <Button variant="contained" onClick={ startNight }>Set bedtime and wake time</Button>
       </Box> }
-      { settings?.features.oneOffAlarms && <Accordion sx={ { width: '100%', mt: 2 } } slotProps={ { transition: { unmountOnExit: true } } }>
-        <AccordionSummary expandIcon={ <ExpandMore/> }>Add one-time alarm</AccordionSummary>
+      { !firstRun && <ApplyToOtherDaysAccordion/> }
+      { settings?.features.oneOffAlarms && <Accordion sx={ { width: '100%' } } slotProps={ { transition: { unmountOnExit: true } } }>
+        <AccordionSummary expandIcon={ <ExpandMore/> }>
+          <Typography component="span" variant="inherit">Add one-time alarm</Typography>
+        </AccordionSummary>
         <AccordionDetails><OneOffAlarmSection/></AccordionDetails>
       </Accordion> }
+      { saveError && <Alert severity="error" sx={ { width: '100%' } }>{ saveError }</Alert> }
+      { showSchemaError && schemaIssue && <Alert severity="error" sx={ { width: '100%' } }>
+        { schemaField }: { schemaIssue.message }
+      </Alert> }
       { changesPresent && <Box
+        data-schedule-draft="true"
         sx={ {
-          position: 'sticky', bottom: 80, mt: 2, width: '100%', p: 1, bgcolor: 'background.paper',
-          border: 1, borderColor: 'divider', borderRadius: 2, zIndex: 2,
+          position: 'fixed', bottom: 72, left: '50%', transform: 'translateX(-50%)',
+          width: { xs: 'calc(100% - 32px)', sm: 'calc(100% - 48px)' }, maxWidth: 672,
+          height: 60, p: 1, bgcolor: 'background.paper', display: 'flex', alignItems: 'center', gap: 1,
+          border: 1, borderColor: 'divider', borderRadius: '24px', zIndex: 2,
         } }>
-        <Typography role="status" variant="body2">
-          Unsaved changes to { affectedDays.map(day => day.charAt(0).toUpperCase() + day.slice(1)).join(', ') }, { sideLabel } side
-        </Typography>
-        { saveError && <Alert severity="error" sx={ { my: 1 } }>{ saveError }</Alert> }
-        <Box sx={ { display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1, gap: 1 } }>
-          { !useScheduleStore.getState().isValid() && <Button size="small" color="error" onClick={ showInvalidRow }>Check invalid time</Button> }
-          <Button onClick={ reloadScheduleData } disabled={ useAppStore.getState().isUpdating }>Discard</Button>
-          <SaveButton onSave={ handleSave }/>
-        </Box>
+        { invalidTimes > 0 || schemaIssue ? <Button
+          color="error"
+          onClick={ showInvalidRow }
+          sx={ { flex: 1, minWidth: 0, whiteSpace: 'nowrap', px: 0 } }>
+          { schemaIssue ? 'Fix schedule' : `Fix ${invalidTimes} ${invalidTimes === 1 ? 'time' : 'times'}` }
+        </Button>
+          : <Typography
+            role="status"
+            variant="body2"
+            title={ draftLabel }
+            aria-label={ draftLabel }
+            sx={ { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }>
+            Unsaved: { titleDay }{ affectedDays.length > 1 ? ` and ${affectedDays.length - 1} more` : '' }, <bdi>{ sideLabel }</bdi>
+          </Typography> }
+        <Button onClick={ reloadScheduleData } disabled={ useAppStore.getState().isUpdating } sx={ { flexShrink: 0, px: 1 } }>Discard</Button>
+        <SaveButton onSave={ handleSave }/>
       </Box> }
 
       <Dialog open={ !!pendingChange } onClose={ () => setPendingChange(undefined) } aria-labelledby="discard-schedule-title">

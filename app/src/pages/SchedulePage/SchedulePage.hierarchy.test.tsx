@@ -19,12 +19,12 @@ it('groups editable events and marks the side/day draft scope', async () => {
   }
   server.use(http.get('*/schedules', () => HttpResponse.json(schedules)));
   renderWithProviders(<SchedulePage />);
-  await waitFor(() => expect(screen.getAllByLabelText('Alarm time')).toHaveLength(2));
+  await waitFor(() => expect(screen.getAllByLabelText('Wake at')).toHaveLength(2));
   const events = screen.getAllByTestId('schedule-event');
   expect(events.map(row => row.querySelector('input[type="time"]')?.getAttribute('value')))
-    .toEqual(['21:00', '01:00', '23:00', '08:00', '09:00']);
-  fireEvent.change(screen.getAllByLabelText('Alarm time')[1], { target: { value: '08:30' } });
-  expect(screen.getByRole('status')).toHaveTextContent(/Unsaved.*Left side/);
+    .toEqual(['21:00', '23:00', '01:00', '08:00', '09:00']);
+  fireEvent.change(screen.getAllByLabelText('Wake at')[1], { target: { value: '08:30' } });
+  expect(screen.getByRole('status')).toHaveTextContent(/Unsaved.*Alex/);
   expect(screen.queryByRole('button', { name: 'Save one-time alarm' })).not.toBeInTheDocument();
 });
 
@@ -69,7 +69,7 @@ it('can add a temperature adjustment inside a thirty-minute power window', async
   }
   server.use(http.get('*/schedules', () => HttpResponse.json(schedules)));
   renderWithProviders(<SchedulePage />);
-  await screen.findByLabelText('Alarm time');
+  await screen.findByLabelText('Wake at');
   fireEvent.click(screen.getByRole('button', { name: 'Add temperature change' }));
   expect(screen.getByLabelText('Change at')).toHaveValue('21:15');
 });
@@ -97,8 +97,22 @@ it('keeps draft errors compact and focuses the invalid row on request', async ()
   const adjustments = await screen.findAllByLabelText('Change at');
   fireEvent.change(adjustments[0], { target: { value: '15:00' } });
   expect(screen.queryByText('Check every alarm and temperature time against the power window before saving.')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Check invalid time' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Fix 1 time' }));
   expect(screen.getByDisplayValue('15:00')).toHaveFocus();
   expect(scroll).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' });
   scroll.mockRestore();
+});
+
+it('collapses a disabled night and restores its saved editor when enabled', async () => {
+  renderWithProviders(<SchedulePage/>);
+  const enabled = await screen.findByRole('switch', { name: 'Enabled' });
+  await screen.findByLabelText('Turn on at');
+  fireEvent.click(enabled);
+  expect(screen.getByText('This night is off')).toBeInTheDocument();
+  expect(screen.queryByLabelText('Turn on at')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Night temperature chart')).not.toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent(/Unsaved: .*Alex/);
+  fireEvent.click(enabled);
+  expect(screen.getByLabelText('Turn on at')).toBeInTheDocument();
+  expect(screen.queryByText('This night is off')).not.toBeInTheDocument();
 });

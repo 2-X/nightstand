@@ -13,10 +13,9 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import AlarmOnIcon from '@mui/icons-material/AlarmOn';
 import moment from 'moment-timezone';
 
-import GlassCard from '@design/GlassCard';
+import { friendlyTimeZone } from '@lib/timeZone';
 import { palette } from '@design/tokens';
 import { postSettings, useSettings } from '@api/settings.ts';
 import { useAppStore } from '@state/appStore.tsx';
@@ -71,11 +70,15 @@ export default function OneOffAlarmSection() {
   const fireAtMoment = fireAtIso ? moment(fireAtIso) : null;
   const isInPast = !!fireAtMoment && fireAtMoment.isBefore(moment());
 
+  const durations = [...new Set([duration, ...Array.from({ length: 18 }, (_, index) => (index + 1) * 10)])]
+    .filter(value => Number.isInteger(value) && value >= 0 && value <= 180)
+    .sort((first, second) => first - second);
   const canSave =
-    !saving &&
+    !saving && Number.isInteger(duration) && duration >= 0 && duration <= 180 &&
     (!enabled || (!!fireAtLocal && !isInPast));
 
   const handleSave = async () => {
+    if (!canSave) return;
     setSaveError('');
     setSaved(false);
     setSaving(true);
@@ -106,18 +109,13 @@ export default function OneOffAlarmSection() {
   const minLocal = moment.tz(settings.timeZone).add(1, 'minute').format('YYYY-MM-DDTHH:mm');
 
   return (
-    <GlassCard>
+    <Box>
       { saveError && <Alert severity="error">{ saveError }</Alert> }
-      { saved && <Typography role="status" variant="body2">One-time alarm saved for the { side } side.</Typography> }
-      <Box sx={ { display: 'flex', alignItems: 'center', gap: 1.25, mb: 2 } }>
-        <AlarmOnIcon sx={ { color: palette.text.primary } } />
-        <Typography sx={ { fontSize: '1.1rem', fontWeight: 600, color: palette.text.primary } }>
-          One-time alarm
-        </Typography>
-      </Box>
-
-      <Typography sx={ { color: palette.text.secondary, fontSize: '0.85rem', mb: 2 } }>
-        Fires once for the { side } side, then disables itself. Saved separately from the recurring schedule.
+      { saved && <Typography role="status" variant="body2">
+        One-time alarm saved for <bdi>{ settings[side]?.name || `${side} side` }</bdi>.
+      </Typography> }
+      <Typography variant="body2" color="text.secondary" sx={ { mb: 2 } }>
+        Rings once for <bdi>{ settings[side]?.name || `${side} side` }</bdi>, then turns off. Saved separately from this schedule.
       </Typography>
 
       <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 } }>
@@ -133,7 +131,7 @@ export default function OneOffAlarmSection() {
           <Box sx={ { mb: 2 } }>
             <TextField
               type="datetime-local"
-              label="Fire at"
+              label="Ring at"
               fullWidth
               variant="standard"
               value={ fireAtLocal }
@@ -141,35 +139,37 @@ export default function OneOffAlarmSection() {
               InputLabelProps={ { shrink: true } }
               inputProps={ { min: minLocal } }
               error={ isInPast }
-              helperText={ isInPast ? 'Time is in the past' : `Timezone: ${settings.timeZone}` }
+              helperText={ isInPast ? 'Time is in the past' : `Timezone: ${friendlyTimeZone(settings.timeZone)}` }
             />
           </Box>
 
           <Box sx={ { display: 'flex', gap: 2, mb: 2 } }>
             <TextField
-              type="number"
-              label="Duration (s)"
+              select
+              label="Length"
               variant="standard"
               value={ duration }
-              onChange={ (e) => setDuration(Math.min(180, Math.max(0, Number(e.target.value) || 0))) }
-              inputProps={ { min: 0, max: 180 } }
-              sx={ { flex: 1 } }
-            />
+              onChange={ (e) => setDuration(Number(e.target.value)) }
+              sx={ { flex: 1 } }>
+              { durations.map(value => <MenuItem key={ value } value={ value }>{ value % 60 === 0 && value > 0
+                ? `${value / 60} ${value === 60 ? 'minute' : 'minutes'}` : `${value} seconds` }</MenuItem>) }
+            </TextField>
             <FormControl variant="standard" sx={ { flex: 1 } }>
               <InputLabel>Pattern</InputLabel>
               <Select value={ pattern } onChange={ (e) => setPattern(e.target.value as Pattern) }>
                 { PATTERNS.map((p) => (
-                  <MenuItem key={ p } value={ p }>{ p }</MenuItem>
+                  <MenuItem key={ p } value={ p }>{ p === 'rise' ? 'Builds up' : 'Double pulse' }</MenuItem>
                 )) }
               </Select>
             </FormControl>
           </Box>
 
-          <Box sx={ { px: 1, mb: 1 } }>
-            <Typography sx={ { color: palette.text.secondary, fontSize: '0.85rem', mb: 1 } }>
-              Vibration intensity: { intensity }%
+          <Box sx={ { mb: 1 } }>
+            <Typography id="one-time-alarm-strength" variant="body2" sx={ { color: palette.text.secondary, mb: 1 } }>
+              Strength { intensity } of 100
             </Typography>
             <Slider
+              aria-labelledby="one-time-alarm-strength"
               value={ intensity }
               onChange={ (_e, v) => setIntensity(Array.isArray(v) ? v[0] : v) }
               min={ 1 }
@@ -185,11 +185,10 @@ export default function OneOffAlarmSection() {
           variant="contained"
           onClick={ handleSave }
           disabled={ !canSave }
-          size="small"
         >
           { saving ? <CircularProgress size={ 18 } /> : 'Save one-time alarm' }
         </Button>
       </Box>
-    </GlassCard>
+    </Box>
   );
 }

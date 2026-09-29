@@ -23,8 +23,9 @@ it('groups near-wake changes without hiding unusual or invalid saved times', () 
   const night = screen.getByRole('region', { name: 'Through the night' });
   const wake = screen.getByRole('region', { name: 'Wake up' });
   expect(within(night).getByDisplayValue('02:00')).toBeInTheDocument();
-  expect(within(night).getByDisplayValue('12:00')).toBeInTheDocument();
-  for (const time of ['06:00', '07:15']) expect(within(night).getByDisplayValue(time)).toBeInTheDocument();
+  expect(within(wake).getByDisplayValue('12:00')).toBeInTheDocument();
+  expect(within(night).getByDisplayValue('06:00')).toBeInTheDocument();
+  expect(within(wake).getByDisplayValue('07:15')).toBeInTheDocument();
   expect(within(wake).getByLabelText('Warm up')).toHaveTextContent('17 min before');
   expect(screen.getAllByLabelText('Change at')).toHaveLength(4);
 });
@@ -34,7 +35,7 @@ it('moves relative power-off with wake across midnight', () => {
   store.updateSelectedSchedule({ power: { on: '18:00', off: '00:15' } });
   store.updateSelectedAlarm({ time: '23:45' });
   render(<ScheduleTimeline format="level"/>);
-  fireEvent.change(screen.getByLabelText('Alarm time'), { target: { value: '00:15' } });
+  fireEvent.change(screen.getByLabelText('Wake at'), { target: { value: '00:15' } });
   expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('00:45');
 });
 
@@ -56,7 +57,7 @@ it('keeps edited rows in their section after blur until the draft is discarded',
 it('keeps a custom absolute off time when wake moves', () => {
   useScheduleStore.getState().updateSelectedSchedule({ power: { off: '08:42' } });
   render(<ScheduleTimeline format="level"/>);
-  fireEvent.change(screen.getByLabelText('Alarm time'), { target: { value: '07:15' } });
+  fireEvent.change(screen.getByLabelText('Wake at'), { target: { value: '07:15' } });
   expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('08:42');
 });
 
@@ -123,6 +124,21 @@ it('restores relative off behavior after discarding a custom off edit', () => {
   fireEvent.click(screen.getByRole('option', { name: 'At a set time' }));
   fireEvent.change(screen.getByLabelText('Turn off at'), { target: { value: '08:42' } });
   act(() => useScheduleStore.getState().reloadScheduleData());
-  fireEvent.change(screen.getByLabelText('Alarm time'), { target: { value: '07:15' } });
+  fireEvent.change(screen.getByLabelText('Wake at'), { target: { value: '07:15' } });
   expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('07:45');
+});
+
+it('warns inline after a bedtime AM/PM slip makes a night longer than sixteen hours', () => {
+  useScheduleStore.getState().updateSelectedSchedule({ power: { on: '21:30', off: '07:00' } });
+  render(<ScheduleTimeline format="level"/>);
+  expect(screen.queryByText(/This night is/)).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Turn on at'), { target: { value: '09:30' } });
+  expect(within(screen.getByRole('region', { name: 'Bedtime' })).getByText('This night is 21 h 30 m long')).toBeInTheDocument();
+});
+
+it('keeps full-day schedules editable and explains their length', () => {
+  useScheduleStore.getState().updateSelectedSchedule({ power: { on: '21:00', off: '21:00' } });
+  render(<ScheduleTimeline format="level"/>);
+  expect(screen.getByText('This night is 24 h long')).toBeInTheDocument();
+  expect(screen.getByLabelText('Turn on at')).toBeEnabled();
 });

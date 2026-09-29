@@ -19,7 +19,7 @@ beforeEach(() => {
 
 it.each(['18:00', '18:59', '19:00', '20:30'])('keeps turn-off and explains a wake edit to %s that reaches the wrong bedtime', time => {
   render(<ScheduleTimeline format="level"/>);
-  fireEvent.change(screen.getByLabelText('Alarm time'), { target: { value: time } });
+  fireEvent.change(screen.getByLabelText('Wake at'), { target: { value: time } });
   expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('07:30');
   expect(screen.getByText('Wake time is before bedtime, so turn off was not moved.')).toBeInTheDocument();
   expect(useScheduleStore.getState().isValid()).toBe(false);
@@ -27,7 +27,7 @@ it.each(['18:00', '18:59', '19:00', '20:30'])('keeps turn-off and explains a wak
 
 it('follows a later wake time in the same morning', () => {
   render(<ScheduleTimeline format="level"/>);
-  fireEvent.change(screen.getByLabelText('Alarm time'), { target: { value: '07:30' } });
+  fireEvent.change(screen.getByLabelText('Wake at'), { target: { value: '07:30' } });
   expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('08:00');
 });
 
@@ -54,7 +54,7 @@ it('recomputes grouping after focus without a temperature edit when wake changes
   useScheduleStore.getState().updateSelectedTemperatures({ '06:15': 83, '06:45': 99 });
   render(<ScheduleTimeline format="level"/>);
   fireEvent.focus(screen.getByDisplayValue('06:15'));
-  fireEvent.change(screen.getByLabelText('Alarm time'), { target: { value: '08:45' } });
+  fireEvent.change(screen.getByLabelText('Wake at'), { target: { value: '08:45' } });
   const night = screen.getByRole('region', { name: 'Through the night' });
   expect(within(night).getByDisplayValue('06:15')).toBeInTheDocument();
   expect(within(night).getByDisplayValue('06:45')).toBeInTheDocument();
@@ -68,7 +68,7 @@ it('anchors warm-up and turn-off to the earliest enabled alarm in the night', ()
   store.updateSelectedAlarm({ enabled: true, time: '07:00' });
   render(<ScheduleTimeline format="level"/>);
   expect(screen.getByLabelText('Warm up')).toHaveTextContent('15 min before');
-  fireEvent.change(screen.getAllByLabelText('Alarm time')[1], { target: { value: '07:15' } });
+  fireEvent.change(screen.getByDisplayValue('07:00'), { target: { value: '07:15' } });
   expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('07:45');
 });
 
@@ -82,7 +82,7 @@ it.each(['21:15', '21:30'])('hides add warm-up when a thirty-minute lead for %s 
 it('keeps a disabled alarm time visible and editable without enabling it', () => {
   useScheduleStore.getState().updateSelectedAlarm({ enabled: false });
   render(<ScheduleTimeline format="level"/>);
-  const input = screen.getByLabelText('Alarm time');
+  const input = screen.getByLabelText('Wake at');
   expect(input).toHaveValue('07:00');
   fireEvent.change(input, { target: { value: '08:10' } });
   expect(useScheduleStore.getState().getEditedAlarms()[0]).toMatchObject({ enabled: false, time: '08:10' });
@@ -102,7 +102,7 @@ it('follows the new earliest alarm when an edited wake passes another alarm', ()
   store.addAlarm();
   store.updateSelectedAlarm({ enabled: true, time: '08:00' });
   render(<ScheduleTimeline format="level"/>);
-  fireEvent.change(screen.getAllByLabelText('Alarm time')[0], { target: { value: '08:15' } });
+  fireEvent.change(screen.getAllByLabelText('Wake at')[0], { target: { value: '08:15' } });
   expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('08:30');
 });
 
@@ -129,9 +129,9 @@ it('focuses a newly added warm-up without changing the alarm', () => {
 
 it('clears the rejected-wake warning and resumes relative turn-off after correcting the wake time', () => {
   render(<ScheduleTimeline format="level"/>);
-  fireEvent.change(screen.getByLabelText('Alarm time'), { target: { value: '19:00' } });
+  fireEvent.change(screen.getByLabelText('Wake at'), { target: { value: '19:00' } });
   expect(screen.getByText('Wake time is before bedtime, so turn off was not moved.')).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText('Alarm time'), { target: { value: '07:15' } });
+  fireEvent.change(screen.getByLabelText('Wake at'), { target: { value: '07:15' } });
   expect(screen.queryByText('Wake time is before bedtime, so turn off was not moved.')).not.toBeInTheDocument();
   expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('07:45');
 });
@@ -139,16 +139,16 @@ it('clears the rejected-wake warning and resumes relative turn-off after correct
 it('recomputes warm-up membership after editing a temperature and moving wake earlier or later', () => {
   render(<ScheduleTimeline format="level"/>);
   fireEvent.click(screen.getByRole('button', { name: 'Increase temperature at 06:00' }));
-  fireEvent.change(screen.getByLabelText('Alarm time'), { target: { value: '06:20' } });
+  fireEvent.change(screen.getByLabelText('Wake at'), { target: { value: '06:20' } });
   expect(screen.getByLabelText('Warm up')).toHaveTextContent('20 min before');
-  expect(within(screen.getByRole('region', { name: 'Through the night' })).getByDisplayValue('06:45')).toBeInTheDocument();
+  expect(within(screen.getByRole('region', { name: 'Wake up' })).getByDisplayValue('06:45')).toBeInTheDocument();
   fireEvent.mouseDown(screen.getByLabelText('Warm up'));
   expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['15 min before', '20 min before', '30 min before']);
   fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' });
-  fireEvent.change(screen.getByLabelText('Alarm time'), { target: { value: '09:00' } });
+  fireEvent.change(screen.getByLabelText('Wake at'), { target: { value: '09:00' } });
   expect(screen.queryByLabelText('Warm up')).not.toBeInTheDocument();
   expect(screen.getAllByLabelText('Change at').map(input => (input as HTMLInputElement).value)).toEqual(['06:00', '06:45']);
-  fireEvent.change(screen.getByLabelText('Alarm time'), { target: { value: '07:00' } });
+  fireEvent.change(screen.getByLabelText('Wake at'), { target: { value: '07:00' } });
   expect(screen.getByLabelText('Warm up')).toHaveTextContent('15 min before');
 });
 
@@ -156,7 +156,7 @@ it('keeps the chosen relative turn-off through a rejected wake and bedtime edit'
   render(<ScheduleTimeline format="level"/>);
   fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Turn off' }));
   fireEvent.click(screen.getByRole('option', { name: '15 min after' }));
-  fireEvent.change(screen.getByLabelText('Alarm time'), { target: { value: '19:00' } });
+  fireEvent.change(screen.getByLabelText('Wake at'), { target: { value: '19:00' } });
   expect(screen.getByRole('combobox', { name: 'Turn off' })).toHaveTextContent('15 min after');
   expect(screen.queryByLabelText('Turn off at')).not.toBeInTheDocument();
   expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('07:15');
@@ -164,7 +164,7 @@ it('keeps the chosen relative turn-off through a rejected wake and bedtime edit'
   expect(screen.getByRole('combobox', { name: 'Turn off' })).toHaveTextContent('15 min after');
   expect(screen.getByText('Wake time is before bedtime, so turn off was not moved.')).toBeInTheDocument();
   expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('07:15');
-  fireEvent.change(screen.getByLabelText('Alarm time'), { target: { value: '07:30' } });
+  fireEvent.change(screen.getByLabelText('Wake at'), { target: { value: '07:30' } });
   expect(screen.getByRole('combobox', { name: 'Turn off' })).toHaveTextContent('15 min after');
   expect(screen.queryByText('Wake time is before bedtime, so turn off was not moved.')).not.toBeInTheDocument();
   expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('07:45');
@@ -173,17 +173,17 @@ it('keeps the chosen relative turn-off through a rejected wake and bedtime edit'
 it('regroups a newly added warm-up when wake returns to its original time', () => {
   render(<ScheduleTimeline format="level"/>);
   fireEvent.click(screen.getByRole('button', { name: 'Increase temperature at 06:00' }));
-  fireEvent.change(screen.getByLabelText('Alarm time'), { target: { value: '09:00' } });
+  fireEvent.change(screen.getByLabelText('Wake at'), { target: { value: '09:00' } });
   fireEvent.click(screen.getByRole('button', { name: 'Add warm-up' }));
   expect(screen.getByLabelText('Warm up')).toHaveTextContent('30 min before');
-  fireEvent.change(screen.getByLabelText('Alarm time'), { target: { value: '07:00' } });
+  fireEvent.change(screen.getByLabelText('Wake at'), { target: { value: '07:00' } });
   expect(screen.getByLabelText('Warm up')).toHaveTextContent('15 min before');
-  expect(within(screen.getByRole('region', { name: 'Through the night' })).getByDisplayValue('08:30')).toBeInTheDocument();
+  expect(within(screen.getByRole('region', { name: 'Wake up' })).getByDisplayValue('08:30')).toBeInTheDocument();
 });
 
 it('resumes a rejected relative turn-off when changing bedtime makes the wake valid', () => {
   render(<ScheduleTimeline format="level"/>);
-  fireEvent.change(screen.getByLabelText('Alarm time'), { target: { value: '19:00' } });
+  fireEvent.change(screen.getByLabelText('Wake at'), { target: { value: '19:00' } });
   expect(screen.getByText('Wake time is before bedtime, so turn off was not moved.')).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText('Turn on at'), { target: { value: '18:00' } });
   expect(screen.getByRole('combobox', { name: 'Turn off' })).toHaveTextContent('30 min after');

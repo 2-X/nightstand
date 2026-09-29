@@ -31,9 +31,9 @@ it('blocks saving an out-of-window temperature even when its editor is closed', 
 
 it('allows a 23:00 alarm in the 21:00 to 09:00 overnight window', () => {
   render(<ScheduleTimeline format="fahrenheit" />);
-  fireEvent.change(screen.getByLabelText('Alarm time'), { target: { value: '23:00' } });
+  fireEvent.change(screen.getByLabelText('Wake at'), { target: { value: '23:00' } });
   expect(useScheduleStore.getState().isValid()).toBe(true);
-  expect(screen.getByLabelText('Alarm time')).not.toHaveAttribute('aria-invalid', 'true');
+  expect(screen.getByLabelText('Wake at')).not.toHaveAttribute('aria-invalid', 'true');
 });
 
 it('revalidates all enabled alarms when power times change and ignores disabled alarms', () => {

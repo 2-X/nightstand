@@ -3,14 +3,17 @@ import { Box, IconButton } from '@mui/material';
 import Add from '@mui/icons-material/Add';
 import Remove from '@mui/icons-material/Remove';
 import {
-  fahrenheitToDisplay, displayBounds, MIN_TEMP_F, MAX_TEMP_F, fahrenheitToLevel, formatTemperature, levelToFahrenheit, TemperatureFormat,
+  fahrenheitToDisplay, displayBounds, MIN_TEMP_F, MAX_TEMP_F, fahrenheitToLevel, formatTemperature, TemperatureFormat,
 } from '@lib/temperatureConversions';
+import { stepTemperature, TemperatureStepState } from '@lib/temperatureStep';
 import { temperatureColor } from '@lib/temperatureColor';
 import { palette } from '@design/tokens';
 
 export default function TemperatureStepper({ value, format, label, disabled, onChange }: {
   value: number; format: TemperatureFormat; label: string; disabled: boolean; onChange: (value: number) => void;
 }) {
+  const steps = useRef<TemperatureStepState | undefined>(undefined);
+  if (value !== steps.current?.value || format !== steps.current?.format) steps.current = undefined;
   const current = useRef({ value, onChange, disabled, format });
   current.current = { value, onChange, disabled, format };
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -19,13 +22,12 @@ export default function TemperatureStepper({ value, format, label, disabled, onC
   const stop = () => { clearTimeout(timer.current); timer.current = undefined; holdingDirection.current = undefined; };
   useEffect(() => stop, []);
   useEffect(() => { if (disabled) stop(); }, [disabled]);
-  const step = (direction: number): boolean => {
+  const step = (direction: 1 | -1): boolean => {
     const state = current.current;
-    if (state.disabled) { stop(); return false; }
+    if (state.disabled || !Number.isFinite(state.value)) { stop(); return false; }
     // Match the bed controls: one level, or one Fahrenheit degree in F/C modes.
-    const requested = state.format === 'level'
-      ? levelToFahrenheit(fahrenheitToLevel(state.value) + direction) : state.value + direction;
-    const temperature = Math.max(MIN_TEMP_F, Math.min(MAX_TEMP_F, requested));
+    steps.current = stepTemperature(state.value, state.format, direction, steps.current);
+    const temperature = steps.current.value;
     const atLimit = temperature === MIN_TEMP_F || temperature === MAX_TEMP_F;
     if (atLimit) stop();
     if (temperature === state.value) return false;
@@ -33,7 +35,7 @@ export default function TemperatureStepper({ value, format, label, disabled, onC
     state.onChange(temperature);
     return !atLimit;
   };
-  const start = (direction: number) => {
+  const start = (direction: 1 | -1) => {
     stop();
     repeated.current = false;
     holdingDirection.current = direction;
@@ -47,8 +49,8 @@ export default function TemperatureStepper({ value, format, label, disabled, onC
   return <Box sx={ { display: 'flex', alignItems: 'center', gap: 0.5, color: temperatureColor(level) } }>
     <IconButton
       aria-label={ `Decrease ${label.toLowerCase()}` }
-      disabled={ disabled || value <= MIN_TEMP_F }
-      sx={ { width: 48, height: 48, color: 'inherit', border: '1px solid', borderColor: palette.border.control, touchAction: 'none' } }
+      disabled={ disabled || !Number.isFinite(value) || value <= MIN_TEMP_F }
+      sx={ { width: 44, height: 44, color: 'inherit', border: '1px solid', borderColor: palette.border.control, touchAction: 'none' } }
       onPointerDown={ event => { event.currentTarget.setPointerCapture?.(event.pointerId); start(-1); } }
       onPointerUp={ stop }
       onPointerCancel={ stop }
@@ -71,12 +73,12 @@ export default function TemperatureStepper({ value, format, label, disabled, onC
         }
       } }
       sx={ { minWidth: 62, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
-        fontSize: 24, fontWeight: 600, fontVariantNumeric: 'tabular-nums', opacity: disabled ? 0.5 : 1,
+        fontSize: 24, fontWeight: 500, fontVariantNumeric: 'tabular-nums', opacity: disabled ? 0.5 : 1,
         '&:focus-visible': { outline: '2px solid', outlineOffset: 3, borderRadius: 1 } } }>{ formatTemperature(value, format) }</Box>
     <IconButton
       aria-label={ `Increase ${label.toLowerCase()}` }
-      disabled={ disabled || value >= MAX_TEMP_F }
-      sx={ { width: 48, height: 48, color: 'inherit', border: '1px solid', borderColor: palette.border.control, touchAction: 'none' } }
+      disabled={ disabled || !Number.isFinite(value) || value >= MAX_TEMP_F }
+      sx={ { width: 44, height: 44, color: 'inherit', border: '1px solid', borderColor: palette.border.control, touchAction: 'none' } }
       onPointerDown={ event => { event.currentTarget.setPointerCapture?.(event.pointerId); start(1); } }
       onPointerUp={ stop }
       onPointerCancel={ stop }

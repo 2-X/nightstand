@@ -77,7 +77,7 @@ test('level steppers stay bounded and boundary errors focus the affected row', a
   const off = await page.getByLabel('Turn off at', { exact: true }).inputValue();
   await page.getByLabel('Change at', { exact: true }).first().fill(off);
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: 'Check invalid time' }).click();
+  await page.getByRole('button', { name: 'Fix 1 time' }).click();
   const invalid = page.locator('input[aria-invalid="true"]:focus');
   await expect(invalid).toHaveCount(1);
   await expect(invalid).toBeInViewport();

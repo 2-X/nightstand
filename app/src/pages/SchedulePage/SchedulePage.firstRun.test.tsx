@@ -25,7 +25,7 @@ it('offers setup for an unused side and preserves its saved times when starting'
   renderWithProviders(<SchedulePage/>);
   fireEvent.click(await screen.findByRole('button', { name: 'Set bedtime and wake time' }));
   expect(screen.getByLabelText('Turn on at')).toHaveValue('22:15');
-  expect(screen.getByLabelText('Alarm time')).toHaveValue('08:00');
+  expect(screen.getByLabelText('Wake at')).toHaveValue('08:00');
   expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('08:30');
   expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
 });

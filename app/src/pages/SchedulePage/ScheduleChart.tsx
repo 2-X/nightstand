@@ -2,7 +2,7 @@
 import moment from 'moment-timezone';
 import { useTheme } from '@mui/material/styles';
 import { useMemo } from 'react';
-import { Box, Button, Paper, Typography } from '@mui/material';
+import { Paper } from '@mui/material';
 import { LineChart, lineElementClasses, areaElementClasses } from '@mui/x-charts/LineChart';
 import { ChartsReferenceLine } from '@mui/x-charts/ChartsReferenceLine';
 import { useDrawingArea } from '@mui/x-charts/hooks';
@@ -17,7 +17,6 @@ import {
   TemperatureFormat,
   fahrenheitToLevel,
   levelToFahrenheit,
-  formatTemperature,
 } from '@lib/temperatureConversions.ts';
 
 
@@ -31,12 +30,9 @@ const LINE_ALPHA = 1.0;
 const CHART_END_PADDING_MS = 30 * 60 * 1000;
 
 // ---------------- buildSeriesData (same as before) ----------------
-const todayAt = (hhmm: Time, dayOffset = 0) => {
-  const [h, m] = hhmm.split(':').map(Number);
-  const d = new Date();
-  d.setHours(h, m, 0, 0);
-  if (dayOffset) d.setDate(d.getDate() + dayOffset);
-  return d;
+const todayAt = (hhmm: Time, timeZone: string, dayOffset = 0) => {
+  const [hour, minute] = hhmm.split(':').map(Number);
+  return moment.tz(timeZone).startOf('day').add(dayOffset, 'day').hour(hour).minute(minute).toDate();
 };
 
 
@@ -46,14 +42,14 @@ const compareTime = (a: Time, b: Time) => {
   return ah - bh || am - bm;
 };
 
-function buildSeriesData(selectedSchedule: DailySchedule, yMin: number, yMax: number, format: TemperatureFormat): Point[] {
+function buildSeriesData(selectedSchedule: DailySchedule, yMin: number, yMax: number, format: TemperatureFormat, timeZone: string): Point[] {
   if (!selectedSchedule?.power.enabled) return [];
 
   const { power, temperatures } = selectedSchedule;
   const wraps = compareTime(power.off, power.on) <= 0;
 
-  const start = todayAt(power.on, 0);
-  const end = todayAt(power.off, wraps ? 1 : 0);
+  const start = todayAt(power.on, timeZone);
+  const end = todayAt(power.off, timeZone, wraps ? 1 : 0);
 
   const entries = Object.entries(temperatures).filter(([time]) => temperatureInPowerWindow(time, power)) as [Time, number][];
   const day0: [Date, number][] = [];
@@ -62,10 +58,10 @@ function buildSeriesData(selectedSchedule: DailySchedule, yMin: number, yMax: nu
   for (const [t, temp] of entries.sort((a, b) => compareTime(a[0], b[0]))) {
     if (!wraps) {
       if (compareTime(t, power.on) >= 0 && compareTime(t, power.off) <= 0)
-        day0.push([todayAt(t, 0), temp]);
+        day0.push([todayAt(t, timeZone), temp]);
     } else {
-      if (compareTime(t, power.on) >= 0) day0.push([todayAt(t, 0), temp]);
-      if (compareTime(t, power.off) <= 0) day1.push([todayAt(t, 1), temp]);
+      if (compareTime(t, power.on) >= 0) day0.push([todayAt(t, timeZone), temp]);
+      if (compareTime(t, power.off) <= 0) day1.push([todayAt(t, timeZone, 1), temp]);
     }
   }
 
@@ -78,7 +74,7 @@ function buildSeriesData(selectedSchedule: DailySchedule, yMin: number, yMax: nu
       const convertedTemp = fahrenheitToDisplay(temp, format);
 
       if (dt.getTime() > points[points.length - 1].x.getTime()) {
-        const time = `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+        const time = moment(dt).tz(timeZone).format('HH:mm');
         points.push({ x: dt, y: convertedTemp, temperature: temp, rowId: `schedule-temperature-${time}` });
       } else {
         points[points.length - 1].y = convertedTemp;
@@ -161,13 +157,14 @@ export default function TemperatureScheduleChart() {
   const theme = useTheme();
 
   const format = settings?.temperatureFormat ?? 'fahrenheit';
+  const timeZone = settings?.timeZone ?? moment.tz.guess();
   const { min: yMin, max: yMax } = displayBounds(format);
 
   const points = useMemo(() => {
     if (!selectedSchedule) return [];
-    return buildSeriesData(selectedSchedule, yMin, yMax, format);
+    return buildSeriesData(selectedSchedule, yMin, yMax, format, timeZone);
   },
-  [selectedSchedule, yMin, yMax, format],
+  [selectedSchedule, yMin, yMax, format, timeZone],
   );
 
   if (!points.length) return null;
@@ -189,7 +186,7 @@ export default function TemperatureScheduleChart() {
     minutesSincePowerOn(first.time, selectedSchedule!.power.on) - minutesSincePowerOn(second.time, selectedSchedule!.power.on));
 
   return (
-    <Paper variant="outlined" aria-label="Night temperature chart" sx={ { width: '100%', p: 1, mb: 1 } }>
+    <Paper variant="outlined" aria-label="Night temperature chart" sx={ { width: '100%', p: 2 } }>
       <LineChart
         height={ 120 }
         onAxisClick={ (_, data) => { if (data) showRow(points[data.dataIndex].rowId); } }
@@ -197,7 +194,7 @@ export default function TemperatureScheduleChart() {
           scaleType: 'time',
           data: xData,
           valueFormatter: (v) =>
-            moment(v as Date).format('h:mm A'),
+            moment(v as Date).tz(timeZone).format('h:mm A'),
           min: xData[0],
           max: new Date(xData[xData.length - 1].getTime() + CHART_END_PADDING_MS),
           tickMinStep: 60 * 60 * 1000,
@@ -205,7 +202,6 @@ export default function TemperatureScheduleChart() {
           tickLabelStyle: { fill: axisColor },
         }] }
         yAxis={ [{
-          label: format === 'level' ? 'Level' : format === 'celsius' ? '°C' : '°F',
           min: yMin,
           max: yMax,
           tickLabelStyle: { fill: axisColor },
@@ -222,7 +218,7 @@ export default function TemperatureScheduleChart() {
         }] }
         margin={ {
           right: 32,
-          left: 42,
+          left: 36,
           top: 5,
           bottom: 24
         } }
@@ -249,10 +245,10 @@ export default function TemperatureScheduleChart() {
         slotProps={ { legend: { hidden: true } } }
       >
         { enabledAlarms[0] && timeInPowerWindow(enabledAlarms[0].time, selectedSchedule!.power) && <ChartsReferenceLine
-          x={ todayAt(enabledAlarms[0].time, enabledAlarms[0].time < selectedSchedule!.power.on ? 1 : 0) }
+          x={ todayAt(enabledAlarms[0].time, timeZone, enabledAlarms[0].time < selectedSchedule!.power.on ? 1 : 0) }
           label="Wake"
           labelAlign="start"
-          labelStyle={ { fill: axisColor, fontSize: 11, textAnchor: 'end' } }
+          labelStyle={ { fill: axisColor, fontSize: 12, textAnchor: 'end', transform: 'translateX(-4px)' } }
           lineStyle={ { stroke: axisColor, strokeDasharray: '3 3' } }/> }
         <HorizontalTempGradient
           idArea={ gradAreaId }
@@ -262,18 +258,6 @@ export default function TemperatureScheduleChart() {
           lineAlpha={ LINE_ALPHA }
         />
       </LineChart>
-      <Box sx={ { display: 'flex', overflowX: 'auto', gap: 0.5 } }>
-        { points.slice(0, -1).map(point => <Button
-          key={ point.rowId }
-          size="small"
-          onClick={ () => showRow(point.rowId) }
-          sx={ { flexShrink: 0, minHeight: 44, color: temperatureColor(fahrenheitToLevel(point.temperature)) } }>
-          { moment(point.x).format('h:mm A') } { formatTemperature(point.temperature, format) }
-        </Button>) }
-      </Box>
-      { enabledAlarms.length > 0 && <Typography variant="caption" color="text.secondary" sx={ { px: 1 } }>
-        Wake { enabledAlarms.map(alarm => moment(alarm.time, 'HH:mm').format('h:mm A')).join(', ') }
-      </Typography> }
     </Paper>
   );
 }

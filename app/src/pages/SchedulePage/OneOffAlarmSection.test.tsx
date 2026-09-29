@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { http, HttpResponse } from 'msw';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import OneOffAlarmSection from './OneOffAlarmSection';
@@ -18,7 +18,7 @@ describe('OneOffAlarmSection', () => {
     const { user } = renderWithProviders(<OneOffAlarmSection />, { initialRoute: '/schedules' });
 
     // The section renders its heading once settings load.
-    expect(await screen.findByText('One-time alarm')).toBeInTheDocument();
+    expect(await screen.findByText(/Rings once for/)).toHaveTextContent('Rings once for Alex');
 
     const save = await screen.findByRole('button', { name: 'Save one-time alarm' });
     await user.click(save);
@@ -31,4 +31,15 @@ describe('OneOffAlarmSection', () => {
     expect(posted.left.oneOffAlarm).toHaveProperty('vibrationPattern');
     expect(posted.left.oneOffAlarm).toHaveProperty('duration');
   });
+});
+
+it('offers whole-second lengths, labels strength and shows the friendly Pod timezone', async () => {
+  renderWithProviders(<OneOffAlarmSection/>);
+  fireEvent.click(await screen.findByRole('switch', { name: 'Enable one-time alarm' }));
+  expect(screen.getByRole('slider', { name: /Strength/ })).toBeInTheDocument();
+  expect(screen.getByText(/Timezone: Pacific Time/)).toBeInTheDocument();
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Length' }));
+  expect(screen.getByRole('option', { name: '3 minutes' })).toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: '4 minutes' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('spinbutton', { name: 'Length' })).not.toBeInTheDocument();
 });

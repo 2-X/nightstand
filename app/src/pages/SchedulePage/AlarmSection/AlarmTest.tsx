@@ -42,7 +42,6 @@ export default function AlarmTest() {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 1,
-        pr: 1,
       } }
     >
       { isTesting && (
@@ -62,7 +61,6 @@ export default function AlarmTest() {
 
       <Button
         variant="outlined"
-        sx={ { ml: 'auto' } }
         onClick={ onTestAlarm }
         disabled={ isTesting }
       >

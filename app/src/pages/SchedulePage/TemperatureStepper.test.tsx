@@ -14,7 +14,7 @@ it.each<TemperatureFormat>(['fahrenheit', 'celsius', 'level'])('steps in %s usin
   fireEvent.click(screen.getByRole('button', { name: 'Increase temperature' }));
   expect(onChange).toHaveBeenLastCalledWith(format === 'level' ? 83 : 80);
   fireEvent.click(screen.getByRole('button', { name: 'Decrease temperature' }));
-  expect(onChange).toHaveBeenLastCalledWith(format === 'level' ? 80 : 79);
+  expect(onChange).toHaveBeenLastCalledWith(79);
 });
 
 it.each<TemperatureFormat>(['fahrenheit', 'celsius', 'level'])('clamps both bounds in %s using actual stored limits', format => {
@@ -101,4 +101,12 @@ it.each(['increase', 'decrease'])('repeats a held %s after clicking the opposite
   await user.pointer({ keys: '[/MouseLeft]' });
   act(() => vi.advanceTimersByTime(1000));
   expect(screen.getByRole('spinbutton')).toHaveAttribute('aria-valuenow', direction === 'increase' ? '85' : '81');
+});
+
+it.each(Array.from({ length: 55 }, (_, index) => index + 55))('restores the exact stored %s F after a level increase and decrease', value => {
+  const onChange = vi.fn();
+  render(<TemperatureStepper value={ value } format="level" label="Temperature" disabled={ false } onChange={ onChange }/>);
+  fireEvent.click(screen.getByRole('button', { name: 'Increase temperature' }));
+  fireEvent.keyDown(screen.getByRole('spinbutton'), { key: 'ArrowDown' });
+  expect(onChange).toHaveBeenLastCalledWith(value);
 });

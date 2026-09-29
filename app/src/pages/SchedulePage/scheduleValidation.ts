@@ -21,10 +21,18 @@ export function temperatureInPowerWindow(time: string, power: DailySchedule['pow
   return Number.isFinite(offset) && offset > 0 && offset < end;
 }
 
+export function validateSchedule(schedule: DailySchedule | undefined) {
+  const parsed = DailyScheduleSchema.safeParse(schedule);
+  if (!parsed.success) return { invalidTimes: 0, schemaIssues: parsed.error.issues };
+  const validSchedule = parsed.data;
+  const alarms = validSchedule.alarms.length ? validSchedule.alarms : [validSchedule.alarm];
+  const invalidTimes = !validSchedule.power.enabled ? 0
+    : alarms.filter(alarm => alarm.enabled && !timeInPowerWindow(alarm.time, validSchedule.power)).length
+      + Object.keys(validSchedule.temperatures).filter(time => !temperatureInPowerWindow(time, validSchedule.power)).length;
+  return { invalidTimes, schemaIssues: [] };
+}
+
 export function scheduleIsValid(schedule: DailySchedule | undefined): boolean {
-  if (!schedule || !DailyScheduleSchema.safeParse(schedule).success) return false;
-  if (!schedule.power.enabled) return true;
-  const alarms = schedule.alarms.length ? schedule.alarms : [schedule.alarm];
-  return alarms.every(alarm => !alarm.enabled || timeInPowerWindow(alarm.time, schedule.power))
-    && Object.keys(schedule.temperatures).every(time => temperatureInPowerWindow(time, schedule.power));
+  const { invalidTimes, schemaIssues } = validateSchedule(schedule);
+  return invalidTimes === 0 && schemaIssues.length === 0;
 }

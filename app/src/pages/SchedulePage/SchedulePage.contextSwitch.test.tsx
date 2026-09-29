@@ -88,7 +88,7 @@ describe('Apply to other days save targeting (full page)', () => {
 
     // Expand the accordion and check the target day.
     await user.click(screen.getByText('Apply settings to other days'));
-    const checkbox = await screen.findByRole('checkbox', { name: targetLabel });
+    const checkbox = await screen.findByRole('button', { name: targetLabel });
     await user.click(checkbox);
 
     const save = await screen.findByRole('button', { name: 'Save' });

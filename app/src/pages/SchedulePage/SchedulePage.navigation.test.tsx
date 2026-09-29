@@ -136,6 +136,6 @@ it.each(['left', 'right'] as const)('preserves newer %s side edits when an earli
   finishSave();
   await waitFor(() => expect(useAppStore.getState().isUpdating).toBe(false), { timeout: 3000 });
   expect(useScheduleStore.getState().selectedDays.saturday).toBe(true);
-  expect(screen.getByRole('status')).toHaveTextContent(`${side === 'left' ? 'Left' : 'Right'} side`);
+  expect(screen.getByRole('status')).toHaveTextContent(side === 'left' ? 'Alex' : 'Sam');
   expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
 });

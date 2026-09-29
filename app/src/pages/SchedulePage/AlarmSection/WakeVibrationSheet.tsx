@@ -19,7 +19,7 @@ export default function WakeVibrationSheet({ open, onClose }: { open: boolean; o
     sx={ { '& .MuiDialog-container': { alignItems: 'flex-end' },
       '& .MuiDialog-paper': { m: 0, width: '100%', borderRadius: '20px 20px 0 0' } } }>
     <DialogTitle id="wake-vibration-title">Wake-up vibration</DialogTitle>
-    <DialogContent><Stack spacing={ 3 } sx={ { pt: 1 } }>
+    <DialogContent><Stack spacing={ 2 } sx={ { pt: 1 } }>
       <TextField
         select
         label="Pattern"
@@ -28,7 +28,7 @@ export default function WakeVibrationSheet({ open, onClose }: { open: boolean; o
         onChange={ event => store.updateSelectedAlarm({ vibrationPattern: event.target.value as 'rise' | 'double' }) }>
         <MenuItem value="rise">Builds up</MenuItem><MenuItem value="double">Double pulse</MenuItem>
       </TextField>
-      <Box sx={ { px: 1 } }><Typography id="vibration-strength">Strength { alarm.vibrationIntensity } of 100</Typography>
+      <Box><Typography id="vibration-strength">Strength { alarm.vibrationIntensity } of 100</Typography>
         <Slider
           aria-labelledby="vibration-strength"
           min={ 1 }
@@ -45,8 +45,10 @@ export default function WakeVibrationSheet({ open, onClose }: { open: boolean; o
         { durations.map(duration => <MenuItem key={ duration } value={ duration }>{ duration % 60 === 0 && duration > 0
           ? `${duration / 60} ${duration === 60 ? 'minute' : 'minutes'}` : `${duration} seconds` }</MenuItem>) }
       </TextField>
-      <AlarmTest/>
-      <Button onClick={ onClose }>Done</Button>
+      <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 } }>
+        <AlarmTest/>
+        <Button onClick={ onClose }>Done</Button>
+      </Box>
     </Stack></DialogContent>
   </Dialog>;
 }

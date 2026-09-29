@@ -1,4 +1,4 @@
-import { Box, Paper, Tab, Tabs } from '@mui/material';
+import { Box, Tab, Tabs } from '@mui/material';
 import { useScheduleStore } from './scheduleStore.tsx';
 import { useAppStore } from '@state/appStore.tsx';
 import { LOWERCASE_DAYS } from './days.ts';
@@ -10,7 +10,7 @@ export default function DayTabs({ beforeDayChange }: { beforeDayChange?: (day: n
   const { isUpdating } = useAppStore();
 
   return (
-    <Paper sx={ { width: { xs: 'calc(100% + 32px)', sm: '100%' }, mx: { xs: -2, sm: 0 } } }>
+    <Box sx={ { borderBottom: 1, borderColor: 'divider', width: { xs: 'calc(100% + 32px)', sm: '100%' }, mx: { xs: -2, sm: 0 } } }>
       <Tabs
         value={ selectedDayIndex || 0 }
         onChange={ (_, index: number) => { if (!beforeDayChange || beforeDayChange(index)) selectDay(index); } }
@@ -52,6 +52,6 @@ export default function DayTabs({ beforeDayChange }: { beforeDayChange?: (day: n
           />
         )) }
       </Tabs>
-    </Paper>
+    </Box>
   );
 }

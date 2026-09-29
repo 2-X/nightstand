@@ -3,9 +3,8 @@ import {
   AccordionSummary,
   Box,
   Button,
-  Checkbox,
-  FormControlLabel,
-  FormGroup,
+  ToggleButton,
+  AccordionDetails,
   Typography
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -13,7 +12,6 @@ import { AccordionExpanded } from './SchedulePage.types.ts';
 import { DayOfWeek } from '@api/schedulesSchema.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { useScheduleStore } from './scheduleStore';
-import EventRepeatIcon from '@mui/icons-material/EventRepeat';
 
 export const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -25,7 +23,6 @@ export default function ApplyToOtherDaysAccordion() {
     toggleSelectedDay,
     accordionExpanded,
     setAccordionExpanded,
-    selectedSchedule,
   } = useScheduleStore();
   const { isUpdating } = useAppStore();
 
@@ -58,44 +55,33 @@ export default function ApplyToOtherDaysAccordion() {
 
   return (
     <Accordion
-      sx={ { width: '100%', mt: -2 } }
+      sx={ { width: '100%' } }
       expanded={ accordionExpanded === ACCORDION_NAME }
       onChange={ () => setAccordionExpanded(ACCORDION_NAME) }
-      disabled={ !selectedSchedule?.power.enabled }
-
     >
       <AccordionSummary expandIcon={ <ExpandMoreIcon/> }>
-        <Typography sx={ { display: 'flex', alignItems: 'center', gap: 3 } }>
-          <EventRepeatIcon /> Apply settings to other days
-        </Typography>
+        <Typography component="span" variant="inherit">Apply settings to other days</Typography>
       </AccordionSummary>
-      <Box sx={ { mt: -2, p: 2 } }>
-        <Box sx={ { display: 'flex', gap: 1 } }>
-          <Button variant="contained" sx={ { mb: 1 } } onClick={ setWeekdays } >Weekdays</Button>
-          <Button variant="contained" sx={ { mb: 1 } } onClick={ setWeekends }>Weekends</Button>
-          <Button variant="contained" sx={ { mb: 1 } } onClick={ setEveryday }>Everyday</Button>
+      <AccordionDetails>
+        <Box sx={ { display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 } }>
+          <Button onClick={ setWeekdays }>Weekdays</Button>
+          <Button onClick={ setWeekends }>Weekends</Button>
+          <Button onClick={ setEveryday }>Every day</Button>
         </Box>
-        <FormGroup>
-          {
-            daysOfWeek.map((day) => {
-              const lowerCaseDay = day.toLowerCase() as DayOfWeek;
-              return (
-                <FormControlLabel
-                  key={ day }
-                  control={
-                    <Checkbox
-                      disabled={ isUpdating }
-                      checked={ selectedDays[lowerCaseDay] }
-                      onChange={ () => toggleSelectedDay(lowerCaseDay) }
-                    />
-                  }
-                  label={ day }
-                />
-              );
-            })
-          }
-        </FormGroup>
-      </Box>
+        <Box role="group" aria-label="Apply to days" sx={ { display: 'flex', flexWrap: 'wrap', gap: 1 } }>
+          { daysOfWeek.map(day => {
+            const lowerCaseDay = day.toLowerCase() as DayOfWeek;
+            return <ToggleButton
+              key={ day }
+              value={ lowerCaseDay }
+              aria-label={ day }
+              selected={ selectedDays[lowerCaseDay] }
+              disabled={ isUpdating }
+              onChange={ () => toggleSelectedDay(lowerCaseDay) }
+              sx={ { minWidth: 44, height: 44, px: 1, borderRadius: '999px' } }>{ day.slice(0, 3) }</ToggleButton>;
+          }) }
+        </Box>
+      </AccordionDetails>
     </Accordion>
   );
 }

@@ -1,3 +1,4 @@
+import SectionHeading from '@components/SectionHeading';
 import moment from 'moment-timezone';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Alert, Box, Button, FormControlLabel, IconButton, MenuItem, Paper, Stack, Switch, TextField, Typography } from '@mui/material';
@@ -24,7 +25,9 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
   const rowKeys = useRef(new Map<string, number>());
   const nextKey = useRef(0);
   const focusTime = useRef<string | undefined>(undefined);
-  const [editing, setEditing] = useState<{ order: number[]; wake: number[]; wakeTime?: string } | undefined>(undefined);
+  const [editing, setEditing] = useState<{
+    order: number[]; wake: number[]; afterWake: number[]; offsets: Record<number, number>; wakeTime?: string; powerOn: string;
+  } | undefined>(undefined);
   useEffect(() => {
     if (!store.changesPresent) {
       setCustomOff(false);
@@ -50,6 +53,7 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
   const wakeAlarm = alarms[wakeIndex];
   const wakeTimes = wakeTemperatureTimes(schedule, wakeAlarm?.time);
   const fullDay = schedule.power.on === schedule.power.off;
+  const nightMinutes = fullDay ? 1440 : minutesSincePowerOn(schedule.power.off, schedule.power.on);
   const orderedTimes = Object.keys(schedule.temperatures).sort((first, second) =>
     minutesSincePowerOn(first, schedule.power.on) - minutesSincePowerOn(second, schedule.power.on));
   for (const time of orderedTimes) if (!rowKeys.current.has(time)) rowKeys.current.set(time, nextKey.current++);
@@ -58,21 +62,38 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
     return index !== undefined && index >= 0 ? index : (editing?.order.length ?? 0) + orderedTimes.indexOf(time);
   };
   const times = editing ? [...orderedTimes].sort((first, second) => draftOrder(first) - draftOrder(second)) : orderedTimes;
-  // Keep draft placement stable only while the wake anchor stays unchanged.
-  const frozenWake = editing?.wakeTime === wakeAlarm?.time ? editing?.wake : undefined;
+  // Frozen offsets belong to both the bedtime and wake anchors.
+  const anchorsUnchanged = editing?.wakeTime === wakeAlarm?.time && editing?.powerOn === schedule.power.on;
+  const frozenWake = anchorsUnchanged ? editing?.wake : undefined;
   const isWakeTime = (time: string) => frozenWake
     ? frozenWake.includes(rowKeys.current.get(time)!) : wakeTimes.includes(time);
+  const isAfterWake = (time: string) => anchorsUnchanged
+    ? editing?.afterWake.includes(rowKeys.current.get(time)!) ?? false
+    : !!wakeAlarm && minutesSincePowerOn(time, schedule.power.on) >= minutesSincePowerOn(wakeAlarm.time, schedule.power.on);
+  const wakeOffset = (time: string) => (anchorsUnchanged
+    ? editing?.offsets[rowKeys.current.get(time)!] : undefined) ?? minutesSincePowerOn(time, schedule.power.on);
+  const orderedAlarms = alarms.map((alarm, index) => ({ alarm, index }))
+    .sort((first, second) => minutesSincePowerOn(first.alarm.time, schedule.power.on)
+      - minutesSincePowerOn(second.alarm.time, schedule.power.on));
+  const isNightTime = (time: string) => !isWakeTime(time) && !isAfterWake(time);
+  const timeHint = `Pick a time between ${moment(schedule.power.on, 'HH:mm').format('h:mm A')}`
+    + ` and ${moment(schedule.power.off, 'HH:mm').format('h:mm A')}.`;
+  const rowGrid = { display: 'grid', gridTemplateColumns: '145px 1fr 44px',
+    gridTemplateAreas: { xs: '"field . delete" "stepper stepper stepper"', sm: '"field stepper delete"' }, alignItems: 'center', gap: 1 };
   const delay = wakeAlarm ? relativeOffDelay(wakeAlarm.time, schedule.power.off) : undefined;
   const followDelay = rejectedDelay ?? delay;
 
   const freezeRows = () => setEditing(previous => {
     if (previous) {
-      if (previous.wakeTime === wakeAlarm?.time) return previous;
+      if (previous.wakeTime === wakeAlarm?.time && previous.powerOn === schedule.power.on) return previous;
     }
     return {
       order: previous?.order ?? times.map(value => rowKeys.current.get(value)!),
       wake: times.filter(isWakeTime).map(value => rowKeys.current.get(value)!),
+      afterWake: times.filter(isAfterWake).map(value => rowKeys.current.get(value)!),
+      offsets: Object.fromEntries(times.map(time => [rowKeys.current.get(time)!, wakeOffset(time)])),
       wakeTime: wakeAlarm?.time,
+      powerOn: schedule.power.on,
     };
   });
   const followWake = (time: string, minutes: number, power = schedule.power) => {
@@ -129,15 +150,15 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
       variant="outlined"
       data-testid="schedule-event"
       data-invalid={ invalid || undefined }
-      sx={ { p: 1.5, scrollMarginBlock: '100px' } }>
-      <Box sx={ { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1 } }>
+      sx={ { p: 2, scrollMarginBlock: '100px' } }>
+      <Box sx={ rowGrid }>
         { warmUp && wakeAlarm ? <TextField
           select
           size="small"
           label="Warm up"
           disabled={ disabled }
           value={ lead }
-          sx={ { minWidth: 145, flex: 1 } }
+          sx={ { width: 145, gridArea: 'field' } }
           onChange={ event => changeTemperatureTime(time, addMinutes(wakeAlarm.time, -Number(event.target.value))) }>
           { warmUpOptions.map(minutes => <MenuItem value={ minutes } key={ minutes }>{ minutes } min before</MenuItem>) }
         </TextField> : <TextField
@@ -148,41 +169,44 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
           value={ time }
           disabled={ disabled }
           error={ invalid }
-          sx={ { width: 145 } }
+          sx={ { width: 145, gridArea: 'field' } }
           InputLabelProps={ { shrink: true } }
           onChange={ event => changeTemperatureTime(time, event.target.value) }/> }
         <IconButton
           aria-label={ `Remove adjustment at ${time}` }
           disabled={ disabled }
-          sx={ { width: 48, height: 48 } }
+          sx={ { width: 44, height: 44, gridArea: 'delete' } }
           onClick={ () => removeTemperature(time) }><DeleteOutline/></IconButton>
-        <TemperatureStepper
+        <Box sx={ { gridArea: 'stepper', justifySelf: 'end' } }><TemperatureStepper
           value={ schedule.temperatures[time] }
           format={ format }
           label={ `Temperature at ${time}` }
           disabled={ disabled }
-          onChange={ temperature => { freezeRows(); store.updateSelectedTemperatures({ ...schedule.temperatures, [time]: temperature }); } }/>
+          onChange={ temperature => {
+            freezeRows();
+            store.updateSelectedTemperatures({ ...schedule.temperatures, [time]: temperature });
+          } }/></Box>
       </Box>
       { invalid && <Typography color="error" variant="caption">
         { time === schedule.power.off ? 'This change happens as the bed turns off, so it has no effect. Move it earlier or delete it.'
           : time === schedule.power.on ? 'This change happens as the bed turns on. Change the starting temperature or move it later.'
-            : 'Time must be inside the power-on and power-off window.' }
+            : timeHint }
       </Typography> }
     </Paper>;
   };
-  return <Stack spacing={ 3 } sx={ { width: '100%' } }>
+  return <Stack spacing={ 2 } sx={ { width: '100%' } }>
     { error && <Alert severity="error" onClose={ () => setError('') }>{ error }</Alert> }
     <Stack component="section" aria-labelledby="bedtime-heading" spacing={ 1 }>
-      <Typography component="h2" variant="h6" id="bedtime-heading">Bedtime</Typography>
-      <Paper id="schedule-bedtime" variant="outlined" data-testid="schedule-event" sx={ { p: 1.5 } }>
-        <Box sx={ { display: 'flex', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between', gap: 2 } }>
+      <SectionHeading id="bedtime-heading">Bedtime</SectionHeading>
+      <Paper id="schedule-bedtime" variant="outlined" data-testid="schedule-event" sx={ { p: 2 } }>
+        <Box sx={ rowGrid }>
           <TextField
             label="Turn on at"
             type="time"
             size="small"
             value={ schedule.power.on }
             disabled={ disabled }
-            sx={ { width: 145 } }
+            sx={ { width: 145, gridArea: 'field' } }
             InputLabelProps={ { shrink: true } }
             onChange={ event => {
               const on = event.target.value;
@@ -194,54 +218,59 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
                 if (nextWake) followWake(nextWake.time, rejectedDelay, { ...schedule.power, on });
               }
             } }/>
-          <TemperatureStepper
+          <Box sx={ { gridArea: 'stepper', justifySelf: 'end' } }><TemperatureStepper
             value={ schedule.power.onTemperature }
             format={ format }
             label="Bedtime temperature"
             disabled={ disabled }
-            onChange={ onTemperature => store.updateSelectedSchedule({ power: { onTemperature } }) }/>
+            onChange={ onTemperature => store.updateSelectedSchedule({ power: { onTemperature } }) }/></Box>
         </Box>
+        { nightMinutes > 16 * 60 && <Typography variant="body2" color="text.secondary" sx={ { mt: 1 } }>
+          This night is { Math.floor(nightMinutes / 60) } h{ nightMinutes % 60 ? ` ${nightMinutes % 60} m` : '' } long
+        </Typography> }
       </Paper>
     </Stack>
     <Stack component="section" aria-labelledby="night-heading" spacing={ 1 }>
-      <Typography component="h2" variant="h6" id="night-heading">Through the night</Typography>
-      { times.filter(time => !isWakeTime(time)).map(renderTemperature) }
-      { !times.some(time => !isWakeTime(time)) && <Typography variant="body2" color="text.secondary">
+      <SectionHeading id="night-heading">Through the night</SectionHeading>
+      { times.filter(isNightTime).map(renderTemperature) }
+      { !times.some(isNightTime) && <Typography variant="body2" color="text.secondary">
         Keep the bedtime temperature until wake-up.
       </Typography> }
-      <Button onClick={ addTemperature } disabled={ disabled } sx={ { alignSelf: 'flex-start', minHeight: 44 } }>Add temperature change</Button>
+      <Button onClick={ addTemperature } disabled={ disabled } sx={ { alignSelf: 'flex-start', px: 0 } }>Add temperature change</Button>
     </Stack>
     <Stack component="section" aria-labelledby="wake-heading" spacing={ 1 }>
-      <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 } }>
-        <Typography component="h2" variant="h6" id="wake-heading">{ wakeAlarm ? 'Wake up' : 'Get up' }</Typography>
-        { alarms.map((alarm, index) => <FormControlLabel
-          key={ index }
-          label={ alarms.length === 1 ? 'Alarm' : `Alarm ${index + 1}` }
-          sx={ { mr: 0 } }
-          control={ <Switch
-            checked={ alarm.enabled }
-            disabled={ disabled }
-            slotProps={ { input: { 'aria-label': `Enable alarm ${index + 1}` } } }
-            onChange={ event => { store.selectAlarm(index); store.updateSelectedAlarm({ enabled: event.target.checked }); } }/> }/>) }
-      </Box>
-      { alarms.map((alarm, index) => {
+      <SectionHeading id="wake-heading">{ wakeAlarm ? 'Wake up' : 'Get up' }</SectionHeading>
+      { times.filter(isWakeTime).map(renderTemperature) }
+      { orderedAlarms.flatMap(({ alarm, index }, alarmPosition) => {
         const invalid = schedule.power.enabled && alarm.enabled && !timeInPowerWindow(alarm.time, schedule.power);
-        return <Paper
-          key={ index }
+        const nextAlarm = orderedAlarms[alarmPosition + 1]?.alarm;
+        return [<Paper
+          key={ `alarm-${index}` }
           variant="outlined"
           data-testid="schedule-event"
           data-invalid={ invalid || undefined }
-          sx={ { p: 1.5, opacity: alarm.enabled ? 1 : 0.6 } }>
-          <Box sx={ { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 1 } }>
+          sx={ { p: 2, opacity: alarm.enabled ? 1 : 0.6 } }>
+          <FormControlLabel
+            label={ alarms.length === 1 ? 'Alarm' : `Alarm ${index + 1}` }
+            labelPlacement="start"
+            sx={ { m: 0, mb: 1, width: '100%', justifyContent: 'space-between' } }
+            control={ <Switch
+              checked={ alarm.enabled }
+              disabled={ disabled }
+              slotProps={ { input: { 'aria-label': `Enable alarm ${index + 1}` } } }
+              onChange={ event => { store.selectAlarm(index); store.updateSelectedAlarm({ enabled: event.target.checked }); } }/> }/>
+          <Box
+            sx={ { display: 'grid', gridTemplateColumns: '145px 1fr 44px',
+              gridTemplateAreas: '"field . delete"', alignItems: 'center', gap: 1 } }>
             <TextField
-              label="Alarm time"
+              label="Wake at"
               type="time"
               size="small"
               value={ alarm.time }
               disabled={ disabled }
               error={ invalid }
               InputLabelProps={ { shrink: true } }
-              sx={ { width: 145 } }
+              sx={ { width: 145, gridArea: 'field' } }
               onChange={ event => {
                 const time = event.target.value;
                 if (!time) return;
@@ -256,24 +285,27 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
             { alarms.length > 1 && <IconButton
               aria-label={ `Remove alarm ${index + 1}` }
               disabled={ disabled }
-              sx={ { width: 48, height: 48 } }
+              sx={ { width: 44, height: 44, gridArea: 'delete' } }
               onClick={ () => store.removeAlarm(index) }><DeleteOutline/></IconButton> }
           </Box>
-          { invalid && <Typography color="error" variant="caption">Time must be inside the power-on and power-off window.</Typography> }
+          { invalid && <Typography color="error" variant="caption">{ timeHint }</Typography> }
           { alarm.enabled && <Button
             fullWidth
             disabled={ disabled }
+            aria-label={ `Vibrate: ${alarm.vibrationPattern === 'rise' ? 'Builds up' : 'Double pulse'}, `
+              + `strength ${alarm.vibrationIntensity}, ${alarm.duration} seconds` }
             endIcon={ <ChevronRight/> }
-            sx={ { justifyContent: 'space-between', textAlign: 'left', minHeight: 48, mt: 1 } }
+            sx={ { justifyContent: 'space-between', textAlign: 'left', minHeight: 44, mt: 1, px: 0 } }
             onClick={ () => { store.selectAlarm(index); setSheetOpen(true); } }>
-            <span>Vibrate <Typography component="span" variant="body2" color="text.secondary">
-              { alarm.vibrationPattern === 'rise' ? 'Builds up' : 'Double pulse' }, strength { alarm.vibrationIntensity } of 100,
+            <Typography component="span" variant="body2" color="text.secondary">
+              { alarm.vibrationPattern === 'rise' ? 'Builds up' : 'Double pulse' }, strength { alarm.vibrationIntensity },
               { ' ' }<Box component="span" sx={ { whiteSpace: 'nowrap' } }>{ alarm.duration } s</Box>
-            </Typography></span>
+            </Typography>
           </Button> }
-        </Paper>;
+        </Paper>, ...times.filter(time => isAfterWake(time)
+          && wakeOffset(time) >= minutesSincePowerOn(alarm.time, schedule.power.on)
+          && (!nextAlarm || wakeOffset(time) < minutesSincePowerOn(nextAlarm.time, schedule.power.on))).map(renderTemperature)];
       }) }
-      { times.filter(isWakeTime).map(renderTemperature) }
       { wakeAlarm && !times.some(isWakeTime) && timeInPowerWindow(wakeAlarm.time, schedule.power)
         && minutesSincePowerOn(wakeAlarm.time, schedule.power.on) > 30 && <Button
         disabled={ disabled }
@@ -285,47 +317,53 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
           }
           const key = nextKey.current++;
           rowKeys.current.set(time, key);
-          setEditing(previous => previous ? { ...previous, order: [...previous.order, key], wake: [key], wakeTime: wakeAlarm.time } : previous);
+          setEditing(previous => previous ? {
+            ...previous, order: [...previous.order, key], wake: [key],
+            afterWake: times.filter(isAfterWake).map(value => rowKeys.current.get(value)!),
+            offsets: Object.fromEntries(times.map(value => [rowKeys.current.get(value)!, wakeOffset(value)])),
+            wakeTime: wakeAlarm.time, powerOn: schedule.power.on } : previous);
           focusTime.current = time;
           store.updateSelectedTemperatures({ ...schedule.temperatures, [time]: schedule.power.onTemperature });
         } }
-        sx={ { alignSelf: 'flex-start', minHeight: 44 } }>Add warm-up</Button> }
-      <Paper variant="outlined" data-testid="schedule-event" sx={ { p: 1.5 } }>
-        { wakeAlarm && <TextField
-          select
-          label="Turn off"
-          size="small"
-          fullWidth
-          disabled={ disabled }
-          value={ customOff || followDelay === undefined ? 'custom' : followDelay }
-          sx={ { mb: customOff || followDelay === undefined ? 2 : 0 } }
-          onChange={ event => {
-            const value = event.target.value;
-            setCustomOff(value === 'custom');
-            clearOffWarning();
-            if (value !== 'custom') followWake(wakeAlarm.time, Number(value));
-          } }>
-          <MenuItem value={ 0 }>At wake time</MenuItem><MenuItem value={ 15 }>15 min after</MenuItem>
-          <MenuItem value={ 30 }>30 min after</MenuItem><MenuItem value={ 60 }>1 hour after</MenuItem>
-          <MenuItem value="custom">At a set time</MenuItem>
-        </TextField> }
-        { (!wakeAlarm || customOff || followDelay === undefined) && <TextField
-          label="Turn off at"
-          type="time"
-          size="small"
-          value={ schedule.power.off }
-          disabled={ disabled }
-          InputLabelProps={ { shrink: true } }
-          sx={ { width: 145 } }
-          onChange={ event => {
-            if (!event.target.value) return;
-            clearOffWarning();
-            store.updateSelectedSchedule({ power: { off: event.target.value } });
-          } }/> }
-        { wakeAlarm && !customOff && followDelay !== undefined && <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={ { display: 'block', mt: 1 } }>Turns off at { moment(schedule.power.off, 'HH:mm').format('h:mm A') }</Typography> }
+        sx={ { alignSelf: 'flex-start', px: 0 } }>Add warm-up</Button> }
+      <Paper variant="outlined" data-testid="schedule-event" sx={ { p: 2 } }>
+        <Box sx={ { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2 } }>
+          { wakeAlarm && <TextField
+            select
+            label="Turn off"
+            size="small"
+            disabled={ disabled }
+            value={ customOff || followDelay === undefined ? 'custom' : followDelay }
+            sx={ { width: 145 } }
+            onChange={ event => {
+              const value = event.target.value;
+              setCustomOff(value === 'custom');
+              clearOffWarning();
+              if (value !== 'custom') followWake(wakeAlarm.time, Number(value));
+            } }>
+            <MenuItem value={ 0 }>At wake time</MenuItem><MenuItem value={ 15 }>15 min after</MenuItem>
+            <MenuItem value={ 30 }>30 min after</MenuItem><MenuItem value={ 60 }>1 hour after</MenuItem>
+            <MenuItem value="custom">At a set time</MenuItem>
+          </TextField> }
+          { (!wakeAlarm || customOff || followDelay === undefined) && <TextField
+            label={ wakeAlarm ? undefined : 'Turn off at' }
+            inputProps={ { 'aria-label': 'Turn off at' } }
+            type="time"
+            size="small"
+            value={ schedule.power.off }
+            disabled={ disabled }
+            InputLabelProps={ { shrink: true } }
+            sx={ { width: 145, gridArea: 'field' } }
+            onChange={ event => {
+              if (!event.target.value) return;
+              clearOffWarning();
+              store.updateSelectedSchedule({ power: { off: event.target.value } });
+            } }/> }
+          { wakeAlarm && !customOff && followDelay !== undefined && <Typography
+            variant="caption"
+            color="text.secondary"
+          >Turns off at { moment(schedule.power.off, 'HH:mm').format('h:mm A') }</Typography> }
+        </Box>
         { offWarning && <Typography variant="caption" color="error" sx={ { display: 'block', mt: 1 } }>
           Wake time is before bedtime, so turn off was not moved.
         </Typography> }
@@ -337,7 +375,7 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
       <Button
         onClick={ store.addAlarm }
         disabled={ disabled || alarms.length >= MAX_ALARMS_PER_DAY }
-        sx={ { alignSelf: 'flex-start', minHeight: 44 } }>Add alarm</Button>
+        sx={ { alignSelf: 'flex-start', px: 0 } }>Add alarm</Button>
     </Stack>
     <WakeVibrationSheet open={ sheetOpen } onClose={ () => setSheetOpen(false) }/>
   </Stack>;
