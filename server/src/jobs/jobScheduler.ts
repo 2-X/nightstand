@@ -61,8 +61,8 @@ async function rebuildJobs() {
     let failedDays = 0;
     SCHEDULE_SIDES.forEach(side => {
       SCHEDULE_DAYS.forEach(day => {
-        const schedule = schedulesData[side][day];
         try {
+          const schedule = schedulesData[side][day];
           schedulePowerOn(settingsData, side, day, schedule.power);
           schedulePowerOff(settingsData, side, day, schedule.power);
           scheduleTemperatures(settingsData, side, day, schedule.temperatures, schedule.power);

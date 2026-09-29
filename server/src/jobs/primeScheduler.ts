@@ -10,6 +10,7 @@ import settingsDB from '../db/settings.js';
 import serverStatus from '../serverStatus.js';
 import servicesDB from '../db/services.js';
 import reboot from './reboot.js';
+import { PrivilegedCommandError } from './privilegedCommand.js';
 
 
 const scheduleRebootJob = (onHour: number, onMinute: number, timeZone: TimeZone) => {
@@ -29,10 +30,14 @@ const scheduleRebootJob = (onHour: number, onMinute: number, timeZone: TimeZone)
         return;
       }
       logger.info(`Executing scheduled reboot job`);
-      reboot();
+      await reboot();
       serverStatus.status.alarmSchedule.status = 'healthy';
       serverStatus.status.alarmSchedule.message = '';
     } catch (error: unknown) {
+      if (error instanceof PrivilegedCommandError) {
+        logger.info(`Skipping daily reboot: ${error.message}`);
+        return;
+      }
       serverStatus.status.alarmSchedule.status = 'failed';
       const message = error instanceof Error ? error.message : String(error);
       serverStatus.status.alarmSchedule.message = message;

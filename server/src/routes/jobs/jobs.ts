@@ -43,7 +43,7 @@ const biometricsCalibrationRight = () => executeCalibrateSensors(
 );
 
 
-const JOB_MAP: Record<Job, () => void> = {
+const JOB_MAP: Record<Job, () => void | Promise<void>> = {
   analyzeSleepLeft,
   analyzeSleepRight,
   biometricsCalibrationLeft,
@@ -68,8 +68,7 @@ router.post('/jobs', async (req: Request, res: Response) => {
 
   try {
     for (const job of validationResult.data) {
-      if (job === 'update') await update();
-      else JOB_MAP[job]();
+      await JOB_MAP[job]();
     }
   } catch (error) {
     logger.error('Failed to start job', error);

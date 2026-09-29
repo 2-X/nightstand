@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 
 const calls: string[][] = [];
+const timeouts: number[] = [];
 let loadState = 'loaded';
 let denied = false;
 let startFailed = false;
@@ -16,8 +17,9 @@ mock.module('child_process', { namedExports: {
     queueMicrotask(() => child.emit('exit', startFailed ? 1 : 0));
     return child;
   },
-  execFile: (command: string, args: string[], _options: unknown, callback: (error: Error | null, stdout: string) => void) => {
+  execFile: (command: string, args: string[], options: { timeout: number }, callback: (error: Error | null, stdout: string) => void) => {
     calls.push([command, ...args]);
+    timeouts.push(options.timeout);
     if (command === '/bin/systemctl') {
       if (args.includes('--property=ActiveState')) callback(null, args.includes(activeUnit) ? 'active' : 'inactive');
       else if (holdLoadCheck) holdLoadCheck(() => callback(null, loadState));
@@ -26,6 +28,7 @@ mock.module('child_process', { namedExports: {
     else callback((denied || (startFailed && !args.includes('-l'))) ? new Error('denied') : null, '');
   },
 } });
+const { assertOperationsIdle } = await import('./privilegedCommand.js');
 const { triggerUpdateService } = await import('./update.js');
 const { triggerRollbackService } = await import('./rollback.js');
 const { triggerRevertToStockService } = await import('./revertToStock.js');
@@ -44,7 +47,7 @@ for (const [name, trigger] of [
     loadState = 'loaded'; denied = true;
     await assert.rejects(async () => trigger(), /successful update.*repair/i);
     denied = false; startFailed = true;
-    await assert.rejects(async () => trigger(), /Unable to start/);
+    await assert.rejects(async () => trigger(), name === 'biometrics' ? /Unable to stop and disable/ : /Unable to start/);
     startFailed = false;
   });
   it(`${name} checks exact sudo command before awaiting success`, async () => {
@@ -70,6 +73,7 @@ it('refuses overlapping local admissions until the first start is acknowledged',
   const first = triggerUpdateService();
   try {
     await assert.rejects(triggerRollbackService(), /already running/);
+    await assert.rejects(assertOperationsIdle(), /already running/);
   } finally {
     holdLoadCheck = undefined;
     release?.();
@@ -88,6 +92,7 @@ it('keeps admission locked until failed-start target cleanup finishes', async ()
   try {
     await cleanupEntered;
     await assert.rejects(triggerRollbackService(), /already running/);
+    await assert.rejects(assertOperationsIdle(), /already running/);
   } finally {
     finishCleanup?.();
     await rejected;
@@ -107,4 +112,13 @@ it('does not run target hooks when another operation is active', async () => {
     assert.equal(writes, 0);
     assert.equal(deletes, 0);
   } finally { activeUnit = ''; }
+});
+
+it('allows the synchronous biometrics stop longer than the systemd stop deadline', async () => {
+  calls.length = 0;
+  timeouts.length = 0;
+  await triggerBiometricsDisable();
+  const stopIndex = calls.findIndex(args => args[0] === 'sudo' && !args.includes('-l'));
+  assert.ok(timeouts[stopIndex] > 90_000);
+  assert.equal(timeouts[stopIndex], 120_000);
 });
