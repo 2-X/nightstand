@@ -5,7 +5,7 @@ import type { SleepRecord } from '@api/sleepSchema';
 import { useSleepStages } from '@api/sleepStages';
 import { useSleepScoreEnabled } from '@api/sleepScore';
 import { palette } from '@design/tokens';
-import { formatSleepDuration, nightDuration, recordForNight, SLEEP_GOAL_MIN_SECONDS, SLEEP_GOAL_MAX_SECONDS } from './sleepContext';
+import { formatSleepDuration, nightDuration, nightMarkHeight, recordForNight } from './sleepContext';
 import type { MissingNightState } from './MissingNightCard';
 
 type Props = {
@@ -48,8 +48,7 @@ function NightButton({ day, selected, record, disabled, onSelect, missingState }
         { !disabled && <Box
           component="span"
           sx={ {
-            height: duration === undefined ? 6 : Math.max(4, Math.min(40,
-              12 + (duration - SLEEP_GOAL_MIN_SECONDS) * 28 / (SLEEP_GOAL_MAX_SECONDS - SLEEP_GOAL_MIN_SECONDS))),
+            height: duration === undefined ? 6 : nightMarkHeight(duration),
             width: 12, borderRadius: '2px', border: `1px ${pending ? 'dashed' : 'solid'}`,
             borderColor: missingState === 'failed' ? palette.status.error : 'currentColor',
             bgcolor: duration === undefined || duration === 0 ? 'transparent' : palette.lamp,

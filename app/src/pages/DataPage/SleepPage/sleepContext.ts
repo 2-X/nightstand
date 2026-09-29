@@ -5,6 +5,10 @@ import type { SleepRecord } from '@api/sleepSchema';
 export const SLEEP_GOAL_MIN_SECONDS = 6.5 * 3600;
 export const SLEEP_GOAL_MAX_SECONDS = 9 * 3600;
 
+// Week-strip bar height in px: proportional from 0 up to the top of the goal range.
+export const nightMarkHeight = (seconds: number) =>
+  Math.round(4 + 36 * Math.min(1, Math.max(0, seconds) / SLEEP_GOAL_MAX_SECONDS));
+
 // Nights belong to their wake date in the Pod timezone. Weekly aggregates
 // filter the full recording history to these boundaries.
 export function recordsInWeek(records: SleepRecord[] | undefined, weekStart: moment.Moment, timeZone: string) {
