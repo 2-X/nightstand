@@ -105,7 +105,7 @@ def get_current_files(folder_path: str):
     # AND the local archive that hardlinks them before frank truncates its
     # rolling buffer (~75 min). Without the archive a daily analyze run
     # routinely sees only the last ~hour of data instead of the previous
-    # 12 h, missing most of the user's sleep. The archive lives at:
+    # day, missing most of the user's sleep. The archive lives at:
     #   /persistent/free-sleep-data/raw-archive/
     # populated by /home/dac/free-sleep/scripts/archive-raw.sh on a
     # systemd timer. Files in both locations point to the same inode (until
@@ -227,11 +227,9 @@ def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Si
                 if not decoded_data['type'] in load_raw_types:
                     continue
                 _delete_other_side(decoded_data, side, sensor_count)
+                record_time = datetime.fromtimestamp(decoded_data['ts'], timezone.utc)
                 if not checked_timespan:
-                    timestamp_start = datetime.fromtimestamp(
-                        decoded_data['ts'],
-                        timezone.utc
-                    )
+                    timestamp_start = record_time
                     timestamp_end = timestamp_start + timedelta(minutes=15)
                     if start_time <= timestamp_start <= end_time:
                         checked_timespan = True
@@ -242,13 +240,14 @@ def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Si
                             raw_data.close()
                             return
 
+                # A file spans ~15 minutes and can straddle either window edge.
+                if not start_time <= record_time <= end_time:
+                    continue
+
                 if decoded_data['type'] == 'piezo-dual':
                     load_piezo_row(decoded_data, side)
 
-                decoded_data['ts'] = datetime.fromtimestamp(
-                    decoded_data['ts'],
-                    timezone.utc
-                ).strftime("%Y-%m-%d %H:%M:%S")
+                decoded_data['ts'] = record_time.strftime("%Y-%m-%d %H:%M:%S")
                 data[decoded_data['type']].append(decoded_data)
 
             except EOFError:

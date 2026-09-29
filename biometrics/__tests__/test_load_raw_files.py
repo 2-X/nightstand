@@ -9,7 +9,11 @@ Run locally (needs cbor2, numpy, pandas, not part of the node CI):
     python3 -m pytest biometrics/__tests__/test_load_raw_files.py -v
 (also runs under plain unittest: python3 -m unittest discover ...)
 """
+import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
+
+import cbor2
 
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -26,7 +30,7 @@ from get_logger import get_logger, LOGGER_NAMES
 for _name in LOGGER_NAMES:
     get_logger(_name)
 
-from load_raw_files import _normalize_cap_sense2
+from load_raw_files import _decode_cbor_file, _normalize_cap_sense2
 
 
 def _cap_sense2_record():
@@ -67,6 +71,47 @@ class TestNormalizeCapSense2(unittest.TestCase):
         del record['left']['status']
         out = _normalize_cap_sense2(record)
         self.assertEqual(out['left']['status'], 'good')
+
+
+def _cap_sense_record(ts):
+    channel = {'out': 1.0, 'cen': 2.0, 'in': 3.0, 'status': 'good'}
+    return {'type': 'capSense', 'ts': ts, 'left': dict(channel), 'right': dict(channel)}
+
+
+class TestDecodeWindowTrim(unittest.TestCase):
+    """A RAW file covers ~15 minutes, so it can straddle either edge of the
+    requested window; samples outside the window must not be loaded."""
+
+    def setUp(self):
+        self.window_start = datetime(2026, 9, 28, 12, 0, 0, tzinfo=timezone.utc)
+        self.window_end = self.window_start + timedelta(hours=1)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def _write_file(self, first, minutes):
+        path = os.path.join(self.tmp.name, 'test.RAW')
+        with open(path, 'wb') as handle:
+            for seq in range(minutes):
+                ts = int((first + timedelta(minutes=seq)).timestamp())
+                handle.write(cbor2.dumps({'seq': seq, 'data': cbor2.dumps(_cap_sense_record(ts))}))
+        return path
+
+    def _load(self, path):
+        data = {'capSense': []}
+        _decode_cbor_file(path, data, self.window_start, self.window_end, 'left', 1)
+        return [row['ts'] for row in data['capSense']]
+
+    def test_file_starting_before_window_is_trimmed_to_start(self):
+        path = self._write_file(self.window_start - timedelta(minutes=5), 15)
+        loaded = self._load(path)
+        self.assertEqual(len(loaded), 10)
+        self.assertEqual(min(loaded), '2026-09-28 12:00:00')
+
+    def test_file_running_past_window_is_trimmed_to_end(self):
+        path = self._write_file(self.window_end - timedelta(minutes=5), 15)
+        loaded = self._load(path)
+        self.assertEqual(len(loaded), 6)
+        self.assertEqual(max(loaded), '2026-09-28 13:00:00')
 
 
 if __name__ == '__main__':

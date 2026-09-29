@@ -101,37 +101,41 @@ def insert_sleep_records(sleep_records: List[SleepRecord]):
       - times_exited_bed (int)
       - present_intervals (list of [start, end] datetime pairs)
       - not_present_intervals (list of [start, end] datetime pairs)
+
+    Existing records on the same side that overlap a new record are replaced,
+    so re-analyzing a night with a different window does not leave a second,
+    overlapping record behind. All changes commit together or not at all.
     """
+    if len(sleep_records) == 0:
+        logger.warning(f'No sleep records to insert, exiting...')
+        return
+    logger.info(f'Inserting {len(sleep_records)} sleep record(s) into {DB_FILE_PATH}...')
+    logger.info(json.dumps(sleep_records, indent=4, default=custom_serializer))
+
+    delete_query = """
+    DELETE FROM sleep_records
+    WHERE side = ? AND entered_bed_at < ? AND left_bed_at > ?;
+    """
+    insert_query = """
+    INSERT OR REPLACE INTO sleep_records (
+        side,
+        entered_bed_at,
+        left_bed_at,
+        sleep_period_seconds,
+        times_exited_bed,
+        present_intervals,
+        not_present_intervals
+    ) VALUES (?, ?, ?, ?, ?, ?, ?);
+    """
+
+    cursor = conn.cursor()
     try:
-        cursor = conn.cursor()
-
-        if len(sleep_records) == 0:
-            logger.warning(f'No sleep records to insert, exiting...')
-            return
-        else:
-            logger.info(f'Inserting {len(sleep_records)} sleep record(s) into {DB_FILE_PATH}...')
-            logger.info(json.dumps(sleep_records, indent=4, default=custom_serializer))
-
-        insert_query = """
-        INSERT OR IGNORE INTO sleep_records (
-            side,
-            entered_bed_at,
-            left_bed_at,
-            sleep_period_seconds,
-            times_exited_bed,
-            present_intervals,
-            not_present_intervals
-        ) VALUES (?, ?, ?, ?, ?, ?, ?);
-        """
-
-        # Convert records to tuples for insertion
-        values_to_insert = []
+        cursor.execute('BEGIN IMMEDIATE;')
+        replaced = 0
         for sleep_record in sleep_records:
             side = sleep_record['side']
             entered_bed_at = int(sleep_record['entered_bed_at'].timestamp())
             left_bed_at = int(sleep_record.get('left_bed_at').timestamp())
-            sleep_period_seconds = sleep_record.get('sleep_period_seconds', 0)
-            times_exited_bed = sleep_record.get('times_exited_bed', 0)
 
             # Encode intervals as JSON strings
             present_intervals_str = json.dumps([
@@ -141,21 +145,22 @@ def insert_sleep_records(sleep_records: List[SleepRecord]):
                 [int(start.timestamp()), int(end.timestamp())] for start, end in sleep_record.get('not_present_intervals', [])
             ])
 
-            # Prepare the data tuple
-            row_tuple = (
+            cursor.execute(delete_query, (side, left_bed_at, entered_bed_at))
+            replaced += cursor.rowcount
+            cursor.execute(insert_query, (
                 side,
                 entered_bed_at,
                 left_bed_at,
-                sleep_period_seconds,
-                times_exited_bed,
+                sleep_record.get('sleep_period_seconds', 0),
+                sleep_record.get('times_exited_bed', 0),
                 present_intervals_str,
-                not_present_intervals_str
-            )
-            values_to_insert.append(row_tuple)
-
-        cursor.executemany(insert_query, values_to_insert)
-        logger.info(f"Inserted {len(sleep_records)} record(s) into 'sleep_records' (ignoring duplicates).")
+                not_present_intervals_str,
+            ))
+        cursor.execute('COMMIT;')
+        logger.info(f"Inserted {len(sleep_records)} record(s) into 'sleep_records', replacing {replaced} overlapping.")
     except Exception as error:
+        if conn.in_transaction:
+            conn.rollback()
         logger.error(error)
     finally:
         cursor.close()
