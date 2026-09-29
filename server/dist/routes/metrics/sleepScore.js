@@ -4,6 +4,7 @@ import { prisma } from '../../db/prisma.js';
 import settingsDB from '../../db/settings.js';
 import servicesDB from '../../db/services.js';
 import { isSleepScoreActive } from './sleepScoreGuard.js';
+import { loadStageSummary } from './sleepStages.js';
 const router = express.Router();
 // --- Component scorers (each returns 0-100) ---
 function scoreDuration(seconds) {
@@ -42,8 +43,19 @@ function scoreRestingHr(minHr) {
 }
 function formatHours(seconds) {
     const h = Math.floor(seconds / 3600);
-    const m = Math.round((seconds % 3600) / 60);
-    return `${h}h ${m}m`;
+    const m = Math.floor((seconds % 3600) / 60);
+    return `${h}h${m ? ` ${m}m` : ''}`;
+}
+// Scores the same asleep time the stages headline shows, or time in bed when
+// vitals coverage is too sparse for the stages to say when sleep began.
+export function durationComponent(inBedSeconds, stages) {
+    const [seconds, label] = stages.lowCoverage ? [inBedSeconds, 'in bed'] : [stages.asleepSeconds, 'asleep'];
+    return {
+        score: scoreDuration(seconds),
+        weight: 0.4,
+        value: `${formatHours(seconds)} ${label}`,
+        available: true,
+    };
 }
 router.get('/sleep-score', async (req, res) => {
     const { side, startTime, endTime } = req.query;
@@ -81,17 +93,13 @@ router.get('/sleep-score', async (req, res) => {
         where: { ...vitalsQuery, hrv: { not: 0, lte: 120, gte: 30 } },
         _avg: { hrv: true },
     });
-    const durationSec = sleepRecord?.sleep_period_seconds ?? endUnix - startUnix;
+    const inBedSec = sleepRecord?.sleep_period_seconds ?? endUnix - startUnix;
+    const stages = await loadStageSummary(side, startUnix, endUnix);
     const exits = sleepRecord?.times_exited_bed ?? 0;
     const minHr = hrAgg._min.heart_rate ?? 0;
     const avgHrv = hrvAgg._avg.hrv ?? 0;
     const components = {
-        duration: {
-            score: scoreDuration(durationSec),
-            weight: 0.4,
-            value: formatHours(durationSec),
-            available: true,
-        },
+        duration: durationComponent(inBedSec, stages),
         continuity: {
             score: scoreContinuity(exits),
             weight: 0.3,

@@ -1,21 +1,12 @@
 import express from 'express';
-import moment from 'moment-timezone';
+import { parseMetricsQuery } from './metricsQuery.js';
 import { prisma } from '../../db/prisma.js';
 const router = express.Router();
 router.get('/vitals', async (req, res) => {
-    const { side, startTime, endTime } = req.query;
-    const query = {};
-    if (side)
-        query.side = side;
-    query.timestamp = {};
-    if (startTime) {
-        // @ts-ignore
-        query.timestamp.gte = moment(startTime).unix();
-    }
-    if (endTime) {
-        // @ts-ignore
-        query.timestamp.lte = moment(endTime).unix();
-    }
+    const range = parseMetricsQuery(req.query);
+    if (!range)
+        return res.status(400).json({ error: 'Invalid side, startTime or endTime' });
+    const query = { side: range.side, timestamp: { gte: range.start, lte: range.end } };
     // Use Prisma's generated type for the records
     const vitals = await prisma.vitals.findMany({
         where: query,
@@ -30,19 +21,10 @@ router.get('/vitals', async (req, res) => {
     res.json(vitals);
 });
 router.get('/vitals/summary', async (req, res) => {
-    const { side, startTime, endTime } = req.query;
-    const query = {};
-    if (side)
-        query.side = side;
-    query.timestamp = {};
-    if (startTime) {
-        // @ts-ignore
-        query.timestamp.gte = moment(startTime).unix();
-    }
-    if (endTime) {
-        // @ts-ignore
-        query.timestamp.lte = moment(endTime).unix();
-    }
+    const range = parseMetricsQuery(req.query);
+    if (!range)
+        return res.status(400).json({ error: 'Invalid side, startTime or endTime' });
+    const query = { side: range.side, timestamp: { gte: range.start, lte: range.end } };
     // Query: Min & Max Heart Rate
     const heartRateSummary = await prisma.vitals.aggregate({
         where: query,

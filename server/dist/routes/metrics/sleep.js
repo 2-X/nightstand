@@ -1,27 +1,18 @@
 import express from 'express';
-import moment from 'moment-timezone';
 import { sleepRecordSchema } from '../../db/sleepRecordsSchema.js';
 import { loadSleepRecords } from '../../db/loadSleepRecords.js';
 import { prisma } from '../../db/prisma.js';
+import { parseMetricsQuery } from './metricsQuery.js';
 const router = express.Router();
 router.get('/sleep', async (req, res) => {
-    const { startTime, endTime, side } = req.query;
+    const range = parseMetricsQuery(req.query);
+    if (!range)
+        return res.status(400).json({ error: 'Invalid side, startTime or endTime' });
     const query = {
-        entered_bed_at: {},
-        left_bed_at: {},
+        side: range.side,
+        left_bed_at: { gte: range.start },
+        entered_bed_at: { lte: range.end },
     };
-    if (side)
-        query.side = side;
-    if (startTime) {
-        query.left_bed_at = {
-            gte: moment(startTime).unix(),
-        };
-    }
-    if (endTime) {
-        query.entered_bed_at = {
-            lte: moment(endTime).unix(),
-        };
-    }
     const sleepRecords = await prisma.sleep_records.findMany({
         where: query,
         orderBy: { entered_bed_at: 'asc' },

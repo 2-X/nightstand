@@ -1,29 +1,17 @@
 import express from 'express';
-import moment from 'moment-timezone';
-import { loadMovementRecords } from '../../db/loadMovementRecords.js';
 import { prisma } from '../../db/prisma.js';
+import { parseMetricsQuery } from './metricsQuery.js';
 const router = express.Router();
 router.get('/movement', async (req, res) => {
-    const { startTime, endTime, side } = req.query;
-    const query = {
-        timestamp: {},
-    };
-    if (side)
-        query.side = side;
-    if (startTime) {
-        // @ts-expect-error
-        query.timestamp.gte = moment(startTime).unix();
-    }
-    if (endTime) {
-        // @ts-expect-error
-        query.timestamp.lte = moment(endTime).unix();
-    }
+    const query = parseMetricsQuery(req.query);
+    if (!query)
+        return res.status(400).json({ error: 'Invalid side, startTime or endTime' });
     const movementRecords = await prisma.movement.findMany({
-        where: query,
+        where: { side: query.side, timestamp: { gte: query.start, lte: query.end } },
         orderBy: { timestamp: 'asc' },
     });
-    const formattedRecords = await loadMovementRecords(movementRecords);
-    res.json(formattedRecords);
+    // Epoch seconds, as stored, matching the vitals route.
+    res.json(movementRecords);
 });
 export default router;
 //# sourceMappingURL=movement.js.map

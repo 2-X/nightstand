@@ -25,8 +25,8 @@ const router = express.Router();
 //
 // Approach (still no ML, fully deterministic):
 //   - baselineHR = 10th-percentile HR across the night = "deep sleep HR"
-//   - calmMoveThreshold = 50th percentile of bucket movement = "low restless"
-//   - sleep onset = first epoch where (HR ≤ baseline+5) AND (movement < calm)
+//   - calm movement = not restless (below the 85th percentile or at most 50)
+//   - sleep onset = first epoch where (HR ≤ baseline+5) AND calm movement
 //     stays true for ≥3 consecutive epochs (~15 min)
 //
 // Validation against polysomnography would require data we don't have, so
@@ -34,6 +34,9 @@ const router = express.Router();
 const BUCKET_SECONDS = 300;
 const SLEEP_HR_DELTA_BPM = 5;
 const ONSET_REQUIRED_CALM_BUCKETS = 3; // 15 min of sustained calm = real sleep
+// Below this share of buckets with a vitals row, onset/offset detection is
+// guessing, so the per-epoch stages are kept as-is and the night is flagged.
+const MIN_VITALS_COVERAGE = 0.6;
 function classifyStages(vitals, movements, periodStart, periodEnd) {
     // Build vitals lookup by 5-min bucket
     const vitalByBucket = new Map();
@@ -96,8 +99,9 @@ function classifyStages(vitals, movements, periodStart, periodEnd) {
         const br = v?.breathing_rate ?? null;
         const hrv = v?.hrv ?? null;
         const hrCalm = hr !== null && hr <= baselineHR + SLEEP_HR_DELTA_BPM;
-        const moveCalm = movement < calmMoveThreshold;
+        const moveCalm = !(movement >= calmMoveThreshold && movement > 50);
         const isCalm = hrCalm && moveCalm;
+        const isNeutral = hr === null && moveCalm;
         // HRV-driven signal (only meaningful when the per-night HRV spread is
         // reasonable - see hrvSpreadOk above). hrvLow is intentionally unused
         // for now: requiring it for DEEP eats too many epochs (produced 2-4%
@@ -137,7 +141,7 @@ function classifyStages(vitals, movements, periodStart, periodEnd) {
         }
         if (stage !== 'awake')
             lastClassifiedSleepStage = stage;
-        working.push({ bucket: b, movement, hr, br, hrv, isCalm, stage });
+        working.push({ bucket: b, movement, hr, br, hrv, isCalm, isNeutral, stage });
     }
     // Sleep-onset detection: first run of ≥ONSET_REQUIRED_CALM_BUCKETS consecutive
     // calm epochs. Until that point, the user was in bed but awake - relabel to
@@ -145,11 +149,16 @@ function classifyStages(vitals, movements, periodStart, periodEnd) {
     // pre-sleep period correctly.
     let onsetIdx = -1;
     let calmRun = 0;
+    let calmRunStart = -1;
     for (let i = 0; i < working.length; i++) {
+        if (working[i].isNeutral)
+            continue;
         if (working[i].isCalm) {
+            if (calmRun === 0)
+                calmRunStart = i;
             calmRun++;
             if (calmRun >= ONSET_REQUIRED_CALM_BUCKETS) {
-                onsetIdx = i - ONSET_REQUIRED_CALM_BUCKETS + 1;
+                onsetIdx = calmRunStart;
                 break;
             }
         }
@@ -173,71 +182,60 @@ function classifyStages(vitals, movements, periodStart, periodEnd) {
     const OFFSET_REQUIRED_SLEEP_BUCKETS = 10; // 50 min of continuous sleep
     let offsetIdx = working.length;
     let sleepRun = 0;
+    let sleepRunEnd = -1;
+    // Unknown buckets directly after the final sleep block stay asleep.
+    let unknownTailEnd = -1;
     for (let i = working.length - 1; i >= 0; i--) {
+        if (working[i].isNeutral) {
+            if (sleepRun === 0 && unknownTailEnd === -1)
+                unknownTailEnd = i;
+            continue;
+        }
         if (working[i].stage !== 'awake') {
+            if (sleepRun === 0)
+                sleepRunEnd = unknownTailEnd === -1 ? i : unknownTailEnd;
             sleepRun++;
             if (sleepRun >= OFFSET_REQUIRED_SLEEP_BUCKETS) {
                 // First epoch AFTER the sustained sleep block, walking forward.
-                offsetIdx = i + OFFSET_REQUIRED_SLEEP_BUCKETS;
+                offsetIdx = sleepRunEnd + 1;
                 break;
             }
         }
         else {
             sleepRun = 0;
+            unknownTailEnd = -1;
         }
     }
+    const covered = working.filter((w) => w.hr !== null).length;
+    const lowCoverage = working.length === 0 || covered / working.length < MIN_VITALS_COVERAGE;
     // If we never found a calm run, leave classifications as-is - the user
     // probably never properly slept (or vitals are too sparse to tell), and
     // the per-epoch heuristic is the best we have.
-    if (onsetIdx >= 0) {
+    if (onsetIdx >= 0 && !lowCoverage) {
         for (let i = 0; i < onsetIdx; i++)
             working[i].stage = 'awake';
         for (let i = offsetIdx; i < working.length; i++)
             working[i].stage = 'awake';
     }
-    return working.map((w) => ({
+    const epochs = working.map((w) => ({
         startUnix: w.bucket,
         endUnix: w.bucket + BUCKET_SECONDS,
         stage: w.stage,
     }));
+    return { epochs, lowCoverage };
 }
-router.get('/sleep-stages', async (req, res) => {
-    const { side, startTime, endTime } = req.query;
-    if (!side || !startTime || !endTime) {
-        return res.status(400).json({ error: 'side, startTime, endTime required' });
-    }
-    await settingsDB.read();
-    await servicesDB.read();
-    if (!isSleepScoreActive(settingsDB.data, servicesDB.data)) {
-        return res.json({
-            active: false,
-            epochs: [],
-            totals: { awake: 0, rem: 0, light: 0, deep: 0 },
-            percentages: { awake: 0, rem: 0, light: 0, deep: 0 },
-            totalSeconds: 0,
-        });
-    }
-    const startUnix = moment(startTime).unix();
-    const endUnix = moment(endTime).unix();
-    const vitalsQuery = {
-        side,
-        timestamp: { gte: startUnix, lte: endUnix },
+// The biometrics writer stores 0 when it had no HRV or breathing estimate.
+export function toStageVitals(row) {
+    return {
+        timestamp: row.timestamp,
+        heart_rate: row.heart_rate,
+        hrv: row.hrv || null,
+        breathing_rate: row.breathing_rate || null,
     };
-    const vitalsRaw = await prisma.vitals.findMany({
-        where: vitalsQuery,
-        orderBy: { timestamp: 'asc' },
-    });
-    const movements = await prisma.movement.findMany({
-        where: { side, timestamp: { gte: startUnix, lte: endUnix } },
-        orderBy: { timestamp: 'asc' },
-    });
-    // Bucket-snap + dedupe is now inside classifyStages.
-    const rawEpochs = classifyStages(vitalsRaw.map((v) => ({
-        timestamp: v.timestamp,
-        heart_rate: v.heart_rate,
-        hrv: v.hrv,
-        breathing_rate: v.breathing_rate,
-    })), movements.map((m) => ({ timestamp: m.timestamp, total_movement: m.total_movement })), startUnix, endUnix);
+}
+// Classify [startUnix, endUnix] and roll the epochs up into per-stage totals.
+export function summarizeStages(vitals, movements, startUnix, endUnix) {
+    const { epochs: rawEpochs, lowCoverage } = classifyStages(vitals, movements, startUnix, endUnix);
     // Clamp each epoch to the requested period AND drop epochs that fall
     // entirely outside it. Belt-and-suspenders - the SQL query already filters
     // by timestamp range, but the classifier extends each epoch by 300s so the
@@ -260,7 +258,43 @@ router.get('/sleep-stages', async (req, res) => {
         light: Math.round((totals.light / totalSeconds) * 100),
         deep: Math.round((totals.deep / totalSeconds) * 100),
     };
-    return res.json({ active: true, epochs, totals, percentages, totalSeconds });
+    return { epochs, totals, percentages, totalSeconds, asleepSeconds: totals.light + totals.rem + totals.deep, lowCoverage };
+}
+export async function loadStageSummary(side, startUnix, endUnix) {
+    const vitalsQuery = {
+        side,
+        timestamp: { gte: startUnix, lte: endUnix },
+    };
+    const vitalsRaw = await prisma.vitals.findMany({
+        where: vitalsQuery,
+        orderBy: { timestamp: 'asc' },
+    });
+    const movements = await prisma.movement.findMany({
+        where: { side, timestamp: { gte: startUnix, lte: endUnix } },
+        orderBy: { timestamp: 'asc' },
+    });
+    return summarizeStages(vitalsRaw.map(toStageVitals), movements.map((m) => ({ timestamp: m.timestamp, total_movement: m.total_movement })), startUnix, endUnix);
+}
+router.get('/sleep-stages', async (req, res) => {
+    const { side, startTime, endTime } = req.query;
+    if (!side || !startTime || !endTime) {
+        return res.status(400).json({ error: 'side, startTime, endTime required' });
+    }
+    await settingsDB.read();
+    await servicesDB.read();
+    if (!isSleepScoreActive(settingsDB.data, servicesDB.data)) {
+        return res.json({
+            active: false,
+            epochs: [],
+            totals: { awake: 0, rem: 0, light: 0, deep: 0 },
+            percentages: { awake: 0, rem: 0, light: 0, deep: 0 },
+            totalSeconds: 0,
+        });
+    }
+    const startUnix = moment(startTime).unix();
+    const endUnix = moment(endTime).unix();
+    const { epochs, totals, percentages, totalSeconds, lowCoverage } = await loadStageSummary(side, startUnix, endUnix);
+    return res.json({ active: true, epochs, totals, percentages, totalSeconds, lowCoverage });
 });
 export default router;
 //# sourceMappingURL=sleepStages.js.map

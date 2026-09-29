@@ -6,13 +6,77 @@ is a hard fork; for the history of the projects it descends from, see
 [jmew/free-sleep](https://github.com/jmew/free-sleep) and
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
 
-## [Unreleased]
+## [3.4.0] - 2026-09-29
 
 - Blocking internet access no longer leaves the firmware stuck on some Pod 3
   units. The firewall now refuses the firmware's cloud connection right away
   instead of silently ignoring it, which left the firmware waiting. Thanks to
   @sim- for tracking this down
   (https://github.com/LTimothy/nightstand/issues/1).
+
+- Reinstalling no longer loses recent sleep data. The installer deleted the
+  database's write-ahead file after stopping the biometrics service, which
+  could drop rows that were saved but not yet merged into the main file. It
+  now keeps that file, and the biometrics service closes the database cleanly
+  when it stops.
+
+- Database backups made by updates, the installer, `fs-reset-db` and
+  switching to upstream free-sleep now include the newest rows. They were
+  plain file copies taken while the services were running. Database backups
+  are kept apart from code backups, so several updates in a row no longer
+  rotate out the last database copy.
+
+- Settings > Features and Sleep status no longer say "Could not load" after
+  switching from upstream free-sleep or jmew's fork, and switching to
+  upstream no longer shows "Still not done" after it has finished. The app
+  now ignores response fields it does not recognize, which also keeps it
+  working after rolling back from a newer version.
+
+- Switching to upstream free-sleep converts schedules and settings to a shape
+  upstream can save. Each day keeps its first enabled alarm, alarm length is
+  capped at 180 seconds, the level temperature display becomes Fahrenheit,
+  and base control taps become alarm dismiss. The switch also stops the
+  sensor recording archive, leaving saved recordings in place, and installs a
+  Python package that upstream's biometrics needs. The guide lists what stays
+  on the Pod afterwards.
+
+- Roll back, switching to upstream and turning biometrics off check that the
+  Pod can run them before starting, and say what to do if it cannot. Only one
+  update, rollback or switch runs at a time, and restarts wait for it to
+  finish.
+
+- Downgrading from this version to 3.2.2 or older keeps archived sensor
+  recordings. Those versions delete recordings older than 36 hours; the
+  updater now gives them your retention setting, up to 14 days, since they
+  do not check free space. The downgrade dialog lists what the older version
+  will not do. Rolling back to 3.0.0 keeps the archive running.
+
+- A failed database migration no longer leaves updates stuck. New migrations
+  run as a single transaction, and the updater clears a failed one and
+  retries once when that is safe. A Pod on 3.0.x whose update skipped a
+  database step now shows it in System status, with Reinstall as the fix.
+
+- Settings and schedules brought over from upstream keep their tap actions
+  and disabled alarms instead of being reset to defaults. A day saved on
+  3.0.0 with more than ten alarms loads and can be edited; new alarms are
+  still limited to ten per day.
+
+- The sleep, vitals and movement endpoints answer a malformed `startTime`,
+  `endTime` or `side` with a 400 error instead of a server error. Movement
+  records return their times as epoch seconds, as the API documentation
+  describes.
+
+- Sleep records start when you got into bed. The nightly analysis began at
+  the first sensor file after midnight, so most nights were recorded as
+  starting around 11:45 PM whatever the real bedtime. It now covers the whole
+  day and only the requested window, and analyzing a night again replaces its
+  earlier record instead of adding a second one.
+
+- Sleep stages hold up better when the bed sensors lose track of a still
+  sleeper. Minutes without heart readings no longer delay the estimated start
+  of sleep or end it early, and a night with too few readings shows time in
+  bed rather than a stage estimate. The sleep score's duration now uses the
+  same figure as the time asleep shown above it.
 
 - Alarms minutes apart no longer suppress one another. Overnight temperature
   changes, alarm replacements and sleep analysis use the full night window.
