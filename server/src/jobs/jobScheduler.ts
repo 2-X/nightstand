@@ -8,7 +8,7 @@ import logger from '../logger.js';
 import schedulesDB from '../db/schedules.js';
 import serverStatus from '../serverStatus.js';
 import settingsDB from '../db/settings.js';
-import { DayOfWeek, Side } from '../db/schedulesSchema.js';
+import { SCHEDULE_SIDES, SCHEDULE_DAYS } from '../db/scheduleKeys.js';
 import { isSystemDateValid } from './isSystemDateValid.js';
 import { scheduleAlarm, scheduleAlarmOverride, scheduleOneOffAlarm } from './alarmScheduler.js';
 import { schedulePowerOff, schedulePowerOn, scheduleSleepAnalysis } from './powerScheduler.js';
@@ -16,15 +16,11 @@ import { schedulePrimingRebootAndCalibration } from './primeScheduler.js';
 import { scheduleTemperatures } from './temperatureScheduler.js';
 import eventBus from '../events/eventBus.js';
 import { emitJobEvent } from './jobEvents.js';
-import { isServicesDbChange } from './isServicesDbChange.js';
+import { isScheduleDbChange } from './isScheduleDbChange.js';
 
 
-async function setupJobs() {
+async function rebuildJobs() {
   try {
-    if (serverStatus.status.jobs.status === 'started') {
-      logger.debug('Job setup already running, skipping duplicate execution.');
-      return;
-    }
     serverStatus.status.jobs.status = 'started';
 
 
@@ -63,13 +59,14 @@ async function setupJobs() {
     // with no power, temperature or alarm jobs at all until something else
     // triggers a reschedule. Skip the bad day and keep the rest.
     let failedDays = 0;
-    Object.entries(schedulesData).forEach(([side, sideSchedule]) => {
-      Object.entries(sideSchedule).forEach(([day, schedule]) => {
+    SCHEDULE_SIDES.forEach(side => {
+      SCHEDULE_DAYS.forEach(day => {
+        const schedule = schedulesData[side][day];
         try {
-          schedulePowerOn(settingsData, side as Side, day as DayOfWeek, schedule.power);
-          schedulePowerOff(settingsData, side as Side, day as DayOfWeek, schedule.power);
-          scheduleTemperatures(settingsData, side as Side, day as DayOfWeek, schedule.temperatures, schedule.power);
-          scheduleAlarm(settingsData, side as Side, day as DayOfWeek, schedule);
+          schedulePowerOn(settingsData, side, day, schedule.power);
+          schedulePowerOff(settingsData, side, day, schedule.power);
+          scheduleTemperatures(settingsData, side, day, schedule.temperatures, schedule.power);
+          scheduleAlarm(settingsData, side, day, schedule);
         } catch (error: unknown) {
           failedDays += 1;
           const message = error instanceof Error ? error.message : String(error);
@@ -105,6 +102,24 @@ async function setupJobs() {
     serverStatus.status.jobs.message = message;
     emitJobEvent({ jobName: 'setupJobs', status: 'fail', message });
     eventBus.emit('service-health', { jobs: serverStatus.status.jobs });
+  }
+}
+
+let setupRunning = false;
+let setupRequested = false;
+
+// Coalesce changes during a rebuild, then read the latest files in another pass.
+async function setupJobs() {
+  setupRequested = true;
+  if (setupRunning) return;
+  setupRunning = true;
+  try {
+    do {
+      setupRequested = false;
+      await rebuildJobs();
+    } while (setupRequested);
+  } finally {
+    setupRunning = false;
   }
 }
 
@@ -146,10 +161,8 @@ function waitForValidDateAndSetupJobs() {
 // Monitor the JSON file and refresh jobs on change
 chokidar.watch(config.lowDbFolder).on('change', (changedPath) => {
   const fileName = path.basename(changedPath);
-  if (isServicesDbChange(fileName)) {
-    // servicesDB.json changes constantly (job status pings, sensor temps) and
-    // never needs a reschedule, logging this no-op at info drowned out the
-    // rare, actually-interesting reschedules in the production log.
+  if (!isScheduleDbChange(fileName)) {
+    // Only settings and schedules affect these jobs. Future databases do not.
     logger.debug(`Skipping restarting jobs for DB change: ${fileName}`);
     return;
   } else {

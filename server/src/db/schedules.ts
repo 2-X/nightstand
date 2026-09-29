@@ -6,6 +6,7 @@ import { JSONFile } from 'lowdb/node';
 import { DailySchedule, Schedules, SideSchedule } from './schedulesSchema.js';
 import { dailyAlarmSchedules } from './scheduleAlarms.js';
 import config from '../config.js';
+import { SCHEDULE_SIDES, SCHEDULE_DAYS } from './scheduleKeys.js';
 
 
 const defaultDailySchedule: DailySchedule = {
@@ -47,10 +48,11 @@ const schedulesDB = new Low<Schedules>(file, defaultData);
 await schedulesDB.read();
 // Allows us to add default values to the schedules if users have existing schedulesDB.json data
 schedulesDB.data = _.merge({}, defaultData, schedulesDB.data);
-for (const sideSchedule of Object.values(schedulesDB.data)) {
-  for (const dailySchedule of Object.values(sideSchedule)) {
+for (const side of SCHEDULE_SIDES) {
+  for (const day of SCHEDULE_DAYS) {
+    const dailySchedule = schedulesDB.data[side][day];
     dailySchedule.alarms = dailyAlarmSchedules(dailySchedule);
-    dailySchedule.alarm = dailySchedule.alarms[0] ?? defaultDailySchedule.alarm;
+    dailySchedule.alarm = dailySchedule.alarms[0] ?? dailySchedule.alarm;
   }
 }
 await schedulesDB.write();

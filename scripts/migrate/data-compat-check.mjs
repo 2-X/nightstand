@@ -7,7 +7,7 @@
 // what would happen, split into two categories:
 //
 //   - harmless: extra fields from the other fork that we don't recognize,
-//     these get silently dropped, same as any settings write today.
+//     these are kept in storage and ignored by this version.
 //   - destructive: a field OUR schema also has, present with an
 //     incompatible shape, this is the one real cross-fork data risk, and
 //     is the only thing that fails this check.
@@ -22,6 +22,16 @@ import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { SettingsSchema } from '../../server/dist/db/settingsSchema.js';
 import { SchedulesSchema } from '../../server/dist/db/schedulesSchema.js';
+import { ServicesSchema } from '../../server/dist/db/servicesSchema.js';
+
+// Existing days can predate the write limit. The loader and app retain all alarms.
+const storedDay = SchedulesSchema.shape.left.shape.monday.extend({
+  alarms: SchedulesSchema.shape.left.shape.monday.shape.alarms.element.array(),
+});
+const storedSide = SchedulesSchema.shape.left.extend(Object.fromEntries(
+  Object.keys(SchedulesSchema.shape.left.shape).map(day => [day, storedDay]),
+));
+const StoredSchedulesSchema = SchedulesSchema.extend({ left: storedSide, right: storedSide });
 
 const LOWDB_DIR = process.env.FS_MIGRATE_LOWDB_DIR || '/persistent/free-sleep-data/lowdb';
 
@@ -46,7 +56,7 @@ function classify(schema, loaded, label) {
   }
   const result = schema.deepPartial().safeParse(loaded.data);
   if (result.success) {
-    console.log(`[${label}] compatible with this fork's schema, nothing would be dropped.`);
+    console.log(`[${label}] compatible with this fork's schema, existing values are kept; missing fields receive defaults.`);
     return [];
   }
   const harmless = [];
@@ -54,13 +64,13 @@ function classify(schema, loaded, label) {
   for (const issue of result.error.issues) {
     const at = issue.path.join('.') || '(root)';
     if (issue.code === 'unrecognized_keys') {
-      harmless.push(`${at}: extra field(s) from the other fork will be dropped: ${(issue.keys || []).join(', ')}`);
+      harmless.push(`${at}: extra field(s) from the other fork will be kept: ${(issue.keys || []).join(', ')}`);
     } else {
       destructive.push(`${at}: ${issue.message} (${issue.code})`);
     }
   }
   if (harmless.length) {
-    console.log(`[${label}] harmless, dropped silently, same as any settings write:`);
+    console.log(`[${label}] unknown fields kept in storage and ignored by this version:`);
     harmless.forEach(m => console.log(`  - ${m}`));
   }
   if (destructive.length) {
@@ -71,9 +81,12 @@ function classify(schema, loaded, label) {
 }
 
 console.log('Data-compatibility dry run (report-only, nothing is written):');
+console.log('Stored tap actions, tap amounts and disabled alarm preferences are kept. Only missing values receive defaults.');
+console.log('Enabled legacy alarms also populate the alarms list. Interrupted service jobs are marked failed at startup.');
 const destructive = [
   ...classify(SettingsSchema, loadJson('settingsDB.json'), 'settings'),
-  ...classify(SchedulesSchema, loadJson('schedulesDB.json'), 'schedules'),
+  ...classify(StoredSchedulesSchema, loadJson('schedulesDB.json'), 'schedules'),
+  ...classify(ServicesSchema, loadJson('servicesDB.json'), 'services'),
 ];
 
 if (destructive.length > 0) {
