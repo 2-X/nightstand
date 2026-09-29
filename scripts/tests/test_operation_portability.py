@@ -81,7 +81,7 @@ class PortabilityTests(unittest.TestCase):
         text = source('update.sh')
         start = text.index('if [ "$HEALTHY" = yes ]; then', text.index('# A pod serving HTTP'))
         body = text[start:text.index('# --- automatic rollback', start)]
-        for succeeds_at, expected, old, script_status in [(1, 1, False, 0), (2, 2, False, 0), (99, 2, False, 0), (1, 1, False, 1), (1, 1, True, 0)]:
+        for succeeds_at, expected, old, script_status, reset_missing in [(1, 1, False, 0, False), (2, 2, False, 0, False), (99, 2, False, 0, False), (1, 1, False, 1, False), (1, 1, True, 0, False), (1, 2, False, 0, True)]:
             with self.subTest(succeeds_at=succeeds_at), tempfile.TemporaryDirectory() as tmp:
                 (Path(tmp) / 'scripts').mkdir()
                 (Path(tmp) / 'scripts/block_internet_access.sh').write_text('iptables -A OUTPUT -j DROP\n' if old else 'iptables -A OUTPUT -p tcp --dport 1337 -j REJECT --reject-with tcp-reset\n')
@@ -89,16 +89,21 @@ class PortabilityTests(unittest.TestCase):
 HEALTHY=yes; LIVE="$1"; STAGED_VERSION=test; PREV=previous; BK=backup; calls=0
 say() { echo "$*"; }
 sh() { calls=$((calls+1)); echo apply >> "$LIVE/calls"; return 0; }
-iptables() { echo "$*" >> "$LIVE/checks"; [ "$calls" -ge "$2_SUCCESS" ]; }
+iptables() { echo "$*" >> "$LIVE/checks"; if [ "$RESET_MISSING" = yes ] && [[ "$*" == *1337* ]]; then return 1; fi; [ "$calls" -ge "$2_SUCCESS" ]; }
 '''.replace('"$2_SUCCESS"', str(succeeds_at)).replace('return 0;', 'return ' + str(script_status) + ';')
+                setup += '\nRESET_MISSING=' + ('yes' if reset_missing else 'no') + '\n'
                 setup += '\nIS_DOWNGRADE=' + ('yes' if old else 'no') + '\n'
                 result = subprocess.run(['/bin/bash', '-c', setup + body + '\necho rollback', 'fixture', tmp], text=True, capture_output=True)
                 self.assertEqual(len((Path(tmp) / 'calls').read_text().splitlines()), expected)
                 self.assertEqual('rollback\n' in result.stdout, succeeds_at == 99)
                 checks = (Path(tmp) / 'checks').read_text()
-                self.assertIn('-C OUTPUT -j DROP', checks)
+                self.assertIn('-w 5 -C OUTPUT -j DROP', checks)
+                if reset_missing:
+                    self.assertIn('WARNING:', result.stdout)
+                    self.assertIn('1337', result.stdout)
+                    self.assertIn('SUCCESS:', result.stdout)
                 if succeeds_at != 99 and not old:
-                    self.assertIn('-C OUTPUT -p tcp --dport 1337 -j REJECT --reject-with tcp-reset', checks)
+                    self.assertIn('-w 5 -C OUTPUT -p tcp --dport 1337 -j REJECT --reject-with tcp-reset', checks)
 
 
 if __name__ == '__main__':

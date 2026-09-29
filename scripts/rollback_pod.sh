@@ -23,7 +23,7 @@ if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
   if [ -z "${NIGHTSTAND_OPERATION_LOCK:-}" ] && [ ! -d /run/lock ]; then
     OPERATION_LOCK=/tmp/free-sleep-operation.lock
   fi
-  exec 9>"$OPERATION_LOCK" || fail "cannot open the update lock"
+  exec 9>>"$OPERATION_LOCK" || fail "cannot open the update lock"
   if command -v flock >/dev/null 2>&1; then
     flock -n 9 || fail "another update, rollback or switch is already running"
   else

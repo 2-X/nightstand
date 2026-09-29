@@ -42,11 +42,32 @@ say() { :; }
                 result, log = self.run_shell(helper + '\n' + call, '''
 restore_switch_data() { return 1; }
 STREAM_WAS_ACTIVE=active
+ARCHIVE_WAS_ACTIVE=active
 BK=fixture-backup
 ''')
                 self.assertEqual(result.returncode, 1)
                 self.assertIn('start free-sleep\n', log)
                 self.assertIn('restart free-sleep-stream\n', log)
+                self.assertIn('start free-sleep-archive-raw.timer\n', log)
+
+    def test_failed_restore_is_not_repeated_by_cleanup(self):
+        script = read('revert-to-stock.sh')
+        functions = section(script, 'DATA_CHANGED=no', '# Keep the descriptor')
+        result, log = self.run_shell(functions + '\n' + """
+DATA_CHANGED=yes
+ARCHIVE_WAS_ACTIVE=active
+STREAM_WAS_ACTIVE=active
+BK=fixture-backup
+STAGE=stage
+ZIP=zip
+cp() { echo restore-attempt >> "$FIXTURE/services"; return 1; }
+rm() { :; }
+trap cleanup EXIT
+restore_switch_data_or_fail "restore failed"
+""")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(log.count('restore-attempt'), 1)
+        self.assertIn('start free-sleep-archive-raw.timer', log)
 
     def test_install_backup_refusals_restart_stopped_services(self):
         script = read('install.sh')

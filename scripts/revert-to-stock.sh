@@ -24,9 +24,12 @@ NPM=/home/dac/.volta/bin/npm
 say() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
 DATA_CHANGED=no
+RESTORE_ATTEMPTED=no
 ARCHIVE_WAS_ACTIVE=inactive
 restore_switch_data() {
   [ "$DATA_CHANGED" = yes ] || return 0
+  [ "$RESTORE_ATTEMPTED" = no ] || return 0
+  RESTORE_ATTEMPTED=yes
   for name in settingsDB.json schedulesDB.json; do
     cp -p "$BK/lowdb/$name" "/persistent/free-sleep-data/lowdb/$name" || return 1
   done
@@ -39,6 +42,9 @@ restore_switch_data() {
 # A failed settings restore must not prevent recovery of the web UI.
 restore_switch_data_or_fail() {
   restore_switch_data || {
+    if [ "$ARCHIVE_WAS_ACTIVE" = active ]; then
+      systemctl start free-sleep-archive-raw.timer >/dev/null 2>&1 || true
+    fi
     systemctl start free-sleep || true
     if [ "$STREAM_WAS_ACTIVE" = active ]; then
       systemctl restart free-sleep-stream 2>/dev/null || true
@@ -66,7 +72,7 @@ if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
   if [ -z "${NIGHTSTAND_OPERATION_LOCK:-}" ] && [ ! -d /run/lock ]; then
     OPERATION_LOCK=/tmp/free-sleep-operation.lock
   fi
-  exec 9>"$OPERATION_LOCK" || fail "cannot open the update lock"
+  exec 9>>"$OPERATION_LOCK" || fail "cannot open the update lock"
   if command -v flock >/dev/null 2>&1; then
     flock -n 9 || fail "another update, rollback or switch is already running"
   else
@@ -121,7 +127,7 @@ if [ -x /home/dac/venv/bin/python ]; then
   # Upstream leaves this unpinned; keep our revert dependency reproducible.
   VENV_OWNER=$(stat -c '%U' /home/dac/venv) || fail "cannot identify the biometrics venv owner"
   PIP_RUNNER=(env)
-  if sudo -u "$VENV_OWNER" /home/dac/venv/bin/python -c 'import os,sysconfig; assert all(os.access(sysconfig.get_path(key), os.W_OK) for key in ("purelib", "platlib"))'; then
+  if sudo -u "$VENV_OWNER" /home/dac/venv/bin/python -c 'import os,sysconfig; assert all(os.access(sysconfig.get_path(key), os.W_OK) for key in ("purelib", "platlib"))' 2>/dev/null; then
     PIP_RUNNER=(sudo -u "$VENV_OWNER")
   else
     say "Venv owner cannot write packages; installing the upstream dependency as root"

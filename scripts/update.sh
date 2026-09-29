@@ -78,7 +78,7 @@ if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
   if [ -z "${NIGHTSTAND_OPERATION_LOCK:-}" ] && [ ! -d /run/lock ]; then
     OPERATION_LOCK=/tmp/free-sleep-operation.lock
   fi
-  exec 9>"$OPERATION_LOCK" || fail "cannot open the update lock"
+  exec 9>>"$OPERATION_LOCK" || fail "cannot open the update lock"
   if command -v flock >/dev/null 2>&1; then
     flock -n 9 || fail "another update, rollback or switch is already running"
   else
@@ -444,11 +444,16 @@ if [ "$HEALTHY" = yes ]; then
       ! grep -q -- '--dport 1337.*--reject-with tcp-reset' "$LIVE/scripts/block_internet_access.sh"; then
       EXPECT_RESET=no
     fi
-    if iptables -C OUTPUT -j DROP && {
-      [ "$EXPECT_RESET" = no ] || iptables -C OUTPUT -p tcp --dport 1337 -j REJECT --reject-with tcp-reset
-    }; then
-      say "SUCCESS: pod is serving v$STAGED_VERSION. Previous version kept at $PREV; backup at $BK"
-      exit 0
+    if iptables -w 5 -C OUTPUT -j DROP; then
+      if [ "$EXPECT_RESET" = no ] || iptables -w 5 -C OUTPUT -p tcp --dport 1337 -j REJECT --reject-with tcp-reset; then
+        say "SUCCESS: pod is serving v$STAGED_VERSION. Previous version kept at $PREV; backup at $BK"
+        exit 0
+      fi
+      if [ "$FIREWALL_ATTEMPT" = 2 ]; then
+        say "WARNING: port 1337 reset rule is unavailable; internet access remains blocked by OUTPUT DROP"
+        say "SUCCESS: pod is serving v$STAGED_VERSION. Previous version kept at $PREV; backup at $BK"
+        exit 0
+      fi
     fi
     say "Firewall rules missing after attempt $FIREWALL_ATTEMPT"
   done
