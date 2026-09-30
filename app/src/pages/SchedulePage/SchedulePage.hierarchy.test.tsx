@@ -22,7 +22,8 @@ it('groups editable events and marks the side/day draft scope', async () => {
   await waitFor(() => expect(screen.getAllByLabelText('Wake at')).toHaveLength(2));
   const events = screen.getAllByTestId('schedule-event');
   expect(events.map(row => row.querySelector('input[type="time"]')?.getAttribute('value')))
-    .toEqual(['21:00', '23:00', '01:00', '08:00', '09:00']);
+    .toEqual(['21:00', '23:00', '01:00', '08:00', undefined]);
+  expect(screen.getByText('Turns off at 9:00 AM')).toBeInTheDocument();
   fireEvent.change(screen.getAllByLabelText('Wake at')[1], { target: { value: '08:30' } });
   expect(screen.getByRole('status')).toHaveTextContent(/Unsaved.*Alex/);
   expect(screen.queryByRole('button', { name: 'Save one-time alarm' })).not.toBeInTheDocument();

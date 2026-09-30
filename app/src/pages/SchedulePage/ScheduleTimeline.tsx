@@ -6,7 +6,7 @@ import DeleteOutline from '@mui/icons-material/DeleteOutline';
 import ChevronRight from '@mui/icons-material/ChevronRight';
 import { useAppStore } from '@state/appStore';
 import { TemperatureFormat } from '@lib/temperatureConversions';
-import { MAX_ALARMS_PER_DAY } from '@api/schedulesSchema';
+import { AlarmSchedule, MAX_ALARMS_PER_DAY } from '@api/schedulesSchema';
 import { useScheduleStore } from './scheduleStore';
 import { minutesSincePowerOn, temperatureInPowerWindow, timeInPowerWindow } from './scheduleValidation';
 import { addMinutes, canFollowWake, nextTemperatureChange, relativeOffDelay, wakeTemperatureTimes } from './scheduleRoutine';
@@ -51,6 +51,10 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
     : earliest < 0 || minutesSincePowerOn(alarm.time, schedule.power.on) < minutesSincePowerOn(alarms[earliest].time, schedule.power.on)
       ? index : earliest, -1);
   const wakeAlarm = alarms[wakeIndex];
+  // Turn off follows the last alarm so the night never ends before one.
+  const offAlarm = alarms.reduce<AlarmSchedule | undefined>((latest, alarm) => !alarm.enabled ? latest
+    : !latest || minutesSincePowerOn(alarm.time, schedule.power.on) > minutesSincePowerOn(latest.time, schedule.power.on)
+      ? alarm : latest, undefined);
   const wakeTimes = wakeTemperatureTimes(schedule, wakeAlarm?.time);
   const fullDay = schedule.power.on === schedule.power.off;
   const nightMinutes = fullDay ? 1440 : minutesSincePowerOn(schedule.power.off, schedule.power.on);
@@ -78,9 +82,16 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
   const isNightTime = (time: string) => !isWakeTime(time) && !isAfterWake(time);
   const timeHint = `Pick a time between ${moment(schedule.power.on, 'HH:mm').format('h:mm A')}`
     + ` and ${moment(schedule.power.off, 'HH:mm').format('h:mm A')}.`;
+  const alarmHint = (time: string) => {
+    const afterOff = minutesSincePowerOn(time, schedule.power.off) <= minutesSincePowerOn(schedule.power.on, time);
+    return afterOff ? `Turn off is at ${moment(schedule.power.off, 'HH:mm').format('h:mm A')}, before this alarm.`
+      + ' Move Turn off later or pick an earlier time.' : timeHint;
+  };
   const rowGrid = { display: 'grid', gridTemplateColumns: '145px 1fr 44px',
     gridTemplateAreas: { xs: '"field . delete" "stepper stepper stepper"', sm: '"field stepper delete"' }, alignItems: 'center', gap: 1 };
-  const delay = wakeAlarm ? relativeOffDelay(wakeAlarm.time, schedule.power.off) : undefined;
+  const manyAlarms = alarms.filter(value => value.enabled).length > 1;
+  const afterLabel = manyAlarms ? ' last alarm' : '';
+  const delay = offAlarm ? relativeOffDelay(offAlarm.time, schedule.power.off) : undefined;
   const followDelay = rejectedDelay ?? delay;
 
   const freezeRows = () => setEditing(previous => {
@@ -102,6 +113,15 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
     setOffWarning(!allowed);
     setRejectedDelay(allowed ? undefined : minutes);
     if (allowed) store.updateSelectedSchedule({ power: { off } });
+  };
+  // Alarm changes move the last alarm; a following turn-off moves with it.
+  const refollowLastAlarm = () => {
+    if (customOff || followDelay === undefined) return;
+    const enabled = store.getEditedAlarms().filter(value => value.enabled);
+    if (!enabled.length) return;
+    const last = enabled.reduce((latest, value) => minutesSincePowerOn(value.time, schedule.power.on)
+      > minutesSincePowerOn(latest.time, schedule.power.on) ? value : latest);
+    followWake(last.time, followDelay);
   };
   const clearOffWarning = () => {
     setOffWarning(false);
@@ -213,9 +233,9 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
               if (!on) return;
               store.updateSelectedSchedule({ power: { on } });
               if (rejectedDelay !== undefined && !customOff) {
-                const nextWake = alarms.filter(alarm => alarm.enabled).sort((first, second) =>
-                  minutesSincePowerOn(first.time, on) - minutesSincePowerOn(second.time, on))[0];
-                if (nextWake) followWake(nextWake.time, rejectedDelay, { ...schedule.power, on });
+                const lastWake = alarms.filter(alarm => alarm.enabled).sort((first, second) =>
+                  minutesSincePowerOn(second.time, on) - minutesSincePowerOn(first.time, on))[0];
+                if (lastWake) followWake(lastWake.time, rejectedDelay, { ...schedule.power, on });
               }
             } }/>
           <Box sx={ { gridArea: 'stepper', justifySelf: 'end' } }><TemperatureStepper
@@ -258,7 +278,11 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
               checked={ alarm.enabled }
               disabled={ disabled }
               slotProps={ { input: { 'aria-label': `Enable alarm ${index + 1}` } } }
-              onChange={ event => { store.selectAlarm(index); store.updateSelectedAlarm({ enabled: event.target.checked }); } }/> }/>
+              onChange={ event => {
+                store.selectAlarm(index);
+                store.updateSelectedAlarm({ enabled: event.target.checked });
+                refollowLastAlarm();
+              } }/> }/>
           <Box
             sx={ { display: 'grid', gridTemplateColumns: '145px 1fr 44px',
               gridTemplateAreas: '"field . delete"', alignItems: 'center', gap: 1 } }>
@@ -277,18 +301,18 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
                 store.selectAlarm(index);
                 store.updateSelectedAlarm({ time });
                 if (alarm.enabled && !customOff && followDelay !== undefined) {
-                  const nextWake = store.getEditedAlarms().filter(value => value.enabled).sort((first, second) =>
-                    minutesSincePowerOn(first.time, schedule.power.on) - minutesSincePowerOn(second.time, schedule.power.on))[0];
-                  followWake(nextWake.time, followDelay);
+                  const lastWake = store.getEditedAlarms().filter(value => value.enabled).sort((first, second) =>
+                    minutesSincePowerOn(second.time, schedule.power.on) - minutesSincePowerOn(first.time, schedule.power.on))[0];
+                  followWake(lastWake.time, followDelay);
                 }
               } }/>
             { alarms.length > 1 && <IconButton
               aria-label={ `Remove alarm ${index + 1}` }
               disabled={ disabled }
               sx={ { width: 44, height: 44, gridArea: 'delete' } }
-              onClick={ () => store.removeAlarm(index) }><DeleteOutline/></IconButton> }
+              onClick={ () => { store.removeAlarm(index); refollowLastAlarm(); } }><DeleteOutline/></IconButton> }
           </Box>
-          { invalid && <Typography color="error" variant="caption">{ timeHint }</Typography> }
+          { invalid && <Typography color="error" variant="caption">{ alarmHint(alarm.time) }</Typography> }
           { alarm.enabled && <Button
             fullWidth
             disabled={ disabled }
@@ -328,25 +352,27 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
         sx={ { alignSelf: 'flex-start', px: 0 } }>Add warm-up</Button> }
       <Paper variant="outlined" data-testid="schedule-event" sx={ { p: 2 } }>
         <Box sx={ { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2 } }>
-          { wakeAlarm && <TextField
+          { offAlarm && <TextField
             select
             label="Turn off"
             size="small"
             disabled={ disabled }
             value={ customOff || followDelay === undefined ? 'custom' : followDelay }
-            sx={ { width: 145 } }
+            sx={ { width: manyAlarms ? 215 : 145 } }
             onChange={ event => {
               const value = event.target.value;
               setCustomOff(value === 'custom');
               clearOffWarning();
-              if (value !== 'custom') followWake(wakeAlarm.time, Number(value));
+              if (value !== 'custom') followWake(offAlarm.time, Number(value));
             } }>
-            <MenuItem value={ 0 }>At wake time</MenuItem><MenuItem value={ 15 }>15 min after</MenuItem>
-            <MenuItem value={ 30 }>30 min after</MenuItem><MenuItem value={ 60 }>1 hour after</MenuItem>
+            <MenuItem value={ 0 }>{ manyAlarms ? 'At last alarm' : 'At wake time' }</MenuItem>
+            <MenuItem value={ 15 }>15 min after{ afterLabel }</MenuItem>
+            <MenuItem value={ 30 }>30 min after{ afterLabel }</MenuItem>
+            <MenuItem value={ 60 }>1 hour after{ afterLabel }</MenuItem>
             <MenuItem value="custom">At a set time</MenuItem>
           </TextField> }
-          { (!wakeAlarm || customOff || followDelay === undefined) && <TextField
-            label={ wakeAlarm ? undefined : 'Turn off at' }
+          { (!offAlarm || customOff || followDelay === undefined) && <TextField
+            label={ offAlarm ? undefined : 'Turn off at' }
             inputProps={ { 'aria-label': 'Turn off at' } }
             type="time"
             size="small"
@@ -359,7 +385,7 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
               clearOffWarning();
               store.updateSelectedSchedule({ power: { off: event.target.value } });
             } }/> }
-          { wakeAlarm && !customOff && followDelay !== undefined && <Typography
+          { offAlarm && !customOff && followDelay !== undefined && <Typography
             variant="caption"
             color="text.secondary"
           >Turns off at { moment(schedule.power.off, 'HH:mm').format('h:mm A') }</Typography> }
@@ -377,7 +403,11 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
         Remove alarms until fewer than { MAX_ALARMS_PER_DAY } remain to add another.
       </Typography> }
       <Button
-        onClick={ store.addAlarm }
+        onClick={ () => {
+          store.addAlarm();
+          const added = store.getEditedAlarms().slice(-1)[0];
+          if (added && !customOff && followDelay !== undefined) followWake(added.time, followDelay);
+        } }
         disabled={ disabled || alarms.length >= MAX_ALARMS_PER_DAY }
         sx={ { alignSelf: 'flex-start', px: 0 } }>Add alarm</Button>
     </Stack>

@@ -58,7 +58,8 @@ it('keeps post-anchor changes between the alarms they follow', () => {
   const wake = screen.getByRole('region', { name: 'Wake up' });
   expect(within(wake).getAllByTestId('schedule-event')
     .map(row => row.querySelector('input[type="time"]')?.getAttribute('value')))
-    .toEqual(['23:00', '01:00', '08:00', '08:15', '08:30']);
+    .toEqual(['23:00', '01:00', '08:00', '08:15', undefined]);
+  expect(within(wake).getByText('Turns off at 8:30 AM')).toBeInTheDocument();
 });
 
 it('keeps a frozen post-alarm change visible after bedtime moves earlier', () => {

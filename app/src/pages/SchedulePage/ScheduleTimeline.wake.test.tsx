@@ -61,15 +61,16 @@ it('recomputes grouping after focus without a temperature edit when wake changes
   expect(screen.queryByLabelText('Warm up')).not.toBeInTheDocument();
 });
 
-it('anchors warm-up and turn-off to the earliest enabled alarm in the night', () => {
+it('anchors warm-up to the earliest enabled alarm and turn-off to the latest', () => {
   const store = useScheduleStore.getState();
   store.updateSelectedAlarm({ time: '08:00' });
+  store.updateSelectedSchedule({ power: { off: '08:30' } });
   store.addAlarm();
   store.updateSelectedAlarm({ enabled: true, time: '07:00' });
   render(<ScheduleTimeline format="level"/>);
   expect(screen.getByLabelText('Warm up')).toHaveTextContent('15 min before');
   fireEvent.change(screen.getByDisplayValue('07:00'), { target: { value: '07:15' } });
-  expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('07:45');
+  expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('08:30');
 });
 
 it.each(['21:15', '21:30'])('hides add warm-up when a thirty-minute lead for %s reaches bedtime', time => {
@@ -97,13 +98,14 @@ it('explains when an absolute turn-off matches a relative preset', () => {
   expect(screen.queryByText(/Matches .*wake/)).not.toBeInTheDocument();
 });
 
-it('follows the new earliest alarm when an edited wake passes another alarm', () => {
+it('follows the latest alarm when an edited wake passes another alarm', () => {
   const store = useScheduleStore.getState();
   store.addAlarm();
   store.updateSelectedAlarm({ enabled: true, time: '08:00' });
+  store.updateSelectedSchedule({ power: { off: '08:30' } });
   render(<ScheduleTimeline format="level"/>);
   fireEvent.change(screen.getAllByLabelText('Wake at')[0], { target: { value: '08:15' } });
-  expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('08:30');
+  expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('08:45');
 });
 
 it('keeps only one warm-up when another temperature change is added during a draft', () => {
@@ -199,5 +201,96 @@ it('shows every legacy alarm and explains the add limit while permitting edits',
   expect(screen.getByText(/12 alarms are saved/)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Add alarm' })).toBeDisabled();
   expect(useScheduleStore.getState().getEditedAlarms()).toHaveLength(12);
+  expect(useScheduleStore.getState().isValid()).toBe(true);
+});
+
+it('extends a following turn-off when a later alarm is added', () => {
+  render(<ScheduleTimeline format="level"/>);
+  fireEvent.click(screen.getByRole('button', { name: 'Add alarm' }));
+  expect(useScheduleStore.getState().getEditedAlarms()[1].time).toBe('07:30');
+  expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('08:00');
+  expect(useScheduleStore.getState().isValid()).toBe(true);
+  fireEvent.change(screen.getAllByLabelText('Wake at')[1], { target: { value: '07:45' } });
+  expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('08:15');
+  expect(useScheduleStore.getState().isValid()).toBe(true);
+  expect(screen.getByRole('combobox', { name: 'Turn off' })).toHaveTextContent('30 min after');
+});
+
+it('follows the latest alarm when the first alarm is moved past it', () => {
+  const store = useScheduleStore.getState();
+  store.addAlarm();
+  store.updateSelectedAlarm({ time: '07:30' });
+  store.updateSelectedSchedule({ power: { off: '08:00' } });
+  render(<ScheduleTimeline format="level"/>);
+  expect(screen.getByRole('combobox', { name: 'Turn off' })).toHaveTextContent('30 min after');
+  fireEvent.change(screen.getAllByLabelText('Wake at')[0], { target: { value: '08:00' } });
+  expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('08:30');
+  expect(useScheduleStore.getState().isValid()).toBe(true);
+});
+
+it('names Turn off when an alarm falls after a set turn-off time', () => {
+  render(<ScheduleTimeline format="level"/>);
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Turn off' }));
+  fireEvent.click(screen.getByRole('option', { name: 'At a set time' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add alarm' }));
+  fireEvent.change(screen.getAllByLabelText('Wake at')[1], { target: { value: '08:30' } });
+  expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('07:30');
+  expect(useScheduleStore.getState().isValid()).toBe(false);
+  expect(screen.getByText('Turn off is at 7:30 AM, before this alarm. Move Turn off later or pick an earlier time.')).toBeInTheDocument();
+});
+
+it('names the last alarm in the turn-off options once there is more than one', () => {
+  render(<ScheduleTimeline format="level"/>);
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Turn off' }));
+  expect(screen.getAllByRole('option').map(option => option.textContent))
+    .toEqual(['At wake time', '15 min after', '30 min after', '1 hour after', 'At a set time']);
+  fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' });
+  fireEvent.click(screen.getByRole('button', { name: 'Add alarm' }));
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Turn off' }));
+  expect(screen.getAllByRole('option').map(option => option.textContent))
+    .toEqual(['At last alarm', '15 min after last alarm', '30 min after last alarm', '1 hour after last alarm', 'At a set time']);
+});
+
+it('keeps a following turn-off anchored when the last alarm is switched off, on again or removed', () => {
+  render(<ScheduleTimeline format="level"/>);
+  fireEvent.click(screen.getByRole('button', { name: 'Add alarm' }));
+  expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('08:00');
+  fireEvent.click(screen.getByRole('switch', { name: 'Enable alarm 2' }));
+  expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('07:30');
+  expect(screen.getByRole('combobox', { name: 'Turn off' })).toHaveTextContent('30 min after');
+  expect(screen.queryByLabelText('Turn off at')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('switch', { name: 'Enable alarm 2' }));
+  expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('08:00');
+  fireEvent.click(screen.getByRole('button', { name: 'Remove alarm 2' }));
+  expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('07:30');
+  expect(screen.getByRole('combobox', { name: 'Turn off' })).toHaveTextContent('30 min after');
+});
+
+it('leaves a set turn-off time alone when an alarm is switched off', () => {
+  render(<ScheduleTimeline format="level"/>);
+  fireEvent.click(screen.getByRole('button', { name: 'Add alarm' }));
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Turn off' }));
+  fireEvent.click(screen.getByRole('option', { name: 'At a set time' }));
+  fireEvent.click(screen.getByRole('switch', { name: 'Enable alarm 2' }));
+  expect(useScheduleStore.getState().selectedSchedule?.power.off).toBe('08:00');
+});
+
+it('seeds a new alarm inside a full-day night', () => {
+  const store = useScheduleStore.getState();
+  store.updateSelectedSchedule({ power: { on: '21:00', off: '21:00' } });
+  store.updateSelectedAlarm({ time: '20:45' });
+  useScheduleStore.getState().addAlarm();
+  const alarms = useScheduleStore.getState().getEditedAlarms();
+  expect(alarms[1].time).toBe('20:59');
+  expect(useScheduleStore.getState().isValid()).toBe(true);
+});
+
+it('seeds a new alarm inside the night when turn-off is a set time', () => {
+  render(<ScheduleTimeline format="level"/>);
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Turn off' }));
+  fireEvent.click(screen.getByRole('option', { name: 'At a set time' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add alarm' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add alarm' }));
+  expect(useScheduleStore.getState().getEditedAlarms().map(alarm => alarm.time)).toEqual(['07:00', '07:30', '07:30']);
   expect(useScheduleStore.getState().isValid()).toBe(true);
 });

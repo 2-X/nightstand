@@ -6,9 +6,22 @@ import { AccordionExpanded } from './SchedulePage.types.ts';
 import { DaysSelected } from './SchedulePage.types.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { LOWERCASE_DAYS } from './days';
-import { scheduleIsValid } from './scheduleValidation';
+import { minutesSincePowerOn, scheduleIsValid } from './scheduleValidation';
+import { addMinutes } from './scheduleRoutine';
 
+const NEW_ALARM_GAP_MINUTES = 30;
 
+// A new alarm starts after the last enabled one, held inside the night: at turn-off, or the final minute of a full-day night.
+function nextAlarmTime(power: DailySchedule['power'], alarms: AlarmSchedule[]): string {
+  const enabled = alarms.filter(alarm => alarm.enabled);
+  const last = (enabled.length ? enabled : alarms).reduce((latest, alarm) =>
+    minutesSincePowerOn(alarm.time, power.on) > minutesSincePowerOn(latest.time, power.on) ? alarm : latest);
+  const fullDay = power.on === power.off;
+  const end = fullDay ? 1439 : minutesSincePowerOn(power.off, power.on);
+  const lastOffset = minutesSincePowerOn(last.time, power.on);
+  if (lastOffset > end) return last.time;
+  return addMinutes(power.on, Math.min(lastOffset + NEW_ALARM_GAP_MINUTES, end));
+}
 
 export const DEFAULT_DAYS_SELECTED: DaysSelected = {
   sunday: false,
@@ -161,7 +174,7 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
     if (!selectedSchedule) return;
     const alarms = _.cloneDeep(getEditedAlarms());
     if (alarms.length >= MAX_ALARMS_PER_DAY) return;
-    alarms.push({ ...alarms[alarms.length - 1], enabled: true });
+    alarms.push({ ...alarms[alarms.length - 1], enabled: true, time: nextAlarmTime(selectedSchedule.power, alarms) });
     set({
       selectedSchedule: {
         ..._.cloneDeep(selectedSchedule),
