@@ -2,6 +2,7 @@
 import logging
 import os
 import runpy
+import sqlite3
 import sys
 import types
 import unittest
@@ -28,6 +29,7 @@ class WidenedWindowWiringTest(unittest.TestCase):
         calls = {}
         frame = pd.DataFrame({'left_out': [1.0]})
         db = types.ModuleType('db')
+        db.conn = sqlite3.connect(':memory:')
         db.widen_window = lambda side, start, end: calls.setdefault('widen', (side, start, end)) and (WIDE_START, WIDE_END)
         db.replace_analysis_results = lambda *args: calls.setdefault('write', args) and (0, 0)
         detector = types.ModuleType('sleep_detector')
@@ -39,6 +41,7 @@ class WidenedWindowWiringTest(unittest.TestCase):
         usage = types.ModuleType('resource_usage')
         usage.get_memory_usage_unix = lambda: 0.0
         usage.get_available_memory_mb = lambda: 2000
+        usage.get_peak_rss_mb = lambda: 1.0
         argv = ['analyze_sleep.py', '--side=left',
                 f'--start_time={datetime.fromtimestamp(START, timezone.utc):%Y-%m-%dT%H:%M:%SZ}',
                 f'--end_time={datetime.fromtimestamp(END, timezone.utc):%Y-%m-%dT%H:%M:%SZ}']

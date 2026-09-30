@@ -66,10 +66,18 @@ nothing while it is off.
   minute. Breathing rate needs 30 seconds of presence before it has a value,
   and HRV needs 5 minutes; until then the row stores 0, which means no
   reading.
-- **Daily sleep analysis.** At 12:00 in the Pod's time zone, the server runs
-  `sleep_detection/analyze_sleep.py` for each side over the previous 24 hours
-  and writes the `sleep_records` and `movement` tables. A side in away mode is
-  skipped.
+- **Sleep analysis.** At 12:00 in the Pod's time zone, and whenever an
+  analysis is requested for a side, the server runs
+  `sleep_detection/analyze_sleep.py` over a time window (the previous 24
+  hours for the daily run). It writes the `sleep_records` and `movement`
+  tables in one transaction, replacing records it overlaps and the movement
+  bins it recomputes, so running it again over the same night replaces that
+  night's records and movement. Movement does not depend on the window
+  analysed. Each run adds a row to
+  `analysis_runs` with the window, how many sensor rows it read, what it
+  wrote, how long it took, its peak memory and its outcome. A failed database
+  write shows as a failed job on the Status page. A side in away mode is
+  skipped by the daily run.
 - **Calibration.** Each evening (left at 18:30, right at 19:00) the server runs
   `sleep_detection/calibrate_sensor_thresholds.py`. It looks back over the
   previous 6 hours for a stretch when the bed was empty, learns the
@@ -147,8 +155,10 @@ by Paul van Gent, used for heart rate, HRV, and breathing rate. See
 
 ### Other modules
 
-- `db.py`: Writes vitals, sleep records, and movement to SQLite, skipping
-  duplicates. Keeps one `sqlite3` connection open, in WAL mode.
+- `db.py`: Writes vitals (skipping duplicates) and each analysis run's sleep
+  records and movement (together, replacing what the run covers). Keeps one
+  `sqlite3` connection open, in WAL mode.
+- `analysis_runs.py`: Records each sleep analysis run in `analysis_runs`.
 - `calibration.py`: Reads and writes the calibration results
   (`calibration_profiles` and `calibration_runs` tables). All calibration
   writes go through it.
