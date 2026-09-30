@@ -105,13 +105,16 @@ function SleepContext({ side, timeZone }: { side: Side; timeZone: string }) {
   const [chosenDate, setChosenDate] = useState<string>();
   const [view, setView] = useState('night');
   const { data, isPending, isError, refetch } = useSleepRecords({ side });
-  const sideRecords = isError ? [] : data?.filter(record => record.side === side) ?? [];
+  const now = moment.tz(timeZone);
+  // A record that ends after now is a clock error, not a night that happened.
+  const sideRecords = isError ? [] : data?.filter(record => record.side === side
+    && Date.parse(record.left_bed_at) <= now.valueOf()) ?? [];
   const latestRecord = [...sideRecords].sort((left, right) => Date.parse(right.left_bed_at) - Date.parse(left.left_bed_at))[0];
   const newest = latestRecord && recordForNight(sideRecords, moment.tz(latestRecord.left_bed_at, timeZone).format('YYYY-MM-DD'), timeZone);
   const { data: services, isError: servicesError, refetch: refetchServices } = useServices();
   const job = services?.biometrics?.jobs?.[side === 'left' ? 'analyzeSleepLeft' : 'analyzeSleepRight'];
   const analysis = useAnalyzeSleep();
-  const today = moment.tz(timeZone);
+  const today = now.clone();
   const todayDate = today.format('YYYY-MM-DD');
   const latestMissing = !recordForNight(sideRecords, todayDate, timeZone);
   const jobIsToday = !!job?.timestamp && moment.tz(job.timestamp, timeZone).isSame(today, 'day');
@@ -128,7 +131,9 @@ function SleepContext({ side, timeZone }: { side: Side; timeZone: string }) {
   const initialWeek = moment.tz(showLatestAnalysis ? todayDate : newest?.left_bed_at, timeZone).startOf('isoWeek').format('YYYY-MM-DD');
   const weekStart = useMemo(() => moment.tz(weekDate ?? initialWeek, timeZone).startOf('day'), [weekDate, initialWeek, timeZone]);
   const weekEnd = weekStart.clone().add(6, 'days');
-  const weekTitle = `${weekStart.format('MMM D')} - ${weekEnd.format('MMM D')}`;
+  const otherYear = weekStart.year() !== today.year() || weekEnd.year() !== today.year();
+  const weekFormat = otherYear ? 'MMM D, YYYY' : 'MMM D';
+  const weekTitle = `${weekStart.format(weekFormat)} - ${weekEnd.format(weekFormat)}`;
   const records = isError ? [] : recordsInWeek(sideRecords, weekStart, timeZone);
   const latest = [...records].sort((left, right) => Date.parse(right.left_bed_at) - Date.parse(left.left_bed_at))[0];
   const defaultDate = latest ? moment.tz(latest.left_bed_at, timeZone) : moment.min(today, weekEnd);
@@ -140,7 +145,10 @@ function SleepContext({ side, timeZone }: { side: Side; timeZone: string }) {
   const fallback = !selected && isLatestDate
     && (['pending', 'analyzing', 'failed'].includes(missingState) || (missingState === 'empty' && completedToday)) ? newest : undefined;
   const displayed = selected?.sleep_period_seconds === 0 ? undefined : selected ?? fallback;
-  const nightTitle = (wakeDate: string) => moment.tz(wakeDate, timeZone).format('[Woke] ddd, MMM D');
+  const nightTitle = (wakeDate: string) => {
+    const wake = moment.tz(wakeDate, timeZone);
+    return wake.format(wake.year() === today.year() ? '[Woke] ddd, MMM D' : '[Woke] ddd, MMM D, YYYY');
+  };
   const phoneZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const podZoneLabel = timeZone.split('/').slice(-1)[0]?.replace(/_/g, ' ') ?? timeZone;
   const changeWeek = (amount: number) => {
