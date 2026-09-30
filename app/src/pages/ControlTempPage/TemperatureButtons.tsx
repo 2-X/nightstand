@@ -36,6 +36,17 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
     if (!editOpenRef.current && !inFlight.current) savedTarget.current = currentTargetTemp;
   }, [currentTargetTemp]);
 
+  // After the stepper unmounts (a side switch), still deliver the last target.
+  const sendLatest = useCallback(() => {
+    ready.current = false;
+    const target = useControlTempStore.getState().deviceStatus?.[side]?.targetTemperatureF;
+    if (statusUnavailableRef.current || !Number.isFinite(target)) return;
+    postDeviceStatus({ [side]: { targetTemperatureF: target } }).catch((error: unknown) => {
+      console.error(error);
+      setDeviceStatus({ [side]: { targetTemperatureF: savedTarget.current } });
+    });
+  }, [side, setDeviceStatus]);
+
   const postUpdate = useCallback(async () => {
     if (inFlight.current || !ready.current || !mounted.current) return;
     const target = useControlTempStore.getState().deviceStatus?.[side]?.targetTemperatureF;
@@ -59,7 +70,9 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
       }
     } finally {
       inFlight.current = false;
-      if (mounted.current && ready.current) {
+      if (ready.current && !mounted.current) {
+        sendLatest();
+      } else if (mounted.current && ready.current) {
         void postUpdate();
       } else if (!debounceTimer.current) {
         if (editOpenRef.current) {
@@ -70,7 +83,7 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
         setIsUpdating(false);
       }
     }
-  }, [side, refetch, setIsUpdating, endEdit, setDeviceStatus]);
+  }, [side, refetch, setIsUpdating, endEdit, setDeviceStatus, sendLatest]);
 
   const scheduleUpdate = useCallback(() => {
     ready.current = false;
@@ -86,15 +99,19 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
     mounted.current = true;
     return () => {
       mounted.current = false;
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+        ready.current = true;
+      }
       debounceTimer.current = null;
+      if (ready.current && !inFlight.current) sendLatest();
       if (!inFlight.current) setIsUpdating(false);
       if (editOpenRef.current) {
         editOpenRef.current = false;
         endEdit();
       }
     };
-  }, [endEdit, setIsUpdating]);
+  }, [endEdit, setIsUpdating, sendLatest]);
 
   const isInAwayMode = settings?.[side]?.awayMode;
   if (isInAwayMode) return null;

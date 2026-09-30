@@ -107,3 +107,25 @@ it('discards level history when the display format changes away and back', () =>
   fireEvent.click(screen.getByRole('button', { name: 'Decrease temperature' }));
   expect(useControlTempStore.getState().deviceStatus?.left.targetTemperatureF).toBe(61);
 });
+it('sends a pending change when the side switches before the delay ends', async () => {
+  const view = render(<TemperatureButtons currentTargetTemp={ 80 } refetch={ vi.fn() }/>);
+  fireEvent.click(screen.getByRole('button', { name: 'Increase temperature' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Increase temperature' }));
+  view.unmount();
+  await act(async () => vi.advanceTimersByTimeAsync(400));
+  expect(api.post).toHaveBeenCalledTimes(1);
+  expect(api.post).toHaveBeenCalledWith({ left: { targetTemperatureF: 82 } });
+});
+it('sends a change queued behind an in-flight request when the side switches', async () => {
+  let resolve!: () => void;
+  api.post.mockImplementationOnce(() => new Promise<void>(done => { resolve = done; }));
+  const view = render(<TemperatureButtons currentTargetTemp={ 80 } refetch={ vi.fn() }/>);
+  const increase = screen.getByRole('button', { name: 'Increase temperature' });
+  fireEvent.click(increase);
+  await act(async () => vi.advanceTimersByTimeAsync(400));
+  fireEvent.click(increase);
+  await act(async () => vi.advanceTimersByTimeAsync(400));
+  view.unmount();
+  await act(async () => { resolve(); await vi.advanceTimersByTimeAsync(2000); });
+  expect(api.post).toHaveBeenLastCalledWith({ left: { targetTemperatureF: 82 } });
+});
