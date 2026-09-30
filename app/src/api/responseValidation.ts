@@ -112,8 +112,8 @@ export const deviceStatusResponseSchema = responseSchema(DeviceStatusSchema.exte
 }));
 
 // Validate a list row by row so one malformed record cannot hide the rest.
-// A list where no row is usable still fails, which keeps a wholesale format
-// change visible as an error instead of an empty history.
+// A list where more than half the rows fail still fails, which keeps a
+// wholesale format change visible as an error instead of a partial history.
 function rowsSchema(label: string, row: z.ZodTypeAny) {
   return z.array(z.unknown()).transform((rows, context) => {
     const kept = rows.flatMap(item => {
@@ -122,8 +122,9 @@ function rowsSchema(label: string, row: z.ZodTypeAny) {
     });
     const dropped = rows.length - kept.length;
     if (dropped === 0) return kept;
-    if (kept.length === 0) {
-      context.addIssue({ code: z.ZodIssueCode.custom, message: `No valid ${label} rows` });
+    // Mostly invalid rows mean the format changed, not that a few rows are bad.
+    if (dropped * 2 > rows.length) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: `Most ${label} rows are invalid` });
       return z.NEVER;
     }
     console.warn(`Ignored ${dropped} invalid ${label} ${dropped === 1 ? 'row' : 'rows'}`);

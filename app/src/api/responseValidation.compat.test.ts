@@ -114,6 +114,7 @@ describe('row-level validation', () => {
 
   it('drops invalid sleep records and keeps the rest', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const more = Array.from({ length: 5 }, (_, index) => ({ ...goodSleep, id: 20 + index }));
     const rows = [
       goodSleep,
       { ...goodSleep, id: 2, left_bed_at: '2026-09-28T20:00:00-07:00' },
@@ -121,16 +122,18 @@ describe('row-level validation', () => {
       { ...goodSleep, id: 4, entered_bed_at: '2026-09-27T23:45:30' },
       { id: 5 },
       { ...goodSleep, id: 6 },
+      ...more,
     ];
-    expect(validateResponse('/metrics/sleep', rows)).toEqual([goodSleep, { ...goodSleep, id: 6 }]);
+    expect(validateResponse('/metrics/sleep', rows)).toEqual([goodSleep, { ...goodSleep, id: 6 }, ...more]);
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
   it('drops malformed vitals rows and keeps the rest', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const good = { side: 'left', timestamp: 1790664360, heart_rate: 58, hrv: 61, breathing_rate: 14 };
-    const rows = [good, { ...good, side: 'middle' }, { ...good, hrv: 'x' }, { ...good, timestamp: 1.5 }, { ...good, timestamp: 1790664420 }];
-    expect(validateResponse('/metrics/vitals', rows)).toEqual([good, { ...good, timestamp: 1790664420 }]);
+    const more = Array.from({ length: 4 }, (_, index) => ({ ...good, timestamp: 1790664420 + index * 60 }));
+    const rows = [good, { ...good, side: 'middle' }, { ...good, hrv: 'x' }, { ...good, timestamp: 1.5 }, ...more];
+    expect(validateResponse('/metrics/vitals', rows)).toEqual([good, ...more]);
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
@@ -140,9 +143,11 @@ describe('row-level validation', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it('still rejects a response where no row is usable', () => {
+  it('treats a list where most rows are invalid as a format error, not a partial history', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     expect(() => validateResponse('/metrics/sleep', [{ id: 1 }, { id: 2 }])).toThrow();
+    expect(() => validateResponse('/metrics/sleep', [goodSleep, { id: 2 }, { id: 3 }])).toThrow();
+    expect(validateResponse('/metrics/sleep', [goodSleep, { ...goodSleep, id: 2 }, { id: 3 }])).toHaveLength(2);
     expect(validateResponse('/metrics/sleep', [])).toEqual([]);
   });
 
