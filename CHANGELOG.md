@@ -8,12 +8,6 @@ is a hard fork; for the history of the projects it descends from, see
 
 ## [3.4.0] - 2026-09-29
 
-- Blocking internet access no longer leaves the firmware stuck on some Pod 3
-  units. The firewall now refuses the firmware's cloud connection right away
-  instead of silently ignoring it, which left the firmware waiting. Thanks to
-  @sim- for tracking this down
-  (https://github.com/LTimothy/nightstand/issues/1).
-
 - Reinstalling no longer loses recent sleep data. The installer deleted the
   database's write-ahead file after stopping the biometrics service, which
   could drop rows that were saved but not yet merged into the main file. It
@@ -155,6 +149,24 @@ is a hard fork; for the history of the projects it descends from, see
 
 - The README and install guide are reorganized around which install path
   each pod takes and what tools each one needs.
+
+## [3.3.2] - 2026-09-29
+
+- Blocking internet access no longer leaves the firmware stuck on some Pod 3
+  units. The firewall now refuses the firmware's cloud connection right away
+  instead of silently ignoring it, which left the firmware waiting. Thanks to
+  @sim- for tracking this down
+  (https://github.com/LTimothy/nightstand/issues/1).
+
+  The update that installs this version blocks internet access again with the
+  previous version's firewall script, so the new rule is not in place yet. To
+  apply it now, run this as root on the Pod:
+
+  ```
+  sh /home/dac/free-sleep/scripts/unblock_internet_access.sh && sh /home/dac/free-sleep/scripts/block_internet_access.sh
+  ```
+
+  A fresh install applies it, and so does the next update after this one.
 
 ## [3.3.1] - 2026-09-28
 
