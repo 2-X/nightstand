@@ -71,14 +71,6 @@ def run_analysis(side: str, start_time: datetime, end_time: datetime, folder_pat
     started = time.monotonic()
     window_start = int(start_time.timestamp())
     window_end = int(end_time.timestamp())
-    # Read the whole of any stored night this window overlaps, so the run
-    # can replace it instead of leaving a truncated copy.
-    wide_start, wide_end = widen_window(side, window_start, window_end)
-    if (wide_start, wide_end) != (window_start, window_end):
-        logger.info(f'Widening the window to {wide_start} -> {wide_end} to cover a stored night')
-        window_start, window_end = wide_start, wide_end
-        start_time = datetime.fromtimestamp(window_start, tz=timezone.utc)
-        end_time = datetime.fromtimestamp(window_end, tz=timezone.utc)
     try:
         run_id = analysis_runs.start_run(side, analysis_runs.KIND_ANALYZE, window_start, window_end, conn=conn)
     except sqlite3.Error as error:
@@ -88,6 +80,19 @@ def run_analysis(side: str, start_time: datetime, end_time: datetime, folder_pat
     counts = {}
     error_text = None
     try:
+        # Read the whole of any stored night this window overlaps, so the run
+        # can replace it instead of leaving a truncated copy.
+        wide_start, wide_end = widen_window(side, window_start, window_end)
+        if (wide_start, wide_end) != (window_start, window_end):
+            logger.info(f'Widening the window to {wide_start} -> {wide_end} to cover a stored night')
+            window_start, window_end = wide_start, wide_end
+            start_time = datetime.fromtimestamp(window_start, tz=timezone.utc)
+            end_time = datetime.fromtimestamp(window_end, tz=timezone.utc)
+            if run_id is not None:
+                try:
+                    analysis_runs.set_window(run_id, window_start, window_end, conn=conn)
+                except sqlite3.Error as error:
+                    logger.warning(f'Could not record the widened window: {error}')
         if get_available_memory_mb() < MIN_AVAILABLE_MB:
             raise MemoryError('Available memory is too little, exiting...')
         merged_df, sleep_records, cap_df = detect_sleep(side, start_time, end_time, folder_path)
@@ -125,7 +130,7 @@ def run_analysis(side: str, start_time: datetime, end_time: datetime, folder_pat
                 error=error_text,
                 **counts,
             )
-        except (sqlite3.Error, ValueError) as error:
+        except Exception as error:
             logger.warning(f'Could not finish the analysis run record: {error}')
     return outcome
 

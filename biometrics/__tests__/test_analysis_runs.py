@@ -72,6 +72,11 @@ class AnalysisRunsTest(unittest.TestCase):
         row = self._row(run_id)
         self.assertEqual((row['status'], row['error']), ('ok', None))
 
+    def test_finish_caps_a_long_error(self):
+        run_id = analysis_runs.start_run('left', analysis_runs.KIND_ANALYZE, 100, 200, conn=self.conn)
+        analysis_runs.finish_run(run_id, analysis_runs.STATUS_FAILED, conn=self.conn, error='x' * 5000)
+        self.assertEqual(len(self._row(run_id)['error']), analysis_runs.MAX_ERROR_CHARS)
+
     def test_finish_keeps_the_error_it_is_given(self):
         run_id = analysis_runs.start_run('left', analysis_runs.KIND_ANALYZE, 100, 200, conn=self.conn)
         analysis_runs.finish_run(run_id, analysis_runs.STATUS_FAILED, conn=self.conn, error='Out of memory')

@@ -104,6 +104,24 @@ class RunAnalysisTest(unittest.TestCase):
         self.assertEqual(row[5], 3)
         self.assertIsNone(row[6])
 
+    def test_a_failing_finish_run_still_returns_the_outcome(self):
+        with unittest.mock.patch.object(self.module.analysis_runs, 'finish_run', side_effect=RuntimeError('boom')), \
+                unittest.mock.patch.object(self.module.logger, 'warning') as warned:
+            status, _ = self._run()
+        self.assertEqual(status, 'healthy')
+        self.assertIn('boom', warned.call_args.args[0])
+
+    def test_a_failing_widen_window_is_a_recorded_failure(self):
+        self.module.widen_window.side_effect = sqlite3.OperationalError('database is locked')
+        with unittest.mock.patch.object(self.module.logger, 'error'):
+            status, message = self._run()
+        self.assertEqual(status, 'failed')
+        self.assertIn('database is locked', message)
+        [row] = self._runs()
+        self.assertEqual((row[2], row[3:5]), ('failed', (int(START.timestamp()), int(END.timestamp()))))
+        self.assertIn('database is locked', row[8])
+        self.module.detect_sleep.assert_not_called()
+
     def test_missing_sensor_data_is_waiting_not_failed(self):
         self.module.detect_sleep.side_effect = InsufficientDataError('No piezo rows found')
         status, message = self._run()

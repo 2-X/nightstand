@@ -17,6 +17,7 @@ STATUS_NO_DATA = 'no_data'
 STATUS_FAILED = 'failed'
 
 INTERRUPTED = 'Interrupted before it finished'
+MAX_ERROR_CHARS = 2000
 
 _FINISHED = (STATUS_OK, STATUS_NO_DATA, STATUS_FAILED)
 _COUNTS = ('rows_loaded', 'records_written', 'movement_written', 'duration_ms', 'peak_rss_mb', 'error')
@@ -55,6 +56,11 @@ def start_run(side: str, kind: str, window_start: int, window_end: int, conn=Non
     return cursor.lastrowid
 
 
+def set_window(run_id: int, window_start: int, window_end: int, conn=None) -> None:
+    _connection(conn).execute(
+        'UPDATE analysis_runs SET window_start = ?, window_end = ? WHERE id = ?', (window_start, window_end, run_id))
+
+
 def finish_run(run_id: int, status: str, conn=None, **counts) -> None:
     if status not in _FINISHED:
         raise ValueError(f'Unknown analysis run status: {status}')
@@ -63,6 +69,8 @@ def finish_run(run_id: int, status: str, conn=None, **counts) -> None:
         raise ValueError(f'Unknown analysis run fields: {unknown}')
     # A run closed as interrupted by a later start can still finish; its outcome replaces that error.
     counts = {'error': None, **counts}
+    if counts['error'] is not None:
+        counts['error'] = str(counts['error'])[:MAX_ERROR_CHARS]
     assignments = ['status = ?', 'finished_at = ?'] + [f'{name} = ?' for name in counts]
     values = [status, int(time.time())] + list(counts.values()) + [run_id]
     cursor = _connection(conn).execute(f'UPDATE analysis_runs SET {", ".join(assignments)} WHERE id = ?', values)
