@@ -926,6 +926,7 @@ returns `400`. Presence has no WebSocket push; clients poll this endpoint.
 ### GET
 
 - Retrieves the status of the services that make up Nightstand. Each entry is `{ name, status, description, message, timestamp? }`, where `status` is one of `not_started`, `started`, `healthy`, `restarting`, `retrying`, `waiting_for_data`, or `failed`. The `analyzeSleep*`, `biometricsCalibration*`, `biometricsStream`, and `pumpHealth*` entries are only present while biometrics is enabled.
+- `rhythmsSchedule` is present only while `features.rhythms` is on. Its `message` gives the number of jobs the last rebuild planned, that no time zone is set, which side could not be planned, or why the weekly schedule is running instead.
 - `waterTank` is `healthy` while the tank sensor reads ok and `failed` once it has read low for about 30 seconds; its `timestamp` is when the current state began. It stays `not_started` until the first reading.
 
 #### Response

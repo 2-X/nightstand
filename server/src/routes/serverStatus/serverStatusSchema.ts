@@ -53,6 +53,7 @@ export type ServerStatus = {
   biometricsCalibrationRight?: StatusInfo;
   pumpHealthLeft?: StatusInfo;
   pumpHealthRight?: StatusInfo;
+  rhythmsSchedule?: StatusInfo;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-type-alias

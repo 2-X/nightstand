@@ -9,6 +9,8 @@ import { effectiveSides } from '../scheduleQueries.js';
 import { resolveSleeps, type ResolvedSleep, type RhythmEvent } from './resolve.js';
 import { ANALYSIS_DELAY_MS, ANALYSIS_MAX_WINDOW_MS, REANALYSIS_DELAY_MS, runRhythmEvent, runSleepAnalysis } from './runEvent.js';
 import { trackAlarm } from '../alarmActivity.js';
+import { scheduleSleepAnalysis } from '../powerScheduler.js';
+import { SLEEP_ANALYSIS_HOUR, SLEEP_ANALYSIS_MINUTE } from '../../sleepAnalysisSchedule.js';
 
 export const RHYTHMS_HORIZON_MS = 48 * 60 * 60 * 1000;
 export const RHYTHMS_HORIZON_JOB = 'rhythms-horizon';
@@ -69,6 +71,20 @@ function scheduleSleep(settings: Settings, side: Side, sleep: ResolvedSleep, now
   return count;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// A sleep that ended in the day before `at` has its own analyses.
+function sleptWithin(db: RhythmsDB, side: Side, timeZone: string, at: Date): boolean {
+  const from = new Date(at.getTime() - DAY_MS);
+  return resolveSleeps({ db, side, timeZone, from, to: at }).some(sleep => sleep.end > from && sleep.end <= at);
+}
+
+function nextNoon(now: Date, timeZone: string): Date {
+  const noon = moment.tz(now, timeZone).hour(SLEEP_ANALYSIS_HOUR).minute(SLEEP_ANALYSIS_MINUTE).startOf('minute');
+  if (!noon.isAfter(now)) noon.add(1, 'day');
+  return noon.toDate();
+}
+
 // The hourly job extends from whatever was planned last.
 let latest: { settings: Settings; db: RhythmsDB } | null = null;
 
@@ -78,6 +94,22 @@ function scheduleHorizon(timeZone: string, extend: () => void): void {
   rule.minute = 0;
   rule.tz = timeZone;
   schedule.scheduleJob(RHYTHMS_HORIZON_JOB, rule, extend);
+}
+
+// A side with no sleep ending in the day before noon, such as one with no
+// rhythms or a night with no sleep, keeps the weekly noon analysis. Each run
+// checks again, since a later day may have a sleep with its own analyses.
+function keepNoonAnalysis(settings: Settings, side: Side): void {
+  if (schedule.scheduledJobs[`daily-analyze-sleep-${side}`]) return;
+  scheduleSleepAnalysis(settings, side, at => {
+    if (!latest?.settings.timeZone) return false;
+    try {
+      return sleptWithin(latest.db, side, latest.settings.timeZone, at);
+    } catch (error: unknown) {
+      logger.error(`Rhythms could not check the ${side} noon analysis: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  });
 }
 
 export type RhythmsPlan = { jobCount: number; failedSides: Side[] };
@@ -98,14 +130,17 @@ export function scheduleRhythms(settings: Settings, db: RhythmsDB, now: Date): R
       logger.debug(`Rhythms: ${side} is away, its own rhythm is not scheduled`);
       continue;
     }
+    let keepNoon = true;
     try {
       for (const sleep of resolveSleeps({ db, side, timeZone, from, to })) {
         jobCount += scheduleSleep(settings, side, sleep, now, timeZone);
       }
+      keepNoon = !sleptWithin(db, side, timeZone, nextNoon(now, timeZone));
     } catch (error: unknown) {
       failedSides.push(side);
       logger.error(`Rhythms could not plan ${side}: ${error instanceof Error ? error.message : String(error)}`);
     }
+    if (keepNoon) keepNoonAnalysis(settings, side);
   }
   scheduleHorizon(timeZone, () => {
     if (!latest) return;

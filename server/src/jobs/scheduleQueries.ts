@@ -106,6 +106,13 @@ export function currentSleep(side: Side, now: Date): ResolvedSleep | null {
   return scheduledSleeps(side, now, now).find(sleep => sleep.start.getTime() <= t && t < sleep.end.getTime()) ?? null;
 }
 
+// The sleep containing `at`, its end instant included; where one sleep ends
+// as the next starts, the earlier one wins, as the weekly override lookup does.
+export function sleepAround(side: Side, at: Date): ResolvedSleep | null {
+  const t = at.getTime();
+  return scheduledSleeps(side, at, at).find(sleep => sleep.start.getTime() <= t && t <= sleep.end.getTime()) ?? null;
+}
+
 export function isInScheduledSleep(side: Side, now: Date): boolean {
   if (!engine.active) return legacyIsInPowerWindow(side, moment.tz(now, podTimeZone()), schedulesDB.data);
   return currentSleep(side, now) !== null;

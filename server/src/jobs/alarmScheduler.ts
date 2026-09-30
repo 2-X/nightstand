@@ -7,7 +7,8 @@ import memoryDB from '../db/memoryDB.js';
 import serverStatus from '../serverStatus.js';
 import schedulesDB from '../db/schedules.js';
 import settingsDB, { updateSettings } from '../db/settings.js';
-import { AlarmJob, DailySchedule, DayOfWeek, Side } from '../db/schedulesSchema.js';
+import { Alarm, AlarmJob, DailySchedule, DayOfWeek, Side } from '../db/schedulesSchema.js';
+import type { ResolvedSleep } from './rhythms/resolve.js';
 import { dailyAlarmSchedules } from '../db/scheduleAlarms.js';
 import { executeFunction } from '../8sleep/deviceApi.js';
 import { compareTimes, getDayIndexForTime, isValidTime, logJob } from './utils.js';
@@ -223,7 +224,29 @@ function openedItsNight(side: Side, occurrence: moment.Moment) {
   return false;
 }
 
-export function scheduleAlarmOverride(settingsData: Settings, side: Side) {
+// The same rule for a Rhythms sleep: it ends at this minute and began a
+// full day earlier.
+function rhythmOpenedItsNight(sleep: ResolvedSleep | null, occurrence: moment.Moment) {
+  return !!sleep && sleep.end.getTime() === occurrence.valueOf()
+    && !occurrence.clone().subtract(1, 'day').isBefore(sleep.start);
+}
+
+// A Rhythms lookup that fails counts as no sleep, so it can never reject
+// inside a job or stop a rebuild after every job was cancelled.
+function rhythmSleepFor(lookup: (at: Date) => ResolvedSleep | null, side: Side, at: Date): ResolvedSleep | null {
+  try {
+    return lookup(at);
+  } catch (error: unknown) {
+    logger.error(`Could not find the ${side} Rhythms sleep at ${at.toISOString()}: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
+export function scheduleAlarmOverride(
+  settingsData: Settings,
+  side: Side,
+  rhythmSleepAt?: (at: Date) => ResolvedSleep | null,
+) {
   if (!settingsData[side].alarmsEnabled) return null;
   const alarmOverride = settingsData[side]?.scheduleOverrides?.alarm;
   if (!alarmOverride || alarmOverride.disabled) return null;
@@ -238,7 +261,10 @@ export function scheduleAlarmOverride(settingsData: Settings, side: Side) {
   for (const [key, ranAt] of overrideRuns) {
     if (ranAt < Date.now() - OCCURRENCE_RETENTION_MS) overrideRuns.delete(key);
   }
-  if (next.isSame(expiresAt) && overrideRuns.has(overrideKey) && openedItsNight(side, next)) return null;
+  const opened = () => (rhythmSleepAt
+    ? rhythmOpenedItsNight(rhythmSleepFor(rhythmSleepAt, side, next.toDate()), next)
+    : openedItsNight(side, next));
+  if (next.isSame(expiresAt) && overrideRuns.has(overrideKey) && opened()) return null;
   logger.debug(`Alarm override is set! Scheduling alarm for ${next.format()}`);
 
   const jobName = `${side}-alarm-override-${alarmOverride.timeOverride}`;
@@ -256,8 +282,12 @@ export function scheduleAlarmOverride(settingsData: Settings, side: Side) {
     }
     // The replacement belongs to a night starting today or yesterday, not
     // necessarily the calendar date on which it rings.
-    let sourceAlarm;
-    for (const offset of [-1, 0]) {
+    let sourceAlarm: Alarm | undefined;
+    if (rhythmSleepAt) {
+      const first = rhythmSleepFor(rhythmSleepAt, side, next.toDate())?.events.find(event => event.kind === 'alarm');
+      sourceAlarm = first?.kind === 'alarm' ? first.alarm : undefined;
+    }
+    for (const offset of rhythmSleepAt ? [] : [-1, 0]) {
       const date = next.clone().startOf('day').add(offset, 'day');
       const dayKey = date.format('dddd').toLowerCase() as DayOfWeek;
       const daily = schedulesDB.data?.[side]?.[dayKey];

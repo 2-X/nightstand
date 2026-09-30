@@ -85,7 +85,7 @@ export const schedulePowerOn = (settingsData: Settings, side: Side, day: DayOfWe
 
 // Analyze a full sleep day for each side, independent of temperature schedules.
 
-export const scheduleSleepAnalysis = (settingsData: Settings, side: Side) => {
+export const scheduleSleepAnalysis = (settingsData: Settings, side: Side, skipAt?: (at: Date) => boolean) => {
   if (settingsData[side].awayMode) return;
   if (settingsData.timeZone === null) return;
 
@@ -97,6 +97,10 @@ export const scheduleSleepAnalysis = (settingsData: Settings, side: Side) => {
 
   logger.debug(`Scheduling daily sleep-analyzer job for ${side} at ${time}`);
   schedule.scheduleJob(`daily-analyze-sleep-${side}`, dailyRule, async () => {
+    if (skipAt?.(new Date())) {
+      logger.debug(`Skipping daily sleep analyzer job for ${side}, its Rhythms sleep is analyzed already`);
+      return;
+    }
     await servicesDB.read();
     if (!servicesDB.data.biometrics.enabled) {
       logger.debug('Not executing sleep analyzer job, biometrics is disabled');

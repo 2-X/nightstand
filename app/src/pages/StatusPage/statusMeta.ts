@@ -40,6 +40,11 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
     blurb: 'Applies your saved temperature schedule throughout the night.',
     meaning: { healthy: 'Your temperature schedule is active.' },
   },
+  rhythmsSchedule: {
+    group: 'schedules',
+    blurb: "Plans each side's sleeps from Rhythms for the next two days.",
+    meaning: { healthy: 'Your Rhythms sleeps are planned.' },
+  },
   biometricsInstallation: {
     group: 'biometrics',
     blurb: 'Whether the biometrics add-on (heart rate, HRV, sleep stages) is installed on the Pod.',

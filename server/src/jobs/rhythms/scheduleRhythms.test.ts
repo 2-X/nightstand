@@ -268,6 +268,34 @@ it('plans a sleep starting just past the horizon before it starts', async () => 
   assert.equal(fireTime(edge), '2026-09-30T12:30:00.000Z');
 });
 
+const onlyOn = (days: string[]) => {
+  const side = everyNight(NIGHT);
+  for (const day of Object.keys(side.week) as (keyof typeof side.week)[]) side.week[day] = days.includes(day) ? side.week[day] : null;
+  return side;
+};
+
+it('keeps the noon analysis for a side with no sleep in the day before, and skips a day that has one', async () => {
+  scheduleRhythms(settingsDB.data, testRhythmsDB(schedulesDB.data, onlyOn(['tuesday'])), at('2026-09-28T12:00:00Z'));
+  assert.ok(schedule.scheduledJobs['daily-analyze-sleep-left'], 'a side with no sleep before noon lost its noon analysis');
+  setNow('2026-09-29T12:00:00Z');
+  await schedule.scheduledJobs['daily-analyze-sleep-left'].invoke();
+  assert.equal(analyses.length, 1);
+  setNow('2026-09-30T12:00:00Z');
+  memoryDB.data.left.analyzeSleep = {};
+  await memoryDB.write();
+  await schedule.scheduledJobs['daily-analyze-sleep-left'].invoke();
+  assert.equal(analyses.length, 1, 'the noon run repeated the analysis of the sleep that ended that morning');
+});
+
+it('adds the noon analysis on the hourly run before a day with no sleep', async () => {
+  scheduleRhythms(settingsDB.data, testRhythmsDB(schedulesDB.data, onlyOn(['sunday', 'monday', 'wednesday'])), at('2026-09-28T12:00:00Z'));
+  assert.equal(schedule.scheduledJobs['daily-analyze-sleep-left'], undefined);
+  assert.ok(schedule.scheduledJobs['daily-analyze-sleep-right'], 'a side with no rhythms lost its noon analysis');
+  setNow('2026-09-29T13:00:00Z');
+  await schedule.scheduledJobs['rhythms-horizon'].invoke();
+  assert.equal(fireTime('daily-analyze-sleep-left'), '2026-09-30T12:00:00.000Z');
+});
+
 // Captures timers so a test can end an alarm's ring on cue.
 function captureTimers(t: TestContext) {
   const timers: { callback: () => void; ms: number }[] = [];
