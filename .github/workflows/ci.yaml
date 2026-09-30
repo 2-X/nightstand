@@ -43,11 +43,20 @@ jobs:
         working-directory: app
         run: npm run build:pr
 
-      - name: Require clean working directory
+      # Pods install the committed bundles from main, so they must match the
+      # source there. On dev they are refreshed once per batch instead.
+      - name: Check committed bundles
+        env:
+          STRICT: ${{ github.ref == 'refs/heads/main' || github.base_ref == 'main' }}
         run: |
-          if ! git diff --exit-code; then
-            echo "Working tree dirty at end of job."
-            exit 1
+          problems=$(git status --porcelain; bash scripts/check-bundles.sh)
+          if [ -n "$problems" ]; then
+            echo "$problems"
+            if [ "$STRICT" = true ]; then
+              echo "Committed bundles do not match the source. Rebuild with npm ci && npm run build:pr in server/ and app/, remove the files listed as orphan, and commit."
+              exit 1
+            fi
+            echo "::notice::Committed bundles are out of date; rebuild them before deploying or releasing."
           fi
 
   lint:

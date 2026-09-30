@@ -66,11 +66,15 @@ your change touches that area:
   `cd app && npx playwright install chromium && npm run build:demo && npx playwright test`
 
 The Pod runs prebuilt code, so `server/dist/` and `server/public/` (the app's
-build output) are committed. If your change touches source, rebuild with
-`npm run build:pr` in both `server/` and `app/` and commit the output.
-Otherwise a deploy ships stale code. CI rebuilds from a clean `npm ci` and
-fails if the result differs from what is committed, so rebuild after a fresh
-`npm ci` if your installed packages may have drifted.
+build output) are committed. They must match the source on `main`, so a
+release rebuilds them as its last step. On `dev` they may lag behind between
+batches; rebuild once at the end of a batch rather than after every change.
+Rebuild from a clean `npm ci` with `npm run build:pr` in both `server/` and
+`app/`, then run `scripts/check-bundles.sh`: the builds do not delete old
+output, and it lists files nothing uses anymore so you can remove them.
+`ops/deploy.sh` refuses to ship bundles older than the source. CI rebuilds
+from a clean `npm ci` and fails on `main` if the result differs from what is
+committed; on `dev` it only notes it.
 
 ## Tests
 
@@ -140,6 +144,9 @@ type(scope): subject
 - The subject is lowercase and imperative, with no trailing period.
 - No trailers. The body explains why the change is needed, not only what it
   does.
+- Before pushing, fold small follow-ups (a lint fix, a test tweak) into the
+  commit they belong to with `git commit --fixup <commit>` and
+  `git rebase -i --autosquash`. Pushed commits are not rewritten.
 
 ## Versioning
 
@@ -208,8 +215,10 @@ older reader against a copy of the resulting database before release.
    from, and its `features` list.
 3. Add a matching entry at the top of `CHANGELOG.md` (the `## [Unreleased]`
    notes become `## [<version>] - <date>`).
-4. Rebuild both packages (`npm run build:pr` in `server/` and `app/`) and
-   commit the output.
+4. Rebuild both packages from a clean `npm ci` (`npm run build:pr` in
+   `server/` and `app/`), remove any files `scripts/check-bundles.sh` lists,
+   and commit the output. The release commit is the last commit before the
+   tag.
 5. Commit everything together on `dev`, fast-forward `main` to it
    (`git switch main && git merge --ff-only dev`), then tag:
    `git tag -a v<version> -m "..."`.

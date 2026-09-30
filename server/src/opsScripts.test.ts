@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -283,5 +284,44 @@ describe('setup_watchdog.sh arms the layer that was missing', () => {
 
   it('refuses to configure a watchdog on a device that has none', () => {
     assert.match(src, /\/dev\/watchdog/, 'must check the device exists before promising protection');
+  });
+});
+
+// The Pod runs committed bundles, so a deploy must not ship ones older than
+// the source they were built from.
+describe('deploy.sh refuses stale bundles', () => {
+  const src = readFileSync(path.join(repoRoot, 'ops/deploy.sh'), 'utf8');
+  const fn = src.slice(src.indexOf('bundle_behind() {'), src.indexOf('\n}\n', src.indexOf('bundle_behind() {')) + 3);
+
+  function git(dir: string, ...args: string[]) {
+    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd: dir });
+  }
+  function behind(dir: string) {
+    return spawnSync('bash', ['-c', `${fn}\nbundle_behind server/public app ':(exclude,glob)**/*.test.tsx'`], { cwd: dir }).status === 0;
+  }
+
+  it('compares the last source commit with the last bundle commit', () => {
+    assert.ok(fn.startsWith('bundle_behind() {'), 'deploy.sh must define bundle_behind');
+    const dir = mkdtempSync(path.join(tmpdir(), 'deploy-bundles-'));
+    mkdirSync(path.join(dir, 'app/src'), { recursive: true });
+    mkdirSync(path.join(dir, 'server/public'), { recursive: true });
+    execFileSync('git', ['init', '-q'], { cwd: dir });
+    writeFileSync(path.join(dir, 'app/src/page.tsx'), 'a');
+    writeFileSync(path.join(dir, 'server/public/index.js'), 'a');
+    git(dir, 'add', '-A'); git(dir, 'commit', '-qm', 'build');
+    assert.equal(behind(dir), false, 'fresh bundle reported stale');
+    writeFileSync(path.join(dir, 'app/src/page.test.tsx'), 'test');
+    git(dir, 'add', '-A'); git(dir, 'commit', '-qm', 'test only');
+    assert.equal(behind(dir), false, 'a test-only change must not count');
+    writeFileSync(path.join(dir, 'app/src/page.tsx'), 'b');
+    git(dir, 'add', '-A'); git(dir, 'commit', '-qm', 'source');
+    assert.equal(behind(dir), true, 'stale bundle not detected');
+  });
+
+  it('checks bundles before touching the pod and honours --force', () => {
+    const check = src.indexOf('bundle_behind server/public');
+    assert.ok(check !== -1 && check < src.indexOf('# --- preflight: pod'), 'bundle check must run before the pod preflight');
+    assert.match(src.slice(check - 200, check + 800), /FORCE/);
+    assert.match(src, /scripts\/check-bundles\.sh/);
   });
 });

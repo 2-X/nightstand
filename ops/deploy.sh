@@ -89,6 +89,28 @@ if [ -n "$(git status --porcelain)" ] && [ "$FORCE" -ne 1 ]; then
   die "git tree is dirty; commit your changes or use --force (deploys HEAD, not the working tree)"
 fi
 
+# The pod runs the committed bundles, so a bundle is stale when the newest
+# source commit is not an ancestor of the newest bundle commit.
+bundle_behind() {
+  local bundle=$1 source built
+  shift
+  source=$(git log -1 --format=%H -- "$@")
+  [ -n "$source" ] || return 1
+  built=$(git log -1 --format=%H -- "$bundle")
+  [ -z "$built" ] || ! git merge-base --is-ancestor "$source" "$built"
+}
+
+if [ "$FORCE" -ne 1 ]; then
+  if bundle_behind server/public app ':(exclude)app/e2e' ':(exclude)app/src/mocks' \
+    ':(exclude,glob)**/*.test.ts' ':(exclude,glob)**/*.test.tsx' ':(exclude,glob)**/*.md'; then
+    die "the committed app bundle is older than app/; run npm ci && npm run build:pr in app/ and commit (or use --force)"
+  fi
+  if bundle_behind server/dist server/src; then
+    die "the committed server build is older than server/src; run npm ci && npm run build:pr in server/ and commit (or use --force)"
+  fi
+  bash scripts/check-bundles.sh || die "orphaned bundle files are committed; remove the files listed above and commit (or use --force)"
+fi
+
 # --- preflight: pod ---------------------------------------------------------
 say "Preflight: pod state"
 SSH "set -e

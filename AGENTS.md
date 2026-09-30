@@ -26,8 +26,9 @@ explain line by line.
   [Commands](#commands) for every package you touched, and say which ones you
   ran.
 - `server/dist/` and `server/public/` are committed build output. Never edit
-  them by hand. If you change source, run `npm run build:pr` in `server/` and
-  `app/` and commit the result.
+  them by hand. Rebuild them once at the end of a batch of changes, and as the
+  last step of a release: `npm ci && npm run build:pr` in `server/` and `app/`,
+  then remove the files `scripts/check-bundles.sh` lists, and commit.
 - Commit messages follow Conventional Commits as described in
   CONTRIBUTING.md, with no trailers. Do not add `Co-Authored-By` or
   "Generated with" lines.
