@@ -35,8 +35,8 @@ export default function SchedulePauseNotice({ note, framed = false, onResumed }:
     try {
       await postSettings({ [side]: { scheduleOverrides: { pause: { active: false, expiresAt: '' } } } });
       const { data: fresh } = await refetch();
-      // This notice unmounts once the pause clears; let the caller place focus.
-      if (onResumed && fresh && !isSchedulePaused(fresh, side, moment().toDate())) requestAnimationFrame(onResumed);
+      // This notice unmounts once the pause clears; the caller places focus after it is gone.
+      if (onResumed && fresh && !isSchedulePaused(fresh, side, moment().toDate())) onResumed();
     } catch (err) {
       console.error(err);
       setError(serverMessage(err) ?? 'Could not resume the schedule. Try again.');

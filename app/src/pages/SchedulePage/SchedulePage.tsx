@@ -22,6 +22,7 @@ import { useAppStore } from '@state/appStore.tsx';
 import { useSchedules } from '@api/schedules';
 import { useScheduleStore } from './scheduleStore.tsx';
 import { useSettings } from '@api/settings';
+import { isSchedulePaused } from '@api/schedulePause.ts';
 import { LOWERCASE_DAYS } from './days.ts';
 import TemperatureScheduleChart from './ScheduleChart.tsx';
 import PageHeader from '@components/PageHeader';
@@ -155,6 +156,14 @@ export default function SchedulePage() {
     target()?.focus({ preventScroll: true });
   };
   const nightHeading = () => document.getElementById('schedule-night-heading');
+  // The notice and its focused Resume button unmount a render after the resume lands, so move focus once they are gone.
+  const [focusAfterResume, setFocusAfterResume] = useState(false);
+  const schedulePaused = !!settings && isSchedulePaused(settings, side, moment().toDate());
+  useEffect(() => {
+    if (!focusAfterResume || schedulePaused) return;
+    setFocusAfterResume(false);
+    focusIfLost(nightHeading);
+  }, [focusAfterResume, schedulePaused]);
   useEffect(() => {
     if (isUpdating || !focusSaveAfterUpdate.current) return;
     focusSaveAfterUpdate.current = false;
@@ -223,7 +232,7 @@ export default function SchedulePage() {
       <PageHeader title="Schedule"/>
       <SideControl beforeSideChange={ nextSide => confirmDiscard({ side: nextSide }) }/>
       <DayTabs beforeDayChange={ day => confirmDiscard({ day }) }/>
-      <SchedulePauseNotice framed note="Changes you save apply after the pause." onResumed={ () => focusIfLost(nightHeading) }/>
+      <SchedulePauseNotice framed note="Changes you save apply after the pause." onResumed={ () => setFocusAfterResume(true) }/>
       <Box sx={ { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 } }>
         <Box sx={ { flex: 1, minWidth: 0 } }>
           <SectionHeading id="schedule-night-heading" tabIndex={ -1 } sx={ { outline: 'none' } }>
