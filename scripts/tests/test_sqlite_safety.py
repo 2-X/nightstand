@@ -156,6 +156,21 @@ while True:
         module.atomic_additive('BEGIN; ALTER TABLE vitals ADD COLUMN source TEXT NOT NULL DEFAULT "pod"; COMMIT;')
         module.atomic_additive('BEGIN; CREATE TABLE future (value TEXT NOT NULL); COMMIT;')
 
+    def test_no_gate_compares_the_prisma_schema_with_migrations(self):
+        # movement.total_movement is Float in schema.prisma over the INTEGER
+        # column its migration created. A gate that diffs the two would ask
+        # for a table rebuild, which the policy above rejects.
+        checked = [*ROOT.glob('.github/workflows/*.y*ml'), *ROOT.glob('scripts/**/*.sh'), *ROOT.glob('ops/**/*.sh')]
+        self.assertTrue(checked)
+        for path in checked:
+            text = path.read_text()
+            for command in ('migrate diff', 'migrate dev', 'db push'):
+                self.assertNotIn(command, text, f'{path.relative_to(ROOT)} runs prisma {command}')
+        scripts = json.loads((ROOT / 'server/package.json').read_text())['scripts']
+        for name, command in scripts.items():
+            if name != 'migrate:local':
+                self.assertNotRegex(command, r'migrate (diff|dev)|db push', name)
+
     def test_install_and_reset_use_consistent_backups(self):
         install = (ROOT / 'scripts/install.sh').read_text()
         self.assertNotIn('rm -f /persistent/free-sleep-data/free-sleep.db-shm', install)

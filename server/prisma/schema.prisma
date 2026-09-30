@@ -28,10 +28,10 @@ model sleep_records {
 model vitals {
   id             Int    @id @default(autoincrement())
   side           String
-  timestamp      Int // 5-minute interval start (Unix timestamp)
-  heart_rate     Float? // Averaged over 5 minutes
-  hrv            Float? // Averaged over 5 minutes
-  breathing_rate Float? // Averaged over 5 minutes
+  timestamp      Int // Unix seconds; the stream writes about one row a minute
+  heart_rate     Float? // bpm, 0 means no estimate
+  hrv            Float? // SDNN in ms, 0 means no estimate
+  breathing_rate Float? // breaths per minute, 0 means no estimate
 
   @@unique([side, timestamp]) // Ensure no duplicate intervals
   @@index([side, timestamp])
@@ -42,7 +42,9 @@ model movement {
   id              Int      @id @default(autoincrement())
   timestamp       Int
   side            String
-  total_movement  Int
+  // INTEGER in the migration, but SQLite keeps the fractions the analyzer
+  // writes; Float reads them as stored. Deliberately no migration.
+  total_movement  Float
   @@unique([side, timestamp]) // Ensure no duplicate intervals
   @@index([side, timestamp])
 }

@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../db/prisma.js';
+import { legacyMovement, loadMovement } from '../../db/movement.js';
 import settingsDB from '../../db/settings.js';
 import servicesDB from '../../db/services.js';
 import { isSleepScoreActive } from './sleepScoreGuard.js';
@@ -326,10 +327,7 @@ export async function loadStageSummary(side: string, startUnix: number, endUnix:
     orderBy: { timestamp: 'asc' },
   });
 
-  const movements = await prisma.movement.findMany({
-    where: { side, timestamp: { gte: startUnix, lte: endUnix } },
-    orderBy: { timestamp: 'asc' },
-  });
+  const movements = legacyMovement(await loadMovement(side, startUnix, endUnix));
 
   return summarizeStages(
     vitalsRaw.map(toStageVitals),
