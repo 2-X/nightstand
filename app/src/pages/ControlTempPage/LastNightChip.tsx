@@ -6,11 +6,15 @@ import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@state/appStore.tsx';
 import { useSleepRecords } from '@api/sleep.ts';
 import { useSleepScore, useSleepScoreEnabled } from '@api/sleepScore.ts';
+import { useSettings } from '@api/settings.ts';
+import { recordForNight } from '../DataPage/SleepPage/sleepContext.ts';
 
 export default function LastNightChip() {
   const { side } = useAppStore();
   const navigate = useNavigate();
   const sleepScoreEnabled = useSleepScoreEnabled();
+  const { data: settings } = useSettings();
+  const timeZone = settings?.timeZone;
 
   // Fetch the most recent sleep record from the last 36 hours. Computed once
   // per mount, not on every render: useSleepRecords keys its query on this
@@ -21,7 +25,13 @@ export default function LastNightChip() {
     endTime: moment().toISOString(),
   }), []);
   const { data: records } = useSleepRecords({ side, startTime, endTime });
-  const last = records?.[records.length - 1];
+  // Same pick as the Sleep page: the longest record of the newest wake date.
+  const last = useMemo(() => {
+    if (!timeZone) return undefined;
+    const sideRecords = records?.filter(record => record.side === side) ?? [];
+    const newest = [...sideRecords].sort((a, b) => Date.parse(b.left_bed_at) - Date.parse(a.left_bed_at))[0];
+    return newest && recordForNight(sideRecords, moment.tz(newest.left_bed_at, timeZone).format('YYYY-MM-DD'), timeZone);
+  }, [records, side, timeZone]);
 
   const { data: score } = useSleepScore(
     {
