@@ -48,7 +48,8 @@ const getAdjustedDayOfWeek = (timeZone?: string): DayOfWeek => {
 
 
 export default function SchedulePage() {
-  const { setIsUpdating, side } = useAppStore();
+  const { setIsUpdating, side, isUpdating } = useAppStore();
+  const focusSaveAfterUpdate = useRef(false);
   const { data: schedules, refetch, isError: schedulesError } = useSchedules();
   const {
     selectedSchedule,
@@ -141,6 +142,19 @@ export default function SchedulePage() {
     row?.querySelector<HTMLElement>('input[type="time"], [role="combobox"]')?.focus({ preventScroll: true });
   };
 
+  // The draft bar unmounts and its buttons are disabled mid-save, so focus would fall to the page body.
+  const focusIfLost = (target: () => HTMLElement | null) => {
+    const active = document.activeElement;
+    if (active && active !== document.body && !active.closest('[data-schedule-draft]')) return;
+    target()?.focus({ preventScroll: true });
+  };
+  const nightHeading = () => document.getElementById('schedule-night-heading');
+  useEffect(() => {
+    if (isUpdating || !focusSaveAfterUpdate.current) return;
+    focusSaveAfterUpdate.current = false;
+    focusIfLost(() => document.querySelector<HTMLElement>('[data-schedule-save]'));
+  }, [isUpdating]);
+
   const handleSave = async () => {
     if (!useScheduleStore.getState().isValid()) return;
     setSaveError('');
@@ -166,12 +180,16 @@ export default function SchedulePage() {
           useScheduleStore.setState({ originalSchedules: result.data });
           // A save may finish after navigation or after another edit.
           if (useAppStore.getState().side === side && current.selectedDay === selectedDay
-            && current.selectedSchedule === selectedSchedule && current.selectedDays === selectedDays) reloadScheduleData();
+            && current.selectedSchedule === selectedSchedule && current.selectedDays === selectedDays) {
+            reloadScheduleData();
+            focusIfLost(nightHeading);
+          }
         }
       })
       .catch(error => {
         console.error(error);
         setSaveError('Could not save the schedule. Your edits are still here. Try again.');
+        focusSaveAfterUpdate.current = true;
       })
       .finally(() => {
         setIsUpdating(false);
@@ -201,7 +219,7 @@ export default function SchedulePage() {
       <DayTabs beforeDayChange={ day => confirmDiscard({ day }) }/>
       <Box sx={ { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 } }>
         <Box sx={ { flex: 1, minWidth: 0 } }>
-          <SectionHeading>
+          <SectionHeading id="schedule-night-heading" tabIndex={ -1 } sx={ { outline: 'none' } }>
             { titleDay } night{ selectedSchedule && selectedSchedule.power.off < selectedSchedule.power.on
               ? ` to ${nextDay.charAt(0).toUpperCase() + nextDay.slice(1)} morning` : '' }
           </SectionHeading>
@@ -256,7 +274,10 @@ export default function SchedulePage() {
               whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.3 } }>
             Unsaved: <bdi>{ sideLabel }</bdi>, { shortDay }{ affectedDays.length > 1 ? ` +${affectedDays.length - 1}` : '' }
           </Typography> }
-        <Button onClick={ reloadScheduleData } disabled={ useAppStore.getState().isUpdating } sx={ { flexShrink: 0, px: 1 } }>Discard</Button>
+        <Button
+          onClick={ () => { reloadScheduleData(); nightHeading()?.focus({ preventScroll: true }); } }
+          disabled={ isUpdating }
+          sx={ { flexShrink: 0, px: 1 } }>Discard</Button>
         <SaveButton onSave={ handleSave }/>
       </Box> }
 
