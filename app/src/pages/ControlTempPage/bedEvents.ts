@@ -1,7 +1,7 @@
 import moment from 'moment-timezone';
 import type { DayOfWeek, SideSchedule } from '@api/schedulesSchema';
 
-type BedSchedule = Partial<Record<DayOfWeek, Pick<SideSchedule['monday'], 'power' | 'temperatures'>>>;
+export type BedSchedule = Partial<Record<DayOfWeek, Pick<SideSchedule['monday'], 'power' | 'temperatures'>>>;
 type BedEvent = { at: moment.Moment; kind: 'on' | 'off' | 'temperature'; temperature?: number };
 
 export function nextBedEvent(schedule: BedSchedule, timeZone: string, now = moment.tz(timeZone), kind?: 'on' | 'off'): BedEvent | undefined {
