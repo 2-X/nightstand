@@ -2,11 +2,17 @@ import _ from 'lodash';
 import { create } from 'zustand';
 import { DeepPartial } from 'ts-essentials';
 import { DeviceStatus } from '@api/deviceStatusSchema.ts';
+import type { Side } from '@state/appStore.tsx';
 
 
 type ControlTempStore = {
   deviceStatus: DeviceStatus | undefined;
   pendingEdits: number;
+  // When a side was last turned off from the Bed page, so the analysis
+  // prompt can follow it without living next to the power button.
+  poweredOff: { side: Side; at: number } | undefined;
+  markPoweredOff: (side: Side) => void;
+  clearPoweredOff: () => void;
   setDeviceStatus: (newDeviceStatus: DeepPartial<DeviceStatus>) => void;
   beginEdit: () => void;
   endEdit: () => void;
@@ -16,6 +22,9 @@ type ControlTempStore = {
 export const useControlTempStore = create<ControlTempStore>((set, get) => ({
   deviceStatus: undefined,
   pendingEdits: 0,
+  poweredOff: undefined,
+  markPoweredOff: (side) => set({ poweredOff: { side, at: Date.now() } }),
+  clearPoweredOff: () => set({ poweredOff: undefined }),
   setDeviceStatus: (newDeviceStatus) => {
     const { deviceStatus } = get();
     // Merge into a fresh object: mutating `deviceStatus` in place would store

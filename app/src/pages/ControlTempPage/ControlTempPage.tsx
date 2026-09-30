@@ -3,6 +3,7 @@ import Button from '@mui/material/Button';
 import { Alert, Box, Typography } from '@mui/material';
 
 import AlarmDismissal from './AlarmDismissal.tsx';
+import AnalyzeLastNightPrompt from './AnalyzeLastNightPrompt.tsx';
 import UpcomingNight from './UpcomingNight.tsx';
 import PageHeader from '@components/PageHeader';
 import BedTabs from '@components/BedTabs';
@@ -90,6 +91,9 @@ export default function ControlTempPage() {
           </ErrorBoundary>
           <ErrorBoundary componentName="Last night chip">
             <LastNightChip />
+          </ErrorBoundary>
+          <ErrorBoundary componentName="Analyze last night">
+            <AnalyzeLastNightPrompt />
           </ErrorBoundary>
         </Box>
       </Box>
