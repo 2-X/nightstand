@@ -6,7 +6,7 @@ import DeleteOutline from '@mui/icons-material/DeleteOutline';
 import ChevronRight from '@mui/icons-material/ChevronRight';
 import { useAppStore } from '@state/appStore';
 import { TemperatureFormat } from '@lib/temperatureConversions';
-import { AlarmSchedule, MAX_ALARMS_PER_DAY } from '@api/schedulesSchema';
+import { AlarmSchedule, MAX_ALARMS_PER_DAY, MAX_TEMPERATURES_PER_DAY } from '@api/schedulesSchema';
 import { useScheduleStore } from './scheduleStore';
 import { minutesSincePowerOn, temperatureInPowerWindow, timeInPowerWindow } from './scheduleValidation';
 import { addMinutes, canFollowWake, nextTemperatureChange, relativeOffDelay, wakeTemperatureTimes } from './scheduleRoutine';
@@ -143,7 +143,9 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
     temperatures[newTime] = schedule.temperatures[oldTime];
     store.updateSelectedTemperatures(temperatures);
   };
+  const atTemperatureLimit = Object.keys(schedule.temperatures).length >= MAX_TEMPERATURES_PER_DAY;
   const addTemperature = () => {
+    if (atTemperatureLimit) return;
     const next = nextTemperatureChange(schedule);
     if (!next) { setError('No free adjustment time remains in this power window.'); return; }
     freezeRows();
@@ -256,7 +258,12 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
       { !times.some(isNightTime) && <Typography variant="body2" color="text.secondary">
         Keep the bedtime temperature until wake-up.
       </Typography> }
-      <Button onClick={ addTemperature } disabled={ disabled } sx={ { alignSelf: 'flex-start', px: 0 } }>Add temperature change</Button>
+      { atTemperatureLimit && <Typography role="status" variant="body2" color="text.secondary">
+        A day holds at most { MAX_TEMPERATURES_PER_DAY } temperature changes. Remove one to add another.
+      </Typography> }
+      <Button onClick={ addTemperature } disabled={ disabled || atTemperatureLimit } sx={ { alignSelf: 'flex-start', px: 0 } }>
+        Add temperature change
+      </Button>
     </Stack>
     <Stack component="section" aria-labelledby="wake-heading" spacing={ 1 }>
       <SectionHeading id="wake-heading">{ wakeAlarm ? 'Wake up' : 'Get up' }</SectionHeading>
@@ -332,7 +339,7 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
       }) }
       { wakeAlarm && !times.some(isWakeTime) && timeInPowerWindow(wakeAlarm.time, schedule.power)
         && minutesSincePowerOn(wakeAlarm.time, schedule.power.on) > 30 && <Button
-        disabled={ disabled }
+        disabled={ disabled || atTemperatureLimit }
         onClick={ () => {
           const time = addMinutes(wakeAlarm.time, -30);
           if (time in schedule.temperatures) {
