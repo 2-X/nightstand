@@ -285,6 +285,114 @@ filter is not authentication or protection from non-browser clients.
 
 ---
 
+## `/api/rhythms`
+
+Rhythms are named sleep plans per side, a weekly plan that picks a rhythm for each weekday, and date changes that pick a different rhythm (or no sleep) for one date. They are stored in `rhythmsDB.json`, apart from the weekly schedule, and are off unless `features.rhythms` is on. These routes never create that file and never change `schedulesDB.json`. Nothing is scheduled from Rhythms yet.
+
+### GET `/api/rhythms`
+
+- Returns whether Rhythms are on and the stored data. `data` is the stored file whenever it can be read, even when Rhythms are not active, and `null` otherwise.
+- `status.reason` is present when `active` is false: `flag-off`, `absent` (not set up yet), `invalid` (the file could not be read), `unsupported-version` (saved by a newer version) or `fingerprint-mismatch` (the weekly schedule changed since Rhythms were set up). Later versions may add reasons.
+
+#### Response
+
+```json
+{
+  "status": { "enabled": true, "active": true },
+  "data": {
+    "version": 1,
+    "legacyFingerprint": "7751bac1543dfb451bc211034ed29808b5d8c870fffe4c5883df45b158265704",
+    "left": {
+      "rhythms": {
+        "workdays": {
+          "id": "workdays",
+          "name": "Workdays",
+          "night": {
+            "temperatures": { "23:00": 78, "03:00": 74 },
+            "power": { "on": "22:00", "off": "07:00", "onTemperature": 82, "enabled": true },
+            "alarm": { "time": "06:30", "vibrationIntensity": 80, "vibrationPattern": "rise", "duration": 30, "enabled": true, "alarmTemperature": 82 },
+            "alarms": [
+              { "time": "06:30", "vibrationIntensity": 80, "vibrationPattern": "rise", "duration": 30, "enabled": true, "alarmTemperature": 82 }
+            ]
+          },
+          "wake": "06:30",
+          "temperatureMode": "manual",
+          "smart": { "baseLevel": 0, "intensity": "standard", "warmStart": true, "warmUp": true, "upEarly": false }
+        }
+      },
+      "week": {
+        "sunday": "workdays", "monday": "workdays", "tuesday": "workdays", "wednesday": "workdays",
+        "thursday": "workdays", "friday": null, "saturday": null
+      },
+      "changes": [{ "date": "2026-10-12", "rhythmId": null }]
+    },
+    "right": { "rhythms": {}, "week": { "sunday": null, "monday": null, "tuesday": null, "wednesday": null, "thursday": null, "friday": null, "saturday": null }, "changes": [] }
+  }
+}
+```
+
+### POST `/api/rhythms`
+
+- Saves one or both sides. A side that is sent replaces the stored side; a side that is left out is kept. The body accepts only `left` and `right`, and unknown keys anywhere inside a side are refused.
+- Many date changes can be saved in one request. Changes more than 7 days old are dropped before the side is checked.
+- A side can have up to 12 rhythms. Each rhythm is stored under its own `id`. The weekly plan and the date changes name existing rhythms or `null`. A date appears at most once, is a real date and is at most 60 days ahead in the Pod's time zone. A rhythm can have up to 48 temperature changes, or as many as it already has when more are stored.
+- Two sleeps on the same side may not overlap, from now to 63 days ahead. Sleeps that have already ended are not checked.
+- Returns the same body as `GET /api/rhythms`.
+
+#### Request Body
+
+```json
+{
+  "left": {
+    "rhythms": { "workdays": { "...": "a full rhythm, as in the GET response" } },
+    "week": { "sunday": "workdays", "monday": "workdays", "tuesday": "workdays", "wednesday": "workdays", "thursday": "workdays", "friday": null, "saturday": null },
+    "changes": [
+      { "date": "2026-10-12", "rhythmId": null },
+      { "date": "2026-10-16", "rhythmId": "workdays" }
+    ]
+  }
+}
+```
+
+#### Errors
+
+- `400 { "error": "Invalid request data", "details": [...] }`: the body does not match the schema.
+- `400 { "error": "Invalid rhythms", "details": ["left: The Monday plan uses a rhythm that does not exist (nap)"] }`: a rule above is broken. Each detail starts with the side.
+- `400 { "error": "Two sleeps would overlap", "overlaps": [{ "side": "left", "first": "2026-10-12", "second": "2026-10-13" }] }`: `first` and `second` are the start dates of the two sleeps.
+- `409 { "error": "Rhythms are not set up on this Pod", "state": "absent" }`: nothing is saved unless the stored file can be read. `state` is `absent`, `invalid` or `unsupported`.
+
+### GET `/api/rhythms/sleeps`
+
+- Returns the sleeps of one side that overlap a window: from Rhythms when they are active, otherwise from the weekly schedule. Alarms are left out when the side's alarms are turned off. Away mode is not applied.
+- Query: `side` (`left` or `right`), `from` and `to` (ISO 8601 date times with an offset, `to` after `from`, at most 16 days apart). Any other query key is refused with `400`.
+- A sleep is named by the date it starts, in the Pod's time zone. `rhythmId` is `null` for sleeps from the weekly schedule. Events are sorted by time.
+
+#### Response
+
+```json
+[
+  {
+    "side": "left",
+    "date": "2026-10-05",
+    "rhythmId": "workdays",
+    "start": "2026-10-06T05:00:00.000Z",
+    "end": "2026-10-06T14:00:00.000Z",
+    "wake": "2026-10-06T13:30:00.000Z",
+    "night": { "...": "the rhythm's night" },
+    "mode": "manual",
+    "events": [
+      { "kind": "power-on", "at": "2026-10-06T05:00:00.000Z", "temperatureF": 82 },
+      { "kind": "temperature", "at": "2026-10-06T06:00:00.000Z", "temperatureF": 78 },
+      { "kind": "temperature", "at": "2026-10-06T10:00:00.000Z", "temperatureF": 74 },
+      { "kind": "alarm", "at": "2026-10-06T13:30:00.000Z", "alarm": { "...": "the alarm" }, "index": 0 },
+      { "kind": "power-off", "at": "2026-10-06T14:00:00.000Z" }
+    ]
+  }
+]
+```
+
+---
+
 ## `/api/execute`
 
 ### POST

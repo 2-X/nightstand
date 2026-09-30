@@ -8,6 +8,7 @@ import jobs from '../routes/jobs/jobs.js';
 import settings from '../routes/settings/settings.js';
 import services from '../routes/services/services.js';
 import schedules from '../routes/schedules/schedules.js';
+import rhythms from '../routes/rhythms/rhythms.js';
 import sleep from '../routes/metrics/sleep.js';
 import movement from '../routes/metrics/movement.js';
 import vitals from '../routes/metrics/vitals.js';
@@ -35,6 +36,7 @@ export default function (app: Express) {
   app.use('/api/', deviceStatus);
   app.use('/api/', execute);
   app.use('/api/', schedules);
+  app.use('/api/', rhythms);
   app.use('/api/', jobs);
   app.use('/api/', settings);
   app.use('/api/', services);

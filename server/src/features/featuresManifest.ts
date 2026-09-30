@@ -497,10 +497,14 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     version: '3.5.0',
     flag: 'rhythms',
     default: false,
-    touchpoints: ['server/src/db/settingsSchema.ts'],
+    touchpoints: [
+      'server/src/db/rhythmsSchema.ts', 'server/src/db/rhythms.ts', 'server/src/jobs/rhythms', 'server/src/routes/rhythms/rhythms.ts',
+    ],
     depends_on: ['agent'],
     reversible: true,
-    tests: ['server/src/routes/settings/settingsValidation.test.ts'],
+    tests: [
+      'server/src/jobs/rhythms/equivalence.test.ts', 'server/src/db/rhythms.test.ts', 'server/src/routes/rhythms/rhythms.test.ts',
+    ],
     upstream_offer: false,
     rationale: 'Off by default. Its data lives only in rhythmsDB.json and it never writes schedulesDB.json, so turning it '
       + 'off, rolling back or switching to upstream leaves the weekly schedule exactly as it was.',
