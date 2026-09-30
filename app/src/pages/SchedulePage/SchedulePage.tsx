@@ -22,6 +22,8 @@ import { useAppStore } from '@state/appStore.tsx';
 import { useSchedules } from '@api/schedules';
 import { useScheduleStore } from './scheduleStore.tsx';
 import { useSettings } from '@api/settings';
+import { useDeviceStatus } from '@api/deviceStatus.ts';
+import { supportsRisePattern } from '@api/alarmPattern.ts';
 import { isSchedulePaused } from '@api/schedulePause.ts';
 import { LOWERCASE_DAYS } from './days.ts';
 import TemperatureScheduleChart from './ScheduleChart.tsx';
@@ -63,6 +65,8 @@ export default function SchedulePage() {
     selectDay,
   } = useScheduleStore();
   const { data: settings, refetch: refetchSettings, isError: settingsError } = useSettings();
+  const { data: deviceStatus } = useDeviceStatus();
+  const risePattern = supportsRisePattern(deviceStatus?.hubVersion);
   const format = settings?.temperatureFormat ?? 'fahrenheit';
   const [saveError, setSaveError] = useState('');
   const [pendingChange, setPendingChange] = useState<{ day: number } | { side: 'left' | 'right' }>();
@@ -247,7 +251,7 @@ export default function SchedulePage() {
       </Box>
       { !firstRun ? selectedSchedule?.power.enabled ? <>
         <ErrorBoundary componentName="Scheduling chart"><TemperatureScheduleChart/></ErrorBoundary>
-        <ScheduleTimeline key={ `${side}-${selectedDay}` } format={ format }/>
+        <ScheduleTimeline key={ `${side}-${selectedDay}` } format={ format } risePattern={ risePattern }/>
       </> : <Typography color="text.secondary" sx={ { width: '100%' } }>This night is off</Typography> : <Box
         sx={ { width: '100%', p: 2, border: 1, borderColor: 'divider', borderRadius: 1 } }>
         <SectionHeading>Set a bedtime and a wake time</SectionHeading>

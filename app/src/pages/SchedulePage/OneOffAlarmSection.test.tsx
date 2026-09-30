@@ -4,7 +4,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import OneOffAlarmSection from './OneOffAlarmSection';
-import { getSettings } from '../../mocks/mockData';
+import { getDeviceStatus, getSettings } from '../../mocks/mockData';
 
 describe('OneOffAlarmSection', () => {
   it('posts the one-time alarm to the left side on save', async () => {
@@ -57,4 +57,27 @@ it('reads and saves times in UTC while the Pod has no time zone set', async () =
   fireEvent.click(screen.getByRole('button', { name: 'Save one-time alarm' }));
   await waitFor(() => expect(posted).toBeTruthy());
   expect(posted.left.oneOffAlarm.fireAt).toBe('2099-01-02T07:30:00Z');
+});
+
+describe('pattern by Pod model', () => {
+  const note = 'Builds up works only on a Pod 5, so alarms on this Pod use Double pulse.';
+
+  it('offers Builds up on a Pod 5', async () => {
+    renderWithProviders(<OneOffAlarmSection/>);
+    fireEvent.click(await screen.findByRole('switch', { name: 'Enable one-time alarm' }));
+    const pattern = screen.getByRole('combobox', { name: 'Pattern' });
+    await waitFor(() => expect(pattern).toHaveTextContent('Builds up'));
+    expect(screen.queryByText(note)).not.toBeInTheDocument();
+  });
+
+  it.each(['Pod 3', 'Pod 4', 'Version not found'])('shows Double pulse and a disabled Builds up on %s', async (hubVersion) => {
+    server.use(http.get('*/deviceStatus', () => HttpResponse.json({ ...getDeviceStatus(), hubVersion })));
+    renderWithProviders(<OneOffAlarmSection/>);
+    fireEvent.click(await screen.findByRole('switch', { name: 'Enable one-time alarm' }));
+    expect(await screen.findByText(note)).toBeInTheDocument();
+    const pattern = screen.getByRole('combobox', { name: 'Pattern' });
+    expect(pattern).toHaveTextContent('Double pulse');
+    fireEvent.mouseDown(pattern);
+    expect(screen.getByRole('option', { name: 'Builds up' })).toHaveAttribute('aria-disabled', 'true');
+  });
 });

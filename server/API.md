@@ -320,7 +320,7 @@ filter is not authentication or protection from non-browser clients.
 
 #### Request Body
 
-Same shape as the `alarm` field in `/api/schedules`, plus `side` and an optional `force` flag (validated by `AlarmJobSchema`).
+Same shape as the `alarm` field in `/api/schedules`, plus `side` and an optional `force` flag (validated by `AlarmJobSchema`). The Pod gets the `rise` pattern only when its hub is detected as a Pod 5; any other or unknown hub gets `double`, which rings on every Pod. The same rule applies to scheduled and one-time alarms.
 
 ```json
 {

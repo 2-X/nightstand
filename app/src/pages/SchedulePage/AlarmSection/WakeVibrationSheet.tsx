@@ -2,8 +2,14 @@ import { Box, Button, Dialog, DialogContent, DialogTitle, MenuItem, Slider, Stac
 import { useScheduleStore } from '../scheduleStore';
 import { useAppStore } from '@state/appStore';
 import AlarmTest from './AlarmTest';
+import { RISE_PATTERN_NOTE } from '@api/alarmPattern.ts';
 
-export default function WakeVibrationSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function WakeVibrationSheet({ open, onClose, risePattern = false }: {
+  open: boolean;
+  onClose: () => void;
+  // Whether this Pod rings the rising pattern; other Pods always get double.
+  risePattern?: boolean;
+}) {
   const store = useScheduleStore();
   const disabled = useAppStore(state => state.isUpdating);
   const alarm = store.getEditedAlarms()[store.selectedAlarmIndex];
@@ -23,10 +29,11 @@ export default function WakeVibrationSheet({ open, onClose }: { open: boolean; o
       <TextField
         select
         label="Pattern"
-        value={ alarm.vibrationPattern }
+        value={ risePattern ? alarm.vibrationPattern : 'double' }
         disabled={ disabled }
+        helperText={ risePattern ? undefined : RISE_PATTERN_NOTE }
         onChange={ event => store.updateSelectedAlarm({ vibrationPattern: event.target.value as 'rise' | 'double' }) }>
-        <MenuItem value="rise">Builds up</MenuItem><MenuItem value="double">Double pulse</MenuItem>
+        <MenuItem value="rise" disabled={ !risePattern }>Builds up</MenuItem><MenuItem value="double">Double pulse</MenuItem>
       </TextField>
       <Box><Typography id="vibration-strength">Strength { alarm.vibrationIntensity } of 100</Typography>
         <Slider

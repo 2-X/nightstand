@@ -305,3 +305,12 @@ it('does not add an alarm at the same minute as one that ends the night', () => 
   expect(times).toEqual(['07:00', '06:59']);
   expect(useScheduleStore.getState().isValid()).toBe(true);
 });
+
+it.each([
+  [true, 'Builds up'],
+  [false, 'Double pulse'],
+])('summarizes a rising alarm by the pattern the Pod uses (Pod 5: %s)', (risePattern, label) => {
+  useScheduleStore.getState().updateSelectedAlarm({ vibrationPattern: 'rise' });
+  render(<ScheduleTimeline format="level" risePattern={ risePattern }/>);
+  expect(screen.getByRole('button', { name: new RegExp(`^Vibrate: ${label},`) })).toBeInTheDocument();
+});

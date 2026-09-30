@@ -4,10 +4,7 @@ import {
   Box,
   Button,
   CircularProgress,
-  FormControl,
-  InputLabel,
   MenuItem,
-  Select,
   Slider,
   Switch,
   TextField,
@@ -18,6 +15,8 @@ import moment from 'moment-timezone';
 import { friendlyTimeZone } from '@lib/timeZone';
 import { palette } from '@design/tokens';
 import { postSettings, useSettings } from '@api/settings.ts';
+import { useDeviceStatus } from '@api/deviceStatus.ts';
+import { RISE_PATTERN_NOTE, supportsRisePattern } from '@api/alarmPattern.ts';
 import { useAppStore } from '@state/appStore.tsx';
 
 const PATTERNS = ['rise', 'double'] as const;
@@ -40,6 +39,8 @@ function localInputToIso(localStr: string, tz: string): string {
 export default function OneOffAlarmSection() {
   const { side } = useAppStore();
   const { data: settings, refetch } = useSettings();
+  const { data: deviceStatus } = useDeviceStatus();
+  const risePattern = supportsRisePattern(deviceStatus?.hubVersion);
 
   const [enabled, setEnabled] = useState(false);
   const [fireAtLocal, setFireAtLocal] = useState('');
@@ -154,15 +155,23 @@ export default function OneOffAlarmSection() {
               { durations.map(value => <MenuItem key={ value } value={ value }>{ value % 60 === 0 && value > 0
                 ? `${value / 60} ${value === 60 ? 'minute' : 'minutes'}` : `${value} seconds` }</MenuItem>) }
             </TextField>
-            <FormControl variant="standard" sx={ { flex: 1 } }>
-              <InputLabel>Pattern</InputLabel>
-              <Select value={ pattern } onChange={ (e) => setPattern(e.target.value as Pattern) }>
-                { PATTERNS.map((p) => (
-                  <MenuItem key={ p } value={ p }>{ p === 'rise' ? 'Builds up' : 'Double pulse' }</MenuItem>
-                )) }
-              </Select>
-            </FormControl>
+            <TextField
+              select
+              label="Pattern"
+              variant="standard"
+              value={ risePattern ? pattern : 'double' }
+              onChange={ (e) => setPattern(e.target.value as Pattern) }
+              sx={ { flex: 1 } }>
+              { PATTERNS.map((p) => (
+                <MenuItem key={ p } value={ p } disabled={ p === 'rise' && !risePattern }>
+                  { p === 'rise' ? 'Builds up' : 'Double pulse' }
+                </MenuItem>
+              )) }
+            </TextField>
           </Box>
+          { !risePattern && <Typography variant="caption" component="p" color="text.secondary" sx={ { mt: -1, mb: 2 } }>
+            { RISE_PATTERN_NOTE }
+          </Typography> }
 
           <Box sx={ { mb: 1 } }>
             <Typography id="one-time-alarm-strength" variant="body2" sx={ { color: palette.text.secondary, mb: 1 } }>

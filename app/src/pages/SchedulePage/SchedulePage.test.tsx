@@ -6,6 +6,7 @@ import { server } from '@test/setup';
 import { useAppStore } from '@state/appStore.tsx';
 import { useScheduleStore } from './scheduleStore';
 import SchedulePage from './SchedulePage';
+import { getDeviceStatus, getSchedules } from '../../mocks/mockData';
 
 describe('SchedulePage', () => {
   it('renders the schedule page once schedule data loads', async () => {
@@ -59,5 +60,29 @@ describe('SchedulePage save', () => {
     // here, the next test starts mid-save with every control still disabled
     // (pointer-events: none) from this test's leftover in-flight save.
     await waitFor(() => expect(useAppStore.getState().isUpdating).toBe(false), { timeout: 3000 });
+  });
+});
+
+describe('SchedulePage alarm pattern', () => {
+  const risingSchedules = () => {
+    const schedules = structuredClone(getSchedules());
+    Object.values(schedules.left).forEach(day => day.alarms.forEach(alarm => { alarm.vibrationPattern = 'rise'; }));
+    return schedules;
+  };
+
+  it('shows Builds up on a Pod 5', async () => {
+    server.use(http.get('*/schedules', () => HttpResponse.json(risingSchedules())));
+    renderWithProviders(<SchedulePage />, { initialRoute: '/schedules' });
+    expect(await screen.findByRole('button', { name: /^Vibrate: Builds up,/ })).toBeInTheDocument();
+  });
+
+  it('shows Double pulse on a Pod that is not a Pod 5', async () => {
+    server.use(
+      http.get('*/schedules', () => HttpResponse.json(risingSchedules())),
+      http.get('*/deviceStatus', () => HttpResponse.json({ ...getDeviceStatus(), hubVersion: 'Pod 4' })),
+    );
+    renderWithProviders(<SchedulePage />, { initialRoute: '/schedules' });
+    expect(await screen.findByRole('button', { name: /^Vibrate: Double pulse,/ })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText(/Builds up/)).not.toBeInTheDocument());
   });
 });

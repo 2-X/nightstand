@@ -18,6 +18,7 @@ import { nightBounds } from './nightBounds.js';
 import { emitJobEvent } from './jobEvents.js';
 import { describePause, isAlarmPaused } from './schedulePause.js';
 import { trackAlarm } from './alarmActivity.js';
+import { alarmPatternFor } from './alarmPattern.js';
 
 
 const alarmOccurrences = new Map<string, number>();
@@ -72,7 +73,7 @@ export const executeAlarm = async (
     const alarmPayload = {
       pl: vibrationIntensity,
       du: min10Duration,
-      pi: vibrationPattern,
+      pi: alarmPatternFor(resp.hubVersion, vibrationPattern),
       tt: alarmTimeEpoch,
     };
 

@@ -13,7 +13,7 @@ import { addMinutes, canFollowWake, nextTemperatureChange, relativeOffDelay, wak
 import TemperatureStepper from './TemperatureStepper';
 import WakeVibrationSheet from './AlarmSection/WakeVibrationSheet';
 
-export default function ScheduleTimeline({ format }: { format: TemperatureFormat }) {
+export default function ScheduleTimeline({ format, risePattern = false }: { format: TemperatureFormat; risePattern?: boolean }) {
   const store = useScheduleStore();
   const schedule = store.selectedSchedule;
   const isUpdating = useAppStore(state => state.isUpdating);
@@ -323,13 +323,13 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
           { alarm.enabled && <Button
             fullWidth
             disabled={ disabled }
-            aria-label={ `Vibrate: ${alarm.vibrationPattern === 'rise' ? 'Builds up' : 'Double pulse'}, `
+            aria-label={ `Vibrate: ${risePattern && alarm.vibrationPattern === 'rise' ? 'Builds up' : 'Double pulse'}, `
               + `strength ${alarm.vibrationIntensity}, ${alarm.duration} seconds` }
             endIcon={ <ChevronRight/> }
             sx={ { justifyContent: 'space-between', textAlign: 'left', minHeight: 44, mt: 1, px: 0 } }
             onClick={ () => { store.selectAlarm(index); setSheetOpen(true); } }>
             <Typography component="span" variant="body2" color="text.secondary">
-              { alarm.vibrationPattern === 'rise' ? 'Builds up' : 'Double pulse' }, strength { alarm.vibrationIntensity },
+              { risePattern && alarm.vibrationPattern === 'rise' ? 'Builds up' : 'Double pulse' }, strength { alarm.vibrationIntensity },
               { ' ' }<Box component="span" sx={ { whiteSpace: 'nowrap' } }>{ alarm.duration } s</Box>
             </Typography>
           </Button> }
@@ -418,6 +418,6 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
         disabled={ disabled || alarms.length >= MAX_ALARMS_PER_DAY }
         sx={ { alignSelf: 'flex-start', px: 0 } }>Add alarm</Button>
     </Stack>
-    <WakeVibrationSheet open={ sheetOpen } onClose={ () => setSheetOpen(false) }/>
+    <WakeVibrationSheet open={ sheetOpen } onClose={ () => setSheetOpen(false) } risePattern={ risePattern }/>
   </Stack>;
 }
