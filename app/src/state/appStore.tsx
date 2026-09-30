@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { create } from 'zustand';
 import moment from 'moment-timezone';
 
@@ -27,12 +27,75 @@ export const useAppStore = create<AppState>((set) => ({
   },
 }));
 
+// Menu options live in a portal and unmount when the menu closes. The control
+// worth returning to is the one that opened the menu.
+function stableFocusTarget(active: HTMLElement) {
+  const popup = active.closest('[role="listbox"], [role="menu"]');
+  if (!popup?.id) return active;
+  const trigger = document.querySelector(`[aria-controls~="${CSS.escape(popup.id)}"]`);
+  return trigger instanceof HTMLElement ? trigger : active;
+}
+
+// Controls disable themselves while a save is in flight, and a browser drops
+// focus from an element that becomes disabled. That leaves a keyboard user at
+// the top of the page after every toggle. Remember what had focus when a
+// keyboard-driven save began and give it back once controls are enabled
+// again, unless the user moved on or clicked elsewhere in the meantime.
+function useRestoreFocusAfterSave() {
+  const isUpdating = useAppStore(state => state.isUpdating);
+  const focusBeforeSave = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    let usingKeyboard = false;
+    const onKeyDown = () => { usingKeyboard = true; };
+    const onPointerDown = () => {
+      usingKeyboard = false;
+      focusBeforeSave.current = null;
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('pointerdown', onPointerDown, true);
+    const unsubscribe = useAppStore.subscribe((state, previous) => {
+      if (!state.isUpdating || previous.isUpdating) return;
+      const active = document.activeElement;
+      focusBeforeSave.current = usingKeyboard && active instanceof HTMLElement && active !== document.body ? stableFocusTarget(active) : null;
+    });
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isUpdating) return;
+    const target = focusBeforeSave.current;
+    focusBeforeSave.current = null;
+    if (!target) return;
+    // A closing menu keeps focus until it unmounts, so wait for focus to land
+    // on the page body; anywhere else means the user has moved on.
+    let frames = 0;
+    let frame = 0;
+    const restore = () => {
+      const active = document.activeElement;
+      if (!target.isConnected || target.matches(':disabled')) return;
+      if (!active || active === document.body) {
+        target.focus({ preventScroll: true });
+      } else if (active.closest('[role="listbox"], [role="menu"]') && frames++ < 40) {
+        frame = requestAnimationFrame(restore);
+      }
+    };
+    restore();
+    return () => cancelAnimationFrame(frame);
+  }, [isUpdating]);
+}
+
 // AppStoreProvider to sync Zustand with react-query's isFetching
 export function AppStoreProvider({ children }: React.PropsWithChildren) {
   // One WebSocket for the whole app, pushing device-status/service-health
   // updates straight into the React Query cache. Mounted at the tree root so
   // there's no per-page connection churn.
   useEventStream();
+  useRestoreFocusAfterSave();
   const { data: settings } = useSettings();
 
   useEffect(() => {
