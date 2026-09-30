@@ -124,8 +124,12 @@ jobs:
         run: npm test
 
   test-python:
-    name: Test (biometrics)
+    name: Test (biometrics, Python ${{ matrix.python }})
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        # 3.9 on Pod 3 units set up with an SD card, 3.10 on the rest.
+        python: ['3.9', '3.10']
 
     steps:
       - name: Checkout repository
@@ -134,10 +138,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: '3.9'
+          python-version: ${{ matrix.python }}
 
       - name: Install dependencies
-        run: pip install cbor2 numpy scipy pandas watchdog pytest
+        run: |
+          pip install -r scripts/python/requirements.txt
+          pip install pytest
 
       - name: Test
         run: python -m pytest biometrics/__tests__/ -v

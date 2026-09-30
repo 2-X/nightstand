@@ -78,6 +78,10 @@ is a hard fork; for the history of the projects it descends from, see
   bed rather than a stage estimate. The sleep score's duration now uses the
   same figure as the time asleep shown above it.
 
+- Setting up biometrics installs its Python packages at versions tested on
+  Pods instead of whatever is newest. A new major version of one of them was
+  released recently and has not been tried on a Pod.
+
 - Alarms minutes apart no longer suppress one another. Overnight temperature
   changes, alarm replacements and sleep analysis use the full night window.
 

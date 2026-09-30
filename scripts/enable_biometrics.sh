@@ -16,7 +16,7 @@ ensure_nats_python_package() {
 
   echo "Installing nats-py for live biometrics stream..."
   sh /home/dac/free-sleep/scripts/unblock_internet_access.sh
-  /home/dac/venv/bin/python -m pip install nats-py
+  /home/dac/venv/bin/python -m pip install "$(grep '^nats-py==' /home/dac/free-sleep/scripts/python/requirements.txt)"
   sh /home/dac/free-sleep/scripts/block_internet_access.sh
 }
 

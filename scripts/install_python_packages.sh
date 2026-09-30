@@ -29,5 +29,5 @@ echo "Activating python venv..."
 source /home/dac/venv/bin/activate
 
 set -x
-/home/dac/venv/bin/python -m pip install numpy scipy pandas cbor2 watchdog nats-py
+/home/dac/venv/bin/python -m pip install -r /home/dac/free-sleep/scripts/python/requirements.txt
 set +x
