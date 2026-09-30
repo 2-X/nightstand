@@ -457,11 +457,13 @@ Valid keys:
 
 ### PUT `/api/metrics/sleep/:id`
 
-- Edits an existing sleep record (e.g., correct a bedtime that was off because of a presence-detection glitch). Body specifies the fields to overwrite; recalculates `sleep_period_seconds` and `times_exited_bed` when both bed-time fields are supplied.
+- Edits an existing sleep record (e.g., correct a bedtime that was off because of a presence-detection glitch). Body specifies the fields to overwrite; recalculates `sleep_period_seconds` and `times_exited_bed` when either bed-time field changes, unless the body sets them.
+- `:id` must be a positive whole number (400 otherwise); 404 if no record has it. An `id` in the body is ignored.
+- `side` must be `left` or `right`. Returns 400 if `left_bed_at` would be before `entered_bed_at`, for negative counts, reversed intervals, or times before 1970 or after 2038. Returns 409 if another record on the same side already starts at the new `entered_bed_at`.
 
 ### DELETE `/api/metrics/sleep/:id`
 
-- Removes a sleep record. Useful for naps or false detections that should not count. Returns `204 No Content`.
+- Removes a sleep record. Useful for naps or false detections that should not count. Returns `204 No Content`, 400 for an id that is not a positive whole number, and 404 if no record has it.
 
 ---
 

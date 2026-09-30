@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
-import { sleepRecordSchema, SleepRecord } from '../../db/sleepRecordsSchema.js';
+import { z } from 'zod';
+import { SideSchema } from '../../db/schedulesSchema.js';
 import { loadSleepRecords } from '../../db/loadSleepRecords.js';
 import { prisma } from '../../db/prisma.js';
 import { parseMetricsQuery } from './metricsQuery.js';
@@ -27,74 +28,94 @@ router.get('/sleep', async (req: Request, res: Response) => {
 });
 
 
-router.put<
-  { id: string },
-  any,
-  SleepRecord
->('/sleep/:id', async (req, res) => {
-  const { id } = req.params;
-  const parsedId = parseInt(id, 10);
-  if (isNaN(parsedId)) {
+// Sleep record columns are 32-bit integers holding epoch seconds.
+const MAX_INT32 = 2_147_483_647;
+
+const parseRecordId = (raw: string) => {
+  if (!/^\d{1,10}$/.test(raw)) return undefined;
+  const id = Number(raw);
+  return id >= 1 && id <= MAX_INT32 ? id : undefined;
+};
+
+const EpochSecondsSchema = z.string().datetime({ offset: true })
+  .transform(value => Math.floor(Date.parse(value) / 1000))
+  .refine(seconds => seconds >= 0 && seconds <= MAX_INT32, 'Time is out of range');
+
+const IntervalsSchema = z.array(z.tuple([EpochSecondsSchema, EpochSecondsSchema]))
+  .refine(pairs => pairs.every(([start, end]) => end >= start), 'Interval ends before it starts');
+
+const CountSchema = z.number().int().min(0).max(MAX_INT32);
+
+// Fields a client may change. The id comes from the path only.
+const SleepRecordUpdateSchema = z.object({
+  side: SideSchema,
+  entered_bed_at: EpochSecondsSchema,
+  left_bed_at: EpochSecondsSchema,
+  sleep_period_seconds: CountSchema,
+  times_exited_bed: CountSchema,
+  present_intervals: IntervalsSchema,
+  not_present_intervals: IntervalsSchema,
+}).partial();
+
+const isPrismaError = (error: unknown, code: string) => (error as { code?: unknown })?.code === code;
+
+router.put('/sleep/:id', async (req: Request<{ id: string }>, res: Response) => {
+  const id = parseRecordId(req.params.id);
+  if (id === undefined) {
     return res.status(400).json({ error: 'Invalid ID' });
   }
 
-  // Fetch the existing record
-  let existingRecord = await prisma.sleep_records.findUnique({
-    where: { id: parsedId },
-  });
-  if (!existingRecord) {
+  const existing = await prisma.sleep_records.findUnique({ where: { id } });
+  if (!existing) {
     return res.status(404).json({ error: 'Sleep record not found' });
   }
-  const loadedRecords = await loadSleepRecords([existingRecord]);
-  // @ts-ignore
-  existingRecord = loadedRecords[0];
 
-  // Validate the request body
-  const parsedData = sleepRecordSchema.partial().safeParse(req.body);
+  const parsedData = SleepRecordUpdateSchema.safeParse(req.body);
   if (!parsedData.success) {
     return res.status(400).json({ error: 'Invalid request body', details: parsedData.error.format() });
   }
-  // Convert entered_bed_at and exited_bed_at to epoch timestamps
-  const updatedRecord = { ...parsedData.data };
-  if (updatedRecord.entered_bed_at) {
-    // @ts-expect-error
-    updatedRecord.entered_bed_at = Math.floor(new Date(updatedRecord.entered_bed_at).getTime() / 1000);
-  }
-  if (updatedRecord.left_bed_at) {
-    // @ts-expect-error
-    updatedRecord.left_bed_at = Math.floor(new Date(updatedRecord.left_bed_at).getTime() / 1000);
+  const { present_intervals: presentIntervals, not_present_intervals: notPresentIntervals, ...fields } = parsedData.data;
+  const enteredBedAt = fields.entered_bed_at ?? existing.entered_bed_at;
+  const leftBedAt = fields.left_bed_at ?? existing.left_bed_at;
+  if (leftBedAt < enteredBedAt) {
+    return res.status(400).json({ error: 'Invalid request body', details: 'left_bed_at is before entered_bed_at' });
   }
 
-  // Need to recalculate the number of times someone left the bed during the new sleep interval
-  if (updatedRecord.entered_bed_at && updatedRecord.left_bed_at) {
-    // @ts-expect-error
-    updatedRecord.sleep_period_seconds = updatedRecord.left_bed_at - updatedRecord.entered_bed_at;
+  const data: Prisma.sleep_recordsUpdateInput = { ...fields };
+  if (presentIntervals) data.present_intervals = JSON.stringify(presentIntervals);
+  if (notPresentIntervals) data.not_present_intervals = JSON.stringify(notPresentIntervals);
 
-    // @ts-expect-error
-    updatedRecord.times_exited_bed = existingRecord.not_present_intervals.filter(([start, end]) => {
-      const startTime = Math.floor(new Date(start).getTime() / 1000);
-      const endTime = Math.floor(new Date(end).getTime() / 1000);
-      // @ts-ignore
-      return startTime >= updatedRecord.entered_bed_at && endTime <= updatedRecord.left_bed_at;
-    }).length;
+  // Moving either end changes the period and which absences fall inside it.
+  if (fields.entered_bed_at !== undefined || fields.left_bed_at !== undefined) {
+    data.sleep_period_seconds ??= leftBedAt - enteredBedAt;
+    const absences: [number, number][] = notPresentIntervals
+      ?? (existing.not_present_intervals ? JSON.parse(existing.not_present_intervals) : []);
+    data.times_exited_bed ??= absences.filter(([start, end]) => start >= enteredBedAt && end <= leftBedAt).length;
   }
 
-  // Update the record in the database
-  const dbUpdatedRecord = await prisma.sleep_records.update({
-    where: { id: parsedId },
-    // @ts-ignore
-    data: updatedRecord,
-  });
-
-  // Load and return the updated record
-  const loadedNewRecord = await loadSleepRecords([dbUpdatedRecord]);
-  return res.json(loadedNewRecord[0]);
+  try {
+    const updated = await prisma.sleep_records.update({ where: { id }, data });
+    const [loaded] = await loadSleepRecords([updated]);
+    return res.json(loaded);
+  } catch (error) {
+    if (isPrismaError(error, 'P2025')) return res.status(404).json({ error: 'Sleep record not found' });
+    if (isPrismaError(error, 'P2002')) {
+      return res.status(409).json({ error: 'Another sleep record on this side starts at that time' });
+    }
+    throw error;
+  }
 });
 
 
-router.delete('/sleep/:id', async (req, res) => {
-  const { id } = req.params;
-  await prisma.sleep_records.delete({ where: { id: parseInt(id, 10) } });
+router.delete('/sleep/:id', async (req: Request<{ id: string }>, res: Response) => {
+  const id = parseRecordId(req.params.id);
+  if (id === undefined) {
+    return res.status(400).json({ error: 'Invalid ID' });
+  }
+  const { count } = await prisma.sleep_records.deleteMany({ where: { id } });
+  if (count === 0) {
+    return res.status(404).json({ error: 'Sleep record not found' });
+  }
   res.status(204).send();
 });
 
