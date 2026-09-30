@@ -288,7 +288,7 @@ filter is not authentication or protection from non-browser clients.
 ### POST
 
 - Executes a specific command on the device.
-- Returns 400 for a `command` that is not a known command name. For `TEMP_LEVEL_LEFT` and `TEMP_LEVEL_RIGHT`, `arg` must be a plain whole number from -100 to 100; for `LEFT_TEMP_DURATION` and `RIGHT_TEMP_DURATION`, a plain whole number of seconds from 0 to 43200. Text such as `1e2`, `0x10`, `10.5` or a padded number is refused. Every other command takes `arg` as a string (or no `arg`), and a value of another type is refused with 400. Nothing is sent to the Pod for a 400.
+- Returns 400 for a `command` that is not a known command name. For `TEMP_LEVEL_LEFT` and `TEMP_LEVEL_RIGHT`, `arg` must be a plain whole number from -100 to 100; for `LEFT_TEMP_DURATION` and `RIGHT_TEMP_DURATION`, a plain whole number of seconds from 0 to 43200. Text such as `1e2`, `0x10`, `10.5` or a padded number is refused. Every other command takes `arg` as a string (or no `arg`), and a value of another type is refused with 400. Nothing is sent to the Pod for a 400. A 400 answers JSON `{ "message": "..." }`.
 
 #### Request Body
 

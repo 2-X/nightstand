@@ -9,13 +9,13 @@ router.post('/execute', async (req: Request, res: Response) => {
 
   // Basic validation
   if (typeof command !== 'string' || !Object.hasOwn(frankenCommands, command)) {
-    res.status(400).send('Invalid command');
+    res.status(400).json({ message: 'Invalid command' });
     return;
   }
 
   const normalizedArg = normalizeExecuteArg(command, arg);
   if (normalizedArg === undefined) {
-    res.status(400).send(`Invalid arg for ${command}`);
+    res.status(400).json({ message: `Invalid arg for ${command}` });
     return;
   }
 
