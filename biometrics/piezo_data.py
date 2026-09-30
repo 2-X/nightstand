@@ -38,7 +38,7 @@ def load_piezo_df(data: Data, side: Side, lower_percentile=2, upper_percentile=9
     df = pd.DataFrame(data['piezo_dual'])
     if df.empty:
         raise InsufficientDataError('No piezo rows found for the requested window (piezo_dual RAW data missing or not yet archived)')
-    df.sort_values(by='ts', inplace=True)
+    df.sort_values(by='ts', kind='stable', inplace=True)
     df['ts'] = pd.to_datetime(df['ts'])
     df.set_index('ts', inplace=True)
 

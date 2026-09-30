@@ -9,7 +9,6 @@ import sqlite3
 import json
 import sys
 import os
-import types
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'sleep_detection'))
@@ -29,38 +28,10 @@ import pandas as pd
 import calibration
 import cap_data
 
-# sleep_detector imports db at module level, which opens a real sqlite file
-# under /persistent or a prior maintainer's local path, neither of which
-# exists here. Only one test below actually needs sleep_detector, so it is
-# imported lazily inside that test instead of at module scope: that keeps
-# the db stubbing local to the single place that needs it rather than shared
-# global state every other test file has to reason about.
 def _import_sleep_detector():
-    """Import sleep_detector with the two db names it binds at import time
-    present, then leave sys.modules['db'] exactly as found.
-
-    Another test module may already have installed its own db stub (a
-    different slice of db's surface), so only add names that are missing,
-    never overwrite ones already there, and only remove what was added.
-    """
-    had_db = 'db' in sys.modules
-    db_module = sys.modules['db'] if had_db else types.ModuleType('db')
-    added = []
-    for name in ('insert_sleep_records', 'insert_movement_df'):
-        if not hasattr(db_module, name):
-            setattr(db_module, name, lambda *a, **k: None)
-            added.append(name)
-    sys.modules['db'] = db_module
-
-    try:
-        import sleep_detector
-        return sleep_detector
-    finally:
-        if had_db:
-            for name in added:
-                delattr(db_module, name)
-        else:
-            del sys.modules['db']
+    """sleep_detector no longer touches the database, so it imports directly."""
+    import sleep_detector
+    return sleep_detector
 
 
 SCHEMA = """

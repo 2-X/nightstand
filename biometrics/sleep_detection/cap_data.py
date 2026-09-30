@@ -120,18 +120,22 @@ def load_baseline(side: Side):
     return None
 
 
-def load_cap_df(data: Data, side: Side, expected_row_count=None) -> pd.DataFrame:
+def load_cap_df(data: Data, side: Side, expected_row_count=None, with_no_reading=False) -> pd.DataFrame:
+    """with_no_reading adds {side}_no_reading: a raw value of the row was
+    missing (Pod 5 capSense2). Only movement reads it."""
     logger.debug('Loading cap df...')
     df = pd.DataFrame(data['cap_senses'], columns=['ts', side])
 
     df[f'{side}_out'] = df[side].str['out']
     df[f'{side}_cen'] = df[side].str['cen']
     df[f'{side}_in'] = df[side].str['in']
+    if with_no_reading:
+        df[f'{side}_no_reading'] = df[side].str.get('no_reading').eq(True)
 
     df.drop(columns=[side], inplace=True)
 
     # Sort, parse, set index in one pass
-    df.sort_values('ts', inplace=True)
+    df.sort_values('ts', kind='stable', inplace=True)
     df['ts'] = pd.to_datetime(df['ts'])
     df.set_index('ts', inplace=True)
     logger.debug(f'Capacitance rows loaded: {df.shape[0]:,}')

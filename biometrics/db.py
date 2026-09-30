@@ -90,109 +90,37 @@ def insert_vitals(data: dict):
         cursor.close()
 
 
-def insert_sleep_records(sleep_records: List[SleepRecord]):
-    """
-    Inserts a list of records into the sleep_records table in the given database.
-    Each record is expected to have:
-      - side (str)
-      - entered_bed_at (datetime)
-      - left_bed_at (datetime, optional)
-      - sleep_period_seconds (int)
-      - times_exited_bed (int)
-      - present_intervals (list of [start, end] datetime pairs)
-      - not_present_intervals (list of [start, end] datetime pairs)
+MAX_WINDOW_SECONDS = 25 * 3600
+# Detection at a window's first seconds is not reliable, so a widened window
+# keeps this much before a stored entry and after a stored exit.
+WIDEN_MARGIN_SECONDS = 3600
 
-    Existing records on the same side that overlap a new record are replaced,
-    so re-analyzing a night with a different window does not leave a second,
-    overlapping record behind. All changes commit together or not at all.
-    """
-    if len(sleep_records) == 0:
-        logger.warning(f'No sleep records to insert, exiting...')
-        return
-    logger.info(f'Inserting {len(sleep_records)} sleep record(s) into {DB_FILE_PATH}...')
-    logger.info(json.dumps(sleep_records, indent=4, default=custom_serializer))
 
-    delete_query = """
-    DELETE FROM sleep_records
-    WHERE side = ? AND entered_bed_at < ? AND left_bed_at > ?;
+def widen_window(side: str, window_start: int, window_end: int, max_seconds: int = MAX_WINDOW_SECONDS) -> Tuple[int, int]:
+    """Grow a run's window to cover every stored same-side sleep record that
+    overlaps it, plus WIDEN_MARGIN_SECONDS either side, so the run sees the
+    whole night it may replace. The result always holds the original window
+    and is never longer than max_seconds; an original window of max_seconds
+    or more is returned as is, and a stored record that still does not fit is
+    kept by the writer.
     """
-    insert_query = """
-    INSERT OR REPLACE INTO sleep_records (
-        side,
-        entered_bed_at,
-        left_bed_at,
-        sleep_period_seconds,
-        times_exited_bed,
-        present_intervals,
-        not_present_intervals
-    ) VALUES (?, ?, ?, ?, ?, ?, ?);
-    """
-
-    cursor = conn.cursor()
+    if window_end - window_start >= max_seconds:
+        return window_start, window_end
     try:
-        cursor.execute('BEGIN IMMEDIATE;')
-        replaced = 0
-        for sleep_record in sleep_records:
-            side = sleep_record['side']
-            entered_bed_at = int(sleep_record['entered_bed_at'].timestamp())
-            left_bed_at = int(sleep_record.get('left_bed_at').timestamp())
-
-            # Encode intervals as JSON strings
-            present_intervals_str = json.dumps([
-                [int(start.timestamp()), int(end.timestamp())] for start, end in sleep_record.get('present_intervals', [])
-            ])
-            not_present_intervals_str = json.dumps([
-                [int(start.timestamp()), int(end.timestamp())] for start, end in sleep_record.get('not_present_intervals', [])
-            ])
-
-            cursor.execute(delete_query, (side, left_bed_at, entered_bed_at))
-            replaced += cursor.rowcount
-            cursor.execute(insert_query, (
-                side,
-                entered_bed_at,
-                left_bed_at,
-                sleep_record.get('sleep_period_seconds', 0),
-                sleep_record.get('times_exited_bed', 0),
-                present_intervals_str,
-                not_present_intervals_str,
-            ))
-        cursor.execute('COMMIT;')
-        logger.info(f"Inserted {len(sleep_records)} record(s) into 'sleep_records', replacing {replaced} overlapping.")
-    except Exception as error:
-        if conn.in_transaction:
-            conn.rollback()
-        logger.error(error)
-    finally:
-        cursor.close()
-
-
-
-def insert_movement_df(movement_df: pd.DataFrame):
-    try:
-        logger.debug(f'Inserting {movement_df.shape[0]} rows into movement table...')
-        movement_df['timestamp'] = pd.to_datetime(movement_df['timestamp']).astype(int) // 10 ** 9
-
-        # Use INSERT OR IGNORE on the (side, timestamp) UNIQUE index so that
-        # re-running analyze on a day already in the DB silently skips
-        # duplicates instead of bombing out with a UNIQUE constraint error
-        # spam in the logs. Pandas' to_sql(..., if_exists='append') has no
-        # native "ignore conflicts" option, so we go through executemany.
-        cursor = conn.cursor()
-        try:
-            rows = list(movement_df[['side', 'timestamp', 'total_movement']].itertuples(index=False, name=None))
-            cursor.executemany(
-                'INSERT OR IGNORE INTO movement (side, timestamp, total_movement) VALUES (?, ?, ?)',
-                rows,
-            )
-            inserted = cursor.rowcount
-            conn.commit()
-            logger.debug(f'Finished inserting movement rows: {inserted} new, {len(rows) - inserted} duplicates skipped')
-        finally:
-            cursor.close()
-
-    except Exception as error:
-        logger.error('Failed to insert movement df!')
-        logger.error(error)
+        row = conn.execute(
+            'SELECT MIN(entered_bed_at), MAX(left_bed_at) FROM sleep_records '
+            'WHERE side = ? AND entered_bed_at < ? AND left_bed_at > ?;',
+            (side, window_end, window_start),
+        ).fetchone()
+    except sqlite3.Error as error:
+        logger.warning(f'Could not look up stored sleep records, keeping the window as given: {error}')
+        return window_start, window_end
+    if row is None or row[0] is None:
+        return window_start, window_end
+    wanted_start = min(window_start, row[0] - WIDEN_MARGIN_SECONDS)
+    wanted_end = max(window_end, row[1] + WIDEN_MARGIN_SECONDS)
+    start = min(window_start, max(wanted_start, wanted_end - max_seconds))
+    return start, min(wanted_end, start + max_seconds)
 
 
 def replace_analysis_results(

@@ -12,6 +12,7 @@ raw-archive/.
 import sys
 import os
 from argparse import ArgumentParser, Namespace
+from datetime import datetime, timezone
 
 sys.path.append(os.getcwd())
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -23,6 +24,7 @@ from get_logger import get_logger
 # This must run before the other local import in order to set up the logger
 logger = get_logger('sleep-analyzer')
 
+from db import replace_analysis_results, widen_window
 from sleep_detector import detect_sleep, detect_movement
 from resource_usage import get_memory_usage_unix, get_available_memory_mb
 from biometrics_helpers import validate_datetime_utc
@@ -73,14 +75,27 @@ if __name__ == "__main__":
             update_health(job_key, 'failed', message)
             raise MemoryError(message)
 
-        merged_df, sleep_records = detect_sleep(
+        start_time, end_time = args.start_time, args.end_time
+        window_start, window_end = int(start_time.timestamp()), int(end_time.timestamp())
+        # Read the whole of any stored night this window overlaps, so the run
+        # can replace it instead of leaving a truncated copy.
+        wide_start, wide_end = widen_window(args.side, window_start, window_end)
+        if (wide_start, wide_end) != (window_start, window_end):
+            logger.info(f'Widening the window to {wide_start} -> {wide_end} to cover a stored night')
+            window_start, window_end = wide_start, wide_end
+            start_time = datetime.fromtimestamp(window_start, tz=timezone.utc)
+            end_time = datetime.fromtimestamp(window_end, tz=timezone.utc)
+
+        merged_df, sleep_records, cap_df = detect_sleep(
             args.side,
-            args.start_time,
-            args.end_time,
+            start_time,
+            end_time,
             FOLDER_PATH
         )
-
-        detect_movement(args.side, merged_df)
+        del merged_df
+        movement_rows = detect_movement(args.side, cap_df)
+        del cap_df
+        replace_analysis_results(args.side, sleep_records, movement_rows, window_start, window_end)
         # No sleep found is not an error, but say so instead of a silent green.
         update_health(job_key, 'healthy', '' if sleep_records else NO_SLEEP_MESSAGE)
 

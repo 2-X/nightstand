@@ -212,5 +212,76 @@ class ReplaceAnalysisResultsTest(unittest.TestCase):
         self.assertEqual(written, (1, 2))
 
 
+class WidenWindowTest(unittest.TestCase):
+    def setUp(self):
+        self.db = _load_db_module()
+        self.db.conn.executescript(SCHEMA)
+
+    def _seconds(self, moment):
+        return int(moment.timestamp())
+
+    def _widen(self, side, start, end):
+        return self.db.widen_window(side, self._seconds(start), self._seconds(end))
+
+    def test_a_window_that_starts_mid_night_reaches_back_and_replaces_the_stored_night(self):
+        entered = NIGHT - timedelta(hours=1, minutes=30)
+        self.db.replace_analysis_results('left', [_record('left', entered, 6.5)], [], 0, 2 ** 31)
+        start, end = NIGHT + timedelta(hours=2, minutes=10), NIGHT + timedelta(hours=9)
+        widened_start, widened_end = self._widen('left', start, end)
+        self.assertLessEqual(widened_start, self._seconds(entered))
+        self.assertEqual(widened_end, self._seconds(end))
+        full_night = _record('left', entered, 6.5)
+        self.db.replace_analysis_results('left', [full_night], [], widened_start, widened_end)
+        rows = self.db.conn.execute('SELECT entered_bed_at, left_bed_at FROM sleep_records').fetchall()
+        self.assertEqual(rows, [(self._seconds(entered), self._seconds(entered + timedelta(hours=6.5)))])
+
+    def test_a_window_with_no_overlapping_record_is_unchanged(self):
+        self.db.replace_analysis_results('left', [_record('left', NIGHT, 6)], [], 0, 2 ** 31)
+        window = (NIGHT + timedelta(hours=6), NIGHT + timedelta(hours=20))
+        self.assertEqual(self._widen('left', *window), (self._seconds(window[0]), self._seconds(window[1])))
+
+    def test_the_other_side_is_ignored(self):
+        self.db.replace_analysis_results('right', [_record('right', NIGHT, 6)], [], 0, 2 ** 31)
+        window = (NIGHT + timedelta(hours=2), NIGHT + timedelta(hours=9))
+        self.assertEqual(self._widen('left', *window), (self._seconds(window[0]), self._seconds(window[1])))
+
+    def test_widening_reaches_both_ends_with_an_hour_to_spare(self):
+        # Detection at a window's first seconds is not reliable, so the widened
+        # window keeps an hour before entry and after exit.
+        self.db.replace_analysis_results('left', [_record('left', NIGHT, 8)], [], 0, 2 ** 31)
+        window = (NIGHT + timedelta(hours=2), NIGHT + timedelta(hours=4))
+        self.assertEqual(self._widen('left', *window),
+                         (self._seconds(NIGHT - timedelta(hours=1)), self._seconds(NIGHT + timedelta(hours=9))))
+
+    def test_a_window_holding_the_night_without_the_margin_gains_it(self):
+        self.db.replace_analysis_results('left', [_record('left', NIGHT, 8)], [], 0, 2 ** 31)
+        window = (NIGHT - timedelta(minutes=10), NIGHT + timedelta(hours=8, minutes=10))
+        self.assertEqual(self._widen('left', *window),
+                         (self._seconds(NIGHT - timedelta(hours=1)), self._seconds(NIGHT + timedelta(hours=9))))
+
+    def test_a_window_of_exactly_25_hours_is_left_alone(self):
+        # The daily job's window.
+        self.db.replace_analysis_results('left', [_record('left', NIGHT, 8)], [], 0, 2 ** 31)
+        window = (NIGHT + timedelta(hours=2), NIGHT + timedelta(hours=27))
+        self.assertEqual(self._widen('left', *window), (self._seconds(window[0]), self._seconds(window[1])))
+
+    def test_the_widened_window_is_at_most_25_hours_and_still_holds_the_original(self):
+        self.db.replace_analysis_results('left', [_record('left', NIGHT, 40)], [], 0, 2 ** 31)
+        window = (NIGHT + timedelta(hours=20), NIGHT + timedelta(hours=30))
+        start, end = self._widen('left', *window)
+        self.assertLessEqual(end - start, 25 * 3600)
+        self.assertLessEqual(start, self._seconds(window[0]))
+        self.assertGreaterEqual(end, self._seconds(window[1]))
+
+    def test_a_missing_table_keeps_the_window_as_given(self):
+        self.db.conn.execute('DROP TABLE sleep_records')
+        self.assertEqual(self.db.widen_window('left', 100, 200), (100, 200))
+
+    def test_an_original_window_over_the_cap_is_left_alone(self):
+        self.db.replace_analysis_results('left', [_record('left', NIGHT, 8)], [], 0, 2 ** 31)
+        window = (NIGHT - timedelta(hours=30), NIGHT + timedelta(hours=2))
+        self.assertEqual(self._widen('left', *window), (self._seconds(window[0]), self._seconds(window[1])))
+
+
 if __name__ == '__main__':
     unittest.main()

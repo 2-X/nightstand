@@ -125,11 +125,25 @@ def get_current_files(folder_path: str):
                     candidates[f.name] = str(f.resolve())
         except (OSError, FileNotFoundError):
             continue
-    return list(candidates.values())
+    # Name order, so the same archive always decodes in the same order.
+    return [candidates[name] for name in sorted(candidates)]
 
 
 def _decode_piezo_data(raw_bytes: bytes) -> np.ndarray:
     return np.frombuffer(raw_bytes, dtype=np.int32)
+
+
+# Pod 5 writes -1 for a capacitance value it could not read.
+NO_CAP_READING = -1
+
+
+def _cap_values_missing(record: dict) -> dict:
+    """Per side, whether any raw capSense2 value is missing."""
+    missing = {}
+    for side in ('left', 'right'):
+        channel = record.get(side)
+        missing[side] = isinstance(channel, dict) and NO_CAP_READING in (channel.get('values') or ())
+    return missing
 
 
 def _normalize_cap_sense2(record: dict) -> dict:
@@ -226,7 +240,13 @@ def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Si
                 # legacy 'capSense' shape before the type filter so Pod 5
                 # capacitance data isn't silently dropped.
                 if decoded_data.get('type') == 'capSense2':
+                    missing = _cap_values_missing(decoded_data)
                     decoded_data = _normalize_cap_sense2(decoded_data)
+                    if decoded_data['type'] == 'capSense':
+                        # Movement skips these rows; presence and calibration
+                        # read only out, cen and in.
+                        for cap_side, value in missing.items():
+                            decoded_data[cap_side]['no_reading'] = value
                 if not decoded_data['type'] in load_raw_types:
                     continue
                 _delete_other_side(decoded_data, side, sensor_count)

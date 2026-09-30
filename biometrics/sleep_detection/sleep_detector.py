@@ -7,22 +7,26 @@ Key functionalities:
 - Detects presence using piezoelectric and capacitance sensors.
 - Identifies sleep intervals by merging presence periods with small gaps.
 - Filters valid sleep periods based on predefined thresholds.
-- Saves detected sleep records to a database.
+- Returns sleep records and movement; analyze_sleep.py writes them.
 """
 
 import pandas as pd
 import gc
+import math
 from typing import List, Tuple
 from datetime import datetime, timedelta
 
 from data_types import *
-from db import insert_sleep_records, insert_movement_df
 from sleep_detection.cap_data import load_cap_df, load_baseline, detect_presence_cap
 from get_logger import get_logger
-from load_raw_files import load_raw_files
+from load_raw_files import NO_CAP_READING, load_raw_files
 from piezo_data import load_piezo_df, detect_presence_piezo_p2p
 
 logger = get_logger()
+
+# (epoch seconds of a 2-minute bin start, largest per-second movement in it)
+MovementRow = Tuple[int, float]
+BIN_SECONDS = 120
 
 
 def _get_presence_intervals(df: pd.DataFrame, side: Side, presence_duration_threshold_seconds=60) -> Tuple[
@@ -262,14 +266,17 @@ def _set_final_occupancy(merged_df: pd.DataFrame, side: Side, cap_baseline) -> p
     return merged_df
 
 
-def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_path: str) -> Tuple[pd.DataFrame, List[SleepRecord]]:
+def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_path: str) -> Tuple[pd.DataFrame, List[SleepRecord], pd.DataFrame]:
+    """Returns the merged frame, the sleep records and the capacitance frame
+    as loaded. Movement reads the capacitance frame: the merged frame lacks the
+    seconds the piezo trim dropped, and those differ from window to window."""
     expected_row_count = int((end_time - start_time).total_seconds())
     logger.info(f"Detecting sleep interval for {side} side | {start_time.isoformat()} -> {end_time.isoformat()} | Expected row count: {expected_row_count:,}")
 
     data = load_raw_files(folder_path, start_time, end_time, side, sensor_count=1, raw_data_types=['capSense', 'piezo-dual'])
 
     piezo_df = load_piezo_df(data, side, expected_row_count=expected_row_count, with_p2p=True)
-    cap_df = load_cap_df(data, side, expected_row_count=expected_row_count)
+    cap_df = load_cap_df(data, side, expected_row_count=expected_row_count, with_no_reading=True)
     # Cleanup data
     del data
     gc.collect()
@@ -283,14 +290,12 @@ def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_pa
         clean=True
     )
 
-    merged_df = piezo_df.merge(cap_df, on='ts', how='inner')
+    merged_df = piezo_df.merge(cap_df.drop(columns=[f'{side}_no_reading']), on='ts', how='inner')
     merged_df.drop_duplicates(inplace=True)
 
     # Free up memory from old dfs
     piezo_df.drop(piezo_df.index, inplace=True)
-    cap_df.drop(cap_df.index, inplace=True)
     del piezo_df
-    del cap_df
     gc.collect()
 
     cap_baseline = load_baseline(side)
@@ -299,42 +304,53 @@ def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_pa
     sleep_records = build_sleep_records(merged_df, side, max_gap_in_minutes=15)
     if len(sleep_records) == 0:
         logger.warning(f'No sleep periods found for {side} side! {start_time} -> {end_time} ')
-    else:
-        insert_sleep_records(sleep_records)
-    # Cleanup
-    return merged_df, sleep_records
+    return merged_df, sleep_records, cap_df
 
 
+def _one_row_per_second(frame: pd.DataFrame) -> pd.DataFrame:
+    """First row of each second in load order. Capacitance arrives about twice
+    a second, and an unstable sort used to keep either row."""
+    ordered = frame.sort_values('ts', kind='stable')
+    return ordered.drop_duplicates(subset=['ts'], keep='first')
 
-def detect_movement(side: Side, merged_df: pd.DataFrame):
-    logger.debug('Logging movement...')
-    merged_df.reset_index(inplace=True)
-    merged_df.sort_values('ts', inplace=True)
-    merged_df.drop_duplicates(subset=["ts"], inplace=True)
 
-    movement_df = merged_df[[f'{side}_out', f'{side}_cen', f'{side}_in']].diff().abs()
-    # Optionally sum across sensors
+def detect_movement(side: Side, cap_df: pd.DataFrame) -> List[MovementRow]:
+    """Largest per-second sum of absolute capacitance changes in each 2-minute bin.
+
+    Takes the capacitance frame from detect_sleep, so a bin's value does not
+    depend on the window it was loaded in. A bin is returned only when all its
+    seconds, and the second before the first (a change needs one), lie inside
+    the loaded data. The bin at either edge of a window is therefore left out.
+    Rows with a missing value ({side}_no_reading, or -1 on every channel) are
+    skipped, and bins without a finite value are left out.
+    """
+    logger.debug('Computing movement...')
+    columns = [f'{side}_out', f'{side}_cen', f'{side}_in']
+    frame = cap_df.reset_index()
+    skip = (frame[columns] == NO_CAP_READING).all(axis=1)
+    if f'{side}_no_reading' in frame:
+        skip |= frame[f'{side}_no_reading']
+    frame = _one_row_per_second(frame[~skip])
+    if frame.empty:
+        return []
+
+    movement_df = frame[columns].diff().abs()
     movement_df['total_movement'] = movement_df.sum(axis=1)
-
-    # Add timestamps for plotting
-    movement_df['timestamp'] = merged_df['ts']
-
-    # Set timestamp as index for resampling
+    movement_df['timestamp'] = frame['ts']
     movement_df.set_index('timestamp', inplace=True)
-    # Resample into 2-minute intervals, keeping the max value
-    resampled_df = movement_df.resample('2T').max().dropna().reset_index()
+    resampled = movement_df.resample('2min').max().dropna()
 
-    resampled_df.drop(columns=[f'{side}_out', f'{side}_cen', f'{side}_in'], inplace=True)
-    resampled_df['side'] = side
+    epoch_zero, one_second = pd.Timestamp('1970-01-01'), pd.Timedelta(seconds=1)
+    epochs = (resampled.index - epoch_zero) // one_second
+    first = int((frame['ts'].iloc[0] - epoch_zero) // one_second)
+    last = int((frame['ts'].iloc[-1] - epoch_zero) // one_second)
+    rows = [
+        (int(epoch), float(total)) for epoch, total in zip(epochs, resampled['total_movement'])
+        if epoch > first and epoch + BIN_SECONDS - 1 <= last and math.isfinite(total)
+    ]
 
-    resampled_df.to_csv('/home/dac/free-sleep/server/free-sleep-data/movement.csv', index=False)
-
-    # Only count changes > 15
-    # movement_df = movement_df[movement_df['total_movement'] > 15]
-    insert_movement_df(resampled_df)
     movement_df.drop(movement_df.index, inplace=True)
-    del movement_df
-    merged_df.drop(merged_df.index, inplace=True)
-    del merged_df
+    del movement_df, frame, resampled
+    cap_df.drop(cap_df.index, inplace=True)
     gc.collect()
-
+    return rows
