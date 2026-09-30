@@ -105,3 +105,33 @@ it('trims a long paste by whole characters, never through an emoji', async () =>
   await user.paste('a'.repeat(17) + '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}');
   expect(name).toHaveValue('a'.repeat(17));
 });
+
+it('sends the same name again on Enter after a failed save', async () => {
+  const updateSettings = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+  const { user } = renderWithProviders(<SideSettings side="left" settings={ getSettings() } updateSettings={ updateSettings }/>);
+  const name = screen.getByRole('textbox', { name: 'Left side name' });
+  await user.clear(name);
+  await user.type(name, 'Riley{Enter}');
+  await waitFor(() => expect(name).not.toHaveAttribute('readonly'));
+  await user.type(name, '{Enter}');
+  await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(2));
+  expect(updateSettings).toHaveBeenLastCalledWith({ left: { name: 'Riley' } });
+});
+
+it('retries a name the page failed to save', async () => {
+  let posts = 0;
+  server.use(http.post('*/settings', () => {
+    posts += 1;
+    return new HttpResponse(null, { status: 500 });
+  }));
+  const { user } = renderWithProviders(<SettingsPage/>, { initialRoute: '/settings/bed' });
+  const name = await screen.findByRole('textbox', { name: 'Left side name' });
+  await waitFor(() => expect(name).toBeEnabled());
+  await user.clear(name);
+  await user.type(name, 'Riley{Enter}');
+  await waitFor(() => expect(posts).toBe(1));
+  await screen.findByText(/Could not save settings/);
+  await waitFor(() => expect(name).not.toHaveAttribute('readonly'));
+  await user.type(name, '{Enter}');
+  await waitFor(() => expect(posts).toBe(2));
+});

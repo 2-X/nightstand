@@ -31,7 +31,8 @@ function trimToLimit(value: string) {
 type AwayModeSwitchProps = {
   side: Side;
   settings?: Settings;
-  updateSettings: (settings: DeepPartial<Settings>) => void | Promise<void>;
+  // A save that resolves to false did not go through.
+  updateSettings: (settings: DeepPartial<Settings>) => void | Promise<void | boolean>;
 }
 
 export default function SideSettings({ side, settings, updateSettings }: AwayModeSwitchProps) {
@@ -58,7 +59,7 @@ export default function SideSettings({ side, settings, updateSettings }: AwayMod
     lastSubmitted.current = name;
     setSavingName(true);
     try {
-      await updateSettings({ [side]: { name } });
+      if (await updateSettings({ [side]: { name } }) === false) lastSubmitted.current = undefined;
     } catch (error) {
       lastSubmitted.current = undefined;
       throw error;

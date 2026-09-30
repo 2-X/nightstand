@@ -65,9 +65,10 @@ export default function SettingsPage() {
     pendingSaves.current += 1;
     setIsUpdating(true);
     return postSettings(patch)
-      .then(async () => { await refetch(); })
+      .then(async () => { await refetch(); return true; })
       .catch(() => {
         setError('Could not save settings. Your previous settings are still active. Try the change again.');
+        return false;
       })
       .finally(() => {
         pendingSaves.current -= 1;
