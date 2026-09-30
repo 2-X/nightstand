@@ -150,6 +150,19 @@ test('a scheduled alarm that is on time is sent', async t => {
   assert.ok(received[1].startsWith('5\n'), JSON.stringify(received));
 });
 
+test('an alarm is not sent when the connection comes only after its deadline', async t => {
+  let clock = Date.now();
+  t.mock.method(Date, 'now', () => clock);
+  const sending = executeFunction('ALARM_LEFT', 'a0', { background: true, notAfter: clock + 700 });
+  const outcome = sending.then(() => undefined, (error: unknown) => error);
+  await pause(50);
+  clock += 2_000;
+  const received = await connectFirmware();
+  assert.ok(await outcome instanceof FrankenUnavailableError);
+  await pause(50);
+  assert.deepEqual(received, []);
+});
+
 test('a scheduled state command waits out an outage longer than the limit for other commands', async () => {
   const pending = executeFunction('LEFT_TEMP_DURATION', '0', { background: true, latest: true });
   await pause(1_200);

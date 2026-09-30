@@ -459,3 +459,17 @@ test('shutdown ends a power-off\'s wait for an alarm that has not started', asyn
   await powerOff;
   assert.deepEqual(updates, [{ left: { isOn: false } }]);
 });
+
+test('a scheduled alarm counts its lateness from when it was due', async t => {
+  t.mock.method(Date, 'now', () => now);
+  t.mock.method(globalThis, 'setTimeout', () => ({ unref() {} }) as NodeJS.Timeout);
+  scheduleAlarm(settings.data, 'left', 'monday', night);
+  const due = Date.parse('2026-09-29T07:00:00Z');
+  now = due + 4 * 60_000;
+  await invokeAt('left-monday-07:00-0-alarm', new Date(due));
+  assert.equal(commands.length, 0, 'an alarm four minutes past its time rang');
+  now = due + 2 * 60_000;
+  await invokeAt('left-monday-07:00-0-alarm', new Date(due));
+  assert.equal(commands.length, 1);
+  assert.equal((commands[0][2] as { notAfter: number }).notAfter, due + 3 * 60_000);
+});

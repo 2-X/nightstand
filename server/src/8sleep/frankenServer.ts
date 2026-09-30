@@ -339,17 +339,26 @@ export type CommandOptions = {
   // the command late, unless a newer command for the same setting arrives
   // first. For state that stays correct when applied late.
   latest?: boolean;
+  // Epoch ms after which the command must not be sent, even once connected.
+  notAfter?: number;
 };
 
 // Newest waiting command per setting; older ones drop out when superseded.
 const latestWaiting = new Map<string, symbol>();
 
-async function connectFrankenLatest(key: string): Promise<Franken> {
+function assertBefore(notAfter: number | undefined) {
+  if (notAfter !== undefined && Date.now() > notAfter) {
+    throw new FrankenUnavailableError('Pod hardware became available too late for this command');
+  }
+}
+
+async function connectFrankenLatest(key: string, notAfter: number | undefined): Promise<Franken> {
   const ticket = Symbol(key);
   latestWaiting.set(key, ticket);
   try {
     const connection = franken ?? await connectFranken();
     if (latestWaiting.get(key) !== ticket) throw new FrankenSupersededError();
+    assertBefore(notAfter);
     return connection;
   } finally {
     if (latestWaiting.get(key) === ticket) latestWaiting.delete(key);
@@ -362,15 +371,21 @@ async function connectFrankenLatest(key: string): Promise<Franken> {
 // A latest command is the exception: it waits without a limit, and only the
 // newest command for its key is sent.
 export async function connectFrankenWithin(
-  { background = false, latest = false }: CommandOptions = {},
+  { background = false, latest = false, notAfter }: CommandOptions = {},
   key = '',
 ): Promise<Franken> {
-  if (background && latest && key) return connectFrankenLatest(key);
-  if (franken) return franken;
-  const waitMs = background ? FRANKEN_BACKGROUND_CONNECT_WAIT_MS : FRANKEN_CONNECT_WAIT_MS;
-  return promiseWithTimeout(connectFranken(), waitMs, {
+  if (background && latest && key) return connectFrankenLatest(key, notAfter);
+  if (franken) {
+    assertBefore(notAfter);
+    return franken;
+  }
+  let waitMs = background ? FRANKEN_BACKGROUND_CONNECT_WAIT_MS : FRANKEN_CONNECT_WAIT_MS;
+  if (notAfter !== undefined) waitMs = Math.max(0, Math.min(waitMs, notAfter - Date.now()));
+  const connection = await promiseWithTimeout(connectFranken(), waitMs, {
     onTimeout: () => new FrankenUnavailableError(`Pod hardware is not connected; gave up after ${waitMs / 1_000}s`),
   });
+  assertBefore(notAfter);
+  return connection;
 }
 
 export function getFrankenQueueDepth(): number {

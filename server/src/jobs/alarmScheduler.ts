@@ -22,17 +22,18 @@ import { trackAlarm } from './alarmActivity.js';
 const alarmOccurrences = new Map<string, number>();
 const activeAlarms = new Map<Side, symbol>();
 const OCCURRENCE_RETENTION_MS = 48 * 60 * 60 * 1000;
-// A scheduled alarm may wait out a hardware reconnect, but one that could
-// only start this late is dropped rather than vibrating long after its time.
+// A scheduled alarm may wait out a hardware reconnect, but one that would
+// start more than this after its due time is dropped rather than
+// vibrating long after it.
 const ALARM_LATE_LIMIT_MS = 3 * 60_000;
 
 // Resolves to how long the alarm rings in milliseconds, or 0 if it did not ring.
 export const executeAlarm = async (
   { vibrationIntensity, duration, vibrationPattern, side, force=false }: AlarmJob,
   occurrenceId?: string,
-  options: CommandOptions = {},
+  { dueAt, ...options }: CommandOptions & { dueAt?: number } = {},
 ): Promise<number> => {
-  const startedAt = Date.now();
+  const due = dueAt ?? Date.now();
   // Reserve recurring occurrences before awaiting I/O; manual alarms can repeat.
   const occurrenceKey = !force && occurrenceId ? `${side}:${occurrenceId}` : undefined;
   const cutoff = Date.now() - OCCURRENCE_RETENTION_MS;
@@ -76,8 +77,9 @@ export const executeAlarm = async (
     const hexPayload = cborPayload.toString('hex');
     const command = side === 'left' ? 'ALARM_LEFT' : 'ALARM_RIGHT';
 
-    const lateMs = Date.now() - startedAt;
-    if (options.background && lateMs > ALARM_LATE_LIMIT_MS) {
+    const lateMs = Date.now() - due;
+    const notAfter = options.background ? due + ALARM_LATE_LIMIT_MS : undefined;
+    if (notAfter !== undefined && lateMs > ALARM_LATE_LIMIT_MS) {
       const message = `Skipped the ${side} alarm: the Pod was reachable only ${Math.round(lateMs / 1_000)}s after its time`;
       logger.warn(message);
       emitJobEvent({ jobName: `alarm-${side}`, status: 'fail', message });
@@ -85,7 +87,7 @@ export const executeAlarm = async (
     }
 
     logger.debug(`Executing alarm... ${JSON.stringify(alarmPayload)}`);
-    await executeFunction(command, hexPayload, options);
+    await executeFunction(command, hexPayload, { ...options, notAfter });
     fired = true;
     const activeAlarm = Symbol(side);
     activeAlarms.set(side, activeAlarm);
@@ -170,14 +172,14 @@ export function scheduleOneOffAlarm(settingsData: Settings, side: Side) {
 
   logger.debug(`Scheduling one-off alarm for ${side} at ${fireAt.format()}`);
   const jobName = `${side}-one-off-alarm`;
-  schedule.scheduleJob(jobName, fireAt.toDate(), () => trackAlarm(side, jobName, async () => {
+  schedule.scheduleJob(jobName, fireAt.toDate(), (fireDate?: Date) => trackAlarm(side, jobName, async () => {
     try {
       return await executeAlarm({
         side,
         vibrationIntensity: o.vibrationIntensity,
         duration: o.duration,
         vibrationPattern: o.vibrationPattern,
-      }, undefined, { background: true });
+      }, undefined, { background: true, dueAt: fireDate?.getTime() });
     } finally {
       // Auto-disable after firing (or after attempt) so the user doesn't
       // need to come back and manually toggle it off, which is the whole
@@ -224,7 +226,7 @@ export function scheduleAlarmOverride(settingsData: Settings, side: Side) {
   logger.debug(`Alarm override is set! Scheduling alarm for ${next.format()}`);
 
   const jobName = `${side}-alarm-override-${alarmOverride.timeOverride}`;
-  schedule.scheduleJob(jobName, next.toDate(), () => trackAlarm(side, jobName, async () => {
+  schedule.scheduleJob(jobName, next.toDate(), (fireDate?: Date) => trackAlarm(side, jobName, async () => {
     // The replacement belongs to a night starting today or yesterday, not
     // necessarily the calendar date on which it rings.
     let sourceAlarm;
@@ -256,7 +258,7 @@ export function scheduleAlarmOverride(settingsData: Settings, side: Side) {
       vibrationIntensity,
       duration,
       vibrationPattern,
-    }, undefined, { background: true });
+    }, undefined, { background: true, dueAt: fireDate?.getTime() });
   }));
 }
 
@@ -295,7 +297,7 @@ export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek
     logJob('Scheduling alarm job', side, day, dayIndex, time);
 
     const jobName = `${side}-${day}-${time}-${alarmIndex}-alarm`;
-    schedule.scheduleJob(jobName, alarmRule, () => trackAlarm(side, jobName, async () => {
+    schedule.scheduleJob(jobName, alarmRule, (fireDate?: Date) => trackAlarm(side, jobName, async () => {
       try {
         logJob('Executing alarm job', side, day, dayIndex, time);
         await settingsDB.read();
@@ -318,7 +320,7 @@ export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek
           vibrationIntensity: alarm.vibrationIntensity,
           duration: alarm.duration,
           vibrationPattern: alarm.vibrationPattern,
-        }, `recurring:${day}:${time}:${now.format('YYYY-MM-DD')}`, { background: true });
+        }, `recurring:${day}:${time}:${now.format('YYYY-MM-DD')}`, { background: true, dueAt: fireDate?.getTime() });
       } catch (error: unknown) {
         serverStatus.status.alarmSchedule.status = 'failed';
         const message = error instanceof Error ? error.message : String(error);
