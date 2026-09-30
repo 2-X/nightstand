@@ -84,6 +84,8 @@ beforeEach(async () => {
   settingsDB.data.timeZone = 'UTC';
   settingsDB.data.left.awayMode = false;
   settingsDB.data.right.awayMode = false;
+  settingsDB.data.left.scheduleOverrides.pause = { active: false, expiresAt: '' };
+  settingsDB.data.right.scheduleOverrides.pause = { active: false, expiresAt: '' };
   settingsDB.data.features.presenceAutoOff = true;
   await settingsDB.write();
 
@@ -257,6 +259,30 @@ describe('presenceAutoOffMonitor', () => {
 
     await runTicks(at('2026-03-02T18:00:00'), 60, heartbeatAbsent);
     assert.equal(powerOffCalls.length > 0, true, 'auto-off suppressed after a midday window closed');
+  });
+
+  it('does not power off a side whose schedule is paused', async () => {
+    await settingsDB.read();
+    settingsDB.data.left.scheduleOverrides.pause = { active: true, expiresAt: '' };
+    await settingsDB.write();
+    await runTicks(at('2026-03-02T14:00:00'), 50, heartbeatAbsent);
+    assert.deepEqual(powerOffCalls, [], 'powered off a paused side');
+  });
+
+  it('acts again once the pause has ended', async () => {
+    await settingsDB.read();
+    settingsDB.data.left.scheduleOverrides.pause = { active: true, expiresAt: '2026-03-02T13:00:00Z' };
+    await settingsDB.write();
+    await runTicks(at('2026-03-02T14:00:00'), 50, heartbeatAbsent);
+    assert.equal(powerOffCalls.length > 0, true, 'an ended pause still held off auto-off');
+  });
+
+  it('still acts on a side whose partner is paused', async () => {
+    await settingsDB.read();
+    settingsDB.data.right.scheduleOverrides.pause = { active: true, expiresAt: '' };
+    await settingsDB.write();
+    await runTicks(at('2026-03-02T14:00:00'), 50, heartbeatAbsent);
+    assert.equal(powerOffCalls.length > 0, true, 'the partner pause suppressed auto-off');
   });
 
   it('does not fire when the stream goes quiet after reporting a dropout', async () => {
