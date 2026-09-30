@@ -44,13 +44,10 @@ export function trackAlarm(side: Side, jobName: string, run: () => Promise<numbe
 // Waits for the alarms of the night ending now, on this side, that are due in
 // the same minute as a power-off or already ringing, to finish. The due check
 // runs before the first await, while node-schedule still lists the alarm's
-// pending run. A recurring alarm belongs to the night named by day; an alarm
-// on another day's schedule starts that day's night and is left out.
-export async function letAlarmsFinish(side: Side, day: DayOfWeek, fireDate: Date) {
+// pending run. endsThisNight picks the alarm jobs of that night.
+export async function waitForNightAlarms(side: Side, fireDate: Date, endsThisNight: (name: string) => boolean) {
   const { signal } = pendingWaits;
   const minuteStart = Math.floor(fireDate.getTime() / 60_000) * 60_000;
-  const endsThisNight = (name: string) => isAlarmJob(side, name)
-    && (!isRecurring(name) || name.startsWith(`${side}-${day}-`));
   const due = Object.values(schedule.scheduledJobs).filter(job => {
     if (!endsThisNight(job.name)) return false;
     const next = job.nextInvocation()?.getTime();
@@ -84,6 +81,18 @@ export async function letAlarmsFinish(side: Side, day: DayOfWeek, fireDate: Date
   await Promise.race([waitForRinging(), aborted]);
   limits.forEach(limit => limit.cancel());
 }
+
+// A recurring alarm belongs to the night named by day; an alarm on another
+// day's schedule starts that day's night and is left out.
+export function letAlarmsFinish(side: Side, day: DayOfWeek, fireDate: Date): Promise<void> {
+  return waitForNightAlarms(side, fireDate, name => isAlarmJob(side, name)
+    && (!isRecurring(name) || name.startsWith(`${side}-${day}-`)));
+}
+
+// The alarms of one Rhythms sleep, plus the per-night override and the
+// one-time alarm, which can end any night.
+export const rhythmNightAlarms = (side: Side, sleepDate: string) => (name: string) =>
+  name.startsWith(`rhythm-${side}-${sleepDate}-alarm-`) || (isAlarmJob(side, name) && !isRecurring(name));
 
 // Ends every wait in progress, so the power-offs behind them go out at once.
 export function abortAlarmWaits() {

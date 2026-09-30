@@ -23,6 +23,7 @@ mock.module('../../8sleep/deviceApi.js', {
 });
 
 const { updateDeviceStatus } = await import('./updateDeviceStatus.js');
+const { default: settingsDB } = await import('../../db/settings.js');
 const { FrankenSupersededError } = await import('../../8sleep/frankenErrors.js');
 
 describe('updateDeviceStatus', () => {
@@ -70,5 +71,23 @@ describe('updateDeviceStatus', () => {
     await updateDeviceStatus({ left: { isOn: true, targetTemperatureF: 80 } }, { background: true });
 
     assert.equal(executeFunctionMock.mock.callCount(), 1, 'the set point of a replaced power-on must not be sent');
+  });
+
+  it('mirrors a timed power-on to both sides while one side is away', async () => {
+    settingsDB.data.right.awayMode = true;
+    await settingsDB.write();
+    executeFunctionMock.mock.resetCalls();
+    try {
+      await updateDeviceStatus({ left: { isOn: true, targetTemperatureF: 80, secondsRemaining: 29100 } }, { background: true });
+    } finally {
+      settingsDB.data.right.awayMode = false;
+      await settingsDB.write();
+    }
+    // The third argument is the command options, pinned by the tests above.
+    assert.deepEqual(executeFunctionMock.mock.calls.map(call => call.arguments.slice(0, 2)), [
+      ['LEFT_TEMP_DURATION', '43200'], ['RIGHT_TEMP_DURATION', '43200'],
+      ['TEMP_LEVEL_LEFT', '-9'], ['TEMP_LEVEL_RIGHT', '-9'],
+      ['LEFT_TEMP_DURATION', '29100'], ['RIGHT_TEMP_DURATION', '29100'],
+    ]);
   });
 });

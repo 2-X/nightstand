@@ -126,6 +126,14 @@ export const executeAlarm = async (
   }
 };
 
+// True once an alarm with this occurrence id has rung (or is ringing) in this process.
+export function hasAlarmOccurrence(side: Side, occurrenceId: string): boolean {
+  return alarmOccurrences.has(`${side}:${occurrenceId}`);
+}
+
+// Test isolation only.
+export const resetAlarmOccurrences = () => alarmOccurrences.clear();
+
 
 /**
  * Next occurrence of HH:mm in tz (today or tomorrow depending on 'now').

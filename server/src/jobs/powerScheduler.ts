@@ -26,6 +26,12 @@ const minuteOf = (date: Date) => Math.floor(date.getTime() / 60_000) * 60_000;
 // Test isolation only.
 export const resetPowerOnTimes = () => lastPowerOn.clear();
 
+// The Rhythms engine shares the record, so its power-offs follow the same rule.
+export const notePowerOn = (side: Side, at: Date) => {
+  lastPowerOn.set(side, minuteOf(at));
+};
+export const poweredOnSince = (side: Side, dueAt: Date) => (lastPowerOn.get(side) ?? -Infinity) >= minuteOf(dueAt);
+
 export const schedulePowerOn = (settingsData: Settings, side: Side, day: DayOfWeek, power: DailySchedule['power']) => {
   if (!power.enabled) return;
   if (settingsData[side].awayMode) return;
