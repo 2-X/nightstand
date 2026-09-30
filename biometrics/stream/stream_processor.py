@@ -22,7 +22,7 @@ from biometric_processor import BiometricProcessor
 from buffer import Buffer
 from data_types import *
 from presence.cap import CAP_HOLD_SECONDS, CapBaseline, cap_delta
-from presence.detector import DetectorParams, PresenceDetector, piezo_range
+from presence.detector import FRAME_GAP_SECONDS, DetectorParams, PresenceDetector, piezo_range
 import numpy as np
 
 logger = get_logger()
@@ -85,6 +85,7 @@ class StreamProcessor:
         # Set through use_presence_v2. None leaves presence to the piezo detector.
         self.presence: Optional[PresenceDetector] = None
         self._presence_inputs: Optional[PresenceInputs] = None
+        self._presence_epoch: Optional[int] = None
 
     def use_presence_v2(self, inputs: Optional[PresenceInputs]) -> None:
         """Hand presence to the capacitance detector (inputs) or back to piezo (None).
@@ -107,6 +108,7 @@ class StreamProcessor:
             return
         self.presence = PresenceDetector(inputs[0])
         self._presence_inputs = inputs
+        self._presence_epoch = None
 
     def _end_sessions(self) -> None:
         self.left_processor.end_presence_session()
@@ -114,6 +116,11 @@ class StreamProcessor:
 
     def _step_presence(self, piezo_record) -> None:
         epoch = int(piezo_record['ts'])
+        # The detector reads a repeated or earlier second as a break in the
+        # frames, so drop one; a long step back is a clock change and goes through.
+        if self._presence_epoch is not None and 0 <= self._presence_epoch - epoch <= FRAME_GAP_SECONDS:
+            return
+        self._presence_epoch = epoch
         baselines = self._presence_inputs[1]
         cap = {'left': None, 'right': None}
         reading = self.cap_source.read() if self.cap_source is not None else None
@@ -130,6 +137,11 @@ class StreamProcessor:
         left, right = self.left_processor, self.right_processor
         left_swap = states['left'] and not left.present and is_side_swap(left, right, epoch)
         right_swap = states['right'] and not right.present and is_side_swap(right, left, epoch)
+        # The side the partner came from keeps nothing for whoever lies down there next.
+        if left_swap:
+            right.reset()
+        if right_swap:
+            left.reset()
         left.apply_presence(states['left'], epoch, reset_state=left_swap)
         right.apply_presence(states['right'], epoch, reset_state=right_swap)
 

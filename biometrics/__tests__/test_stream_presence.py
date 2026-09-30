@@ -68,7 +68,7 @@ def fake_vitals(self, signal, epoch, update_breathing=False, update_hrv=False):
             'hrv': self.hrv, 'breathing_rate': self.breathing_rate}
 
 
-def stream(night: Night, inputs=(PARAMS, BASELINES), switch_off_at=None):
+def stream(night: Night, inputs=(PARAMS, BASELINES), switch_off_at=None, records=None):
     """Feed a night through StreamProcessor as the stream does; returns (transitions, inserts)."""
     _PresenceCoordinator._latest = {'left': 0.0, 'right': 0.0}
     posts, inserts = [], []
@@ -83,7 +83,7 @@ def stream(night: Night, inputs=(PARAMS, BASELINES), switch_off_at=None):
             unittest.mock.patch.object(biometric_processor, 'insert_vitals',
                                        side_effect=lambda row: inserts.append((row['side'], row['timestamp'] - T0, row['hrv']))):
         processor = None
-        for record in scenarios.raw_records(night):
+        for record in records if records is not None else scenarios.raw_records(night):
             if record['type'] == 'capSense2':
                 latest.update(record['ts'], record['left']['values'], record['right']['values'])
                 continue
@@ -176,6 +176,39 @@ class DetectorSwitchTest(unittest.TestCase):
                 detector.step(T0 + second, {'left': 0.0, 'right': 0.0}, {'left': 10_000.0, 'right': 10_000.0})
             processor.use_presence_v2((newer, BASELINES))
             self.assertIsNot(processor.presence, detector)
+
+
+class FullSwapTest(unittest.TestCase):
+    def test_trading_sides_starts_both_clean(self):
+        night = Night(seconds=2400, left=((100, 800), (1000, 2400)), right=((100, 900), (1100, 2400)))
+        changes, inserts = stream(night)
+        entries = [(second, side) for second, side, present in changes if present]
+        self.assertEqual([side for _, side in entries], ['left', 'right', 'left', 'right'])
+        for second, side in entries[2:]:
+            first = next(hrv for row_side, row_second, hrv in inserts if row_side == side and row_second >= second)
+            self.assertEqual(first, 0, side)
+
+
+class OutOfOrderRecordTest(unittest.TestCase):
+    def test_repeated_and_backward_seconds_do_not_restart_the_entry(self):
+        night = Night(seconds=400, right=((100, 400),))
+        records = []
+        for record in scenarios.raw_records(night):
+            records.append(record)
+            second = record['ts'] - T0
+            if record['type'] == 'piezo-dual' and 90 <= second <= 140 and second % 5 == 0:
+                records.append(dict(record))
+                records.append(dict(record, ts=record['ts'] - 3))
+        changes, _ = stream(night, records=records)
+        self.assertEqual(changes[0][1:], ('right', True))
+        self.assertLessEqual(changes[0][0], 121)
+
+    def test_a_clock_step_back_does_not_freeze_presence(self):
+        night = Night(seconds=600, right=((100, 300),))
+        records = [dict(record, ts=record['ts'] - 3600) if record['ts'] - T0 >= 200 else record
+                   for record in scenarios.raw_records(night)]
+        changes, _ = stream(night, records=records)
+        self.assertEqual([change[1:] for change in changes], [('right', True), ('right', False)])
 
 
 class SideSwapTest(unittest.TestCase):
