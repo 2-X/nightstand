@@ -1,4 +1,5 @@
-import { Button, Box } from '@mui/material';
+import { Link } from 'react-router-dom';
+import { Button, Box, Typography } from '@mui/material';
 import { postDeviceStatus } from '@api/deviceStatus.ts';
 import { DeviceStatus } from '@api/deviceStatusSchema.ts';
 import { DeepPartial } from 'ts-essentials';
@@ -83,7 +84,13 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
       });
   };
 
-  if (isInAwayMode) return null;
+  if (isInAwayMode) {
+    return (
+      <Typography variant="body2" color="text.secondary" sx={ { textAlign: 'center' } }>
+        Away mode is on. Change it in <Link to="/settings/bed" style={ { color: 'inherit' } }>Settings, Bed and sides</Link>.
+      </Typography>
+    );
+  }
 
   return (
     <Box sx={ { width: '100%', mt: 0, display: 'flex', flexDirection: 'column', gap: 2 } }>
