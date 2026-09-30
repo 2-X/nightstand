@@ -265,12 +265,13 @@ def _occupancy_from_intervals(index: pd.DatetimeIndex, intervals: List[Tuple[int
     return occupied
 
 
-def _presence_v2_setup() -> Tuple[Optional[FrameCollector], Optional[DetectorParams]]:
+def _presence_v2_setup(start_time: datetime, end_time: datetime) -> Tuple[Optional[FrameCollector], Optional[DetectorParams]]:
     """A frame collector and detector parameters when capacitance presence applies to this run."""
     if not biometrics_v2_enabled():
         return None, None
     try:
-        profiles = calibration.load_presence_profiles()
+        profiles = calibration.load_presence_profiles(
+            window=(int(start_time.timestamp()), int(end_time.timestamp())))
         params = params_from_calibration(profiles)
         baselines = baselines_from_calibration(profiles)
         if params is None or baselines is None:
@@ -378,7 +379,7 @@ def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_pa
     expected_row_count = int((end_time - start_time).total_seconds())
     logger.info(f"Detecting sleep interval for {side} side | {start_time.isoformat()} -> {end_time.isoformat()} | Expected row count: {expected_row_count:,}")
 
-    collector, presence_params = _presence_v2_setup()
+    collector, presence_params = _presence_v2_setup(start_time, end_time)
     data = load_raw_files(folder_path, start_time, end_time, side, sensor_count=1, raw_data_types=['capSense', 'piezo-dual'],
                           presence_collector=collector)
 

@@ -12,6 +12,7 @@ import tempfile
 import unittest
 import unittest.mock
 from datetime import datetime, timezone
+from functools import partial
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, '..'))
@@ -28,9 +29,11 @@ for _logger_name in LOGGER_NAMES:
 
 import pandas as pd
 
+import calibration
 import load_raw_files
 import sleep_detector
 import presence_scenarios as scenarios
+from test_presence_calibration import SCHEMA
 
 T0 = scenarios.T0
 GOLDEN_PATH = os.path.join(HERE, 'fixtures', 'toggle_off_golden.json')
@@ -155,6 +158,72 @@ class NightLevelTest(unittest.TestCase):
         result = analyze('left', scenarios.raw_records(scenarios.STAGGERED), True, profiles(), window=(-60, 1000))
         self.assertEqual(result[0], [])
         self.assertEqual(result[2], [])
+
+
+# Left lingers at a light capacitance rise after getting up: over the default
+# exit level, under the one a learned level of 20 gives.
+TAIL = dataclasses.replace(scenarios.STAGGERED, overrides=scenarios.STAGGERED.overrides + (('left', 13_800, 14_400, 2.2),))
+WHOLE = (-60, TAIL.seconds + 60)
+AROUND_SLEEP = (300, 15_600)
+
+
+class ReanalysisTest(unittest.TestCase):
+    """A night analyzed again, over the same or another window, keeps its records."""
+
+    def setUp(self):
+        self.conn = sqlite3.connect(':memory:')
+        self.conn.executescript(SCHEMA)
+        self.addCleanup(self.conn.close)
+        for side in ('left', 'right'):
+            calibration.save_profile(side, 'cap', cap_payload(side, delta_noise=0.05), 0.5, 0, 1, 300, 1, conn=self.conn)
+
+    def analyze(self, side, window):
+        with tempfile.TemporaryDirectory() as folder:
+            scenarios.write_raw_file(os.path.join(folder, 'night.RAW'), scenarios.raw_records(TAIL))
+            start = datetime.fromtimestamp(T0 + window[0], timezone.utc)
+            end = datetime.fromtimestamp(T0 + window[1], timezone.utc)
+            with unittest.mock.patch.object(load_raw_files.logger, 'folder_path', os.path.join(folder, '')), \
+                    unittest.mock.patch.object(sleep_detector, 'load_baseline', return_value=cap_payload(side)), \
+                    unittest.mock.patch.object(sleep_detector, 'biometrics_v2_enabled', return_value=True), \
+                    unittest.mock.patch.object(sleep_detector.calibration, 'load_presence_profiles',
+                                               partial(calibration.load_presence_profiles, conn=self.conn)), \
+                    unittest.mock.patch.object(sleep_detector.calibration, 'record_occupied_level',
+                                               partial(calibration.record_occupied_level, conn=self.conn)):
+                _, records, _ = sleep_detector.detect_sleep(side, start, end, folder)
+        return as_json(records)
+
+    def runs(self, windows):
+        return [{side: self.analyze(side, window) for side in ('left', 'right')} for window in windows]
+
+    def assert_same_every_run(self, windows):
+        first, *later = self.runs(windows)
+        self.assertEqual(len(first['left']), 1)
+        for result in later:
+            self.assertEqual(result, first)
+
+    def test_the_same_night_twice(self):
+        self.assert_same_every_run([WHOLE, WHOLE, WHOLE])
+
+    def test_a_window_around_the_sleep_then_the_whole_day(self):
+        self.assert_same_every_run([AROUND_SLEEP, WHOLE])
+
+    def test_the_whole_day_then_a_window_around_the_sleep(self):
+        self.assert_same_every_run([WHOLE, AROUND_SLEEP])
+
+    def test_the_level_learned_the_night_before_is_the_one_used(self):
+        day = 24 * 3600
+        for side, level in (('left', 10.0), ('right', 10.0)):
+            calibration.record_occupied_level(side, level, 7 * 3600, T0 - day, T0 - day + 7 * 3600, conn=self.conn)
+        self.assert_same_every_run([WHOLE, AROUND_SLEEP, WHOLE])
+        # Exit at 2 from the level of 10 keeps the tail in bed; the night's own level of 20 would end it.
+        left = self.runs([WHOLE])[0]['left'][0]
+        self.assertGreater(left['left_bed_at'], utc(14_400).isoformat())
+
+    def test_learning_still_happens_once_per_night(self):
+        self.runs([WHOLE, AROUND_SLEEP])
+        profile = calibration.get_profile('left', calibration.SENSOR_TYPE_CAP_OCCUPIED, conn=self.conn)
+        self.assertAlmostEqual(profile['payload']['level'], 20.0, places=3)
+        self.assertIsNone(profile['payload']['before'])
 
 
 class FallbackTest(unittest.TestCase):

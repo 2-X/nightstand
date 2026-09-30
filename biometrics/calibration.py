@@ -11,7 +11,7 @@ The server reads these same tables through Prisma and never writes them.
 import json
 import math
 import time
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from get_logger import get_logger
 
@@ -263,18 +263,37 @@ def recent_piezo_floors(side: str, conn=None) -> List[float]:
     return floors
 
 
-def load_presence_profiles(conn=None) -> dict:
-    """Everything the capacitance presence detector learns from, for both sides."""
+def load_presence_profiles(conn=None, window: Optional[Tuple[int, int]] = None) -> dict:
+    """Everything the capacitance presence detector learns from, for both sides.
+
+    window is the analyzer's (start, end) in unix seconds. When the stored
+    occupied level came from the night that window covers (the same rule
+    record_occupied_level uses), the level that stood before that night is
+    returned in its place: a night analyzed again reads the thresholds its
+    first run read, never the level that run stored.
+    """
     profiles = {}
     for side in ('left', 'right'):
         cap = get_profile(side, SENSOR_TYPE_CAP, conn=conn)
         occupied = get_profile(side, SENSOR_TYPE_CAP_OCCUPIED, conn=conn)
         profiles[side] = {
             'cap': cap['payload'] if cap else None,
-            'cap_occupied': occupied['payload'] if occupied else None,
+            'cap_occupied': _occupied_for_window(occupied, window),
             'piezo_floors': recent_piezo_floors(side, conn=conn),
         }
     return profiles
+
+
+def _occupied_for_window(profile: Optional[dict], window) -> Optional[dict]:
+    if profile is None:
+        return None
+    payload = profile['payload']
+    if window is None or profile['source_start'] is None or profile['source_end'] is None:
+        return payload
+    if not _same_night((profile['source_start'], profile['source_end']), (int(window[0]), int(window[1]))):
+        return payload
+    before = payload.get('before') if isinstance(payload, dict) else None
+    return None if before is None else {'level': before}
 
 
 def record_occupied_level(

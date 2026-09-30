@@ -187,6 +187,33 @@ class PresenceProfilesTest(StoreTestCase):
         self.assertEqual(profiles['right'], {'cap': None, 'cap_occupied': None, 'piezo_floors': []})
 
 
+class ProfilesForAWindowTest(StoreTestCase):
+    """The analyzer reads the level from before the night its window covers."""
+
+    def occupied(self, window):
+        return calibration.load_presence_profiles(conn=self.conn, window=window)['left']['cap_occupied']
+
+    def test_a_window_over_the_stored_night_reads_the_level_before_it(self):
+        calibration.record_occupied_level('left', 20.0, 7 * HOUR, 0, 7 * HOUR, conn=self.conn)
+        calibration.record_occupied_level('left', 22.0, 7 * HOUR, 24 * HOUR, 31 * HOUR, conn=self.conn)
+        self.assertEqual(self.occupied((23 * HOUR, 32 * HOUR)), {'level': 20.0})
+        self.assertEqual(self.occupied((12 * HOUR, 37 * HOUR)), {'level': 20.0})
+
+    def test_the_first_night_ever_analyzed_again_reads_no_level(self):
+        calibration.record_occupied_level('left', 20.0, 7 * HOUR, 0, 7 * HOUR, conn=self.conn)
+        self.assertIsNone(self.occupied((-HOUR, 8 * HOUR)))
+
+    def test_the_next_night_reads_the_stored_level(self):
+        calibration.record_occupied_level('left', 20.0, 7 * HOUR, 0, 7 * HOUR, conn=self.conn)
+        stored = calibration.get_profile('left', calibration.SENSOR_TYPE_CAP_OCCUPIED, conn=self.conn)['payload']
+        self.assertEqual(self.occupied((12 * HOUR, 37 * HOUR)), stored)
+        self.assertEqual(self.occupied(None), stored)
+
+    def test_a_window_touching_the_night_is_another_night(self):
+        calibration.record_occupied_level('left', 20.0, 7 * HOUR, 0, 7 * HOUR, conn=self.conn)
+        self.assertEqual(self.occupied((6 * HOUR, 31 * HOUR))['level'], 20.0)
+
+
 class DeltaNoiseTest(unittest.TestCase):
     def _window(self, rows):
         index = pd.date_range('2026-09-28 19:00', periods=len(rows), freq='500ms')
