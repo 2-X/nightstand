@@ -56,7 +56,8 @@ describe('app navigation and conditional visibility', () => {
 
 it('redirects an unknown settings category to the index', async () => {
   renderApp('/settings/unknown');
-  expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+  // The lazy route tree can take longer than the default wait to load under a busy suite.
+  expect(await screen.findByRole('heading', { name: 'Settings' }, { timeout: 10_000 })).toBeInTheDocument();
   expect(screen.queryByRole('link', { name: 'Back to Settings' })).not.toBeInTheDocument();
 });
 

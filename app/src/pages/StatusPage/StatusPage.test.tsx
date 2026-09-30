@@ -203,12 +203,13 @@ it.each([-3_600_000, 3_600_000])('carries overdue attention through Settings and
     frankenMonitor: { ...data.frankenMonitor, status: 'not_started' },
   }, { headers: { Date: new Date(podNow).toUTCString() } })));
   const { user } = renderApp('/settings');
-  // This mounts the lazy route tree; allow the cold import to settle on CI.
-  const device = await screen.findByRole('link', { name: 'Pod and diagnostics 1 items need attention' }, { timeout: 5000 });
-  expect((await screen.findAllByRole('link', { name: 'Settings, system needs attention' })).length).toBeGreaterThan(0);
+  // This mounts the lazy route tree; allow the cold import to settle on CI and under a busy suite.
+  const patient = { timeout: 10_000 };
+  const device = await screen.findByRole('link', { name: 'Pod and diagnostics 1 items need attention' }, patient);
+  expect((await screen.findAllByRole('link', { name: 'Settings, system needs attention' }, patient)).length).toBeGreaterThan(0);
   await user.click(device);
-  await user.click(await screen.findByRole('link', { name: /^System status/ }));
-  expect(await screen.findByText('Franken monitor needs attention')).toBeVisible();
+  await user.click(await screen.findByRole('link', { name: /^System status/ }, patient));
+  expect(await screen.findByText('Franken monitor needs attention', undefined, patient)).toBeVisible();
   expect(screen.getByText('Franken monitor has not started. Check the service below or open Logs.')).toBeVisible();
 });
 

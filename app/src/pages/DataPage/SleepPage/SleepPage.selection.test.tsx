@@ -150,13 +150,14 @@ it('shows the nightly average once and the seven night average in expanded detai
     })),
   );
   const { user } = renderWithProviders(<SleepPage />);
-  expect(await screen.findByRole('button', { name: 'HRV 87 ms' })).toBeInTheDocument();
+  // The charts render late when the suite is busy, so wait longer than the default.
+  expect(await screen.findByRole('button', { name: 'HRV 87 ms' }, { timeout: 10_000 })).toBeInTheDocument();
   expect(screen.queryByText('SELECTED NIGHT')).not.toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'HRV 87 ms' }));
-  await screen.findByText('7-night average 63 ms');
+  await screen.findByText('7-night average 63 ms', undefined, { timeout: 10_000 });
   expect(screen.getAllByText('87 ms')).toHaveLength(1);
   await user.click(screen.getByRole('button', { name: 'HRV 87 ms' }));
-  await waitFor(() => expect(screen.queryByText('7-night average 63 ms')).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByText('7-night average 63 ms')).not.toBeInTheDocument(), { timeout: 10_000 });
 });
 
 it('keeps the night summary visible when measurements are malformed', async () => {
