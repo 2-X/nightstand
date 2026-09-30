@@ -22,3 +22,20 @@ export function parseMetricsQuery(query: Record<string, unknown>): MetricsQuery 
   if (start === null || end === null) return null;
   return { side: side || undefined, start, end } as MetricsQuery;
 }
+
+export interface NightQuery {
+  side: 'left' | 'right';
+  start: number;
+  end: number;
+}
+
+// Stages and scores build one entry per five minutes of the range, so an
+// unbounded range could exhaust the Pod's memory.
+export const MAX_NIGHT_SECONDS = 48 * 3600;
+
+export function parseNightQuery(query: Record<string, unknown>): NightQuery | null {
+  const range = parseMetricsQuery(query);
+  if (!range?.side || range.start === undefined || range.end === undefined) return null;
+  if (range.end <= range.start || range.end - range.start > MAX_NIGHT_SECONDS) return null;
+  return { side: range.side, start: range.start, end: range.end };
+}

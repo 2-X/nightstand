@@ -1,18 +1,12 @@
 import express, { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
-import moment from 'moment-timezone';
 import { prisma } from '../../db/prisma.js';
 import settingsDB from '../../db/settings.js';
 import servicesDB from '../../db/services.js';
 import { isSleepScoreActive } from './sleepScoreGuard.js';
+import { parseNightQuery } from './metricsQuery.js';
 
 const router = express.Router();
-
-interface SleepStagesQuery {
-  side?: string;
-  startTime?: string;
-  endTime?: string;
-}
 
 export type SleepStage = 'awake' | 'rem' | 'light' | 'deep';
 
@@ -347,11 +341,12 @@ export async function loadStageSummary(side: string, startUnix: number, endUnix:
 
 router.get(
   '/sleep-stages',
-  async (req: Request<object, object, object, SleepStagesQuery>, res: Response) => {
-    const { side, startTime, endTime } = req.query;
-    if (!side || !startTime || !endTime) {
-      return res.status(400).json({ error: 'side, startTime, endTime required' });
+  async (req: Request, res: Response) => {
+    const night = parseNightQuery(req.query);
+    if (!night) {
+      return res.status(400).json({ error: 'side, startTime and endTime are required, and the range must be at most 48 hours' });
     }
+    const { side, start: startUnix, end: endUnix } = night;
 
     await settingsDB.read();
     await servicesDB.read();
@@ -365,8 +360,6 @@ router.get(
       });
     }
 
-    const startUnix = moment(startTime).unix();
-    const endUnix = moment(endTime).unix();
     const { epochs, totals, percentages, totalSeconds, lowCoverage } = await loadStageSummary(side, startUnix, endUnix);
 
     return res.json({ active: true, epochs, totals, percentages, totalSeconds, lowCoverage });
