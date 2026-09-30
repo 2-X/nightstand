@@ -106,7 +106,7 @@ it('keeps draft errors compact and focuses the invalid row on request', async ()
 
 it('collapses a disabled night and restores its saved editor when enabled', async () => {
   renderWithProviders(<SchedulePage/>);
-  const enabled = await screen.findByRole('switch', { name: 'Enabled' });
+  const enabled = await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
   await screen.findByLabelText('Turn on at');
   fireEvent.click(enabled);
   expect(screen.getByText('This night is off')).toBeInTheDocument();

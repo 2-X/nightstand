@@ -26,7 +26,7 @@ function renderNavigation() {
 it('silently discards the edited time and copied days after leaving and returning', async () => {
   const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
   const { user } = renderNavigation();
-  await screen.findByRole('switch', { name: 'Enabled' });
+  await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
   act(() => {
     useScheduleStore.getState().selectDay(1);
     useScheduleStore.getState().updateSelectedAlarm({ time: '03:33' });
@@ -35,7 +35,7 @@ it('silently discards the edited time and copied days after leaving and returnin
   await user.click(screen.getByRole('link', { name: 'Bed' }));
   await screen.findByText('Bed controls');
   await user.click(screen.getByRole('link', { name: 'Schedule' }));
-  await screen.findByRole('switch', { name: 'Enabled' });
+  await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   expect(useScheduleStore.getState().selectedDays.wednesday).toBe(false);
@@ -47,7 +47,7 @@ it('silently discards the edited time and copied days after leaving and returnin
 
 it('discards edits from both sides when leaving the page', async () => {
   const { user } = renderNavigation();
-  await screen.findByRole('switch', { name: 'Enabled' });
+  await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
   act(() => {
     useScheduleStore.getState().selectDay(2);
     useScheduleStore.getState().updateSelectedAlarm({ time: '03:33' });
@@ -55,7 +55,7 @@ it('discards edits from both sides when leaving the page', async () => {
   await user.click(screen.getByRole('link', { name: 'Bed' }));
   act(() => useAppStore.getState().setSide('right'));
   await user.click(screen.getByRole('link', { name: 'Schedule' }));
-  await screen.findByRole('switch', { name: 'Enabled' });
+  await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
   expect(useScheduleStore.getState().selectedSchedule?.alarm.time).not.toBe('03:33');
   act(() => {
     useScheduleStore.getState().selectDay(4);
@@ -64,14 +64,14 @@ it('discards edits from both sides when leaving the page', async () => {
   await user.click(screen.getByRole('link', { name: 'Bed' }));
   act(() => useAppStore.getState().setSide('left'));
   await user.click(screen.getByRole('link', { name: 'Schedule' }));
-  await screen.findByRole('switch', { name: 'Enabled' });
+  await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
   act(() => useScheduleStore.getState().selectDay(2));
   expect(useScheduleStore.getState().selectedSchedule?.alarm.time).toBe('07:00');
   await user.click(screen.getByRole('link', { name: 'Bed' }));
   act(() => useAppStore.getState().setSide('right'));
   await user.click(screen.getByRole('link', { name: 'Schedule' }));
-  await screen.findByRole('switch', { name: 'Enabled' });
+  await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
   act(() => useScheduleStore.getState().selectDay(4));
   expect(useScheduleStore.getState().selectedSchedule?.alarm.time).toBe('06:30');
@@ -80,14 +80,14 @@ it('discards edits from both sides when leaving the page', async () => {
 
 it('shows the saved schedule on the next visit', async () => {
   const { user } = renderNavigation();
-  await screen.findByRole('switch', { name: 'Enabled' });
+  await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
   const savedDayIndex = useScheduleStore.getState().selectedDayIndex;
   act(() => useScheduleStore.getState().updateSelectedAlarm({ time: '03:33' }));
   await user.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument(), { timeout: 3000 });
   await user.click(screen.getByRole('link', { name: 'Bed' }));
   await user.click(screen.getByRole('link', { name: 'Schedule' }));
-  await screen.findByRole('switch', { name: 'Enabled' });
+  await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
   expect(useScheduleStore.getState().changesPresent).toBe(false);
   act(() => useScheduleStore.getState().selectDay(savedDayIndex));
@@ -103,14 +103,14 @@ it('does not restore submitted edits when navigation happens during the save', a
     return HttpResponse.json({});
   }));
   const { user } = renderNavigation();
-  await screen.findByRole('switch', { name: 'Enabled' });
+  await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
   act(() => useScheduleStore.getState().updateSelectedAlarm({ time: '04:55' }));
   await user.click(screen.getByRole('button', { name: 'Save' }));
   await user.click(screen.getByRole('link', { name: 'Bed' }));
   finishSave();
   await waitFor(() => expect(useAppStore.getState().isUpdating).toBe(false), { timeout: 3000 });
   await user.click(screen.getByRole('link', { name: 'Schedule' }));
-  await screen.findByRole('switch', { name: 'Enabled' });
+  await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
   expect(useScheduleStore.getState().changesPresent).toBe(false);
 });
@@ -123,13 +123,13 @@ it.each(['left', 'right'] as const)('preserves newer %s side edits when an earli
     return HttpResponse.json({});
   }));
   const { user } = renderNavigation();
-  await screen.findByRole('switch', { name: 'Enabled' });
+  await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
   act(() => useScheduleStore.getState().updateSelectedAlarm({ time: '05:55' }));
   await user.click(screen.getByRole('button', { name: 'Save' }));
   await user.click(screen.getByRole('link', { name: 'Bed' }));
   act(() => useAppStore.getState().setSide(side));
   await user.click(screen.getByRole('link', { name: 'Schedule' }));
-  await screen.findByRole('switch', { name: 'Enabled' });
+  await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
   await user.click(screen.getByText('Apply settings to other days'));
   await user.click(screen.getByRole('button', { name: 'Weekends' }));
   expect(useScheduleStore.getState().selectedDays.saturday).toBe(true);

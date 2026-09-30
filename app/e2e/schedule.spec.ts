@@ -8,7 +8,7 @@ test('saving a schedule edit hides the save button', async ({ page }) => {
   // to reach its loaded checked state first: the schedule data arrives after
   // the switch first mounts, and clicking before that settles gets silently
   // overwritten by the data-load effect (which loses the edit on a cold run).
-  const enabled = page.getByRole('switch', { name: 'Enabled' }).first();
+  const enabled = page.getByRole('switch', { name: /^Schedule \w+ night$/ }).first();
   await expect(enabled).toBeChecked();
   await enabled.click();
 
@@ -29,7 +29,7 @@ test('leaving Schedule silently discards unsaved edits', async ({ page }) => {
     await dialog.dismiss();
   });
   await page.goto('/schedules');
-  const enabled = page.getByRole('switch', { name: 'Enabled' }).first();
+  const enabled = page.getByRole('switch', { name: /^Schedule \w+ night$/ }).first();
   await expect(enabled).toBeChecked();
   const powerOn = page.getByLabel('Turn on at', { exact: true });
   await expect(powerOn).toHaveValue('21:30');

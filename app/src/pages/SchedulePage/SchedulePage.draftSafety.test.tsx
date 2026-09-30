@@ -17,7 +17,7 @@ it('keeps copied days visible when the edited night is disabled', async () => {
     useScheduleStore.getState().selectDay(1);
     useScheduleStore.getState().toggleSelectedDay('wednesday');
   });
-  fireEvent.click(screen.getByRole('switch', { name: 'Enabled' }));
+  fireEvent.click(screen.getByRole('switch', { name: /^Schedule \w+ night$/ }));
   expect(screen.getByText('Apply settings to other days')).toBeInTheDocument();
   const draft = screen.getByRole('status');
   expect(draft).toHaveTextContent('Unsaved: Monday and 1 more, Alex');

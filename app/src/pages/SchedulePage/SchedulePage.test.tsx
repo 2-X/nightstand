@@ -4,12 +4,21 @@ import { http, HttpResponse } from 'msw';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import { useAppStore } from '@state/appStore.tsx';
+import { useScheduleStore } from './scheduleStore';
 import SchedulePage from './SchedulePage';
 
 describe('SchedulePage', () => {
   it('renders the schedule page once schedule data loads', async () => {
     renderWithProviders(<SchedulePage />, { initialRoute: '/schedules' });
     expect(await screen.findByText('Turn on at')).toBeInTheDocument();
+  });
+
+  it('names the night switch after the selected night', async () => {
+    renderWithProviders(<SchedulePage />, { initialRoute: '/schedules' });
+    const nightSwitch = await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
+    const day = useScheduleStore.getState().selectedDay;
+    expect(nightSwitch).toHaveAccessibleName(`Schedule ${day.charAt(0).toUpperCase()}${day.slice(1)} night`);
+    expect(screen.queryByRole('switch', { name: 'Enabled' })).not.toBeInTheDocument();
   });
 });
 
@@ -33,7 +42,7 @@ describe('SchedulePage save', () => {
     // power.enabled true for every day); wait for the loaded, checked state
     // first so the click toggles the real loaded schedule instead of a value
     // that the data-loaded effect immediately overwrites.
-    const enabled = await screen.findByRole('switch', { name: 'Enabled' }) as HTMLInputElement;
+    const enabled = await screen.findByRole('switch', { name: /^Schedule \w+ night$/ }) as HTMLInputElement;
     await waitFor(() => expect(enabled.checked).toBe(true));
     await user.click(enabled);
 

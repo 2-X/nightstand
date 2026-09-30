@@ -34,7 +34,7 @@ describe('SchedulePage save revert on failed save', () => {
     // Wait for the loaded, checked state before toggling (known race: the
     // switch renders unchecked first, then the fetched schedule effect sets
     // it checked; toggling before that lands gets immediately overwritten).
-    const enabled = await screen.findByRole('switch', { name: 'Enabled' }) as HTMLInputElement;
+    const enabled = await screen.findByRole('switch', { name: /^Schedule \w+ night$/ }) as HTMLInputElement;
     await waitFor(() => expect(enabled.checked).toBe(true));
     await user.click(enabled);
 
