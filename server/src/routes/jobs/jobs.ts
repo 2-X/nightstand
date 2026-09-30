@@ -77,7 +77,7 @@ router.post('/jobs', async (req: Request, res: Response) => {
 
   const jobs = [...new Set(validationResult.data)];
   if (jobs.includes('reboot') && jobs.includes('update')) {
-    res.status(400).json({ error: 'Restart and update cannot be requested together' });
+    res.status(400).json({ message: 'Restart and update cannot be requested together' });
     return;
   }
 
