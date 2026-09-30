@@ -31,7 +31,7 @@ def _read_raw_record(f):
 
     Returns the raw inner data bytes, or None for empty placeholder records
     (the Pod firmware writes data=b'' records as sequence-number markers).
-    Raises EOFError at end of file, ValueError on malformed data.
+    Raises EOFError at end of file or on a record cut short, ValueError on malformed data.
     """
     b = f.read(1)
     if not b:
@@ -45,7 +45,10 @@ def _read_raw_record(f):
             raise EOFError
     if b[0] != 0xa2:
         raise ValueError('Expected outer map 0xa2, got 0x%02x' % b[0])
-    if f.read(4) != b'\x63\x73\x65\x71':  # text(3) "seq"
+    key = f.read(4)
+    if len(key) < 4:
+        raise EOFError
+    if key != b'\x63\x73\x65\x71':  # text(3) "seq"
         raise ValueError('Expected seq key')
     hdr = f.read(1)
     if not hdr:
@@ -67,7 +70,10 @@ def _read_raw_record(f):
             raise EOFError
     else:
         raise ValueError('Unexpected seq encoding: 0x%02x' % val)
-    if f.read(5) != b'\x64\x64\x61\x74\x61':  # text(4) "data"
+    key = f.read(5)
+    if len(key) < 5:
+        raise EOFError
+    if key != b'\x64\x64\x61\x74\x61':  # text(4) "data"
         raise ValueError('Expected data key')
     bs = f.read(1)
     if not bs:

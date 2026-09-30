@@ -21,7 +21,10 @@ Key areas tested:
 5. Sequential reading correctness -- file offset advances exactly by the
    CBOR record length
 """
+import signal
+import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
 import cbor2
@@ -44,6 +47,7 @@ get_logger('sleep-analyzer')
 
 from load_raw_files import (
     _read_raw_record,
+    _decode_cbor_file,
     _decode_piezo_data,
     load_piezo_row,
     _delete_other_side,
@@ -229,13 +233,85 @@ class TestEOFPropagation(unittest.TestCase):
     def test_partial_header_eof(self):
         """Stream ends after the first byte which is ``0xa2``."""
         handle = BytesIO(b"\xa2")
-        with self.assertRaisesRegex(ValueError, "Expected seq key"):
+        with self.assertRaises(EOFError):
             _read_raw_record(handle)
 
     def test_eof_after_seq(self):
         handle = BytesIO(b'\xa2\x63seq\x18\x01\x64data')
         with self.assertRaises(EOFError):
             _read_raw_record(handle)
+
+
+# ---------------------------------------------------------------------------
+# 4b. Truncation at every byte offset
+# ---------------------------------------------------------------------------
+
+class TestTruncatedTail(unittest.TestCase):
+    def test_cut_inside_key_literals_is_eof(self):
+        """Cuts inside the fixed seq/data key literals are a short read,
+        not corruption."""
+        full = outer_record(5, b"x" * 8)
+        seq_key_end = 1 + 4
+        data_key_start = full.index(b"\x64data")
+        for cut in list(range(2, seq_key_end)) + list(range(data_key_start + 1, data_key_start + 5)):
+            with self.subTest(cut=cut):
+                with self.assertRaises(EOFError):
+                    _read_raw_record(BytesIO(full[:cut]))
+
+    def test_every_cut_of_a_record_is_eof(self):
+        full = outer_record(0x1234, b"payload-bytes")
+        for cut in range(1, len(full)):
+            with self.subTest(cut=cut):
+                with self.assertRaises(EOFError):
+                    _read_raw_record(BytesIO(full[:cut]))
+
+    def test_wrong_seq_key_still_value_error(self):
+        with self.assertRaisesRegex(ValueError, "seq key"):
+            _read_raw_record(BytesIO(b"\xa2\x63foo\x01\x64data\x40"))
+
+    def test_wrong_data_key_still_value_error_with_full_key(self):
+        with self.assertRaisesRegex(ValueError, "data key"):
+            _read_raw_record(BytesIO(b"\xa2\x63seq\x01\x64dat!\x40"))
+
+    def test_decode_file_with_truncated_final_record(self):
+        """N good records plus a final record cut at every offset yields
+        exactly N rows and never spins."""
+        t0 = datetime(2026, 9, 28, 12, 0, 0, tzinfo=timezone.utc)
+        base = int(t0.timestamp())
+
+        def rec(seq):
+            ch = {"out": 1.0, "cen": 2.0, "in": 3.0, "status": "good"}
+            inner = {"type": "capSense", "ts": base + seq, "left": dict(ch), "right": dict(ch)}
+            return outer_record(seq, cbor2.dumps(inner))
+
+        good_count = 5
+        good = b"".join(rec(i) for i in range(good_count))
+        last = rec(good_count)
+        start, end = t0 - timedelta(hours=1), t0 + timedelta(hours=1)
+
+        def timeout(*_):
+            raise TimeoutError("decode did not terminate")
+
+        use_alarm = hasattr(signal, "SIGALRM")
+        if use_alarm:
+            old = signal.signal(signal.SIGALRM, timeout)
+        else:
+            self.skipTest("SIGALRM unavailable")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                path = os.path.join(tmp, "trunc.RAW")
+                for cut in range(1, len(last)):
+                    with open(path, "wb") as fh:
+                        fh.write(good + last[:cut])
+                    data = {"capSense": []}
+                    signal.alarm(5)
+                    try:
+                        _decode_cbor_file(path, data, start, end, "left", 1)
+                    finally:
+                        signal.alarm(0)
+                    self.assertEqual(len(data["capSense"]), good_count, "cut=%d" % cut)
+        finally:
+            signal.signal(signal.SIGALRM, old)
 
 
 # ---------------------------------------------------------------------------
