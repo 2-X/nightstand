@@ -95,11 +95,8 @@ router.post('/presence', async (req: Request, res: Response) => {
     return res.status(200).json(presenceData);
 
   } catch (error) {
-    console.error('Error updating presence:', error);
-    return res.status(500).json({
-      error: 'Internal server error',
-      message: (error as Error).message
-    });
+    logger.error('Error updating presence:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

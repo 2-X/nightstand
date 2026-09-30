@@ -26,14 +26,17 @@ export function registerErrorHandlers(app: Express) {
   });
 
   // --- Central error handler (must be AFTER routes and special-case handlers)
+  // A server error's message can carry database or file internals, so only
+  // the log gets it. Client errors (body too large and the like) keep theirs.
   // eslint-disable-next-line no-unused-vars,@typescript-eslint/no-unused-vars
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const isProd = process.env.NODE_ENV === 'production';
+  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     const status = Number(err?.status) || 500;
-    const body: any = { error: { message: err?.message || 'Internal Server Error' } };
-    if (!isProd) body.error.stack = err?.stack;
-    logger.error(body);
-    logger.error(JSON.stringify(body));
-    res.status(status).json(body);
+    const clientError = status >= 400 && status < 500;
+    logger.error({
+      message: `${req.method} ${req.originalUrl} failed with ${status}: ${err?.message ?? String(err)}`,
+      stack: err?.stack,
+    });
+    const message = clientError && err?.message ? err.message : 'Internal Server Error';
+    res.status(clientError ? status : 500).json({ error: { message } });
   });
 }
