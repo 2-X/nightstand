@@ -336,7 +336,7 @@ Rhythms are named sleep plans per side, a weekly plan that picks a rhythm for ea
 - Saves one or both sides. A side that is sent replaces the stored side; a side that is left out is kept. The body accepts only `left` and `right`, and unknown keys anywhere inside a side are refused.
 - Many date changes can be saved in one request. Changes more than 7 days old are dropped before the side is checked.
 - A side can have up to 12 rhythms. Each rhythm is stored under its own `id`. The weekly plan and the date changes name existing rhythms or `null`. A date appears at most once, is a real date and is at most 60 days ahead in the Pod's time zone. A rhythm can have up to 48 temperature changes, or as many as it already has when more are stored.
-- Two sleeps on the same side may not overlap, from now to 63 days ahead. Sleeps that have already ended are not checked.
+- Two sleeps on the same side may not overlap, from now to 69 days ahead. Date changes reach 60 days ahead, so the last days of that span hold the weekly plan alone and a clash between two weekly nights cannot hide behind changes. A sleep that has already ended is not checked, so an overlap never involves a sleep that is over.
 - Returns the same body as `GET /api/rhythms`.
 
 #### Request Body
@@ -359,7 +359,7 @@ Rhythms are named sleep plans per side, a weekly plan that picks a rhythm for ea
 - `400 { "error": "Invalid request data", "details": [...] }`: the body does not match the schema.
 - `400 { "error": "Invalid rhythms", "details": ["left: The Monday plan uses a rhythm that does not exist (nap)"] }`: a rule above is broken. Each detail starts with the side.
 - `400 { "error": "Two sleeps would overlap", "overlaps": [{ "side": "left", "first": "2026-10-12", "second": "2026-10-13" }] }`: `first` and `second` are the start dates of the two sleeps.
-- `409 { "error": "Rhythms are not set up on this Pod", "state": "absent" }`: nothing is saved unless the stored file can be read. `state` is `absent`, `invalid` or `unsupported`.
+- `409 { "error": "...", "state": "absent" }`: nothing is saved unless the stored file can be read. The text depends on `state`: `absent` is "Rhythms are not set up on this Pod", `unsupported` is "The saved rhythms are from a newer version" and `invalid` is "The saved rhythms could not be read". Switch on `state`, not the text.
 
 ### GET `/api/rhythms/sleeps`
 

@@ -498,7 +498,8 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     flag: 'rhythms',
     default: false,
     touchpoints: [
-      'server/src/db/rhythmsSchema.ts', 'server/src/db/rhythms.ts', 'server/src/jobs/rhythms', 'server/src/routes/rhythms/rhythms.ts',
+      'server/src/db/settingsSchema.ts', 'server/src/db/rhythmsSchema.ts', 'server/src/db/rhythms.ts', 'server/src/jobs/rhythms',
+      'server/src/routes/rhythms/rhythms.ts',
     ],
     depends_on: ['agent'],
     reversible: true,

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { after, before, describe, it } from 'node:test';
+import { after, before, describe, it, mock } from 'node:test';
 import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -154,12 +154,15 @@ describe('with Rhythms turned on', () => {
 
   it('POST /rhythms with no side leaves the file alone', async () => {
     const stored = readFileSync(rhythmsFile, 'utf8');
-    writeFileSync(rhythmsFile, stored.replace(/\n\s*/g, ''));
-    const compact = readFileSync(rhythmsFile, 'utf8');
-    const res = await post({});
-    assert.equal(res.status, 200);
-    assert.equal(readFileSync(rhythmsFile, 'utf8'), compact);
-    writeFileSync(rhythmsFile, stored);
+    try {
+      writeFileSync(rhythmsFile, stored.replace(/\n\s*/g, ''));
+      const compact = readFileSync(rhythmsFile, 'utf8');
+      const res = await post({});
+      assert.equal(res.status, 200);
+      assert.equal(readFileSync(rhythmsFile, 'utf8'), compact);
+    } finally {
+      writeFileSync(rhythmsFile, stored);
+    }
   });
 
   it('POST /rhythms drops old changes before checking them', async () => {
@@ -183,18 +186,39 @@ describe('with Rhythms turned on', () => {
     assert.equal(readFileSync(rhythmsFile, 'utf8'), before);
   });
 
-  it('POST /rhythms names no overlap whose sleeps have both ended', async () => {
-    // A full day from 22:00 followed by a 21:00 start overlaps every other night, past ones included.
+  it('POST /rhythms refuses a weekly clash that date changes hide for the first 60 days', async () => {
+    const before = readFileSync(rhythmsFile, 'utf8');
+    const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const weekdayOn = (offset: number) => weekdays[moment.tz(day(offset), TZ).day()];
+    // Two consecutive weekdays, cleared on every date a change can reach, so they only clash after day 60.
+    const [first, second] = [weekdayOn(64), weekdayOn(65)];
     const long = rhythmOf('long', nightOf({ on: '22:00', off: '22:00' }));
     const early = rhythmOf('early', nightOf({ on: '21:00', off: '06:00' }));
-    const week = {
-      sunday: 'long', monday: 'early', tuesday: 'long', wednesday: 'early', thursday: 'long', friday: 'early', saturday: 'long',
-    };
-    const res = await post({ left: sideOf([long, early], week) });
-    assert.equal(res.status, 400);
+    const hidden = Array.from({ length: 61 }, (_, n) => n)
+      .filter(n => [first, second].includes(weekdayOn(n)))
+      .map(n => ({ date: day(n), rhythmId: null }));
+    const res = await post({ left: sideOf([long, early], { [first]: 'long', [second]: 'early' }, hidden) });
+    assert.equal(res.status, 400, JSON.stringify(res.body));
+    assert.equal(res.body.error, 'Two sleeps would overlap');
     assert.ok(res.body.overlaps.length > 0);
-    assert.ok(res.body.overlaps.every((pair: { second: string }) => pair.second >= day(0)), JSON.stringify(res.body.overlaps[0]));
-    assert.ok(res.body.overlaps[0].first >= day(-1));
+    assert.ok(res.body.overlaps.every((pair: { first: string }) => pair.first >= day(61)), JSON.stringify(res.body.overlaps));
+    assert.equal(readFileSync(rhythmsFile, 'utf8'), before);
+  });
+
+  it('POST /rhythms names no overlap with a sleep that has ended or a date a change cleared', async () => {
+    // Wednesday 2026-10-07 20:00 in Los Angeles, after both of the week's clashing sleeps are over.
+    mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-08T03:00:00Z') });
+    try {
+      const late = rhythmOf('late', nightOf({ on: '22:00', off: '05:00' }));
+      const dawn = rhythmOf('dawn', nightOf({ on: '04:00', off: '06:00' }));
+      const cleared = [{ date: '2026-10-13', rhythmId: null }, { date: '2026-10-14', rhythmId: null }];
+      const res = await post({ left: sideOf([late, dawn], { tuesday: 'late', wednesday: 'dawn' }, cleared) });
+      assert.equal(res.status, 400, JSON.stringify(res.body));
+      assert.deepEqual(res.body.overlaps[0], { side: 'left', first: '2026-10-20', second: '2026-10-21' });
+      assert.ok(res.body.overlaps.every((pair: { first: string }) => pair.first >= '2026-10-20'), JSON.stringify(res.body.overlaps));
+    } finally {
+      mock.timers.reset();
+    }
   });
 
   it('POST /rhythms saves many date changes in one write', async () => {
@@ -224,6 +248,36 @@ describe('with Rhythms turned on', () => {
     assert.equal(grown.status, 400);
     assert.deepEqual(grown.body.details, ['left: Rhythm monday can have at most 60 temperature changes']);
     assert.equal((await post({ left: body.data.left })).status, 200);
+  });
+
+  it('POST /rhythms applies two saves sent at once without losing either', async () => {
+    const { body } = await get('/rhythms');
+    const left = { ...body.data.left, changes: [{ date: day(2), rhythmId: null }] };
+    const right = { ...body.data.right, changes: [{ date: day(3), rhythmId: null }] };
+    const results = await Promise.all([post({ left }), post({ right })]);
+    assert.deepEqual(results.map(result => result.status), [200, 200]);
+    const stored = JSON.parse(readFileSync(rhythmsFile, 'utf8'));
+    assert.deepEqual(stored.left.changes, left.changes);
+    assert.deepEqual(stored.right.changes, right.changes);
+    assert.equal((await post({ left: body.data.left, right: body.data.right })).status, 200);
+  });
+
+  it('POST /rhythms checks the set point cap against the file the earlier save left', async () => {
+    const { body } = await get('/rhythms');
+    const withSetPoints = (count: number) => {
+      const left = structuredClone(body.data.left) as SideRhythms;
+      left.rhythms.monday.night.temperatures = Object.fromEntries(Array.from({ length: count }, (_, n) =>
+        [`${String(Math.floor(n / 6)).padStart(2, '0')}:${String((n % 6) * 10).padStart(2, '0')}`, 76]));
+      return left;
+    };
+    await updateRhythms(draft => { draft.left = withSetPoints(60); });
+    const [shrink, regrow] = await Promise.all([post({ left: body.data.left }), post({ left: withSetPoints(60) })]);
+    assert.equal(shrink.status, 200);
+    // The second save sees the small night the first left, so the larger count is no longer grandfathered.
+    assert.equal(regrow.status, 400);
+    assert.deepEqual(regrow.body.details, ['left: Rhythm monday can have at most 48 temperature changes']);
+    const stored = JSON.parse(readFileSync(rhythmsFile, 'utf8'));
+    assert.deepEqual(stored.left.rhythms.monday.night.temperatures, body.data.left.rhythms.monday.night.temperatures);
   });
 
   it('POST /rhythms saves one side, prunes old changes and keeps the other side', async () => {

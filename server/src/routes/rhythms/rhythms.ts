@@ -14,11 +14,10 @@ import { pruneChanges, sideIssues } from '../../jobs/rhythms/validate.js';
 const router = express.Router();
 
 export const MAX_SLEEPS_WINDOW_MS = 16 * 24 * 60 * 60 * 1000;
-// Weekly plans repeat and changes reach 60 days ahead, so this span sees every overlap.
-const OVERLAP_CHECK_DAYS = 63;
-const NOT_READY: Record<RhythmsLoad['state'], string> = {
+// Changes reach 60 days ahead. Days 61 to 68 have none, so they hold every pair of consecutive weekdays.
+const OVERLAP_CHECK_DAYS = 69;
+const NOT_READY: Record<Exclude<RhythmsLoad['state'], 'ok'>, string> = {
   absent: 'Rhythms are not set up on this Pod',
-  ok: 'Rhythms could not be saved',
   unsupported: 'The saved rhythms are from a newer version',
   invalid: 'The saved rhythms could not be read',
 };
@@ -56,7 +55,7 @@ router.post('/rhythms', async (req: Request, res: Response) => {
     const sent = parsed.data[side];
     return sent ? [{ side, next: { ...sent, changes: pruneChanges(sent.changes, today) } }] : [];
   });
-  // Sleeps that have ended are not checked, so an overlap never names two past dates.
+  // Sleeps that have ended are not checked, so an overlap never names a past date.
   const from = new Date();
   const to = moment.tz(today, 'YYYY-MM-DD', timeZone).add(OVERLAP_CHECK_DAYS, 'days').toDate();
   let issues: string[] = [];
@@ -73,7 +72,7 @@ router.post('/rhythms', async (req: Request, res: Response) => {
     });
   } catch (error: unknown) {
     if (!(error instanceof RhythmsStateError)) throw error;
-    res.status(409).json({ error: NOT_READY[error.state], state: error.state });
+    res.status(409).json({ error: NOT_READY[error.state as keyof typeof NOT_READY], state: error.state });
     return;
   }
   if (issues.length) {
