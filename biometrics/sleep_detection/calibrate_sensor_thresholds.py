@@ -39,7 +39,8 @@ logger = get_logger('calibrate-sensor')
 from data_types import *
 from load_raw_files import load_raw_files
 from piezo_data import load_piezo_df, detect_presence_piezo, identify_baseline_period, summarize_empty_floor, one_value_per_second
-from cap_data import load_cap_df, create_cap_baseline_from_cap_df, save_baseline
+from cap_data import load_cap_df, create_cap_baseline_from_cap_df, save_baseline, summed_delta_noise
+from features import biometrics_v2_enabled
 from resource_usage import get_memory_usage_unix, get_available_memory_mb
 from biometrics_helpers import validate_datetime_utc
 from service_health import update_health, is_biometrics_enabled
@@ -162,6 +163,8 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
         return int((time.time() - started_at) * 1000)
 
     run_id = None
+    # Off, the baseline and the legacy file stay exactly what they were.
+    presence_v2 = biometrics_v2_enabled()
     try:
         data = load_raw_files(
             folder_path,
@@ -192,7 +195,7 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
             clean=False
         )
 
-        cap_df = load_cap_df(data, side, expected_row_count=expected_row_count)
+        cap_df = load_cap_df(data, side, expected_row_count=expected_row_count, with_no_reading=presence_v2)
         # Cleanup data
         del data
         gc.collect()
@@ -244,6 +247,10 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
                 f'record a stretch of empty bed.'
             )
         cap_baseline = create_cap_baseline_from_cap_df(merged_df, baseline_start_time, baseline_end_time, side)
+        if presence_v2:
+            # The capacitance presence detector keeps its entry level clear of
+            # this. Readers of the channel means ignore the extra key.
+            cap_baseline['delta_noise'] = summed_delta_noise(merged_df[baseline_start_time:baseline_end_time], side)
 
         # Score the profile over the baseline window that was actually used,
         # not the much longer window of raw data loaded to find it.
@@ -273,9 +280,9 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
             samples_used=samples_used, run_id=run_id,
         )
 
-        # Nothing reads this yet. Both presence detectors still gate on their
-        # hardcoded threshold. Storing the learned number first makes it, and
-        # its night-to-night stability, observable before anything bets on it.
+        # The capacitance presence detector reads recent floors for its
+        # whole-bed gate; the piezo presence detectors still use their
+        # hardcoded threshold.
         _record_piezo_floor(side, merged_df, baseline_start_time, baseline_end_time, window_seconds, trigger)
 
         merged_df.drop(merged_df.index, inplace=True)

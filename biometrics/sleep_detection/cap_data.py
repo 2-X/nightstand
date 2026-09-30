@@ -70,6 +70,30 @@ def create_cap_baseline_from_cap_df(merged_df: pd.DataFrame, start_time: datetim
     return cap_baseline
 
 
+# capSense2 writes -1.0 on every value of a side when it has no reading, so
+# all three pair means read -1.0 in that row.
+CAP_SENTINEL = -1.0
+
+
+def summed_delta_noise(window_df: pd.DataFrame, side: Side) -> float:
+    """Std of the summed out/cen/in reading over an empty window, sentinel rows left out.
+
+    The capacitance presence detector thresholds that sum, so this is the
+    noise it sees on an empty bed. 0.0 when the window is too thin to say.
+    A -1.0 in only some raw values averages into its pair and halves that
+    channel, so rows flagged {side}_no_reading by load_cap_df are left out too.
+    """
+    values = window_df[[f'{side}_out', f'{side}_cen', f'{side}_in']]
+    keep = ((values != CAP_SENTINEL) & values.notna()).all(axis=1)
+    if f'{side}_no_reading' in window_df:
+        keep &= ~window_df[f'{side}_no_reading'].astype(bool)
+    values = values[keep]
+    if len(values) < 2:
+        return 0.0
+    noise = float(values.sum(axis=1).std())
+    return noise if math.isfinite(noise) else 0.0
+
+
 # Still written alongside the calibration store for one release. An instant
 # rollback swaps to a tree that reads these files, so dropping them early
 # would silently lose calibration with no visible cause. Remove one release
@@ -122,7 +146,8 @@ def load_baseline(side: Side):
 
 def load_cap_df(data: Data, side: Side, expected_row_count=None, with_no_reading=False) -> pd.DataFrame:
     """with_no_reading adds {side}_no_reading: a raw value of the row was
-    missing (Pod 5 capSense2). Only movement reads it."""
+    missing (Pod 5 capSense2). Movement skips those rows, and so does the
+    calibrator's summed_delta_noise."""
     logger.debug('Loading cap df...')
     df = pd.DataFrame(data['cap_senses'], columns=['ts', side])
 

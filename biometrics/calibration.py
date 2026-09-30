@@ -1,14 +1,17 @@
 """Read and write the calibration store.
 
 Every calibration write in this codebase goes through this module. Processing
-code only reads. Two modules each learning their own baseline at their own
-cadence, then disagreeing about sensor health, is the failure this prevents.
+code only reads, with one exception: the nightly analyzer reports the
+occupied capacitance level it measured, through record_occupied_level. Two
+modules each learning their own baseline at their own cadence, then
+disagreeing about sensor health, is the failure this prevents.
 
 The server reads these same tables through Prisma and never writes them.
 """
 import json
+import math
 import time
-from typing import Optional
+from typing import List, Optional
 
 from get_logger import get_logger
 
@@ -19,6 +22,9 @@ logger = get_logger()
 # second profile row under a sensor type no reader ever asks for, and the
 # unique index would not catch it.
 SENSOR_TYPE_PIEZO = 'piezo'
+SENSOR_TYPE_CAP = 'cap'
+# The capacitance rise a side shows while occupied, learned by the analyzer.
+SENSOR_TYPE_CAP_OCCUPIED = 'cap_occupied'
 
 STATUS_SUCCESS = 'success'
 STATUS_FAILED = 'failed'
@@ -33,6 +39,21 @@ TRIGGER_MIGRATION = 'migration'
 # A calibration window this long scores full marks. Shorter windows score
 # proportionally less, floored by empty_minutes in the calibrator at 5 minutes.
 TARGET_WINDOW_SECONDS = 1800
+
+# A night with less occupied time than this does not move the learned level.
+OCCUPIED_MIN_SECONDS = 2 * 3600
+# One night moves the learned level by at most this factor either way.
+OCCUPIED_MAX_STEP = 1.25
+# A full night of occupancy scores full quality.
+OCCUPIED_FULL_SECONDS = 8 * 3600
+# Two spans are the same night when their overlap covers at least this share
+# of the shorter one. Consecutive nights whose windows touch stay apart.
+SAME_NIGHT_OVERLAP = 0.5
+# The whole-bed piezo gate uses the median of this many recent clean floors,
+# which damps the night-to-night spread of a single measurement.
+PIEZO_FLOOR_RUNS = 3
+# Below this, a floor came from a thin window and is not used.
+PIEZO_FLOOR_MIN_QUALITY = 0.1
 
 
 def _connection(conn=None):
@@ -221,3 +242,105 @@ def import_legacy_baseline(side: str, file_path: str, conn=None) -> bool:
     )
     logger.info(f'Imported the legacy {side} baseline into the calibration store')
     return True
+
+
+def recent_piezo_floors(side: str, conn=None) -> List[float]:
+    """The newest successful empty-bed piezo floors for this side, newest first."""
+    rows = _connection(conn).execute(
+        'SELECT payload FROM calibration_runs '
+        'WHERE side = ? AND sensor_type = ? AND status = ? AND payload IS NOT NULL AND quality >= ? '
+        'ORDER BY started_at DESC, id DESC LIMIT ?',
+        (side, SENSOR_TYPE_PIEZO, STATUS_SUCCESS, PIEZO_FLOOR_MIN_QUALITY, PIEZO_FLOOR_RUNS),
+    ).fetchall()
+    floors = []
+    for (payload,) in rows:
+        try:
+            floor = json.loads(payload).get('floor')
+        except (ValueError, AttributeError):
+            continue
+        if isinstance(floor, (int, float)) and not isinstance(floor, bool):
+            floors.append(float(floor))
+    return floors
+
+
+def load_presence_profiles(conn=None) -> dict:
+    """Everything the capacitance presence detector learns from, for both sides."""
+    profiles = {}
+    for side in ('left', 'right'):
+        cap = get_profile(side, SENSOR_TYPE_CAP, conn=conn)
+        occupied = get_profile(side, SENSOR_TYPE_CAP_OCCUPIED, conn=conn)
+        profiles[side] = {
+            'cap': cap['payload'] if cap else None,
+            'cap_occupied': occupied['payload'] if occupied else None,
+            'piezo_floors': recent_piezo_floors(side, conn=conn),
+        }
+    return profiles
+
+
+def record_occupied_level(
+    side: str,
+    level: float,
+    seconds: int,
+    source_start: int,
+    source_end: int,
+    conn=None,
+) -> Optional[float]:
+    """Store the capacitance rise a night showed while this side was occupied.
+
+    source_start and source_end are the night's first entry and last exit.
+    Returns the stored level, or None when the night was too short, the
+    value unusable, or the night older than the stored one. The stored level
+    moves at most OCCUPIED_MAX_STEP per night from the previous one, so one
+    odd night (a guest, a heavy blanket) cannot swing the thresholds derived
+    from it. A call whose span overlaps the stored profile's by at least
+    SAME_NIGHT_OVERLAP of the shorter span is the same night analyzed again
+    (a shorter window, a manual run): it steps from the level that stood
+    before that night, so the level moves once per night, not once per run.
+    The stored span grows to the union of that night's spans, so a later
+    window over another part of the night is still recognized.
+    """
+    if seconds < OCCUPIED_MIN_SECONDS or not math.isfinite(level) or level <= 0:
+        return None
+    # The analyzer may pass numpy scalars; sqlite would store those as blobs.
+    source_start, source_end = int(source_start), int(source_end)
+    stored = float(level)
+    previous = get_profile(side, SENSOR_TYPE_CAP_OCCUPIED, conn=conn)
+    base = None
+    night_start, night_end = source_start, source_end
+    if previous:
+        earlier = previous['payload'] if isinstance(previous['payload'], dict) else {}
+        known_span = previous['source_start'] is not None and previous['source_end'] is not None
+        same_night = known_span and _same_night(
+            (previous['source_start'], previous['source_end']), (source_start, source_end))
+        if known_span and not same_night and source_start < previous['source_start']:
+            # An earlier night analyzed again; it already had its step.
+            return None
+        if same_night:
+            base = earlier.get('before')
+            night_start = min(night_start, previous['source_start'])
+            night_end = max(night_end, previous['source_end'])
+        else:
+            base = earlier.get('level')
+    if isinstance(base, (int, float)) and not isinstance(base, bool) and base > 0:
+        stored = min(base * OCCUPIED_MAX_STEP, max(base / OCCUPIED_MAX_STEP, stored))
+    else:
+        base = None
+    quality = min(1.0, seconds / OCCUPIED_FULL_SECONDS)
+    payload = {'level': stored, 'measured': float(level), 'seconds': int(seconds), 'before': base}
+    run_id = record_run(
+        side, SENSOR_TYPE_CAP_OCCUPIED, STATUS_SUCCESS, TRIGGER_DAILY,
+        started_at=int(time.time()), duration_ms=0, quality=quality, payload=payload,
+        source_start=source_start, source_end=source_end, conn=conn,
+    )
+    save_profile(
+        side, SENSOR_TYPE_CAP_OCCUPIED, payload, quality=quality,
+        source_start=night_start, source_end=night_end, samples_used=int(seconds),
+        run_id=run_id, conn=conn,
+    )
+    return stored
+
+
+def _same_night(stored, span) -> bool:
+    overlap = min(stored[1], span[1]) - max(stored[0], span[0])
+    shorter = min(stored[1] - stored[0], span[1] - span[0])
+    return overlap > 0 and overlap >= SAME_NIGHT_OVERLAP * shorter
