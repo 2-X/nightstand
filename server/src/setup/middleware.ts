@@ -60,7 +60,8 @@ export function isAllowedOrigin(origin: string | undefined): boolean {
   try {
     const parsed = new URL(origin);
     // An Origin is just scheme, host and port, never credentials or a path.
-    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.origin !== origin) return false;
+    // Scheme and host are case-insensitive; URL lowercases them.
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.origin !== origin.toLowerCase()) return false;
     if (configuredOrigin && parsed.origin === configuredOrigin) return true;
     const hostname = parsed.hostname;
     if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]') return true;

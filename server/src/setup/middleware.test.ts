@@ -70,6 +70,13 @@ describe('isAllowedOrigin', () => {
     assert.equal(isAllowedOrigin('http://192.168.6.20:5173'), false);
   });
 
+  it('compares the scheme and host without regard to case', () => {
+    assert.equal(isAllowedOrigin('http://LOCALHOST:3000'), true);
+    assert.equal(isAllowedOrigin('HTTP://Eight-Pod.LOCAL'), true);
+    assert.equal(isAllowedOrigin('http://LOCALHOST:3000/Path'), false);
+    assert.equal(isAllowedOrigin('http://LOCALHOST.attacker.example'), false);
+  });
+
   it('accepts the pod\'s mDNS name, with or without a port', () => {
     assert.equal(isAllowedOrigin('http://eight-pod.local:3000'), true);
     assert.equal(isAllowedOrigin('http://eight-pod.local'), true);
