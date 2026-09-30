@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { vitalsRecordsToPoints } from './vitalsPoints.ts';
+import { HRV_RANGE, vitalsRecordsToPoints } from './vitalsPoints.ts';
 import type { VitalsRecord } from '@api/vitals.ts';
 
 const record = (overrides: Partial<VitalsRecord>): VitalsRecord => ({
@@ -37,6 +37,20 @@ describe('vitalsRecordsToPoints', () => {
   it('selects the requested metric', () => {
     const [point] = vitalsRecordsToPoints([record({})], 'breathing_rate');
     expect(point.value).toBe(12);
+  });
+
+  it('keeps HRV readings inside the range the sleep score uses', () => {
+    expect(HRV_RANGE).toEqual([30, 120]);
+    const points = vitalsRecordsToPoints(
+      [29, 30, 65, 120, 121, 250].map(hrv => record({ hrv })),
+      'hrv',
+    );
+    expect(points.map(point => point.value)).toEqual([30, 65, 120]);
+  });
+
+  it('does not limit heart rate to the HRV range', () => {
+    const points = vitalsRecordsToPoints([record({ heart_rate: 20 }), record({ heart_rate: 140 })], 'heart_rate');
+    expect(points.map(point => point.value)).toEqual([20, 140]);
   });
 
   it('yields nothing when timestamps arrive as formatted strings', () => {

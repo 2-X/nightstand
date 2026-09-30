@@ -7,6 +7,7 @@ import type { SleepRecord } from '@api/sleepSchema';
 import { useSettings } from '@api/settings';
 import { useSleepScore, useSleepScoreEnabled } from '@api/sleepScore';
 import { useSleepStages } from '@api/sleepStages';
+import { HRV_RANGE } from '@lib/vitalsPoints';
 import GlassCard from '@design/GlassCard';
 import { palette, typography } from '@design/tokens';
 import {
@@ -118,7 +119,7 @@ export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZon
           }) }
           <Typography variant="body2" color="text.secondary" sx={ { mt: 2 } }>
             The duration contribution uses time asleep, or time in bed when there are too few heart readings.
-            HRV uses readings from 30 to 120 ms.
+            HRV uses readings from { HRV_RANGE[0] } to { HRV_RANGE[1] } ms.
           </Typography>
         </DialogContent>
         <DialogActions><Button onClick={ () => setInfoOpen(false) }>Close</Button></DialogActions>
