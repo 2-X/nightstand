@@ -5,6 +5,8 @@ type BedSchedule = Partial<Record<DayOfWeek, Pick<SideSchedule['monday'], 'power
 type BedEvent = { at: moment.Moment; kind: 'on' | 'off' | 'temperature'; temperature?: number };
 
 export function nextBedEvent(schedule: BedSchedule, timeZone: string, now = moment.tz(timeZone), kind?: 'on' | 'off'): BedEvent | undefined {
+  // The Pod schedules nothing without a time zone, so there is nothing to announce.
+  if (!timeZone) return undefined;
   const events: BedEvent[] = [];
   for (let offset = -1; offset < 8; offset++) {
     const date = now.clone().tz(timeZone).startOf('day').add(offset, 'days');

@@ -26,3 +26,10 @@ it('finds the next scheduled power off past intervening adjustments', () => {
   expect(next?.kind).toBe('off');
   expect(next?.at.toISOString()).toBe('2026-09-28T09:00:00.000Z');
 });
+
+it('has no upcoming event when the Pod has no time zone, because it schedules nothing then', () => {
+  const schedule = {
+    sunday: { power: { on: '21:00', off: '09:00', enabled: true, onTemperature: 82 }, temperatures: {} },
+  };
+  expect(nextBedEvent(schedule, null as unknown as string)).toBeUndefined();
+});

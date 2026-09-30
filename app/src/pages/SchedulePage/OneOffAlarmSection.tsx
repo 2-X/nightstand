@@ -58,7 +58,7 @@ export default function OneOffAlarmSection() {
     const o = settings[side]?.oneOffAlarm;
     if (!o) return;
     setEnabled(o.enabled);
-    setFireAtLocal(isoToLocalInput(o.fireAt, settings.timeZone));
+    setFireAtLocal(isoToLocalInput(o.fireAt, settings.timeZone ?? 'UTC'));
     setIntensity(o.vibrationIntensity);
     setPattern(o.vibrationPattern as Pattern);
     setDuration(o.duration);
@@ -66,7 +66,7 @@ export default function OneOffAlarmSection() {
 
   if (!settings) return null;
 
-  const fireAtIso = localInputToIso(fireAtLocal, settings.timeZone);
+  const fireAtIso = localInputToIso(fireAtLocal, settings.timeZone ?? 'UTC');
   const fireAtMoment = fireAtIso ? moment(fireAtIso) : null;
   const isInPast = !!fireAtMoment && fireAtMoment.isBefore(moment());
 
@@ -106,7 +106,7 @@ export default function OneOffAlarmSection() {
 
   // Defaulting the picker to "tomorrow at the recurring alarm's time" would be
   // nicer, but a sane min is enough to prevent picking past times.
-  const minLocal = moment.tz(settings.timeZone).add(1, 'minute').format('YYYY-MM-DDTHH:mm');
+  const minLocal = moment.tz(settings.timeZone ?? 'UTC').add(1, 'minute').format('YYYY-MM-DDTHH:mm');
 
   return (
     <Box>
@@ -139,7 +139,7 @@ export default function OneOffAlarmSection() {
               InputLabelProps={ { shrink: true } }
               inputProps={ { min: minLocal } }
               error={ isInPast }
-              helperText={ isInPast ? 'Time is in the past' : `Timezone: ${friendlyTimeZone(settings.timeZone)}` }
+              helperText={ isInPast ? 'Time is in the past' : `Timezone: ${friendlyTimeZone(settings.timeZone ?? 'UTC')}` }
             />
           </Box>
 
