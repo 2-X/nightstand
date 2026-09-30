@@ -36,11 +36,34 @@ export default function Layout() {
         minHeight: '100dvh',
       } }
     >
-      { /* Renders current route */ }
-      <ErrorBoundary key={ pathname } componentName={ pageName }>
-        <Suspense fallback={ <RouteFallback/> }><Outlet/></Suspense>
-      </ErrorBoundary>
+      { /* The bars are fixed, so their place in the markup only decides tab
+           order: navigation first, then the page. */ }
+      <Box
+        component="a"
+        href="#main-content"
+        onClick={ (event: React.MouseEvent) => {
+          event.preventDefault();
+          document.getElementById('main-content')?.focus();
+        } }
+        sx={ {
+          position: 'fixed', top: 8, left: 8, zIndex: 1400, px: 2, py: 1, borderRadius: 1,
+          bgcolor: 'background.paper', color: 'text.primary', border: 1, borderColor: 'divider',
+          transform: 'translateY(-200%)', '&:focus': { transform: 'none' },
+        } }
+      >
+        Skip to main content
+      </Box>
       <Navbar/>
+      <Box
+        component="main"
+        id="main-content"
+        tabIndex={ -1 }
+        sx={ { display: 'flex', flexDirection: 'column', flexGrow: 1, alignItems: 'center', gap: 2, width: '100%', outline: 'none' } }
+      >
+        <ErrorBoundary key={ pathname } componentName={ pageName }>
+          <Suspense fallback={ <RouteFallback/> }><Outlet/></Suspense>
+        </ErrorBoundary>
+      </Box>
     </Box>
   );
 }

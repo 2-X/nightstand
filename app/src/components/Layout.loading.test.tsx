@@ -16,6 +16,24 @@ describe('Persistent route shell', () => {
     expect(screen.getByRole('link', { name: 'Go to Bed' })).toHaveAttribute('href', '/');
     expect(screen.getByRole('navigation', { name: 'Primary mobile' })).toBeVisible();
   });
+  it('has a main landmark, and the navigation comes before it in tab order', async () => {
+    renderApp('/this-page-does-not-exist');
+    const main = await screen.findByRole('main');
+    expect(main).toContainElement(await screen.findByText('Page not found'));
+    for (const navigation of screen.getAllByRole('navigation', { hidden: true })) {
+      expect(navigation.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(main).not.toContainElement(navigation);
+    }
+  });
+  it('offers a skip link as the first tab stop that moves focus into the page', async () => {
+    const { user } = renderApp('/this-page-does-not-exist');
+    await screen.findByText('Page not found');
+    await user.tab();
+    const skip = screen.getByRole('link', { name: 'Skip to main content' });
+    expect(skip).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('main')).toHaveFocus();
+  });
   it('keeps navigation visible and discards drafts while the next route suspends', async () => {
     useScheduleStore.getState().setOriginalSchedules(getSchedules());
     useScheduleStore.getState().updateSelectedSchedule({ power: { on: '12:00' } });
