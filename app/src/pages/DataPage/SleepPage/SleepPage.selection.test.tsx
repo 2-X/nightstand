@@ -113,9 +113,10 @@ describe('Sleep selection and period', () => {
     const { user } = renderWithProviders(<SleepPage />, { initialRoute: '/sleep?metric=heart_rate' });
     await screen.findByText('8h');
     expect(screen.getByRole('button', { name: /Heart rate/ })).toHaveAttribute('aria-expanded', 'true');
-    await user.click(screen.getByRole('button', { name: /Breathing rate/ }));
+    expect(screen.queryByRole('button', { name: /Breathing rate/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /HRV/ }));
     expect(screen.getByRole('button', { name: /Heart rate/ })).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getByRole('button', { name: /Breathing rate/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: /HRV/ })).toHaveAttribute('aria-expanded', 'true');
     expect(screen.queryByText('Sleep balance')).not.toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Week' }));
     expect(await screen.findByText('1 of 7 nights recorded')).toBeInTheDocument();
@@ -162,7 +163,7 @@ it('keeps the night summary visible when measurements are malformed', async () =
   vi.spyOn(console, 'error').mockImplementation(() => {});
   server.use(http.get('*/metrics/vitals', () => HttpResponse.json([null])));
   renderWithProviders(<SleepPage />);
-  expect(await screen.findAllByText('Measurements unavailable')).toHaveLength(3);
+  expect(await screen.findAllByText('Measurements unavailable')).toHaveLength(2);
   expect(screen.getByText('8h')).toBeInTheDocument();
   expect(screen.getByRole('group', { name: 'Nights in selected week' })).toBeInTheDocument();
 });

@@ -82,6 +82,10 @@ is a hard fork; for the history of the projects it descends from, see
   Pods instead of whatever is newest. A new major version of one of them was
   released recently and has not been tried on a Pod.
 
+- The Sleep page no longer shows breathing rate. The current estimate does not
+  track breathing closely enough to be useful, so it is hidden until it is
+  measured differently.
+
 - Alarms minutes apart no longer suppress one another. Overnight temperature
   changes, alarm replacements and sleep analysis use the full night window.
 

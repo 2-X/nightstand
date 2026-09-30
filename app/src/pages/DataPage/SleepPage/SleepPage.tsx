@@ -34,7 +34,6 @@ import { SLEEP_ANALYSIS_HOUR, SLEEP_ANALYSIS_MINUTE } from '../../../../../serve
 
 const METRICS = [
   { key: 'heart_rate', label: 'Heart rate', unit: 'bpm', summary: 'avgHeartRate' },
-  { key: 'breathing_rate', label: 'Breathing rate', unit: 'breaths/min', summary: 'avgBreathingRate' },
   { key: 'hrv', label: 'HRV', unit: 'ms', summary: 'avgHRV' },
 ] as const;
 
