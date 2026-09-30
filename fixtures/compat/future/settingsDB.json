@@ -2,6 +2,7 @@
   "timeZone": "UTC",
   "features": {
     "rhythms": true,
+    "futureFeature": true,
     "logsViewer": false
   },
   "left": {

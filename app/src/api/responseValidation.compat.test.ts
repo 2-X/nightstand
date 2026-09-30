@@ -69,7 +69,9 @@ it('strips future compatibility fixtures after defaults are backfilled', async (
     const input = merge({}, defaults, fixture);
     const result = validateResponse(path, input);
     const text = JSON.stringify(result);
-    for (const key of ['futureTop', 'futureSide', 'futureDay', 'strayScalar', 'futureService', 'sentryLogging', 'rhythms', 'futurePause']) {
+    for (const key of [
+      'futureTop', 'futureSide', 'futureDay', 'futureFeature', 'strayScalar', 'futureService', 'sentryLogging', 'futurePause',
+    ]) {
       expect(text).not.toContain(`"${key}"`);
     }
     expect(input).toEqual(merge({}, defaults, fixture));
@@ -157,4 +159,12 @@ describe('row-level validation', () => {
   it('rejects a body that is not a list', () => {
     expect(() => validateResponse('/metrics/vitals', {})).toThrow();
   });
+});
+
+it('keeps the rhythms feature flag now that settings know it', async () => {
+  const { default: merge } = await import('lodash/merge');
+  const settings = await import('../../../fixtures/compat/future/settingsDB.json');
+  const result = validateResponse('/settings', merge({}, getSettings(), settings.default)) as { features: Record<string, boolean> };
+  expect(result.features.rhythms).toBe(true);
+  expect(getSettings().features.rhythms).toBe(false);
 });

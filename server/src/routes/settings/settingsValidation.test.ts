@@ -213,3 +213,15 @@ describe('POST /settings schedule pause', () => {
     assert.deepEqual(res.body.left.scheduleOverrides.pause, { active: true, expiresAt: '' });
   });
 });
+
+describe('POST /settings features.rhythms', () => {
+  it('starts off and accepts the flag, while other unknown feature keys still fail', async () => {
+    const before = await fetch(`${baseUrl}/settings`).then(res => res.json());
+    assert.equal(before.features.rhythms, false);
+    const res = await postSettings({ features: { rhythms: true } });
+    assert.equal(res.status, 200, `expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert.equal(res.body.features.rhythms, true);
+    assert.equal((await postSettings({ features: { futureFeature: true } })).status, 400);
+    assert.equal((await postSettings({ features: { rhythms: 'yes' } })).status, 400);
+  });
+});

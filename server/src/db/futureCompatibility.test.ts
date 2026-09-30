@@ -84,6 +84,7 @@ it('keeps future keys through narrow POST flows and schedules only known days', 
         assert.deepEqual(saved.left.futureSide, input.left.futureSide);
         assert.deepEqual(saved.left.scheduleOverrides.pause, input.left.scheduleOverrides.pause);
         assert.equal(saved.features.rhythms, true);
+        assert.equal(saved.features.futureFeature, true);
       }
       if (name === 'schedulesDB') {
         assert.deepEqual(saved.left.futureDay, input.left.futureDay);

@@ -489,4 +489,20 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     rationale: 'A user action with no background behavior change until someone pauses a side, so there is nothing to turn off. '
       + 'Older versions ignore the setting.',
   },
+  {
+    id: 'rhythms',
+    title: 'Rhythms',
+    description: 'Named sleep plans per side, a weekly plan, date changes and an optional Smart Schedule temperature curve.',
+    category: 'platform',
+    version: '3.5.0',
+    flag: 'rhythms',
+    default: false,
+    touchpoints: ['server/src/db/settingsSchema.ts'],
+    depends_on: ['agent'],
+    reversible: true,
+    tests: ['server/src/routes/settings/settingsValidation.test.ts'],
+    upstream_offer: false,
+    rationale: 'Off by default. Its data lives only in rhythmsDB.json and it never writes schedulesDB.json, so turning it '
+      + 'off, rolling back or switching to upstream leaves the weekly schedule exactly as it was.',
+  },
 ];

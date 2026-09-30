@@ -44,14 +44,15 @@ export default function SettingsPage() {
   const { isError: statusError, attention, keys: statusKeys, coreReady } = useStatusSummary();
   const biometricsEnabled = !!services?.biometrics?.enabled;
   const biometricsInstalled = services?.biometrics?.jobs?.installation?.status === 'healthy';
-  const enabledFeatures = [biometricsEnabled && settings?.features?.sleepScore, biometricsEnabled && settings?.features?.presenceAutoOff,
-    settings?.features?.levelTemps, settings?.features?.oneOffAlarms, biometricsInstalled && biometricsEnabled].filter(Boolean).length;
+  const featureSwitches = [biometricsEnabled && settings?.features?.sleepScore, biometricsEnabled && settings?.features?.presenceAutoOff,
+    settings?.features?.levelTemps, settings?.features?.oneOffAlarms, biometricsInstalled && biometricsEnabled];
+  const enabledFeatures = featureSwitches.filter(Boolean).length;
   const zone = settings?.timeZone ? friendlyTimeZone(settings.timeZone) : 'Time zone not set';
   const issueCount = attention.length;
   const details: Record<string, ReactNode> = {
     bed: settings
       ? <><bdi>{ settings.left.name }</bdi>, <bdi>{ settings.right.name }</bdi> · { zone }</> : 'Names, away mode, units and priming',
-    features: settings && services ? `${enabledFeatures} of 5 on` : 'Optional sleep and bed controls',
+    features: settings && services ? `${enabledFeatures} of ${featureSwitches.length} on` : 'Optional sleep and bed controls',
     versions: runningVersion
       ? `v${runningVersion} · ${updateAvailable ? 'Update available' : latestVersion ? 'Up to date' : 'Updates and recovery'}`
       : 'Updates and recovery',
