@@ -23,3 +23,6 @@ export function isRetryable(failure: unknown) {
   const status = failure.response?.status;
   return !(status && status >= 400 && status < 500);
 }
+
+export const retryUpTo = (max: number) => (failureCount: number, failure: unknown) =>
+  failureCount < max && isRetryable(failure);

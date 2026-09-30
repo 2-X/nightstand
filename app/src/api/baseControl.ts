@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import axiosInstance from './api';
+import { retryUpTo } from '@lib/requestError';
 
 // Schemas
 const BaseStatusSchema = z.object({
@@ -75,7 +76,7 @@ export const useBaseConfigured = (): boolean => {
     staleTime: Infinity,
     gcTime: Infinity,
     refetchOnWindowFocus: false,
-    retry: 1,
+    retry: retryUpTo(1),
   });
   return data?.isConfigured === true;
 };

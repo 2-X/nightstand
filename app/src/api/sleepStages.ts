@@ -1,5 +1,6 @@
 import axios, { LONG_REQUEST_TIMEOUT_MS } from './api';
 import { queryOptions, useQuery } from '@tanstack/react-query';
+import { retryUpTo } from '@lib/requestError';
 
 export type SleepStage = 'awake' | 'rem' | 'light' | 'deep';
 
@@ -42,7 +43,7 @@ export const sleepStagesQueryOptions = ({ side, startTime, endTime }: Args, enab
     },
     gcTime: 60 * 60 * 1000,
     staleTime: 5 * 60 * 1000,
-    retry: 1,
+    retry: retryUpTo(1),
     enabled: enabled && !!startTime && !!endTime,
   });
 

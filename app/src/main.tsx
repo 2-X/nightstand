@@ -1,10 +1,11 @@
 import { BrowserRouter } from 'react-router-dom';
 import { createRoot } from 'react-dom/client';
 import { CssBaseline } from '@mui/material';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { ThemeProvider } from '@mui/material/styles';
 import { theme } from './theme';
+import { createQueryClient } from '@lib/queryClient';
 
 import AppRoutes from './AppRoutes';
 import { AppStoreProvider } from '@state/appStore.tsx';
@@ -13,13 +14,7 @@ import { GlobalStyles } from '@mui/material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 3,
-    },
-  },
-});
+const queryClient = createQueryClient();
 
 const App = () => {
   return (
