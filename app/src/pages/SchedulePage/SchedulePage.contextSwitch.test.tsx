@@ -104,6 +104,19 @@ describe('Apply to other days save targeting (full page)', () => {
   });
 });
 
+it('says the copied days are dropped too when the discard prompt names a multi-day draft', async () => {
+  const { user } = renderWithProviders(<SchedulePage />, { initialRoute: '/schedules' });
+  await loaded();
+  act(() => {
+    useScheduleStore.getState().selectDay(1);
+    useScheduleStore.getState().updateSelectedAlarm({ time: '03:33' });
+    useScheduleStore.getState().toggleSelectedDay('wednesday');
+    useScheduleStore.getState().toggleSelectedDay('thursday');
+  });
+  await user.click(screen.getByRole('tab', { name: /Fri/ }));
+  expect(screen.getByRole('dialog', { name: 'Discard changes to Monday and 2 more days?' })).toBeInTheDocument();
+});
+
 it('keeps unsaved edits when a day or side discard is canceled', async () => {
   const { user } = renderWithProviders(<SchedulePage />, { initialRoute: '/schedules' });
   await loaded();
@@ -112,11 +125,12 @@ it('keeps unsaved edits when a day or side discard is canceled', async () => {
     useScheduleStore.getState().updateSelectedAlarm({ time: '03:33' });
   });
   await user.click(await screen.findByRole('radio', { name: /Sam\./ }));
-  expect(screen.getByRole('dialog', { name: 'Discard changes to Monday?' })).toBeInTheDocument();
+  expect(screen.getByRole('dialog', { name: "Discard changes to Alex's Monday?" })).toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'Keep editing' }));
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   expect(useAppStore.getState().side).toBe('left');
   await user.click(screen.getByRole('tab', { name: /Tue/ }));
+  expect(screen.getByRole('dialog', { name: 'Discard changes to Monday?' })).toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'Keep editing' }));
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   expect(useScheduleStore.getState().selectedDay).toBe('monday');

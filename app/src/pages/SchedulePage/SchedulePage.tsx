@@ -26,6 +26,7 @@ import { LOWERCASE_DAYS } from './days.ts';
 import TemperatureScheduleChart from './ScheduleChart.tsx';
 import PageHeader from '@components/PageHeader';
 import { validateSchedule } from './scheduleValidation';
+import { discardTitle } from './discardTitle';
 import { friendlyTimeZone } from '@lib/timeZone';
 import ErrorBoundary from '@components/ErrorBoundary.tsx';
 
@@ -77,6 +78,10 @@ export default function SchedulePage() {
       : schemaIssue?.path[0] === 'power' ? 'Bedtime and turn-off settings' : 'Alarm settings';
   const draftLabel = `Unsaved: ${sideLabel}, ${affectedDays.map(day => day.charAt(0).toUpperCase() + day.slice(1)).join(', ')}`;
   const shortDay = moment().day(LOWERCASE_DAYS.indexOf(selectedDay)).format('ddd');
+  const discardTitleText = discardTitle({
+    day: titleDay, otherDays: affectedDays.length - 1, sideChange: !!pendingChange && 'side' in pendingChange,
+    side, sideName: settings?.[side]?.name,
+  });
   const keepFocusVisible = (target: HTMLElement) => {
     if (target.closest('[data-schedule-draft]')) return;
     const bounds = target.getBoundingClientRect();
@@ -282,7 +287,7 @@ export default function SchedulePage() {
       </Box> }
 
       <Dialog open={ !!pendingChange } onClose={ () => setPendingChange(undefined) } aria-labelledby="discard-schedule-title">
-        <DialogTitle id="discard-schedule-title">Discard changes to { titleDay }?</DialogTitle>
+        <DialogTitle id="discard-schedule-title">{ discardTitleText }</DialogTitle>
         <DialogActions>
           <Button onClick={ () => setPendingChange(undefined) } autoFocus>Keep editing</Button>
           <Button onClick={ discardAndSwitch }>Discard</Button>
