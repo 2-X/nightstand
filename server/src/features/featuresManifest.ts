@@ -460,4 +460,33 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     upstream_offer: false,
     rationale: 'Settings navigation is required to reach the existing controls.',
   },
+  {
+    id: 'schedule-pause',
+    title: 'Pause schedule',
+    description: 'Pause one side\'s schedule for tonight, until a set time or until resumed. '
+      + 'The saved schedule and the one-time alarm are kept.',
+    category: 'platform',
+    version: 'n/a',
+    flag: null,
+    default: true,
+    touchpoints: [
+      'server/src/jobs/schedulePause.ts', 'server/src/jobs/pauseResume.ts', 'server/src/jobs/powerScheduler.ts',
+      'server/src/jobs/temperatureScheduler.ts', 'server/src/jobs/alarmScheduler.ts', 'server/src/jobs/jobScheduler.ts',
+      'server/src/8sleep/presenceAutoOffMonitor.ts', 'server/src/routes/settings/settingsGuards.ts',
+      'app/src/pages/ControlTempPage/PauseScheduleSheet.tsx', 'app/src/pages/ControlTempPage/SchedulePauseNotice.tsx',
+      'app/src/pages/ControlTempPage/UpcomingNight.tsx', 'app/src/components/SideControl.tsx',
+    ],
+    depends_on: ['agent'],
+    reversible: true,
+    tests: [
+      'server/src/jobs/schedulePause.test.ts', 'server/src/jobs/schedulePauseJobs.test.ts',
+      'server/src/jobs/schedulePauseAlarms.test.ts', 'server/src/jobs/pauseResume.test.ts',
+      'server/src/jobs/jobSchedulerPause.test.ts', 'server/src/routes/settings/settingsGuards.test.ts',
+      'app/src/pages/ControlTempPage/PauseScheduleSheet.test.tsx', 'app/src/pages/ControlTempPage/UpcomingNight.pause.test.tsx',
+      'app/e2e/pause-schedule.spec.ts',
+    ],
+    upstream_offer: false,
+    rationale: 'A user action with no background behavior change until someone pauses a side, so there is nothing to turn off. '
+      + 'Older versions ignore the setting.',
+  },
 ];

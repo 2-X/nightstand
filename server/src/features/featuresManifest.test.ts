@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -69,6 +69,16 @@ describe('FEATURES_MANIFEST', () => {
     for (const key of Object.keys(defaultFeatures)) {
       if (key === 'nightstandTheme') continue;
       assert.ok(flags.has(key), `settings.features.${key} has no featuresManifest entry`);
+    }
+  });
+
+  it('lists schedule pause as always on', () => {
+    const entry = FEATURES_MANIFEST.find((candidate) => candidate.id === 'schedule-pause');
+    assert.ok(entry, 'schedule-pause has no featuresManifest entry');
+    assert.equal(entry.flag, null);
+    assert.equal(entry.default, true);
+    for (const file of [...entry.touchpoints, ...entry.tests]) {
+      assert.ok(existsSync(path.join(repoRoot, file)), `${file} does not exist`);
     }
   });
 
