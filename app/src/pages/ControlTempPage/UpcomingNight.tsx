@@ -12,14 +12,27 @@ import AlarmNotification from './AlarmNotification';
 
 export default function UpcomingNight({ isOn }: { isOn?: boolean }) {
   const { side } = useAppStore();
-  const { data: schedules } = useSchedules();
-  const { data: settings } = useSettings();
+  const { data: schedules, isError: schedulesError, refetch: refetchSchedules } = useSchedules();
+  const { data: settings, isError: settingsError, refetch: refetchSettings } = useSettings();
   const [, tick] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => tick((value) => value + 1), 30_000);
     return () => clearInterval(timer);
   }, []);
-  if (!settings || !schedules) return null;
+  const retry = () => {
+    if (!schedules) void refetchSchedules();
+    if (!settings) void refetchSettings();
+  };
+  if (!settings || !schedules) {
+    if (!schedulesError && !settingsError) return null;
+    return (
+      <Box sx={ { width: '100%', bgcolor: 'background.paper', borderRadius: '12px', border: 1, borderColor: 'divider', p: 2 } }>
+        <SectionHeading>Tonight</SectionHeading>
+        <Typography variant="body2" color="text.secondary" role="status">Schedule unavailable.</Typography>
+        <Button size="small" sx={ { ml: -1 } } onClick={ retry }>Try again</Button>
+      </Box>
+    );
+  }
   const next = !settings[side].awayMode && nextBedEvent(schedules[side], settings.timeZone);
   const event = isOn === false && next && next.kind === 'on'
     ? nextBedEvent(schedules[side], settings.timeZone, next.at.clone().add(1, 'millisecond')) : next;
