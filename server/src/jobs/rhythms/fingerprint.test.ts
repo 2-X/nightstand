@@ -55,6 +55,14 @@ describe('legacyFingerprint', () => {
       s => { s.right.sunday.temperatures['01:00'] = 70; },
       s => { s.left.friday.alarms[0].time = '07:40'; },
       s => { s.left.friday.alarms[1].enabled = false; },
+      s => { s.left.monday.power.off = '06:45'; },
+      s => { s.left.monday.power.onTemperature = 79; },
+      s => { s.left.friday.alarms[0].vibrationIntensity = 60; },
+      s => { s.left.friday.alarms[0].vibrationPattern = 'double'; },
+      s => { s.left.friday.alarms[0].duration = 45; },
+      s => { s.left.friday.alarms[0].alarmTemperature = 75; },
+      s => { [s.left, s.right] = [s.right, s.left]; },
+      s => { [s.left.monday, s.left.friday] = [s.left.friday, s.left.monday]; },
     ];
     for (const edit of edits) {
       const copy = structuredClone(base);
@@ -63,6 +71,23 @@ describe('legacyFingerprint', () => {
       assert.ok(!seen.has(print), 'each edit gives a new fingerprint');
       seen.add(print);
     }
+  });
+
+  it('ignores unknown keys on an alarm', () => {
+    const future = structuredClone(base);
+    (future.left.friday.alarms[0] as unknown as Record<string, unknown>).futureAlarmKey = 1;
+    assert.equal(legacyFingerprint(future), legacyFingerprint(base));
+  });
+
+  it('keeps the stored order of alarms at the same minute', () => {
+    const first = alarmAt('07:00', { duration: 10 });
+    const second = alarmAt('07:00', { duration: 20 });
+    const ordered = structuredClone(base);
+    ordered.left.friday.alarms = [first, second];
+    const flipped = structuredClone(base);
+    flipped.left.friday.alarms = [second, first];
+    assert.notEqual(legacyFingerprint(ordered), legacyFingerprint(flipped));
+    assert.equal(legacyFingerprint(ordered), legacyFingerprint(structuredClone(ordered)));
   });
 
   it('matches before and after the real schedules loader normalizes the file', async (t) => {
