@@ -14,7 +14,9 @@ const INPUT_FORMAT = 'YYYY-MM-DDTHH:mm';
 // Some browsers add seconds; the pause always ends on a whole minute.
 const INPUT_FORMATS = [`${INPUT_FORMAT}:ss.SSS`, `${INPUT_FORMAT}:ss`, INPUT_FORMAT];
 
-export default function PauseScheduleSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function PauseScheduleSheet({ open, onClose, onPaused }: {
+  open: boolean; onClose: () => void; onPaused?: () => void;
+}) {
   const { side } = useAppStore();
   const { data: settings, refetch } = useSettings();
   const { data: schedules } = useSchedules();
@@ -49,6 +51,7 @@ export default function PauseScheduleSheet({ open, onClose }: { open: boolean; o
     try {
       await postSettings({ [side]: { scheduleOverrides: { pause: { active: true, expiresAt } } } });
       await refetch();
+      onPaused?.();
       onClose();
     } catch (err) {
       console.error(err);
