@@ -14,7 +14,8 @@ export default function LastNightChip() {
   const navigate = useNavigate();
   const sleepScoreEnabled = useSleepScoreEnabled();
   const { data: settings } = useSettings();
-  const timeZone = settings?.timeZone;
+  // Unset means UTC, as on the Sleep page; wait only while settings load.
+  const timeZone = settings ? settings.timeZone ?? 'UTC' : undefined;
 
   // Fetch the most recent sleep record from the last 36 hours. Computed once
   // per mount, not on every render: useSleepRecords keys its query on this

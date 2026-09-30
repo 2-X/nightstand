@@ -76,3 +76,24 @@ it('waits for the Pod time zone instead of guessing UTC, so only the right night
   expect(await screen.findByText(/Last night estimate 81/)).toBeInTheDocument();
   expect(requests).toEqual(['2026-09-22T22:00:00-07:00']);
 });
+
+it('groups nights in UTC, as the Sleep page does, when the Pod time zone is unset', async () => {
+  const requests: Array<string | null> = [];
+  server.use(
+    http.get('*/settings', () => HttpResponse.json({ ...getSettings(), timeZone: null })),
+    http.get('*/metrics/sleep', () => HttpResponse.json([
+      record(1, '2026-09-22T22:00:00-07:00', '2026-09-23T06:30:00-07:00', 30_000),
+      // Wakes on the 24th in UTC.
+      record(2, '2026-09-23T17:00:00-07:00', '2026-09-23T18:00:00-07:00', 3_600),
+    ])),
+    http.get('*/metrics/sleep-score', ({ request }) => {
+      requests.push(new URL(request.url).searchParams.get('startTime'));
+      return HttpResponse.json({ active: true, score: 64, components: {} });
+    }),
+  );
+
+  renderWithProviders(<LastNightChip />);
+
+  expect(await screen.findByText(/Last night estimate 64/)).toBeInTheDocument();
+  expect(requests).toEqual(['2026-09-23T17:00:00-07:00']);
+});
