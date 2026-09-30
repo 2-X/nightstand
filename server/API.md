@@ -332,7 +332,7 @@ Same shape as the `alarm` field in `/api/schedules`, plus `side` and an optional
 
 #### Response
 
-Returns the current schedules DB.
+Returns the current schedules DB once the start command has been sent, not when the alarm ends. Returns 503 with `{ "error": { "message": "..." } }` if the alarm did not start, for example when the hardware connection is not back within 10 seconds. A non-forced alarm for a side that is off or in away mode does not start either.
 
 ---
 
