@@ -26,6 +26,13 @@ it('shows a failed channel save and retains the saved channel', async () => {
   expect(screen.getByRole('radio', { name: 'Stable' })).toBeChecked();
 });
 
+it('does not present Stable as the channel when settings fail to load', async () => {
+  server.use(http.get('*/api/settings', () => new HttpResponse(null, { status: 500 })));
+  renderWithProviders(<VersionsPage />);
+  expect(await screen.findByRole('button', { name: /Update channel Unavailable/ })).toBeInTheDocument();
+  expect(screen.queryByText('Stable')).not.toBeInTheDocument();
+});
+
 it('keeps recovery actions collapsed until requested', async () => {
   const { user } = renderWithProviders(<VersionsPage />);
   const recovery = await screen.findByRole('button', { name: 'Recovery' });
@@ -132,6 +139,6 @@ it('disables update channel selection when the server omits the setting', async 
   server.use(http.get('*/api/settings', () => HttpResponse.json({ ...getSettings(), updateChannel: undefined })));
   const { user, queryClient } = renderWithProviders(<VersionsPage />);
   await waitFor(() => expect(queryClient.getQueryData(['useSettings'])).toBeTruthy());
-  await user.click(await screen.findByRole('button', { name: /Update channel Stable/ }));
+  await user.click(await screen.findByRole('button', { name: /Update channel Unavailable/ }));
   expect(await screen.findByRole('radio', { name: 'Beta' })).toBeDisabled();
 });

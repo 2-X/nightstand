@@ -73,7 +73,7 @@ export default function ReleaseRow({ release, runningVersion, offerReinstall = f
             </DialogContentText>
           ) }
           { phase === 'idle' && warnings.length > 0 && <Alert severity="warning" sx={ { mt: 2 } }>
-            <ul>{ warnings.map(warning => <li key={ warning }>{ warning }</li>) }</ul>
+            <Box component="ul" sx={ { m: 0, pl: 2 } }>{ warnings.map(warning => <li key={ warning }>{ warning }</li>) }</Box>
           </Alert> }
           { phase === 'updating' && (
             <Stack spacing={ 2 } alignItems="center" sx={ { py: 2 } }>

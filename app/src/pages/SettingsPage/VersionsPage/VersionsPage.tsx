@@ -39,7 +39,7 @@ const CAPABLE_FLOOR = '3.0.0';
 
 export default function VersionsPage() {
   const { data: deviceStatus } = useDeviceStatus();
-  const { data: settings, refetch: refetchSettings } = useSettings();
+  const { data: settings, isError: settingsError, refetch: refetchSettings } = useSettings();
   const { data: releases, isError: releasesFailed, refetch: checkReleases, dataUpdatedAt, isFetching } = useReleases();
   const [channelOpen, setChannelOpen] = useState(false);
   const updateProblem = useUpdateAttentionStore(state => state.updateAttention);
@@ -60,7 +60,13 @@ export default function VersionsPage() {
   const latestVersion = useLatestVersion();
 
   const running = deviceStatus?.freeSleep?.version;
-  const channel: UpdateChannelType = settings?.updateChannel ?? 'stable';
+  // Releases fall back to stable while settings are missing, but the row and
+  // the radios never present that fallback as the Pod's actual channel.
+  const savedChannel = settings?.updateChannel;
+  const channel: UpdateChannelType = savedChannel ?? 'stable';
+  const channelLabel = savedChannel === undefined
+    ? (settings || settingsError ? 'Unavailable' : 'Loading...')
+    : savedChannel === 'stable' ? 'Stable' : 'Beta';
   const capable = !!running && semver.valid(running) && semver.gte(running, CAPABLE_FLOOR);
 
   const eligibleReleases = releasesForChannel(releases, channel);
@@ -141,7 +147,7 @@ export default function VersionsPage() {
       </Alert> }
       <List disablePadding sx={ { bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' } }>
         <ListItemButton onClick={ () => setChannelOpen(true) } sx={ { minHeight: 44, borderBottom: 1, borderColor: 'divider' } }>
-          <ListItemText primary="Update channel" secondary={ channel === 'stable' ? 'Stable' : 'Beta' } />
+          <ListItemText primary="Update channel" secondary={ channelLabel } />
           <ChevronRightIcon />
         </ListItemButton>
         <ListItemButton component={ Link } to="/changelog" sx={ { minHeight: 44 } }>
@@ -156,7 +162,7 @@ export default function VersionsPage() {
             </Typography>
             <RadioGroup
               aria-label="Update channel"
-              value={ channel }
+              value={ savedChannel ?? '' }
               onChange={ (_event, value) => {
                 setChannelError(undefined);
                 setSavingChannel(true);

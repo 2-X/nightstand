@@ -77,6 +77,19 @@ describe('ReleaseRow', () => {
     await waitFor(() => expect(posted).toEqual({ targetVersion: '3.4.0', allowDowngrade: false }));
   });
 
+  it('lays the downgrade warnings out as a compact list inside the alert', async () => {
+    const { user } = renderWithProviders(
+      <ReleaseRow release={ { ...release, version: '3.2.0' } } runningVersion="3.5.0" body={ undefined }/>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Install (downgrade)' }));
+    const list = (await screen.findByRole('dialog')).querySelector('ul');
+    expect(list).not.toBeNull();
+    const style = getComputedStyle(list!);
+    expect(style.marginTop).toMatch(/^0(px)?$/);
+    expect(style.paddingLeft).toBe('16px');
+  });
+
   it('only changes the running row: other versions still say Install', () => {
     renderWithProviders(<ReleaseRow release={ release } runningVersion="3.3.0" body={ undefined } offerReinstall/>);
     expect(screen.getByRole('button', { name: 'Install' })).toBeInTheDocument();
