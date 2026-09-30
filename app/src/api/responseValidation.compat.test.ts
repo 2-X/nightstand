@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { validateResponse } from './responseValidation';
 import { getDeviceStatus, getSchedules, getServices, getSettings } from '../mocks/mockData';
-import { SettingsSchema } from './settingsSchema';
+import { SettingsSchema, type Settings } from './settingsSchema';
 import { DailyScheduleSchema } from './schedulesSchema';
 
 it.each([
@@ -47,6 +47,7 @@ it('accepts fields absent from older settings and services', () => {
   for (const side of ['left', 'right']) {
     delete (settings[side] as Record<string, unknown>).oneOffAlarm;
     delete (settings[side] as Record<string, unknown>).alarmsEnabled;
+    delete ((settings[side] as Record<string, unknown>).scheduleOverrides as Record<string, unknown>).pause;
   }
   expect(() => validateResponse('/settings', settings)).not.toThrow();
   const services = structuredClone(getServices());
@@ -68,11 +69,13 @@ it('strips future compatibility fixtures after defaults are backfilled', async (
     const input = merge({}, defaults, fixture);
     const result = validateResponse(path, input);
     const text = JSON.stringify(result);
-    for (const key of ['futureTop', 'futureSide', 'futureDay', 'strayScalar', 'futureService', 'sentryLogging', 'rhythms', 'pause']) {
+    for (const key of ['futureTop', 'futureSide', 'futureDay', 'strayScalar', 'futureService', 'sentryLogging', 'rhythms', 'futurePause']) {
       expect(text).not.toContain(`"${key}"`);
     }
     expect(input).toEqual(merge({}, defaults, fixture));
   }
+  const saved = validateResponse('/settings', merge({}, getSettings(), settings.default)) as Settings;
+  expect(saved.left.scheduleOverrides.pause).toEqual({ active: true, expiresAt: '' });
 });
 
 // Shapes as the Pod serves them: times formatted in the Pod's timezone.

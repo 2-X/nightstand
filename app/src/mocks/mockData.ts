@@ -290,6 +290,7 @@ const createSettings = (): Settings => ({
     scheduleOverrides: {
       temperatureSchedules: { disabled: false, expiresAt: '' },
       alarm: { disabled: false, timeOverride: '', expiresAt: '' },
+      pause: { active: false, expiresAt: '' },
     },
     oneOffAlarm: {
       enabled: false,
@@ -324,6 +325,7 @@ const createSettings = (): Settings => ({
     scheduleOverrides: {
       temperatureSchedules: { disabled: false, expiresAt: '' },
       alarm: { disabled: false, timeOverride: '', expiresAt: '' },
+      pause: { active: false, expiresAt: '' },
     },
     oneOffAlarm: {
       enabled: false,

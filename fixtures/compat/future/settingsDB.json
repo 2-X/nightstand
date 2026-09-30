@@ -10,7 +10,9 @@
     },
     "scheduleOverrides": {
       "pause": {
-        "enabled": true
+        "active": true,
+        "expiresAt": "",
+        "futurePause": true
       }
     },
     "taps": {

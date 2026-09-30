@@ -98,6 +98,11 @@ const sideSettingsResponse = SettingsSchema.shape.left.extend({
       timeOverride: clockResponse,
       expiresAt: instantResponse,
     }),
+    // Settings saved before pause existed have no scheduleOverrides.pause.
+    pause: z.object({
+      active: overrideShape.pause.shape.active,
+      expiresAt: instantResponse,
+    }).optional(),
   }),
   oneOffAlarm: oneOffResponse,
   taps: soft(sideSettingsShape.taps.optional(), undefined),

@@ -20,7 +20,11 @@ const defaultSideSettings: SideSettings = {
       disabled: false,
       timeOverride: '',
       expiresAt: '',
-    }
+    },
+    pause: {
+      active: false,
+      expiresAt: '',
+    },
   },
   oneOffAlarm: {
     enabled: false,
