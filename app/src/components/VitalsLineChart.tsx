@@ -19,7 +19,7 @@ type VitalsLineChartProps = {
 
 const METRIC_CONFIG: Record<Metric, { unit: string; targetRange?: [number, number] }> = {
   heart_rate: { unit: 'bpm' },
-  hrv: { unit: 'ms', targetRange: [50, 100] },
+  hrv: { unit: 'ms' },
   breathing_rate: { unit: 'breaths/min', targetRange: [12, 20] },
 };
 

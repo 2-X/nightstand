@@ -21,3 +21,14 @@ it('clips data and pins the chart to the recorded night even if the API returns 
   expect(screen.getByText('7-night average 14 breaths/min')).toBeInTheDocument();
   expect(screen.queryByText('SELECTED NIGHT')).not.toBeInTheDocument();
 });
+
+it('does not shade a target band behind HRV', () => {
+  const timestamp = Date.parse('2026-09-28T01:00:00Z') / 1000;
+  render(<VitalsLineChart
+    metric="hrv"
+    timeZone="UTC"
+    startTime="2026-09-28T00:00:00Z"
+    endTime="2026-09-28T07:30:00Z"
+    vitalsRecords={ [{ side: 'left' as const, timestamp, heart_rate: 60, hrv: 65, breathing_rate: 12 }] }/>);
+  expect(chart.props.targetRange).toBeUndefined();
+});
