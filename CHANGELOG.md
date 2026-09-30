@@ -6,6 +6,24 @@ is a hard fork; for the history of the projects it descends from, see
 [jmew/free-sleep](https://github.com/jmew/free-sleep) and
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
 
+## [3.3.2] - 2026-09-29
+
+- Blocking internet access no longer leaves the firmware stuck on some Pod 3
+  units. The firewall now refuses the firmware's cloud connection right away
+  instead of silently ignoring it, which left the firmware waiting. Thanks to
+  @sim- for tracking this down
+  (https://github.com/LTimothy/nightstand/issues/1).
+
+  The update that installs this version blocks internet access again with the
+  previous version's firewall script, so the new rule is not in place yet. To
+  apply it now, run this as root on the Pod:
+
+  ```
+  sh /home/dac/free-sleep/scripts/unblock_internet_access.sh && sh /home/dac/free-sleep/scripts/block_internet_access.sh
+  ```
+
+  A fresh install applies it, and so does the next update after this one.
+
 ## [3.3.1] - 2026-09-28
 
 - Biometrics installs on a Pod 3 that was set up with the SD card method.
