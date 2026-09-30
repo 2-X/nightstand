@@ -16,6 +16,7 @@ import type { CommandOptions } from '../8sleep/frankenServer.js';
 import { Settings } from '../db/settingsSchema.js';
 import { nightBounds } from './nightBounds.js';
 import { emitJobEvent } from './jobEvents.js';
+import { describePause, isAlarmPaused } from './schedulePause.js';
 import { trackAlarm } from './alarmActivity.js';
 
 
@@ -234,6 +235,16 @@ export function scheduleAlarmOverride(settingsData: Settings, side: Side) {
   const jobName = `${side}-alarm-override-${alarmOverride.timeOverride}`;
   schedule.scheduleJob(jobName, next.toDate(), (fireDate?: Date) => trackAlarm(side, jobName, async () => {
     overrideRuns.set(overrideKey, Date.now());
+    try {
+      await settingsDB.read();
+      if (isAlarmPaused(settingsDB.data, side, fireDate ?? moment().toDate())) {
+        logger.info(`Skipping ${side} alarm override at ${alarmOverride.timeOverride}, schedule paused ${describePause(settingsDB.data, side)}`);
+        return 0;
+      }
+    } catch (error: unknown) {
+      logger.error(error);
+      return 0;
+    }
     // The replacement belongs to a night starting today or yesterday, not
     // necessarily the calendar date on which it rings.
     let sourceAlarm;
@@ -310,6 +321,10 @@ export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek
         await settingsDB.read();
 
         const now = moment.tz(settingsData.timeZone);
+        if (isAlarmPaused(settingsDB.data, side, fireDate ?? now.toDate())) {
+          logger.info(`Skipping ${side} ${day} alarm at ${time}, schedule paused ${describePause(settingsDB.data, side)}`);
+          return 0;
+        }
         if (settingsDB.data[side].scheduleOverrides.alarm.expiresAt) {
           const expiresAt = moment.tz(settingsDB.data[side].scheduleOverrides.alarm.expiresAt, settingsData.timeZone);
           // Keep the night's original alarms suppressed after an earlier replacement.
