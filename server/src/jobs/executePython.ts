@@ -7,6 +7,8 @@ type ExecutePythonScriptArgs = {
   script: string;
   cwd?: string;
   args?: string[];
+  // Identifies a job that must not be queued twice, such as one side's analysis.
+  key?: string;
 };
 async function runPythonScript({ script, args = [] }: ExecutePythonScriptArgs): Promise<void> {
   const pythonExecutable = '/home/dac/venv/bin/python';
@@ -46,11 +48,25 @@ async function runPythonScript({ script, args = [] }: ExecutePythonScriptArgs): 
 }
 
 let executionQueue: Promise<void> = Promise.resolve();
+const pendingKeys = new Set<string>();
 
-// Analysis and calibration share the server's memory budget.
+export const isPythonJobPending = (key: string) => pendingKeys.has(key);
+
+// Analysis and calibration share the server's memory budget. A keyed job that
+// is already queued or running is skipped rather than queued again.
 export const executePythonScript = (options: ExecutePythonScriptArgs): Promise<void> => {
+  const { key } = options;
+  if (key !== undefined) {
+    if (pendingKeys.has(key)) {
+      logger.info(`Skipping ${key}: already queued or running`);
+      return executionQueue;
+    }
+    pendingKeys.add(key);
+  }
   executionQueue = executionQueue.then(() => runPythonScript(options)).catch((error: unknown) => {
     logger.error(`Execution error: ${error instanceof Error ? error.message : String(error)}`);
+  }).finally(() => {
+    if (key !== undefined) pendingKeys.delete(key);
   });
   return executionQueue;
 };

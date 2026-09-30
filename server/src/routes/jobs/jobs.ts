@@ -1,7 +1,8 @@
 import express, { Request, Response } from 'express';
 import logger from '../../logger.js';
-import { executeAnalyzeSleep } from '../../jobs/analyzeSleep.js';
-import { executeCalibrateSensors } from '../../jobs/calibrateSensors.js';
+import { analyzeSleepKey, executeAnalyzeSleep } from '../../jobs/analyzeSleep.js';
+import { calibrateSensorsKey, executeCalibrateSensors } from '../../jobs/calibrateSensors.js';
+import { isPythonJobPending } from '../../jobs/executePython.js';
 import moment from 'moment-timezone';
 import { Job, JobKeyListSchema } from './jobsSchema.js';
 import update from '../../jobs/update.js';
@@ -53,6 +54,14 @@ const JOB_MAP: Record<Job, () => void | Promise<void>> = {
 };
 
 
+const QUEUED_JOB_KEYS: Partial<Record<Job, string>> = {
+  analyzeSleepLeft: analyzeSleepKey('left'),
+  analyzeSleepRight: analyzeSleepKey('right'),
+  biometricsCalibrationLeft: calibrateSensorsKey('left'),
+  biometricsCalibrationRight: calibrateSensorsKey('right'),
+};
+
+
 router.post('/jobs', async (req: Request, res: Response) => {
   const { body } = req;
   const validationResult = JobKeyListSchema.safeParse(body);
@@ -66,13 +75,23 @@ router.post('/jobs', async (req: Request, res: Response) => {
     return;
   }
 
-  if (validationResult.data.includes('reboot') && validationResult.data.includes('update')) {
+  const jobs = [...new Set(validationResult.data)];
+  if (jobs.includes('reboot') && jobs.includes('update')) {
     res.status(400).json({ error: 'Restart and update cannot be requested together' });
     return;
   }
 
+  const busy = jobs.filter(job => {
+    const key = QUEUED_JOB_KEYS[job];
+    return key !== undefined && isPythonJobPending(key);
+  });
+  if (busy.length > 0) {
+    res.status(409).json({ message: `Already queued or running: ${busy.join(', ')}` });
+    return;
+  }
+
   try {
-    for (const job of validationResult.data) {
+    for (const job of jobs) {
       await JOB_MAP[job]();
     }
   } catch (error) {

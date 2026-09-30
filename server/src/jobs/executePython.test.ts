@@ -173,3 +173,43 @@ test('a synchronous spawn failure releases the next queued job', async () => {
   await second;
   assert.equal(errors.length, 1);
 });
+
+const postJobs = async (jobs: string[]) => {
+  const response = await fetch(`${url}/jobs`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(jobs),
+  });
+  await response.text();
+  return response.status;
+};
+const finishAll = async () => {
+  for (let turn = 0; turn < 3; turn++) {
+    calls.forEach(call => call.finish());
+    await flush();
+  }
+};
+
+test('repeated job names in one request queue a single run', async () => {
+  assert.equal(await postJobs(Array(5000).fill('analyzeSleepLeft')), 204);
+  await finishAll();
+  assert.equal(calls.length, 1);
+});
+
+test('a job already queued or running for that side is refused', async () => {
+  assert.equal(await postJobs(['analyzeSleepLeft', 'biometricsCalibrationRight']), 204);
+  await flush();
+  assert.equal(await postJobs(['analyzeSleepLeft']), 409);
+  assert.equal(await postJobs(['analyzeSleepRight', 'biometricsCalibrationRight']), 409);
+  assert.equal(await postJobs(['analyzeSleepRight']), 204);
+  await finishAll();
+  assert.equal(calls.length, 3);
+  assert.equal(await postJobs(['analyzeSleepLeft']), 204);
+});
+
+test('a scheduled run is skipped while the same side is already queued', async () => {
+  executeAnalyzeSleep('left', start, end);
+  executeAnalyzeSleep('left', start, end);
+  executeCalibrateSensors('left', start, end);
+  executeCalibrateSensors('left', start, end);
+  await finishAll();
+  assert.equal(calls.length, 2);
+});
