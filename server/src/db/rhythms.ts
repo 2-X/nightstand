@@ -1,0 +1,93 @@
+// Stores Rhythms in /persistent/free-sleep-data/lowdb/rhythmsDB.json. The file
+// exists only once Rhythms has been turned on, and nothing here deletes it.
+import { Low } from 'lowdb';
+import type { Adapter } from 'lowdb';
+import { TextFile } from 'lowdb/node';
+import config from '../config.js';
+import { createSerializedUpdate } from './serializedUpdate.js';
+import { responseSchema } from './responseSchema.js';
+import { RHYTHMS_FILE_VERSION, RhythmsDB, RhythmsDBSchema } from './rhythmsSchema.js';
+
+export type RhythmsLoad =
+  | { state: 'absent' }
+  | { state: 'ok'; db: RhythmsDB }
+  | { state: 'unsupported'; version: unknown }
+  | { state: 'invalid'; error: string };
+
+type RhythmsText = { text: string | null };
+
+export class RhythmsStateError extends Error {
+  readonly state: RhythmsLoad['state'];
+
+  constructor(state: RhythmsLoad['state'], message = `Rhythms data is ${state}`) {
+    super(message);
+    this.name = 'RhythmsStateError';
+    this.state = state;
+  }
+}
+
+// Stored data is read with unknown keys stripped; only writes are strict.
+const RhythmsReadSchema = responseSchema(RhythmsDBSchema);
+
+export function parseRhythms(text: string | null): RhythmsLoad {
+  if (text === null) return { state: 'absent' };
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch (error: unknown) {
+    return { state: 'invalid', error: error instanceof Error ? error.message : String(error) };
+  }
+  const version = raw !== null && typeof raw === 'object' ? (raw as { version?: unknown }).version : undefined;
+  if (typeof version === 'number' && version > RHYTHMS_FILE_VERSION) return { state: 'unsupported', version };
+  const parsed = RhythmsReadSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { state: 'invalid', error: parsed.error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ') };
+  }
+  return { state: 'ok', db: parsed.data };
+}
+
+class RhythmsFile implements Adapter<RhythmsText> {
+  #file = new TextFile(`${config.lowDbFolder}rhythmsDB.json`);
+
+  async read(): Promise<RhythmsText> {
+    return { text: await this.#file.read() };
+  }
+
+  async write(data: RhythmsText): Promise<void> {
+    if (data.text === null) throw new Error('Refusing to remove rhythmsDB.json');
+    await this.#file.write(data.text);
+  }
+}
+
+const rhythmsFile = new Low<RhythmsText>(new RhythmsFile(), { text: null });
+const serializedUpdate = createSerializedUpdate(rhythmsFile);
+const serialize = (db: unknown) => JSON.stringify(db, null, 2);
+
+export async function loadRhythms(): Promise<RhythmsLoad> {
+  await rhythmsFile.read();
+  return parseRhythms(rhythmsFile.data.text);
+}
+
+// The draft is the stored JSON, so keys this version does not know survive.
+export async function updateRhythms(mutate: (draft: RhythmsDB) => void | false): Promise<RhythmsDB> {
+  const saved = await serializedUpdate(file => {
+    const load = parseRhythms(file.text);
+    if (load.state !== 'ok') throw new RhythmsStateError(load.state);
+    const draft = JSON.parse(file.text as string) as RhythmsDB;
+    if (mutate(draft) === false) return false;
+    const checked = RhythmsReadSchema.safeParse(draft);
+    if (!checked.success) throw new Error(`Refusing to save invalid rhythms: ${checked.error.message}`);
+    file.text = serialize(draft);
+  });
+  const load = parseRhythms(saved.text);
+  if (load.state !== 'ok') throw new RhythmsStateError(load.state);
+  return load.db;
+}
+
+export async function createRhythms(db: RhythmsDB): Promise<void> {
+  const valid = RhythmsDBSchema.parse(db);
+  await serializedUpdate(file => {
+    if (file.text !== null) throw new RhythmsStateError(parseRhythms(file.text).state, 'rhythmsDB.json already exists');
+    file.text = serialize(valid);
+  });
+}
