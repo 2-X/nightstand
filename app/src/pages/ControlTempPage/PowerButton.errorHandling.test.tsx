@@ -5,6 +5,8 @@ import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import { useAppStore } from '@state/appStore.tsx';
 import PowerButton from './PowerButton';
+import { useControlTempStore } from './controlTempStore';
+import { getDeviceStatus } from '../../mocks/mockData';
 
 // This test deliberately makes a save reject. The catch path here never
 // calls refetch(), so nothing should reject asynchronously after the initial
@@ -42,5 +44,19 @@ describe('PowerButton error handling', () => {
 
     // Still correct after the failed save settles.
     expect(screen.getByRole('button', { name: 'Turn off' })).toBeInTheDocument();
+  });
+
+  it('puts the optimistic power state and target back when the save fails', async () => {
+    server.use(http.post('*/deviceStatus', () => new HttpResponse(null, { status: 500 })));
+    useAppStore.setState({ side: 'left', isUpdating: false });
+    const before = getDeviceStatus();
+    useControlTempStore.setState({ deviceStatus: { ...before, left: { ...before.left, isOn: true, targetTemperatureF: 84 } }, pendingEdits: 0 });
+
+    const { user } = renderWithProviders(<PowerButton isOn={ true } refetch={ () => Promise.resolve({ data: undefined }) }/>);
+    await user.click(await screen.findByRole('button', { name: 'Turn off' }));
+    await waitFor(() => expect(useAppStore.getState().isUpdating).toBe(false), { timeout: 5000 });
+
+    expect(useControlTempStore.getState().deviceStatus?.left.isOn).toBe(true);
+    expect(useControlTempStore.getState().deviceStatus?.left.targetTemperatureF).toBe(84);
   });
 });

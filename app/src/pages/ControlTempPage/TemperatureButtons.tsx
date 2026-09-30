@@ -17,7 +17,13 @@ type TemperatureButtonsProps = {
 
 const DEBOUNCE_MS = 400;
 export default function TemperatureButtons({ refetch, currentTargetTemp, statusUnavailable = false }: TemperatureButtonsProps) {
-  const { side, setIsUpdating } = useAppStore();
+  const { side, setIsUpdating: setStoreUpdating } = useAppStore();
+  // Only clear the flag this component raised; the power save shares it.
+  const holdsUpdating = useRef(false);
+  const setIsUpdating = useCallback((value: boolean) => {
+    holdsUpdating.current = value;
+    setStoreUpdating(value);
+  }, [setStoreUpdating]);
   const { deviceStatus, setDeviceStatus, beginEdit, endEdit } = useControlTempStore();
   const { data: settings } = useSettings();
   const format = settings?.temperatureFormat ?? 'fahrenheit';
@@ -36,20 +42,35 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
     if (!editOpenRef.current && !inFlight.current) savedTarget.current = currentTargetTemp;
   }, [currentTargetTemp]);
 
+  // A target sent to a side that was just turned off would count as a manual
+  // change and could pause that side's schedule.
+  const sideIsOff = useCallback(() => useControlTempStore.getState().deviceStatus?.[side]?.isOn === false, [side]);
+
   // After the stepper unmounts (a side switch), still deliver the last target.
   const sendLatest = useCallback(() => {
     ready.current = false;
     const target = useControlTempStore.getState().deviceStatus?.[side]?.targetTemperatureF;
+    if (sideIsOff()) {
+      setDeviceStatus({ [side]: { targetTemperatureF: savedTarget.current } });
+      return;
+    }
     if (statusUnavailableRef.current || !Number.isFinite(target)) return;
     postDeviceStatus({ [side]: { targetTemperatureF: target } }).catch((error: unknown) => {
       console.error(error);
       setDeviceStatus({ [side]: { targetTemperatureF: savedTarget.current } });
     });
-  }, [side, setDeviceStatus]);
+  }, [side, setDeviceStatus, sideIsOff]);
 
   const postUpdate = useCallback(async () => {
     if (inFlight.current || !ready.current || !mounted.current) return;
     const target = useControlTempStore.getState().deviceStatus?.[side]?.targetTemperatureF;
+    if (sideIsOff()) {
+      // The power save owns the updating flag; only the unsent target is undone.
+      ready.current = false;
+      setDeviceStatus({ [side]: { targetTemperatureF: savedTarget.current } });
+      if (editOpenRef.current) { editOpenRef.current = false; endEdit(); }
+      return;
+    }
     if (statusUnavailableRef.current || !Number.isFinite(target)) {
       ready.current = false;
       if (editOpenRef.current) { editOpenRef.current = false; endEdit(); }
@@ -83,7 +104,7 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
         setIsUpdating(false);
       }
     }
-  }, [side, refetch, setIsUpdating, endEdit, setDeviceStatus, sendLatest]);
+  }, [side, refetch, setIsUpdating, endEdit, setDeviceStatus, sendLatest, sideIsOff]);
 
   const scheduleUpdate = useCallback(() => {
     ready.current = false;
@@ -105,7 +126,7 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
       }
       debounceTimer.current = null;
       if (ready.current && !inFlight.current) sendLatest();
-      if (!inFlight.current) setIsUpdating(false);
+      if (!inFlight.current && holdsUpdating.current) setIsUpdating(false);
       if (editOpenRef.current) {
         editOpenRef.current = false;
         endEdit();

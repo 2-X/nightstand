@@ -44,9 +44,12 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
     setIsUpdating(true);
     let gateOpen = true;
     beginEdit();
+    const previous = useControlTempStore.getState().deviceStatus?.[side];
     setDeviceStatus(deviceStatus);
+    let saved = false;
     postDeviceStatus(deviceStatus)
       .then(() => {
+        saved = true;
         if (powerOn) clearPoweredOff();
         else markPoweredOff(side);
         // Wait 1 second before refreshing the device status
@@ -66,6 +69,14 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
           endEdit();
         }
         console.error(error);
+        // The write failed, so the optimistic power state is a lie; a target
+        // set for Turn on goes back too.
+        if (!saved && previous) {
+          setDeviceStatus({ [side]: {
+            isOn: previous.isOn,
+            ...(powerOn ? { targetTemperatureF: previous.targetTemperatureF } : {}),
+          } });
+        }
       })
       .finally(() => {
         setIsUpdating(false);

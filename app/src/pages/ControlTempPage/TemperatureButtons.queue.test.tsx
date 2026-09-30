@@ -129,3 +129,28 @@ it('sends a change queued behind an in-flight request when the side switches', a
   await act(async () => { resolve(); await vi.advanceTimersByTimeAsync(2000); });
   expect(api.post).toHaveBeenLastCalledWith({ left: { targetTemperatureF: 82 } });
 });
+it('drops a pending change when the side is turned off, and leaves the power save to its owner', async () => {
+  const view = render(<TemperatureButtons currentTargetTemp={ 80 } refetch={ vi.fn() }/>);
+  fireEvent.click(screen.getByRole('button', { name: 'Increase temperature' }));
+  // The power button's save is in flight and owns the flag.
+  act(() => {
+    useControlTempStore.getState().setDeviceStatus({ left: { isOn: false } });
+    useAppStore.setState({ isUpdating: true });
+  });
+  await act(async () => vi.advanceTimersByTimeAsync(400));
+  view.unmount();
+  await act(async () => vi.advanceTimersByTimeAsync(2000));
+  expect(api.post).not.toHaveBeenCalled();
+  expect(useControlTempStore.getState().pendingEdits).toBe(0);
+  expect(useAppStore.getState().isUpdating).toBe(true);
+  // The unsent value no longer shows as the target.
+  expect(useControlTempStore.getState().deviceStatus?.left.targetTemperatureF).toBe(80);
+});
+it('does not flush a pending change on unmount once the side is off', async () => {
+  const view = render(<TemperatureButtons currentTargetTemp={ 80 } refetch={ vi.fn() }/>);
+  fireEvent.click(screen.getByRole('button', { name: 'Increase temperature' }));
+  act(() => useControlTempStore.getState().setDeviceStatus({ left: { isOn: false } }));
+  view.unmount();
+  await act(async () => vi.advanceTimersByTimeAsync(2000));
+  expect(api.post).not.toHaveBeenCalled();
+});
