@@ -33,6 +33,7 @@ const { default: settingsDB } = await import('../../db/settings.js');
 const { default: schedulesDB } = await import('../../db/schedules.js');
 const { default: servicesDB } = await import('../../db/services.js');
 const { default: memoryDB } = await import('../../db/memoryDB.js');
+const { default: logger } = await import('../../logger.js');
 const { everyNight, testNight, testRhythmsDB } = await import('./testSupport.js');
 const { scheduleRhythms } = await import('./scheduleRhythms.js');
 const { abortAlarmWaits, resetAlarmActivity } = await import('../alarmActivity.js');
@@ -84,8 +85,8 @@ afterEach(() => {
 after(() => rmSync(folder, { recursive: true, force: true }));
 
 it('plans each sleep in the 48 hour horizon once', () => {
-  const { jobCount } = scheduleRhythms(settingsDB.data, testRhythmsDB(schedulesDB.data, everyNight(NIGHT)), at('2026-09-28T12:00:00Z'));
-  assert.equal(jobCount, 12);
+  const plan = scheduleRhythms(settingsDB.data, testRhythmsDB(schedulesDB.data, everyNight(NIGHT)), at('2026-09-28T12:00:00Z'));
+  assert.deepEqual(plan, { jobCount: 12, failedSides: [] });
   assert.deepEqual(rhythmNames(), [...sleepJobs('2026-09-28'), ...sleepJobs('2026-09-29'), 'rhythms-horizon']);
   assert.equal(fireTime('rhythm-left-2026-09-28-power-on-2200-0'), '2026-09-28T22:00:00.000Z');
   assert.equal(fireTime('rhythm-left-2026-09-28-temperature-0200-0'), '2026-09-29T02:00:00.000Z');
@@ -198,19 +199,73 @@ it('moves a missing time forward and sets the firmware across the spring forward
   assert.deepEqual(updates, [{ left: { isOn: true, targetTemperatureF: 80, secondsRemaining: 7 * 3600 + 300 } }]);
 });
 
+const captureErrors = (t: TestContext) => {
+  const errors: string[] = [];
+  t.mock.method(logger, 'error', (message: string) => { errors.push(message); return logger; });
+  return errors;
+};
+
 it('logs a job that fails instead of rejecting, which would stop the server', async t => {
   scheduleRhythms(settingsDB.data, testRhythmsDB(schedulesDB.data, everyNight(NIGHT)), at('2026-09-28T12:00:00Z'));
+  const errors = captureErrors(t);
   t.mock.method(settingsDB, 'read', async () => { throw new Error('read failed'); });
   for (const suffix of ['power-on-2200-0', 'alarm-0545-0', 'analysis-0615-0']) {
     await assert.doesNotReject(async () => { await schedule.scheduledJobs[`rhythm-left-2026-09-28-${suffix}`].invoke(); });
   }
+  assert.equal(errors.filter(message => message.includes('read failed')).length, 3);
 });
 
-it('logs a horizon run that fails instead of throwing', () => {
+it('logs a horizon run that fails instead of throwing', t => {
   const db = testRhythmsDB(schedulesDB.data, everyNight(NIGHT));
   scheduleRhythms(settingsDB.data, db, at('2026-09-28T12:00:00Z'));
+  const errors = captureErrors(t);
   db.left.changes = null as unknown as typeof db.left.changes;
   assert.doesNotThrow(() => schedule.scheduledJobs['rhythms-horizon'].invoke());
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /left/);
+});
+
+it('plans the other side and the horizon when one side cannot be resolved', t => {
+  const db = testRhythmsDB(schedulesDB.data, everyNight(NIGHT), everyNight(testNight('23:00', '07:00')));
+  db.left.changes = null as unknown as typeof db.left.changes;
+  const errors = captureErrors(t);
+  let plan = { jobCount: 0, failedSides: [] as string[] };
+  assert.doesNotThrow(() => { plan = scheduleRhythms(settingsDB.data, db, at('2026-09-28T12:00:00Z')); });
+  assert.equal(rhythmNames().some(name => name.startsWith('rhythm-left')), false);
+  assert.equal(rhythmNames().filter(name => name.startsWith('rhythm-right')).length, 8);
+  assert.deepEqual(plan, { jobCount: 8, failedSides: ['left'] });
+  assert.ok(schedule.scheduledJobs['rhythms-horizon']);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /left/);
+});
+
+it('extends from the data of the latest plan, not the first', async () => {
+  scheduleRhythms(settingsDB.data, testRhythmsDB(schedulesDB.data, everyNight(NIGHT)), at('2026-09-28T12:00:00Z'));
+  const later = testRhythmsDB(schedulesDB.data, everyNight(testNight('21:30', '06:00')));
+  scheduleRhythms(settingsDB.data, later, at('2026-09-28T12:00:00Z'));
+  setNow('2026-09-29T12:00:00Z');
+  await schedule.scheduledJobs['rhythms-horizon'].invoke();
+  assert.ok(rhythmNames().includes('rhythm-left-2026-09-30-power-on-2130-0'));
+  assert.equal(rhythmNames().includes('rhythm-left-2026-09-30-power-on-2200-0'), false);
+});
+
+it('extends at minute 0 of every hour in the Pod time zone', () => {
+  settingsDB.data.timeZone = 'Asia/Kolkata';
+  scheduleRhythms(settingsDB.data, testRhythmsDB(schedulesDB.data, everyNight(NIGHT)), at('2026-09-28T12:00:00Z'));
+  // 12:00 UTC is 17:30 in Kolkata, so the next hour there starts at 12:30 UTC.
+  assert.equal(fireTime('rhythms-horizon'), '2026-09-28T12:30:00.000Z');
+});
+
+it('plans a sleep starting just past the horizon before it starts', async () => {
+  const db = testRhythmsDB(schedulesDB.data, everyNight(testNight('12:30', '20:00')));
+  scheduleRhythms(settingsDB.data, db, at('2026-09-28T12:00:00Z'));
+  const edge = 'rhythm-left-2026-09-30-power-on-1230-0';
+  assert.equal(rhythmNames().includes(edge), false);
+  const tick = fireTime('rhythms-horizon');
+  assert.equal(tick, '2026-09-28T13:00:00.000Z');
+  setNow(tick);
+  await schedule.scheduledJobs['rhythms-horizon'].invoke();
+  assert.equal(fireTime(edge), '2026-09-30T12:30:00.000Z');
 });
 
 // Captures timers so a test can end an alarm's ring on cue.

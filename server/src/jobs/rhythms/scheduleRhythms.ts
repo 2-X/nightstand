@@ -69,6 +69,9 @@ function scheduleSleep(settings: Settings, side: Side, sleep: ResolvedSleep, now
   return count;
 }
 
+// The hourly job extends from whatever was planned last.
+let latest: { settings: Settings; db: RhythmsDB } | null = null;
+
 function scheduleHorizon(timeZone: string, extend: () => void): void {
   if (schedule.scheduledJobs[RHYTHMS_HORIZON_JOB]) return;
   const rule = new schedule.RecurrenceRule();
@@ -77,30 +80,41 @@ function scheduleHorizon(timeZone: string, extend: () => void): void {
   schedule.scheduleJob(RHYTHMS_HORIZON_JOB, rule, extend);
 }
 
+export type RhythmsPlan = { jobCount: number; failedSides: Side[] };
+
 // Settings and data saves rebuild every job, so the hourly job only adds
-// the sleeps that have come into range.
-export function scheduleRhythms(settings: Settings, db: RhythmsDB, now: Date): { jobCount: number } {
+// the sleeps that have come into range. A side that cannot be resolved is
+// logged and skipped, so the other side and the rest of the rebuild still run.
+export function scheduleRhythms(settings: Settings, db: RhythmsDB, now: Date): RhythmsPlan {
   const timeZone = settings.timeZone;
-  if (!timeZone) return { jobCount: 0 };
+  if (!timeZone) return { jobCount: 0, failedSides: [] };
+  latest = { settings, db };
   const from = new Date(now.getTime() - RHYTHMS_LOOKBACK_MS);
   const to = new Date(now.getTime() + RHYTHMS_HORIZON_MS);
   let jobCount = 0;
+  const failedSides: Side[] = [];
   for (const side of SCHEDULE_SIDES) {
     if (effectiveSides(settings, side).length === 0) {
       logger.debug(`Rhythms: ${side} is away, its own rhythm is not scheduled`);
       continue;
     }
-    for (const sleep of resolveSleeps({ db, side, timeZone, from, to })) {
-      jobCount += scheduleSleep(settings, side, sleep, now, timeZone);
+    try {
+      for (const sleep of resolveSleeps({ db, side, timeZone, from, to })) {
+        jobCount += scheduleSleep(settings, side, sleep, now, timeZone);
+      }
+    } catch (error: unknown) {
+      failedSides.push(side);
+      logger.error(`Rhythms could not plan ${side}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   scheduleHorizon(timeZone, () => {
+    if (!latest) return;
     try {
-      const added = scheduleRhythms(settings, db, new Date()).jobCount;
+      const added = scheduleRhythms(latest.settings, latest.db, new Date()).jobCount;
       logger.debug(`Rhythms horizon added ${added} job(s)`);
     } catch (error: unknown) {
       logger.error(`Rhythms horizon failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
-  return { jobCount };
+  return { jobCount, failedSides };
 }
