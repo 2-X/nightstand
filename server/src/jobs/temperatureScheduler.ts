@@ -1,4 +1,5 @@
 import schedule from 'node-schedule';
+import moment from 'moment-timezone';
 
 import { DailySchedule, DayOfWeek, Side, Time } from '../db/schedulesSchema.js';
 import { getDayIndexForTime, logJob } from './utils.js';
@@ -9,6 +10,7 @@ import serverStatus from '../serverStatus.js';
 import logger from '../logger.js';
 import { isTempScheduleOverridden } from './scheduleOverride.js';
 import settingsDB from '../db/settings.js';
+import { describePause, isSchedulePaused } from './schedulePause.js';
 
 
 const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time: Time, temperature: number, powerOn: Time) => {
@@ -23,9 +25,13 @@ const scheduleAdjustment = (timeZone: TimeZone, side: Side, day: DayOfWeek, time
   onRule.minute = onMinute;
   onRule.tz = timeZone;
 
-  schedule.scheduleJob(`${side}-${day}-${time}-${temperature}-temperature-adjustment`, onRule, async () => {
+  schedule.scheduleJob(`${side}-${day}-${time}-${temperature}-temperature-adjustment`, onRule, async (fireDate?: Date) => {
     try {
       await settingsDB.read();
+      if (isSchedulePaused(settingsDB.data, side, fireDate ?? moment().toDate())) {
+        logger.info(`Skipping ${side} ${day} temperature change at ${time}, schedule paused ${describePause(settingsDB.data, side)}`);
+        return;
+      }
       if (isTempScheduleOverridden(side)) {
         const expiresAt = settingsDB.data[side].scheduleOverrides.temperatureSchedules.expiresAt;
         logJob(`Skipping temperature adjustment, schedule overridden until ${expiresAt}`, side, day, dayOfWeekIndex, time);
