@@ -15,3 +15,9 @@ it('counts every service state in its collapsed summary', () => {
     name: 'Core services · 4 healthy, 1 starting, 1 running, 1 waiting for data, 1 retrying, 1 restarting, 1 failed',
   })).toBeVisible();
 });
+
+it('puts each group under an h2 so the page outline does not skip a level', () => {
+  renderWithProviders(<GroupCard label="Core services" keys={ CORE_KEYS } data={ getServerStatus() }/>);
+  const heading = screen.getByRole('heading', { level: 2 });
+  expect(heading).toContainElement(screen.getByRole('button', { name: /^Core services/ }));
+});

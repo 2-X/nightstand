@@ -57,13 +57,13 @@ export default function ChangelogPage() {
             id={ `release-v${entry.version}` }
             defaultExpanded={ hash === `#release-v${entry.version}` }
             disableGutters
-            slotProps={ { transition: { unmountOnExit: true } } }
+            slotProps={ { transition: { unmountOnExit: true }, heading: { component: 'h2' } } }
             sx={ { backgroundColor: palette.bg.elevated, scrollMarginTop: 24 } }
           >
             <AccordionSummary expandIcon={ <ExpandMoreIcon/> }>
               <Box sx={ { minWidth: 0 } }>
                 <Box sx={ { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 } }>
-                  <Typography variant="subtitle1" sx={ { fontWeight: 600 } }>v{ entry.version }</Typography>
+                  <Typography component="span" variant="subtitle1" sx={ { fontWeight: 600 } }>v{ entry.version }</Typography>
                   <Typography variant="caption" color="text.secondary">{ entry.date }</Typography>
                   { entry.version === running && <Chip label="Running" size="small" variant="outlined"/> }
                   { entry.version === latest && <Chip

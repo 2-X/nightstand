@@ -39,7 +39,7 @@ export default function GroupCard({ label, keys, data, attentionKeys = [] }: Gro
       expanded={ expanded?.issues === issues ? expanded.value : attention.length > 0 }
       onChange={ (_event, value) => setExpanded({ issues, value }) }
       sx={ sx.glassAccordion }
-      slotProps={ { transition: { unmountOnExit: true } } }
+      slotProps={ { transition: { unmountOnExit: true }, heading: { component: 'h2' } } }
     >
       <AccordionSummary expandIcon={ <ExpandMoreIcon/> }>
         <Typography sx={ { fontSize: 16, fontWeight: 500 } }>

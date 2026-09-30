@@ -73,3 +73,11 @@ it('previews each release with its summary, or the first full sentence of its no
   const older = screen.getByRole('button', { name: /^v3.3.0/ });
   expect(older).toHaveTextContent(/The Status page has a Water tank entry\.$/);
 });
+
+it('keeps the heading outline to h1 then one h2 per release', async () => {
+  renderWithProviders(<ChangelogPage />);
+  await screen.findAllByRole('button', { name: /^v\d/ });
+  const levels = screen.getAllByRole('heading').map(heading => Number(heading.tagName.slice(1)));
+  expect(levels.filter(level => level > 2)).toEqual([]);
+  expect(levels.filter(level => level === 2).length).toBeGreaterThan(0);
+});
