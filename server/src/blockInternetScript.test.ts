@@ -46,6 +46,20 @@ describe('block_internet_access.sh', () => {
     assert.ok(reset < drop && drop < save, 'reset rule must come before the final drop and the save');
   });
 
+  it('lets mDNS answers out so eight-pod.local keeps resolving without Tailscale', () => {
+    const gate = src.indexOf('if systemctl is-active --quiet tailscaled; then');
+    const gateEnd = src.indexOf('\nfi', gate);
+    for (const [rule, drop] of [
+      ['iptables -A OUTPUT -d 224.0.0.251 -p udp --dport 5353 -j ACCEPT', 'iptables -A OUTPUT -j DROP'],
+      ['ip6tables -A OUTPUT -d ff02::fb -p udp --dport 5353 -j ACCEPT', 'ip6tables -A OUTPUT -j DROP'],
+    ]) {
+      const at = src.indexOf(rule);
+      assert.ok(at !== -1, `missing "${rule}"`);
+      assert.ok(at < gate || at > gateEnd, `"${rule}" must not depend on tailscaled`);
+      assert.ok(at < src.indexOf(drop), `"${rule}" must come before "${drop}"`);
+    }
+  });
+
   it('still saves both rulesets', () => {
     assert.match(src, /iptables-save > \/etc\/iptables\/iptables\.rules/);
     assert.match(src, /ip6tables-save > \/etc\/iptables\/ip6tables\.rules/);

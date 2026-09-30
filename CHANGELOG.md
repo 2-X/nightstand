@@ -115,7 +115,9 @@ is a hard fork; for the history of the projects it descends from, see
 
 - Re-running the firewall script no longer piles up duplicate rules, and the
   outbound rules Tailscale needs are only added while Tailscale is running, so
-  without it, new outbound connections remain blocked except time sync.
+  without it, new outbound connections remain blocked except time sync and
+  answers to local name lookups (mDNS), which keep http://eight-pod.local:3000
+  working.
   Updates apply the installed version's rules after the swap, and rollback
   applies the restored version's rules. If you set up Tailscale later, run the
   block script again once it is running. Applying the rules removes hand-added

@@ -59,6 +59,9 @@ systemctl restart systemd-timesyncd
 iptables -A INPUT  -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
 
+# Let avahi answer mDNS queries so eight-pod.local resolves on the LAN.
+iptables -A OUTPUT -d 224.0.0.251 -p udp --dport 5353 -j ACCEPT
+
 # -----------------------------------------------------------------------------------------------------
 # Allow Tailscale (https://tailscale.com/kb/1082/firewall-ports)
 #
@@ -114,6 +117,8 @@ ip6tables -A OUTPUT -d fd00::/8 -j ACCEPT
 # Allow NTP traffic (IPv6)
 ip6tables -I OUTPUT -p udp --dport 123 -j ACCEPT
 ip6tables -I INPUT -p udp --sport 123 -j ACCEPT
+
+ip6tables -A OUTPUT -d ff02::fb -p udp --dport 5353 -j ACCEPT
 
 # Block everything else (IPv6)
 ip6tables -A INPUT -j DROP
