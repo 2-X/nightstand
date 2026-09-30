@@ -269,7 +269,7 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
           variant="outlined"
           data-testid="schedule-event"
           data-invalid={ invalid || undefined }
-          sx={ { p: 2, opacity: alarm.enabled ? 1 : 0.6 } }>
+          sx={ { p: 2 } }>
           <FormControlLabel
             label={ alarms.length === 1 ? 'Alarm' : `Alarm ${index + 1}` }
             labelPlacement="start"
@@ -294,7 +294,7 @@ export default function ScheduleTimeline({ format }: { format: TemperatureFormat
               disabled={ disabled }
               error={ invalid }
               InputLabelProps={ { shrink: true } }
-              sx={ { width: 145, gridArea: 'field' } }
+              sx={ { width: 145, gridArea: 'field', '& input': alarm.enabled ? undefined : { color: 'text.secondary' } } }
               onChange={ event => {
                 const time = event.target.value;
                 if (!time) return;
