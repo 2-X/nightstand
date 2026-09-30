@@ -58,7 +58,10 @@ const responseSchemas: Record<string, z.ZodTypeAny> = {
   '/services': responseSchema(servicesResponse),
   '/metrics/sleep': sleepRecordSchema.refine(record => record.sleep_period_seconds >= 0
     && Date.parse(record.left_bed_at) >= Date.parse(record.entered_bed_at), 'Invalid sleep interval').array(),
-  '/metrics/vitals': vitalsRecordSchema.array(),
+  // Reads accept any recorded value; charts drop empty and non-positive ones.
+  '/metrics/vitals': vitalsRecordSchema.extend({
+    heart_rate: z.number().nullable(), hrv: z.number().nullable(), breathing_rate: z.number().nullable(),
+  }).array(),
   '/metrics/movement': movementRecordSchema.array(),
   '/metrics/vitals/summary': z.object({
     avgHeartRate: seconds,

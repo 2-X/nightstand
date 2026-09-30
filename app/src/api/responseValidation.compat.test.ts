@@ -92,3 +92,16 @@ it('keeps the sleep-stages coverage flag and accepts servers that do not send it
   expect(validateResponse('/metrics/sleep-stages', { ...stages, lowCoverage: true })).toEqual({ ...stages, lowCoverage: true });
   expect(validateResponse('/metrics/sleep-stages', stages)).toEqual(stages);
 });
+
+// A newer Pod may record fractional or higher heart rates and leave estimates
+// empty; one such row must not fail the whole night after a rollback.
+it('accepts vitals rows beyond today\'s recorder limits', () => {
+  const vitals = [
+    { side: 'left', timestamp: 1790664360, heart_rate: 92.4, hrv: null, breathing_rate: 0, rmssd: 41.2 },
+    { side: 'right', timestamp: 1790664420, heart_rate: 64, hrv: 38, breathing_rate: 15 },
+  ];
+  expect(validateResponse('/metrics/vitals', vitals)).toEqual([
+    { side: 'left', timestamp: 1790664360, heart_rate: 92.4, hrv: null, breathing_rate: 0 },
+    vitals[1],
+  ]);
+});
