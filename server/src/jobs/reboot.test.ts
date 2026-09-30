@@ -8,7 +8,11 @@ let activeUnit = '';
 let checkFailed = false;
 let dailyJob: (() => Promise<void>) | undefined;
 mock.module('child_process', { namedExports: {
-  exec: (command: string) => reboots.push(command),
+  // Report each reboot as failed so the reboot latch does not carry between tests.
+  exec: (command: string, callback: (error: Error | null) => void) => {
+    reboots.push(command);
+    callback(new Error('not rebooting under test'));
+  },
   execFile: (_command: string, args: string[], _options: unknown, callback: (error: Error | null, stdout: string) => void) => {
     callback(checkFailed ? new Error('check failed') : null, args.includes(activeUnit) ? 'active' : 'inactive');
   },

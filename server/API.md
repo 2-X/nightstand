@@ -420,6 +420,8 @@ Valid keys:
 - `reboot`, reboots the pod immediately (`sudo /sbin/reboot`).
 - `update`, starts `free-sleep-update.service` (the same path `/api/update` triggers).
 
+`reboot` and `update` cannot be in the same request (400). While an update, rollback or switch is starting or running, `reboot` is refused; once a reboot has been issued, update, rollback, switch and further reboots are refused until the Pod restarts (or for 5 minutes if it does not).
+
 ---
 
 ## `/api/metrics/sleep`

@@ -13,7 +13,16 @@ function execute(file: string, args: readonly string[], timeout = 30_000): Promi
 }
 
 const OPERATION_UNITS = ['free-sleep-update.service', 'free-sleep-rollback.service', 'free-sleep-revert.service'];
+const OPERATION_RUNNING = 'An update, rollback or switch is already running. Wait for it to finish.';
+const POD_RESTARTING = 'The Pod is restarting. Wait for it to come back.';
 let operationStarting = false;
+
+// Set when a reboot is issued so no operation starts while the Pod goes
+// down. It lapses if the Pod is still up long after, so a reboot that never
+// happened cannot block updates for good.
+const REBOOT_LATCH_MS = 5 * 60_000;
+let rebootIssuedAt: number | undefined;
+const rebootPending = () => rebootIssuedAt !== undefined && Date.now() - rebootIssuedAt < REBOOT_LATCH_MS;
 
 export type StartHooks = {
   beforeStart?: () => Promise<void>;
@@ -29,20 +38,40 @@ async function assertOperationUnitsIdle() {
       throw new OperationCheckError('Cannot check running operations. Check the service logs before trying again.');
     }
     if (!['inactive', 'failed'].includes(state)) {
-      throw new PrivilegedCommandError('An update, rollback or switch is already running. Wait for it to finish.');
+      throw new PrivilegedCommandError(OPERATION_RUNNING);
     }
   }
 }
 
 export async function assertOperationsIdle() {
   if (operationStarting) {
-    throw new PrivilegedCommandError('An update, rollback or switch is already running. Wait for it to finish.');
+    throw new PrivilegedCommandError(OPERATION_RUNNING);
   }
   await assertOperationUnitsIdle();
   // An operation can enter admission while the systemd checks are in flight.
   if (operationStarting) {
-    throw new PrivilegedCommandError('An update, rollback or switch is already running. Wait for it to finish.');
+    throw new PrivilegedCommandError(OPERATION_RUNNING);
   }
+}
+
+// Admits a reboot only when no operation is starting or running, and holds
+// the reboot latch from the first check so an operation or a second reboot
+// cannot slip in while the systemd checks run.
+export async function admitReboot() {
+  if (rebootPending()) throw new PrivilegedCommandError(POD_RESTARTING);
+  if (operationStarting) throw new PrivilegedCommandError(OPERATION_RUNNING);
+  const issuedAt = Date.now();
+  rebootIssuedAt = issuedAt;
+  try {
+    await assertOperationUnitsIdle();
+  } catch (error) {
+    if (rebootIssuedAt === issuedAt) rebootIssuedAt = undefined;
+    throw error;
+  }
+}
+
+export function releaseRebootLatch() {
+  rebootIssuedAt = undefined;
 }
 
 type CommandOptions = StartHooks & { timeout?: number; action?: string };
@@ -70,8 +99,11 @@ async function startCommand(command: readonly string[], unit: string, operation:
 // both the unit and the exact sudo grant before reporting acceptance.
 export async function runPrivilegedCommand(command: readonly string[], unit: string, hooks: CommandOptions = {}): Promise<void> {
   const operation = OPERATION_UNITS.includes(unit);
+  if (operation && rebootPending()) {
+    throw new PrivilegedCommandError(POD_RESTARTING);
+  }
   if (operation && operationStarting) {
-    throw new PrivilegedCommandError('An update, rollback or switch is already running. Wait for it to finish.');
+    throw new PrivilegedCommandError(OPERATION_RUNNING);
   }
   if (operation) operationStarting = true;
   try {

@@ -66,6 +66,11 @@ router.post('/jobs', async (req: Request, res: Response) => {
     return;
   }
 
+  if (validationResult.data.includes('reboot') && validationResult.data.includes('update')) {
+    res.status(400).json({ error: 'Restart and update cannot be requested together' });
+    return;
+  }
+
   try {
     for (const job of validationResult.data) {
       await JOB_MAP[job]();
