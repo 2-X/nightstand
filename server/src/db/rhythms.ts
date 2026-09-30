@@ -74,7 +74,13 @@ export async function updateRhythms(mutate: (draft: RhythmsDB) => void | false):
     const load = parseRhythms(file.text);
     if (load.state !== 'ok') throw new RhythmsStateError(load.state);
     const draft = JSON.parse(file.text as string) as RhythmsDB;
-    if (mutate(draft) === false) return false;
+    const result: unknown = mutate(draft);
+    // An async change could land after the save, so it is refused outright.
+    if (typeof (result as PromiseLike<unknown> | undefined)?.then === 'function') {
+      Promise.resolve(result).catch(() => {});
+      throw new Error('Rhythms changes must be synchronous');
+    }
+    if (result === false) return false;
     const checked = RhythmsReadSchema.safeParse(draft);
     if (!checked.success) throw new Error(`Refusing to save invalid rhythms: ${checked.error.message}`);
     file.text = serialize(draft);

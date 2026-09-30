@@ -3,6 +3,7 @@ import { after, beforeEach, describe, it } from 'node:test';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import type { RhythmsDB } from './rhythmsSchema.js';
 
 const folder = mkdtempSync(path.join(tmpdir(), 'rhythms-store-'));
 mkdirSync(path.join(folder, 'lowdb'));
@@ -71,6 +72,14 @@ describe('createRhythms', () => {
     await assert.rejects(createRhythms({ ...sample(), extra: true } as never));
     assert.equal(existsSync(file), false);
   });
+
+  it('refuses over an unsupported or invalid file and leaves it alone', async () => {
+    for (const [text, state] of [[fixtureText('rhythmsDB-v2'), 'unsupported'], ['{', 'invalid']] as const) {
+      writeFileSync(file, text);
+      await assert.rejects(createRhythms(sample()), (error: unknown) => error instanceof RhythmsStateError && error.state === state);
+      assert.equal(readFileSync(file, 'utf8'), text);
+    }
+  });
 });
 
 describe('updateRhythms', () => {
@@ -107,6 +116,46 @@ describe('updateRhythms', () => {
     const before = readFileSync(file, 'utf8');
     await assert.rejects(updateRhythms(draft => { draft.left.week.monday = 'Not An Id'; }), /Refusing to save invalid rhythms/);
     assert.equal(readFileSync(file, 'utf8'), before);
+  });
+
+  it('refuses an async change before writing anything', async () => {
+    await createRhythms(sample());
+    const before = readFileSync(file, 'utf8');
+    // The type already refuses this; the check covers callers that get past it.
+    const late = async (draft: RhythmsDB) => { draft.left.week.friday = 'workday'; };
+    await assert.rejects(updateRhythms(late as never), /synchronous/);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(readFileSync(file, 'utf8'), before);
+  });
+
+  it('leaves no unhandled rejection behind when a refused async change fails', async () => {
+    await createRhythms(sample());
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', record);
+    try {
+      const failing = async () => { throw new Error('late failure'); };
+      await assert.rejects(updateRhythms(failing as never), /synchronous/);
+      await new Promise(resolve => setTimeout(resolve, 20));
+    } finally {
+      process.off('unhandledRejection', record);
+    }
+    assert.deepEqual(unhandled, []);
+  });
+
+  it('keeps the previous file when the disk write fails', async () => {
+    await createRhythms(sample());
+    const before = readFileSync(file, 'utf8');
+    const temp = path.join(folder, 'lowdb', '.rhythmsDB.json.tmp');
+    mkdirSync(temp);
+    try {
+      await assert.rejects(updateRhythms(draft => { draft.left.week.friday = 'workday'; }), { code: 'EISDIR' });
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
+    assert.equal(readFileSync(file, 'utf8'), before);
+    const saved = await updateRhythms(draft => { draft.left.week.friday = 'workday'; });
+    assert.equal(saved.left.week.friday, 'workday');
   });
 
   it('applies concurrent updates one after another', async () => {
