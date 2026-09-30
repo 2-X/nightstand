@@ -4,6 +4,7 @@ import moment from 'moment-timezone';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { useSettings, postSettings } from '@api/settings.ts';
+import { isSchedulePaused } from '@api/schedulePause.ts';
 import { useAppStore } from '@state/appStore.tsx';
 
 function formatRemaining(expiresAt: string): string {
@@ -31,7 +32,8 @@ export default function ScheduleOverrideBanner() {
   const isOverridden =
     !!override?.disabled && !!override.expiresAt && moment(override.expiresAt).isAfter(moment());
 
-  if (!isOverridden) return null;
+  // The pause notice on the Tonight card covers a paused side.
+  if (!isOverridden || !settings || isSchedulePaused(settings, side, moment().toDate())) return null;
 
   const handleResume = async () => {
     setIsResuming(true);
