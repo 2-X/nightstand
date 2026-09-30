@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll } from 'vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { setupServer } from 'msw/node';
 import '@testing-library/jest-dom/vitest';
 
@@ -9,6 +9,10 @@ import { handlers } from '../mocks/handlers';
 // viewer, chat-style lists) call it to autoscroll. Stub it once for the suite
 // so any component under test can call it without throwing.
 Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || (() => {});
+
+// findBy and waitFor default to 1 s, which a busy machine or CI runner can
+// exceed when a save, a refetch and a render follow one another.
+configure({ asyncUtilTimeout: 5_000 });
 
 // One MSW server for the whole suite, serving the same handlers the hosted
 // demo uses. onUnhandledRequest 'error' turns any request the app makes that

@@ -14,9 +14,9 @@ test('pausing tonight shows the paused side and resuming brings the schedule bac
   const sheet = page.locator('.MuiDrawer-paper');
   expect(await sheet.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await expect(page.getByLabel('Resume at')).toBeInViewport();
-  await expect(page.getByRole('button', { name: 'Cancel' })).toBeInViewport();
-  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeInViewport();
+  await expect(page.getByLabel('Resume at')).toBeInViewport({ ratio: 1 });
+  await expect(page.getByRole('button', { name: 'Cancel' })).toBeInViewport({ ratio: 1 });
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeInViewport({ ratio: 1 });
 
   await page.getByRole('radio', { name: /^Tonight only/ }).check();
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
