@@ -16,10 +16,18 @@ export const NUMERIC_ARG_BOUNDS: Partial<Record<keyof typeof frankenCommands, [n
   RIGHT_TEMP_DURATION: [0, 43200],
 };
 
-export const isArgWithinBounds = (command: string, arg: unknown): boolean => {
+// The argument to send for a command, or undefined when it is not
+// acceptable. Bounded commands take a plain whole number, sent in canonical
+// form so the firmware never sees "1e2", "0x10" or padded text.
+export const normalizeExecuteArg = (command: string, arg: unknown): string | undefined => {
   const bounds = NUMERIC_ARG_BOUNDS[command as keyof typeof frankenCommands];
-  if (!bounds) return true;
+  if (!bounds) {
+    if (arg === undefined || arg === null || arg === '') return 'empty';
+    return typeof arg === 'string' ? arg : undefined;
+  }
+  const text = typeof arg === 'number' ? String(arg) : arg;
+  if (typeof text !== 'string' || !/^-?\d+$/.test(text)) return undefined;
+  const value = Number(text);
   const [min, max] = bounds;
-  const numericArg = Number(arg);
-  return Number.isFinite(numericArg) && numericArg >= min && numericArg <= max;
+  return value >= min && value <= max ? String(value) : undefined;
 };
