@@ -42,7 +42,7 @@ export default function SideSettings({ side, settings, updateSettings }: AwayMod
     <Box sx={ { display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 2 } }>
       <Typography variant="body2" color="text.secondary" fontWeight={ 600 }>{ title } side</Typography>
       <TextField
-        label="Side name"
+        label="Name"
         placeholder="Enter side name"
         value={ sideName }
         onChange={ (e) => { setSideName(e.target.value); setNameError(false); } }
@@ -50,7 +50,7 @@ export default function SideSettings({ side, settings, updateSettings }: AwayMod
         disabled={ savingName || !settings }
         error={ nameError }
         helperText={ nameError ? 'Enter a side name.' : undefined }
-        inputProps={ { maxLength: 20, style: { unicodeBidi: 'isolate' } } }
+        inputProps={ { 'aria-label': `${title} side name`, maxLength: 20, style: { unicodeBidi: 'isolate' } } }
         fullWidth
       />
       <FeatureToggleRow

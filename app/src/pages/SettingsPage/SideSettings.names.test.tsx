@@ -20,7 +20,10 @@ it('keeps the other name editable and preserves its draft while a save completes
       return HttpResponse.json(settings);
     }));
   const { user } = renderWithProviders(<SettingsPage/>, { initialRoute: '/settings/bed' });
-  const names = await screen.findAllByRole('textbox', { name: 'Side name' });
+  const names = [
+    await screen.findByRole('textbox', { name: 'Left side name' }),
+    await screen.findByRole('textbox', { name: 'Right side name' }),
+  ];
   await waitFor(() => expect(names[0]).toHaveValue(settings.left.name));
   await user.clear(names[0]);
   await user.type(names[0], 'Alex');
@@ -37,7 +40,7 @@ it('keeps the other name editable and preserves its draft while a save completes
 it('shows a validation error for a whitespace-only name without saving it', async () => {
   const updateSettings = vi.fn();
   const { user } = renderWithProviders(<SideSettings side="left" settings={ getSettings() } updateSettings={ updateSettings }/>);
-  const name = screen.getByRole('textbox', { name: 'Side name' });
+  const name = screen.getByRole('textbox', { name: 'Left side name' });
   await user.clear(name);
   await user.type(name, '   ');
   await user.tab();
@@ -50,7 +53,7 @@ it('shows a validation error for a whitespace-only name without saving it', asyn
 it('allows editing a name while another setting is saving', async () => {
   const { user } = renderWithProviders(<SideSettings side="right" settings={ getSettings() } updateSettings={ vi.fn() }/>);
   act(() => useAppStore.setState({ isUpdating: true }));
-  const name = screen.getByRole('textbox', { name: 'Side name' });
+  const name = screen.getByRole('textbox', { name: 'Right side name' });
   const disabled = name.hasAttribute('disabled');
   act(() => useAppStore.setState({ isUpdating: false }));
   expect(disabled).toBe(false);
