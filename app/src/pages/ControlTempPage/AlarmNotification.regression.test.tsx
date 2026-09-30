@@ -103,6 +103,25 @@ it('makes changing the upcoming alarm an explicit action beside its time', async
   expect(await screen.findByRole('dialog', { name: /Change this night's recurring alarms/ })).toBeInTheDocument();
 });
 
+it('opens the change dialog without an error when the bed turns off at wake', async () => {
+  alarms([['07:00', true]], '07:00');
+  renderWithProviders(<AlarmNotification/>);
+  expect(await screen.findByText('Alarm tomorrow at 7:00 AM')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+  expect(await screen.findByLabelText('Alarm')).toHaveValue('07:00');
+  expect(screen.queryByText('Choose a future time before this night ends.')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Alarm')).not.toBeInvalid();
+});
+
+it('still rejects a replacement after the night ends', async () => {
+  alarms([['07:00', true]], '07:00');
+  renderWithProviders(<AlarmNotification/>);
+  expect(await screen.findByText('Alarm tomorrow at 7:00 AM')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+  fireEvent.change(await screen.findByLabelText('Alarm'), { target: { value: '07:01' } });
+  expect(screen.getByText('Choose a future time before this night ends.')).toBeInTheDocument();
+});
+
 it('shows upstream recurring alarms when the optional alarmsEnabled flag is absent', async () => {
   alarms([['23:00', true]]);
   const settings = structuredClone(getSettings());

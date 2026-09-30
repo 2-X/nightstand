@@ -28,7 +28,7 @@ export default function AlarmOverride({ open, setOverrideOpen, alarmTimeLocalOve
   const replacement = start.clone().hour(hour).minute(minute).second(0).millisecond(0);
   if (time < start.format('HH:mm')) replacement.add(1, 'day');
   const valid = /^([01]\d|2[0-3]):[0-5]\d$/.test(time) && replacement.isAfter(moment())
-    && replacement.isBetween(start, moment(nightEnd), undefined, '[)');
+    && replacement.isBetween(start, moment(nightEnd), undefined, '[]');
   const handleCancel = () => { setAlarmTimeLocalOverride(''); setOverrideOpen(false); };
   const handleSave = async () => {
     if (!settings || !valid) return;
