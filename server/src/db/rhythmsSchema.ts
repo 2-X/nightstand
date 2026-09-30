@@ -19,7 +19,8 @@ export const SmartScheduleSchema = z.object({
 export const RhythmSchema = z.object({
   id: RhythmIdSchema,
   name: z.string().trim().min(1).max(24),
-  night: DailyScheduleSchema,
+  // DailyScheduleSchema leaves power open, and POST /schedules relies on that.
+  night: DailyScheduleSchema.extend({ power: DailyScheduleSchema.shape.power.strict() }),
   // When the person gets up, with or without an alarm.
   wake: TimeSchema,
   temperatureMode: z.enum(['manual', 'smart']),

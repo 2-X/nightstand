@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   DEFAULT_SMART, RhythmIdSchema, RhythmSchema, RhythmsDBSchema, RhythmsUpdateSchema, SideRhythmsSchema, SmartScheduleSchema,
 } from './rhythmsSchema.js';
+import { responseSchema } from './responseSchema.js';
 import { dbOf, rhythmOf, sideOf, WORKDAY } from '../jobs/rhythms/rhythmsTestData.js';
 
 describe('rhythmsSchema', () => {
@@ -40,6 +41,18 @@ describe('rhythmsSchema', () => {
     assert.equal(RhythmsDBSchema.safeParse({ ...db, legacyFingerprint: 'abc' }).success, false);
     const changes = Array.from({ length: 121 }, () => ({ date: '2026-10-12', rhythmId: null }));
     assert.equal(SideRhythmsSchema.safeParse({ ...db.left, changes }).success, false);
+  });
+
+  it('rejects unknown keys in a rhythm\'s power settings but the stored reader strips them', () => {
+    const withExtra = structuredClone(db);
+    (withExtra.left.rhythms.workday.night.power as Record<string, unknown>).futurePower = true;
+    const strict = RhythmsDBSchema.safeParse(withExtra);
+    assert.equal(strict.success, false);
+    assert.deepEqual(
+      strict.success ? [] : strict.error.issues.map(issue => [issue.code, issue.path.join('.')]),
+      [['unrecognized_keys', 'left.rhythms.workday.night.power']],
+    );
+    assert.deepEqual(responseSchema(RhythmsDBSchema).parse(withExtra), db);
   });
 
   it('accepts updates for either side and nothing else', () => {

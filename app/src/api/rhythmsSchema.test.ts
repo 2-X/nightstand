@@ -12,7 +12,7 @@ it('reads a future rhythms file with unknown keys stripped and keeps writes stri
   const issues = strict.success ? [] : strict.error.issues;
   expect(new Set(issues.map(issue => issue.code))).toEqual(new Set(['unrecognized_keys']));
   const levels = issues.map(issue => issue.path.join('.'));
-  for (const level of ['', 'left', 'left.rhythms.workday', 'left.rhythms.workday.night',
+  for (const level of ['', 'left', 'left.rhythms.workday', 'left.rhythms.workday.night', 'left.rhythms.workday.night.power',
     'left.rhythms.workday.night.alarms.0', 'left.rhythms.workday.smart', 'left.week', 'left.changes.0']) {
     expect(levels).toContain(level);
   }
