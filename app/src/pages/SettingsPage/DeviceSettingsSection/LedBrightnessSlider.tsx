@@ -22,6 +22,8 @@ export default function LedBrightnessSlider() {
   // True from the first change until its save finishes. Pushed status updates
   // arrive every couple of seconds and must not pull the thumb back meanwhile.
   const editing = useRef(false);
+  // Only clear the flag this slider raised; another save may hold it.
+  const holdsUpdating = useRef(false);
   useEffect(() => {
     if (!deviceStatus || editing.current) return;
     const newDeviceStatus = _.cloneDeep(deviceStatus) as DeviceStatus;
@@ -40,7 +42,8 @@ export default function LedBrightnessSlider() {
     if (value === undefined || inFlight.current) return;
     pendingValue.current = undefined;
     inFlight.current = true;
-    setIsUpdating(true);
+    holdsUpdating.current = !useAppStore.getState().isUpdating;
+    if (holdsUpdating.current) setIsUpdating(true);
     postDeviceStatus({
       settings: { ...latest.current.settingsCopy, ledBrightness: value },
     })
@@ -58,7 +61,8 @@ export default function LedBrightnessSlider() {
       })
       .finally(() => {
         inFlight.current = false;
-        setIsUpdating(false);
+        if (holdsUpdating.current) setIsUpdating(false);
+        holdsUpdating.current = false;
         flush.current();
         if (pendingValue.current === undefined && !inFlight.current && timer.current === undefined) {
           editing.current = false;
