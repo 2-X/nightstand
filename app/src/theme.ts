@@ -78,6 +78,17 @@ const buildComponents = (mode: PaletteMode) => {
         },
       },
     },
+    // ButtonBase resets the outline, leaving only a faint focus ripple on
+    // buttons, links, tabs and accordions. Match the outline switches and
+    // fields already show, and drop the ripple so there is one focus style.
+    MuiButtonBase: {
+      styleOverrides: {
+        root: {
+          '&.Mui-focusVisible': { outline: `2px solid ${palette.lamp}`, outlineOffset: '2px' },
+          '&.Mui-focusVisible .MuiTouchRipple-ripplePulsate': { display: 'none' },
+        },
+      },
+    },
     MuiButton: {
       styleOverrides: {
         root: {
@@ -121,10 +132,11 @@ const buildComponents = (mode: PaletteMode) => {
       '&&': { borderRadius: 12, margin: 0 }, '&:before': { display: 'none' },
     } } },
     MuiAccordionSummary: { styleOverrides: { root: { fontFamily: 'inherit', fontSize: 16, fontWeight: 500, minHeight: 44,
-      '&.Mui-expanded': { minHeight: 44 } }, content: { margin: '8px 0', '&.Mui-expanded': { margin: '8px 0' } } } },
+      '&.Mui-expanded': { minHeight: 44 },
+      '&.Mui-focusVisible': { outlineOffset: '-2px' } }, content: { margin: '8px 0', '&.Mui-expanded': { margin: '8px 0' } } } },
     MuiDialogTitle: { styleOverrides: { root: { fontSize: 16, fontWeight: 600 } } },
     MuiListItemText: { styleOverrides: { root: { marginBlock: 2 } } },
-    MuiListItemButton: { styleOverrides: { root: { minHeight: 44,
+    MuiListItemButton: { styleOverrides: { root: { minHeight: 44, '&.Mui-focusVisible': { outlineOffset: '-2px' },
       '&.Mui-selected': { backgroundColor: mode === 'dark' ? palette.bg.selected : undefined } } } },
     MuiFormControlLabel: {
       styleOverrides: {
