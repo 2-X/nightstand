@@ -60,6 +60,12 @@ logger = get_logger()
 # increase in this log line's volume against the rotating log budget.
 _PRESENCE_DEBUG_LOG_INTERVAL_S = max(1, int(os.getenv('PRESENCE_DEBUG_LOG_INTERVAL_S', '60')))
 
+# While the capacitance detector decides presence (apply_presence), a side's
+# vitals state survives an absence up to this long, so a short trip out of
+# bed keeps the heart rate bounds and the last HRV and breathing values.
+# After it, the next occupant starts clean.
+VITALS_RESET_ABSENCE_SECONDS = 600
+
 
 class _PresenceCoordinator:
     """
@@ -309,6 +315,10 @@ class BiometricProcessor:
         self._AMBIGUOUS_LEAK_DIVISOR = AMBIGUOUS_LEAK_DIVISOR
         self._ambiguous_streak = 0
         self.debug_measurements: List[Measurement] = []
+        # Used only by apply_presence: seconds since this side was last
+        # occupied, and the epoch it was last left.
+        self.absent_for = 0
+        self.last_exit_at: Optional[int] = None
 
     def init_tracking(self):
         # Running metrics
@@ -459,6 +469,59 @@ class BiometricProcessor:
             f'{" (exited)" if exited else ""}: median {median:.0f} '
             f'p10 {p10:.0f} p90 {p90:.0f} max {max(trace):.0f}'
         )
+
+    def apply_presence(self, is_present: bool, epoch: int, reset_state: bool = False) -> None:
+        """Take this side's presence from the shared capacitance detector, once a second.
+
+        A short absence keeps the vitals state. It is cleared only after
+        VITALS_RESET_ABSENCE_SECONDS away, or on an entry with reset_state
+        (someone else has taken this side). present_for counts seconds of
+        unbroken presence, so every estimate still waits for a full window of
+        the returning occupant's own signal.
+        """
+        if is_present and not self.present:
+            if reset_state:
+                self.reset()
+            self.present = True
+            self.present_for = 0
+            self.absent_for = 0
+            logger.info(f'Presence entry on {self.side} side{" (new occupant)" if reset_state else ""}')
+            self._update_presence_api(True)
+            self._presence_heartbeat_counter = 0
+        elif not is_present and self.present:
+            self.present = False
+            self.present_for = 0
+            self.absent_for = 0
+            self.last_exit_at = epoch
+            logger.info(f'Presence exit on {self.side} side')
+            self._update_presence_api(False)
+            self._presence_heartbeat_counter = 0
+
+        if self.present:
+            self.present_for += 1
+        else:
+            self.absent_for += 1
+            if self.absent_for == VITALS_RESET_ABSENCE_SECONDS:
+                self.reset()
+
+        self._presence_heartbeat_counter += 1
+        if self._presence_heartbeat_counter >= self._presence_heartbeat_interval:
+            self._presence_heartbeat_counter = 0
+            self._update_presence_api(self.present)
+
+    def end_presence_session(self) -> None:
+        """End any session and clear every per-session value, for a change of presence detector."""
+        if self.present:
+            self._exit_presence()
+        else:
+            self.reset()
+            self.present_for = 0
+        self.not_present_for = 0
+        self.absent_for = 0
+        self.last_exit_at = None
+        self._recent_ranges.clear()
+        self._reentry_streak = 0
+        self._ambiguous_streak = 0
 
     def detect_presence(self, signal1: np.ndarray, signal2: Union[None, np.ndarray] = None):
         # Each side has TWO physical piezos (head + foot of that half of the
