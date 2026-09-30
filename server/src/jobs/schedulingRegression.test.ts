@@ -240,15 +240,37 @@ test('a previous full-day override expires at the next night start', async t => 
 });
 
 
-test('a full-day replacement rebuilt after ringing cannot fire at the next night start', t => {
-  now = Date.parse('2026-09-28T21:01:00Z');
+test('a full-day replacement rebuilt after ringing cannot fire at the next night start', async t => {
   t.mock.method(Date, 'now', () => now);
+  t.mock.method(globalThis, 'setTimeout', () => ({ unref() {} }) as NodeJS.Timeout);
   schedules.data.left.monday.power = { ...night.power, on: '21:00', off: '21:00' };
   settings.data.left.scheduleOverrides.alarm = {
     disabled: false, timeOverride: '21:00', expiresAt: '2026-09-29T21:00:00Z',
   };
   scheduleAlarmOverride(settings.data, 'left');
+  now = Date.parse('2026-09-28T21:00:00Z');
+  await schedule.scheduledJobs['left-alarm-override-21:00'].invoke();
+  assert.equal(commands.length, 1);
+  schedule.cancelJob('left-alarm-override-21:00');
+  now = Date.parse('2026-09-28T21:01:00Z');
+  scheduleAlarmOverride(settings.data, 'left');
   assert.equal(schedule.scheduledJobs['left-alarm-override-21:00'], undefined);
+});
+
+
+test('a full-day override set after its night began still rings when the night ends', async t => {
+  t.mock.method(Date, 'now', () => now);
+  t.mock.method(globalThis, 'setTimeout', () => ({ unref() {} }) as NodeJS.Timeout);
+  now = Date.parse('2026-09-29T15:00:00Z');
+  schedules.data.left.monday.power = { ...night.power, on: '21:00', off: '21:00' };
+  settings.data.left.scheduleOverrides.alarm = {
+    disabled: false, timeOverride: '21:00', expiresAt: '2026-09-29T21:00:00Z',
+  };
+  scheduleAlarmOverride(settings.data, 'left');
+  assert.ok(schedule.scheduledJobs['left-alarm-override-21:00'], 'the override was never scheduled');
+  now = Date.parse('2026-09-29T21:00:00Z');
+  await schedule.scheduledJobs['left-alarm-override-21:00'].invoke();
+  assert.equal(commands.length, 1);
 });
 
 

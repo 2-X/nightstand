@@ -21,6 +21,8 @@ import { trackAlarm } from './alarmActivity.js';
 
 const alarmOccurrences = new Map<string, number>();
 const activeAlarms = new Map<Side, symbol>();
+// Overrides that have already run, so a rebuild cannot ring them again.
+const overrideRuns = new Map<string, number>();
 const OCCURRENCE_RETENTION_MS = 48 * 60 * 60 * 1000;
 // A scheduled alarm may wait out a hardware reconnect, but one that would
 // start more than this after its due time is dropped rather than
@@ -198,8 +200,8 @@ export function scheduleOneOffAlarm(settingsData: Settings, side: Side) {
 
 
 // An override may ring at the very end of its night (the turn-off minute).
-// In a full-day schedule that same time also opened the night, when the
-// override already had its chance, so it must not ring again at the end.
+// In a full-day schedule that same time also opened the night; an override
+// that already ran then must not ring again at the end.
 function openedItsNight(side: Side, occurrence: moment.Moment) {
   for (const offset of [-1, 0]) {
     const date = occurrence.clone().startOf('day').add(offset, 'day');
@@ -222,11 +224,16 @@ export function scheduleAlarmOverride(settingsData: Settings, side: Side) {
   if (!expiresAt.isAfter(now)) return null;
   const next = nextOccurrenceHhMm(settingsData.timeZone, alarmOverride.timeOverride);
   if (next.isAfter(expiresAt)) return null;
-  if (next.isSame(expiresAt) && openedItsNight(side, next)) return null;
+  const overrideKey = `${side}:${alarmOverride.timeOverride}:${alarmOverride.expiresAt}`;
+  for (const [key, ranAt] of overrideRuns) {
+    if (ranAt < Date.now() - OCCURRENCE_RETENTION_MS) overrideRuns.delete(key);
+  }
+  if (next.isSame(expiresAt) && overrideRuns.has(overrideKey) && openedItsNight(side, next)) return null;
   logger.debug(`Alarm override is set! Scheduling alarm for ${next.format()}`);
 
   const jobName = `${side}-alarm-override-${alarmOverride.timeOverride}`;
   schedule.scheduleJob(jobName, next.toDate(), (fireDate?: Date) => trackAlarm(side, jobName, async () => {
+    overrideRuns.set(overrideKey, Date.now());
     // The replacement belongs to a night starting today or yesterday, not
     // necessarily the calendar date on which it rings.
     let sourceAlarm;
