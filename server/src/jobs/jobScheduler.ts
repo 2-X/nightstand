@@ -113,22 +113,25 @@ async function rebuildJobs() {
   }
 }
 
-let setupRunning = false;
+let setupRun: Promise<void> | null = null;
 let setupRequested = false;
 
-// Coalesce changes during a rebuild, then read the latest files in another pass.
-async function setupJobs() {
+// Coalesce changes during a rebuild, then read the latest files in another
+// pass. A caller that awaits gets the pass that saw its change.
+export function setupJobs(): Promise<void> {
   setupRequested = true;
-  if (setupRunning) return;
-  setupRunning = true;
-  try {
-    do {
-      setupRequested = false;
-      await rebuildJobs();
-    } while (setupRequested);
-  } finally {
-    setupRunning = false;
-  }
+  if (setupRun) return setupRun;
+  setupRun = (async () => {
+    try {
+      do {
+        setupRequested = false;
+        await rebuildJobs();
+      } while (setupRequested);
+    } finally {
+      setupRun = null;
+    }
+  })();
+  return setupRun;
 }
 
 let RETRY_COUNT = 0;
@@ -170,7 +173,7 @@ function waitForValidDateAndSetupJobs() {
 chokidar.watch(config.lowDbFolder).on('change', (changedPath) => {
   const fileName = path.basename(changedPath);
   if (!isScheduleDbChange(fileName)) {
-    // Only settings and schedules affect these jobs. Future databases do not.
+    // Only settings, schedules and Rhythms data affect these jobs.
     logger.debug(`Skipping restarting jobs for DB change: ${fileName}`);
     return;
   } else {

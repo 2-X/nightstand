@@ -109,7 +109,7 @@ it('keeps future keys through narrow POST flows and schedules only known days', 
     let reads = 0;
     const originalRead = settingsDB.read.bind(settingsDB);
     const readMock = mock.method(settingsDB, 'read', async () => { reads++; await originalRead(); });
-    for (const name of ['rhythmsDB.json', '.rhythmsDB.json.tmp', 'servicesDB.json', '.servicesDB.json.tmp', 'unrelated.json']) change(name);
+    for (const name of ['servicesDB.json', '.servicesDB.json.tmp', 'unrelated.json']) change(name);
     await new Promise(resolve => setTimeout(resolve, 30));
     assert.equal(reads, 0, 'unrelated writes rebuilt jobs');
     readMock.mock.restore();
