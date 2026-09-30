@@ -74,7 +74,8 @@ export default function SchedulePage() {
   const schemaField = schemaIssue?.path.join('.') === 'power.onTemperature' ? 'Bedtime temperature'
     : schemaIssue?.path[0] === 'temperatures' ? `Temperature at ${schemaIssue.path[1]}`
       : schemaIssue?.path[0] === 'power' ? 'Bedtime and turn-off settings' : 'Alarm settings';
-  const draftLabel = `Unsaved: ${affectedDays.map(day => day.charAt(0).toUpperCase() + day.slice(1)).join(', ')}, ${sideLabel}`;
+  const draftLabel = `Unsaved: ${sideLabel}, ${affectedDays.map(day => day.charAt(0).toUpperCase() + day.slice(1)).join(', ')}`;
+  const shortDay = moment().day(LOWERCASE_DAYS.indexOf(selectedDay)).format('ddd');
   const keepFocusVisible = (target: HTMLElement) => {
     if (target.closest('[data-schedule-draft]')) return;
     const bounds = target.getBoundingClientRect();
@@ -251,8 +252,9 @@ export default function SchedulePage() {
             variant="body2"
             title={ draftLabel }
             aria-label={ draftLabel }
-            sx={ { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }>
-            Unsaved: { titleDay }{ affectedDays.length > 1 ? ` and ${affectedDays.length - 1} more` : '' }, <bdi>{ sideLabel }</bdi>
+            sx={ { flex: 1, minWidth: 0, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+              whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.3 } }>
+            Unsaved: <bdi>{ sideLabel }</bdi>, { shortDay }{ affectedDays.length > 1 ? ` +${affectedDays.length - 1}` : '' }
           </Typography> }
         <Button onClick={ reloadScheduleData } disabled={ useAppStore.getState().isUpdating } sx={ { flexShrink: 0, px: 1 } }>Discard</Button>
         <SaveButton onSave={ handleSave }/>

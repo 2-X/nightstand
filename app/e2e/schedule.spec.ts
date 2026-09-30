@@ -82,3 +82,15 @@ test('level steppers stay bounded and boundary errors focus the affected row', a
   await expect(invalid).toHaveCount(1);
   await expect(invalid).toBeInViewport();
 });
+
+test('the unsaved summary fits at 320 px with side and days intact', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.goto('/schedules');
+  await page.getByLabel('Turn on at', { exact: true }).fill('21:37');
+  const summary = page.getByRole('status').filter({ hasText: 'Unsaved:' });
+  await expect(summary).toBeVisible();
+  await expect(summary).toContainText(/Unsaved: .+, [A-Z][a-z]{2}/);
+  const clipped = await summary.evaluate(element => element.scrollHeight > element.clientHeight
+    || element.scrollWidth > element.clientWidth);
+  expect(clipped).toBe(false);
+});

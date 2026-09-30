@@ -1,5 +1,6 @@
 import { act, fireEvent, screen } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
+import moment from 'moment-timezone';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { useAppStore } from '@state/appStore';
 import { useScheduleStore } from './scheduleStore';
@@ -20,11 +21,40 @@ it('keeps copied days visible when the edited night is disabled', async () => {
   fireEvent.click(screen.getByRole('switch', { name: /^Schedule \w+ night$/ }));
   expect(screen.getByText('Apply settings to other days')).toBeInTheDocument();
   const draft = screen.getByRole('status');
-  expect(draft).toHaveTextContent('Unsaved: Monday and 1 more, Alex');
-  expect(draft).toHaveAttribute('title', 'Unsaved: Monday, Wednesday, Alex');
+  expect(draft).toHaveTextContent('Unsaved: Alex, Mon +1');
+  expect(draft).toHaveAttribute('title', 'Unsaved: Alex, Monday, Wednesday');
+  expect(draft).toHaveAccessibleName('Unsaved: Alex, Monday, Wednesday');
+  expect(draft).toHaveStyle({ whiteSpace: 'normal' });
   fireEvent.click(screen.getByText('Apply settings to other days'));
   fireEvent.click(screen.getByRole('button', { name: 'Wednesday' }));
   expect(useScheduleStore.getState().selectedDays.wednesday).toBe(false);
+});
+
+it('leads the draft summary with the side and one short day', async () => {
+  renderWithProviders(<SchedulePage/>);
+  await screen.findByLabelText('Turn on at');
+  act(() => {
+    useScheduleStore.getState().selectDay(2);
+    useScheduleStore.getState().updateSelectedSchedule({ power: { onTemperature: 84 } });
+  });
+  expect(screen.getByRole('status')).toHaveTextContent('Unsaved: Alex, Tue');
+  expect(screen.getByRole('status')).toHaveAccessibleName('Unsaved: Alex, Tuesday');
+});
+
+it('formats the summary day with the locale short day name', async () => {
+  const original = moment.localeData('en').weekdaysShort();
+  moment.updateLocale('en', { weekdaysShort: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'] });
+  try {
+    renderWithProviders(<SchedulePage/>);
+    await screen.findByLabelText('Turn on at');
+    act(() => {
+      useScheduleStore.getState().selectDay(2);
+      useScheduleStore.getState().updateSelectedSchedule({ power: { onTemperature: 84 } });
+    });
+    expect(screen.getByRole('status')).toHaveTextContent(/Unsaved: Alex, Tu$/);
+  } finally {
+    moment.updateLocale('en', { weekdaysShort: original });
+  }
 });
 
 it('keeps keyboard focus above the draft bar and restores page scroll padding on exit', async () => {
