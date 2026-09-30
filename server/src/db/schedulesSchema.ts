@@ -32,6 +32,10 @@ export const AlarmScheduleSchema = AlarmSchema.extend({
 export const MAX_ALARMS_PER_DAY = 10;
 export const AlarmSchedulesSchema = z.array(AlarmScheduleSchema).max(MAX_ALARMS_PER_DAY);
 
+// Set points each become a job too. Writes are capped at one per half hour's
+// worth; stored days above it still load (see scheduleUpdateSchema.ts).
+export const MAX_TEMPERATURES_PER_DAY = 48;
+
 
 
 export const DailyScheduleSchema = z.object({

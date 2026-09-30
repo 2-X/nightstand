@@ -233,7 +233,7 @@ filter is not authentication or protection from non-browser clients.
 
 ### POST
 
-- Updates the schedules for the system. Up to 10 alarms per side/day.
+- Updates the schedules for the system. Up to 10 alarms and 48 temperature changes per side/day; a day already stored above a limit can be saved at its current size but not grown.
 
 #### Request Body
 
