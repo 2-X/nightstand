@@ -12,6 +12,7 @@ import os
 sys.path.append(os.getcwd())
 from data_types import *
 from get_logger import get_logger
+from presence.detector import piezo_range
 
 logger = get_logger()
 
@@ -221,7 +222,40 @@ def _delete_other_side(decoded_data: dict, side: Side, sensor_count: int):
         raise error
 
 
-def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Side, sensor_count: int):
+def _capture_presence(record: dict):
+    """Both sides' presence inputs, taken before normalization and _delete_other_side drop them."""
+    kind = record.get('type')
+    if kind == 'capSense2':
+        left = record.get('left')
+        right = record.get('right')
+        left_values = left.get('values') if isinstance(left, dict) else None
+        right_values = right.get('values') if isinstance(right, dict) else None
+        if isinstance(left_values, (list, tuple)) and isinstance(right_values, (list, tuple)):
+            return 'cap', left_values, right_values
+    elif kind == 'piezo-dual':
+        return 'piezo', record.get('left1'), record.get('right1')
+    return None
+
+
+def _record_range(raw):
+    if raw is None:
+        return None
+    try:
+        return piezo_range(np.frombuffer(raw, dtype=np.int32))
+    except (TypeError, ValueError):
+        # The dropped side's bytes never reached the loader's decode, so they must not fail the record.
+        return None
+
+
+def _feed_presence(collector, capture, ts: int):
+    kind, left, right = capture
+    if kind == 'cap':
+        collector.add_cap(ts, left, right)
+    else:
+        collector.add_piezo(ts, _record_range(left), _record_range(right))
+
+
+def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Side, sensor_count: int, presence_collector=None):
     # logger.debug(f'Loading cbor data from: {file_path}')
     load_raw_types = list(data.keys())
     checked_timespan = False
@@ -236,6 +270,7 @@ def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Si
                 if data_bytes is None:
                     continue  # empty placeholder record
                 decoded_data = cbor2.loads(data_bytes)
+                presence_capture = _capture_presence(decoded_data) if presence_collector is not None else None
                 # Pod 5 writes 'capSense2' records; normalize them to the
                 # legacy 'capSense' shape before the type filter so Pod 5
                 # capacitance data isn't silently dropped.
@@ -266,6 +301,9 @@ def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Si
                 # A file spans ~15 minutes and can straddle either window edge.
                 if not start_time <= record_time <= end_time:
                     continue
+
+                if presence_capture is not None:
+                    _feed_presence(presence_collector, presence_capture, int(record_time.timestamp()))
 
                 if decoded_data['type'] == 'piezo-dual':
                     load_piezo_row(decoded_data, side)
@@ -303,7 +341,13 @@ def _debug_data(data: dict):
             logger.warning(f'Unexpected type for loading raw file {type(data[key])}')
 
 
-def load_raw_files(folder_path: str, start_time: datetime, end_time: datetime, side: Side, sensor_count=2, raw_data_types: List[RawDataTypes] = None):
+def load_raw_files(folder_path: str, start_time: datetime, end_time: datetime, side: Side, sensor_count=2, raw_data_types: List[RawDataTypes] = None,
+                   presence_collector=None):
+    """Decode the RAW records in [start_time, end_time] for one side.
+
+    presence_collector, when given, also receives both sides' capSense2
+    values and per-record piezo ranges (see presence.replay.FrameCollector).
+    """
     try:
         data = {}
         if raw_data_types is None:
@@ -321,7 +365,7 @@ def load_raw_files(folder_path: str, start_time: datetime, end_time: datetime, s
 
         for file_path in file_paths:
             if os.path.isfile(file_path):
-                _decode_cbor_file(file_path, data, start_time, end_time, side, sensor_count)
+                _decode_cbor_file(file_path, data, start_time, end_time, side, sensor_count, presence_collector)
             else:
                 logger.warning(f'File path deleted before parsed! {file_path}')
 
