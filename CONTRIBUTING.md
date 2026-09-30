@@ -208,24 +208,26 @@ older reader against a copy of the resulting database before release.
 ## Release ritual
 
 1. Bump the version in `server/src/serverInfo.json`.
-2. Add the new release to the top of `releases.json`, following the shape of
+2. Pin the SHA-256 checksum of each new migration in
+   `server/prisma/shipped-migrations.json`.
+3. Add the new release to the top of `releases.json`, following the shape of
    the entry below it: `kind` (always `bundle`), `version`, `date`, and
    `channel` (`beta` unless there is a reason to ship straight to `stable`).
    A bundle also carries its own `upstreamBase`, the release it was built
    from, and its `features` list.
-3. Add a matching entry at the top of `CHANGELOG.md` (the `## [Unreleased]`
+4. Add a matching entry at the top of `CHANGELOG.md` (the `## [Unreleased]`
    notes become `## [<version>] - <date>`), starting with a one-sentence
    summary on its own line before the notes. The app shows it as the
    release's preview.
-4. Rebuild both packages from a clean `npm ci` (`npm run build:pr` in
+5. Rebuild both packages from a clean `npm ci` (`npm run build:pr` in
    `server/` and `app/`), remove any files `scripts/check-bundles.sh` lists,
    and commit the output. The release commit is the last commit before the
    tag.
-5. Commit everything together on `dev`, fast-forward `main` to it
+6. Commit everything together on `dev`, fast-forward `main` to it
    (`git switch main && git merge --ff-only dev`), then tag:
    `git tag -a v<version> -m "..."`.
-6. Push both branches and the tag: `git push origin main dev v<version>`.
-7. Create the GitHub Release: `gh release create v<version> --title
+7. Push both branches and the tag: `git push origin main dev v<version>`.
+8. Create the GitHub Release: `gh release create v<version> --title
    "v<version>" --notes-file <path>`, with that version's `CHANGELOG.md`
    section as the notes. Add `-R LTimothy/nightstand` if `gh` picks the
    wrong default repository (this clone has several other forks configured
