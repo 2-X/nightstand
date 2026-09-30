@@ -1,10 +1,32 @@
 import FeatureToggleRow from './FeaturesSection/FeatureToggleRow';
 import { Box, TextField, Typography } from '@mui/material';
 import { DeepPartial } from 'ts-essentials';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Settings } from '@api/settingsSchema.ts';
 import { Side, useAppStore } from '@state/appStore.tsx';
+
+const MAX_NAME_LENGTH = 20;
+
+// Control and direction-override characters are dropped; the left and right
+// marks stay because names in right-to-left scripts use them.
+function stripUnsafe(value: string) {
+  // eslint-disable-next-line no-control-regex
+  return value.replace(/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/g, '');
+}
+
+// The server counts UTF-16 units. A paste that is too long is trimmed by whole
+// characters, so no emoji or joined sequence is cut in half.
+function trimToLimit(value: string) {
+  if (value.length <= MAX_NAME_LENGTH) return value;
+  let name = '';
+  const { Segmenter } = Intl as unknown as { Segmenter: new () => { segment: (text: string) => Iterable<{ segment: string }> } };
+  for (const { segment } of new Segmenter().segment(value)) {
+    if (name.length + segment.length > MAX_NAME_LENGTH) break;
+    name += segment;
+  }
+  return name;
+}
 
 type AwayModeSwitchProps = {
   side: Side;
@@ -22,17 +44,24 @@ export default function SideSettings({ side, settings, updateSettings }: AwayMod
   // Local state to manage the text field value
   const [sideName, setSideName] = useState(settings?.[side]?.name || '');
   // Update local state when settings change (e.g., from API)
+  // Enter and the blur that follows must not send the same name twice.
+  const lastSubmitted = useRef<string | undefined>(undefined);
   useEffect(() => {
+    lastSubmitted.current = undefined;
     setSideName(savedName ?? side);
   }, [savedName, side]);
 
   const handleBlur = async () => {
     const name = sideName.trim();
     setNameError(!name);
-    if (!name || name === savedName) return;
+    if (savingName || !name || name === savedName || name === lastSubmitted.current) return;
+    lastSubmitted.current = name;
     setSavingName(true);
     try {
       await updateSettings({ [side]: { name } });
+    } catch (error) {
+      lastSubmitted.current = undefined;
+      throw error;
     } finally {
       setSavingName(false);
     }
@@ -45,12 +74,20 @@ export default function SideSettings({ side, settings, updateSettings }: AwayMod
         label="Name"
         placeholder="Enter side name"
         value={ sideName }
-        onChange={ (e) => { setSideName(e.target.value); setNameError(false); } }
+        onChange={ (e) => {
+          const next = stripUnsafe(e.target.value);
+          // Typing past the limit is refused, like maxLength, so the end of the name is never cut mid-edit.
+          if (next.length > MAX_NAME_LENGTH && (e.nativeEvent as InputEvent).inputType === 'insertText') return;
+          setSideName(trimToLimit(next));
+          setNameError(false);
+        } }
         onBlur={ () => void handleBlur() }
-        disabled={ savingName || !settings }
+        disabled={ !settings }
         error={ nameError }
         helperText={ nameError ? 'Enter a side name.' : undefined }
-        inputProps={ { 'aria-label': `${title} side name`, maxLength: 20, style: { unicodeBidi: 'isolate' } } }
+        inputProps={ { 'aria-label': `${title} side name`, onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => {
+          if (event.key === 'Enter') void handleBlur();
+        }, readOnly: savingName, style: { unicodeBidi: 'isolate' } } }
         fullWidth
       />
       <FeatureToggleRow

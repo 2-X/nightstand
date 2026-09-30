@@ -61,3 +61,47 @@ it('allows editing a name while another setting is saving', async () => {
   await user.type(name, 'Jamie');
   expect(name).toHaveValue('Jamie');
 });
+
+it('saves the name when Enter is pressed and keeps focus in the field', async () => {
+  const updateSettings = vi.fn().mockResolvedValue(undefined);
+  const { user } = renderWithProviders(<SideSettings side="left" settings={ getSettings() } updateSettings={ updateSettings }/>);
+  const name = screen.getByRole('textbox', { name: 'Left side name' });
+  await user.clear(name);
+  await user.type(name, 'Jordan{Enter}');
+  await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ left: { name: 'Jordan' } }));
+  expect(name).toHaveFocus();
+  await user.tab();
+  expect(updateSettings).toHaveBeenCalledTimes(1);
+});
+
+it('drops control and override characters but keeps left and right marks', async () => {
+  const { user } = renderWithProviders(<SideSettings side="left" settings={ getSettings() } updateSettings={ vi.fn() }/>);
+  const name = screen.getByRole('textbox', { name: 'Left side name' });
+  await user.clear(name);
+  await user.click(name);
+  await user.paste('Al\u0000ex\u202Eev\u200E\u200F');
+  expect(name).toHaveValue('Alexev\u200E\u200F');
+});
+
+it('refuses extra typing at the limit instead of cutting the end of the name', async () => {
+  const { user } = renderWithProviders(<SideSettings side="left" settings={ getSettings() } updateSettings={ vi.fn() }/>);
+  const name = screen.getByRole('textbox', { name: 'Left side name' });
+  await user.clear(name);
+  await user.type(name, 'abcdefghijklmnopqrst');
+  await user.type(name, 'XY');
+  expect(name).toHaveValue('abcdefghijklmnopqrst');
+  await user.keyboard('{Home}Z');
+  expect(name).toHaveValue('abcdefghijklmnopqrst');
+});
+
+it('trims a long paste by whole characters, never through an emoji', async () => {
+  const { user } = renderWithProviders(<SideSettings side="left" settings={ getSettings() } updateSettings={ vi.fn() }/>);
+  const name = screen.getByRole('textbox', { name: 'Left side name' });
+  await user.clear(name);
+  await user.click(name);
+  await user.paste('a'.repeat(19) + '\u{1F600}');
+  expect(name).toHaveValue('a'.repeat(19));
+  await user.clear(name);
+  await user.paste('a'.repeat(17) + '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}');
+  expect(name).toHaveValue('a'.repeat(17));
+});
