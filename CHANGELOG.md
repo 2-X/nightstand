@@ -6,6 +6,22 @@ is a hard fork; for the history of the projects it descends from, see
 [jmew/free-sleep](https://github.com/jmew/free-sleep) and
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
 
+## [Unreleased]
+
+- Running sleep analysis again for the same night now replaces that night's
+  movement as well as its sleep records, instead of keeping the movement from
+  an earlier run. Repeated runs over the same data agree, and the movement for
+  a moment no longer depends on the time window that was analysed.
+
+- Movement no longer counts moments when a bed sensor reported no reading,
+  which showed up as spikes.
+
+- A sleep analysis whose database write fails now shows as failed on the
+  Status page instead of healthy, and a successful one says how many sleep
+  records and movement rows it wrote. Each run is also recorded with its time
+  window, how much sensor data it read, how long it took and its peak memory
+  use.
+
 ## [3.4.0] - 2026-09-29
 
 A redesigned app, sleep records that start at your real bedtime, and safer updates, rollbacks and reinstalls.
