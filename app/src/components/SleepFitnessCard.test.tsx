@@ -3,15 +3,18 @@ import { screen, within } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
 import SleepFitnessCard from './SleepFitnessCard';
 
-const fixture = vi.hoisted(() => ({ enabled: true, active: true, epochs: true, lowCoverage: false, restingHr: '' }));
+const fixture = vi.hoisted(() => ({
+  enabled: true, active: true, epochs: true, lowCoverage: false, restingHr: '', scoreError: false, score: 86,
+}));
 vi.mock('@api/sleepScore', () => ({
   useSleepScoreEnabled: () => fixture.enabled,
-  useSleepScore: () => ({ data: { active: fixture.active, score: 86, components: {
-    duration: { score: 90, value: fixture.lowCoverage ? '7h 30m in bed' : '6h 30m asleep', available: true },
-    continuity: { score: 84, value: '84%', available: true },
-    hrv: { score: 70, value: '63ms', available: true },
-    restingHr: { score: 80, value: fixture.restingHr, available: !!fixture.restingHr },
-  } } }),
+  useSleepScore: () => fixture.scoreError ? { data: undefined, isError: true, isPending: false } : ({ data: {
+    active: fixture.active, score: fixture.score, components: {
+      duration: { score: 90, value: fixture.lowCoverage ? '7h 30m in bed' : '6h 30m asleep', available: true },
+      continuity: { score: 84, value: '84%', available: true },
+      hrv: { score: 70, value: '63ms', available: true },
+      restingHr: { score: 80, value: fixture.restingHr, available: !!fixture.restingHr },
+    } } }),
 }));
 vi.mock('@api/sleepStages', () => ({ useSleepStages: () => ({ data: {
   active: fixture.active, epochs: fixture.epochs ? [{ stage: 'light' }] : [], lowCoverage: fixture.lowCoverage,
@@ -23,6 +26,7 @@ const record = {
 };
 beforeEach(() => {
   fixture.enabled = true; fixture.active = true; fixture.epochs = true; fixture.lowCoverage = false; fixture.restingHr = '';
+  fixture.scoreError = false; fixture.score = 86;
 });
 it('leads with the estimate and shows all contributors with unavailable data in words', async () => {
   const { user } = renderWithProviders(<SleepFitnessCard sleepRecord={ record } timeZone="UTC"/>);
@@ -74,4 +78,18 @@ it('shows time in bed in the headline and duration when vitals coverage is low',
   expect(screen.queryByText(/asleep/)).not.toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'About the sleep estimate' }));
   expect(within(screen.getByRole('dialog')).getByText('Duration: 7h 30m in bed')).toBeInTheDocument();
+});
+
+it('says the score is unavailable, not that data is missing, when the score request fails', () => {
+  fixture.scoreError = true;
+  renderWithProviders(<SleepFitnessCard sleepRecord={ record } timeZone="UTC"/>);
+  expect(screen.getByText('Score unavailable')).toBeInTheDocument();
+  expect(screen.getAllByText('Unavailable')).toHaveLength(4);
+  expect(screen.queryByText('Not enough data')).not.toBeInTheDocument();
+});
+
+it('rounds a fractional score for display', () => {
+  fixture.score = 83.456;
+  renderWithProviders(<SleepFitnessCard sleepRecord={ record } timeZone="UTC"/>);
+  expect(screen.getByText('83')).toBeInTheDocument();
 });

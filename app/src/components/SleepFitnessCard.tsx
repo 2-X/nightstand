@@ -47,7 +47,7 @@ export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZon
                 sx={ {
                   ...typography.metricLarge, lineHeight: 1.1, color: palette.lamp, fontVariantNumeric: 'tabular-nums',
                 } }>
-                { score.score }
+                { Math.round(score.score!) }
               </Typography>
               <Typography>{ band }</Typography>
             </Box>
@@ -86,7 +86,8 @@ export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZon
                 <Box sx={ { display: 'flex', justifyContent: 'space-between', gap: 1, mb: 0.5 } }>
                   <Typography variant="body2">{ label }</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    { component?.available ? contributorBand(component.score) : 'Not enough data' }
+                    { component?.available ? contributorBand(component.score)
+                      : isError ? 'Unavailable' : isPending ? 'Loading' : 'Not enough data' }
                   </Typography>
                 </Box>
                 { component?.available && <LinearProgress
