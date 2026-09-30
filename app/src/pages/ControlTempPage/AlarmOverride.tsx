@@ -29,6 +29,8 @@ export default function AlarmOverride({ open, setOverrideOpen, alarmTimeLocalOve
   if (time < start.format('HH:mm')) replacement.add(1, 'day');
   const valid = /^([01]\d|2[0-3]):[0-5]\d$/.test(time) && replacement.isAfter(moment())
     && replacement.isBetween(start, moment(nightEnd), undefined, '[]');
+  // The scheduled time can itself sit on the night's edge, so only an edit is judged.
+  const showError = !valid && !!alarmTimeLocalOverride;
   const handleCancel = () => { setAlarmTimeLocalOverride(''); setOverrideOpen(false); };
   const handleSave = async () => {
     if (!settings || !valid) return;
@@ -57,8 +59,9 @@ export default function AlarmOverride({ open, setOverrideOpen, alarmTimeLocalOve
         value={ time }
         onChange={ event => setAlarmTimeLocalOverride(event.target.value) }
         disabled={ isSaving }
-        error={ !valid }
-        helperText={ valid ? replacement.format('ddd, MMM D · h:mm A') : 'Choose a future time before this night ends.' }
+        error={ showError }
+        helperText={ valid ? replacement.format('ddd, MMM D · h:mm A')
+          : showError ? 'Choose a future time before this night ends.' : undefined }
         fullWidth />
       { error && <Alert severity="error" sx={ { mt: 2 } }>{ error }</Alert> }
     </DialogContent>
