@@ -58,3 +58,18 @@ it('keeps one entry per version and prefers local release notes', async () => {
   expect(document.querySelectorAll('[id="release-v9.3.0"]')).toHaveLength(1);
   expect(document.querySelectorAll('[id="release-v9.4.0"]')).toHaveLength(1);
 });
+
+it('previews each release with its summary, or the first full sentence of its notes', async () => {
+  server.use(http.get('*/changelog', () => HttpResponse.json({ entries: [
+    { version: '3.4.0', date: '2026-09-29', body: 'Sleep data loads again and updates are safer.\n\n'
+      + '- Reinstalling no longer loses recent sleep data. The installer deleted\n  the write-ahead file.' },
+    { version: '3.3.0', date: '2026-09-26', body: '- The Status page has a Water tank entry. The pod reports its tank sensor on\n'
+      + '  the same connection.\n\n- Another change.' },
+  ] })));
+  renderWithProviders(<ChangelogPage />, { initialRoute: '/changelog' });
+  const newest = await screen.findByRole('button', { name: /^v3.4.0/ });
+  expect(newest).toHaveTextContent('Sleep data loads again and updates are safer.');
+  expect(newest).not.toHaveTextContent('Reinstalling');
+  const older = screen.getByRole('button', { name: /^v3.3.0/ });
+  expect(older).toHaveTextContent(/The Status page has a Water tank entry\.$/);
+});

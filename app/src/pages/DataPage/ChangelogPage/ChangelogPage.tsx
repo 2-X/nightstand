@@ -12,9 +12,14 @@ import { useSettings } from '@api/settings';
 import { useLatestVersion } from '@api/useLatestVersion.ts';
 import { palette } from '@design/tokens';
 
+// The first sentence of the notes: a release's one-line summary when it has
+// one, otherwise its first note. Note lines wrap mid-sentence, so join them.
 function summary(body: string) {
-  const first = body.split('\n').find(line => line.trim() && !line.startsWith('#')) ?? 'Release notes';
-  return first.replace(/^\s*[-*]\s+/, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[*`]/g, '').slice(0, 180);
+  const first = body.split(/\n\s*\n/).map(block => block.trim()).find(block => block && !block.startsWith('#'));
+  if (!first) return 'Release notes';
+  const text = first.replace(/^[-*]\s+/, '').replace(/\s*\n\s*/g, ' ')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[*`]/g, '');
+  return (text.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? text).slice(0, 180);
 }
 
 export default function ChangelogPage() {

@@ -8,6 +8,8 @@ is a hard fork; for the history of the projects it descends from, see
 
 ## [3.4.0] - 2026-09-29
 
+A redesigned app, sleep records that start at your real bedtime, and safer updates, rollbacks and reinstalls.
+
 - Reinstalling no longer loses recent sleep data. The installer deleted the
   database's write-ahead file after stopping the biometrics service, which
   could drop rows that were saved but not yet merged into the main file. It
@@ -154,6 +156,8 @@ is a hard fork; for the history of the projects it descends from, see
 
 ## [3.3.2] - 2026-09-29
 
+Fixes the firmware getting stuck on some Pod 3 units while internet access is blocked.
+
 - Blocking internet access no longer leaves the firmware stuck on some Pod 3
   units. The firewall now refuses the firmware's cloud connection right away
   instead of silently ignoring it, which left the firmware waiting. Thanks to
@@ -171,6 +175,8 @@ is a hard fork; for the history of the projects it descends from, see
   A fresh install applies it, and so does the next update after this one.
 
 ## [3.3.1] - 2026-09-28
+
+Biometrics setup on Pod 3 units installed from an SD card, safer installs, and updates that download exactly the chosen release.
 
 - Biometrics installs on a Pod 3 that was set up with the SD card method.
   The bundled Python module for reading XML needed a newer system library
@@ -198,6 +204,8 @@ is a hard fork; for the history of the projects it descends from, see
   to the EpicPi/free-sleep fork of free-sleep.
 
 ## [3.3.0] - 2026-09-26
+
+A water tank status, longer and adjustable sensor recording retention, and memory limits for the services.
 
 - The Status page has a Water tank entry. The pod reports its tank sensor on
   every status read, and that reading only ever showed on the temperature page
@@ -227,6 +235,8 @@ is a hard fork; for the history of the projects it descends from, see
 
 ## [3.2.2] - 2026-09-25
 
+Fewer false pump warnings, and a Logs page that opens large log files.
+
 - The pump warning on the Status page no longer goes off when a side is
   switched off. It raised "pump stall suspected" almost every day, because a
   side the schedule has switched off reports its pump at 0 rpm, and nothing else
@@ -241,6 +251,8 @@ is a hard fork; for the history of the projects it descends from, see
   which is all the page shows.
 
 ## [3.2.1] - 2026-09-24
+
+Updates apply pending database changes reliably and say so on the Status page when they cannot.
 
 - When an update cannot apply its database changes, the Status page now says
   so. The database entry names the changes that are missing, and the Versions
@@ -266,6 +278,8 @@ is a hard fork; for the history of the projects it descends from, see
   and one reinstall finishes them.
 
 ## [3.2.0] - 2026-09-24
+
+Steadier presence calibration, a fix for missing database tables after updates, and an optional hardware watchdog.
 
 - Calibration now needs the whole bed to be empty, not only the side being
   calibrated. It picked its quiet stretch by looking at its own side alone, so a
@@ -306,6 +320,8 @@ is a hard fork; for the history of the projects it descends from, see
   do not run this script. It is run once, as root, on the pod.
 
 ## [3.1.0] - 2026-08-07
+
+Sleep page charts show data again, and the Status page shows what presence calibration learned.
 
 - The Status page now shows when the active presence calibration profile was
   created and what it learned from, instead of only whether the last run
@@ -361,6 +377,8 @@ is a hard fork; for the history of the projects it descends from, see
   and shown on the Status page.
 
 ## [3.0.1] - 2026-08-01
+
+Scheduling fixes, including sides that stayed on, alarms on the wrong day, and controls that showed unsaved values.
 
 A bug-fix release. Most of it comes from one root cause: the app and the
 server disagreed about which day a schedule ends on. The app asked whether

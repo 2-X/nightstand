@@ -214,7 +214,9 @@ older reader against a copy of the resulting database before release.
    A bundle also carries its own `upstreamBase`, the release it was built
    from, and its `features` list.
 3. Add a matching entry at the top of `CHANGELOG.md` (the `## [Unreleased]`
-   notes become `## [<version>] - <date>`).
+   notes become `## [<version>] - <date>`), starting with a one-sentence
+   summary on its own line before the notes. The app shows it as the
+   release's preview.
 4. Rebuild both packages from a clean `npm ci` (`npm run build:pr` in
    `server/` and `app/`), remove any files `scripts/check-bundles.sh` lists,
    and commit the output. The release commit is the last commit before the
