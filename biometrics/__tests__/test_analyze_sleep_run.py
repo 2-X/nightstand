@@ -19,7 +19,7 @@ for name in gl.LOGGER_NAMES:
     gl.get_logger(name)
 
 import pandas as pd
-from insufficient_data import InsufficientDataError
+from insufficient_data import InsufficientDataError, NO_SLEEP_MESSAGE
 
 MIGRATION = os.path.join(BIOMETRICS, '..', 'server', 'prisma', 'migrations', '20260930000000_analysis_runs', 'migration.sql')
 START = datetime(2026, 9, 28, 19, 0, tzinfo=timezone.utc)
@@ -81,6 +81,25 @@ class RunAnalysisTest(unittest.TestCase):
         self.module.replace_analysis_results.assert_called_once_with(
             'left', [{'side': 'left'}], [(1790568000, 0.4), (1790568120, 2.5)],
             int(START.timestamp()), int(END.timestamp()))
+
+    def test_a_run_that_finds_no_sleep_says_so(self):
+        frame = pd.DataFrame({'left_out': [1.0, 2.0, 3.0]})
+        self.module.detect_sleep.return_value = (frame, [], frame.copy())
+        self.module.replace_analysis_results.return_value = (0, 2)
+        status, message = self._run()
+        self.assertEqual((status, message), ('healthy', NO_SLEEP_MESSAGE))
+        self.assertEqual(self._runs()[0][2], 'ok')
+
+    def test_a_run_that_finds_sleep_reports_the_summary(self):
+        status, message = self._run()
+        self.assertEqual(status, 'healthy')
+        self.assertNotEqual(message, NO_SLEEP_MESSAGE)
+        self.assertEqual(message, '1 sleep record and 2 movement rows from 3 sensor rows')
+
+    def test_sleep_kept_as_stored_still_reports_the_summary(self):
+        self.module.replace_analysis_results.return_value = (0, 2)
+        status, message = self._run()
+        self.assertEqual((status, message), ('healthy', '0 sleep records and 2 movement rows from 3 sensor rows'))
 
     def test_a_widened_window_is_read_written_and_recorded(self):
         wide = (int(START.timestamp()) - 1800, int(END.timestamp()) + 1800)
