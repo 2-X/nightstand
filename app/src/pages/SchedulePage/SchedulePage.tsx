@@ -29,6 +29,7 @@ import { validateSchedule } from './scheduleValidation';
 import { discardTitle } from './discardTitle';
 import { friendlyTimeZone } from '@lib/timeZone';
 import ErrorBoundary from '@components/ErrorBoundary.tsx';
+import SchedulePauseNotice from '../ControlTempPage/SchedulePauseNotice.tsx';
 
 
 const getAdjustedDayOfWeek = (timeZone?: string): DayOfWeek => {
@@ -222,6 +223,7 @@ export default function SchedulePage() {
       <PageHeader title="Schedule"/>
       <SideControl beforeSideChange={ nextSide => confirmDiscard({ side: nextSide }) }/>
       <DayTabs beforeDayChange={ day => confirmDiscard({ day }) }/>
+      <SchedulePauseNotice framed note="Changes you save apply after the pause." onResumed={ () => focusIfLost(nightHeading) }/>
       <Box sx={ { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 } }>
         <Box sx={ { flex: 1, minWidth: 0 } }>
           <SectionHeading id="schedule-night-heading" tabIndex={ -1 } sx={ { outline: 'none' } }>

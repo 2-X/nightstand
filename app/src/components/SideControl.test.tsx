@@ -4,7 +4,10 @@ import SideControl from './SideControl';
 
 const fixture = vi.hoisted(() => ({
   setSide: vi.fn(), enabled: true,
-  settings: { left: { name: 'Alex', awayMode: false }, right: { name: 'Sam', awayMode: false } },
+  settings: {
+    left: { name: 'Alex', awayMode: false, scheduleOverrides: { pause: { active: false, expiresAt: '' } } },
+    right: { name: 'Sam', awayMode: false, scheduleOverrides: { pause: { active: false, expiresAt: '' } } },
+  },
   presence: { left: { present: true, lastUpdatedAt: '2026-09-28T05:00:00Z', stateChangedAt: '2026-09-28T04:48:00Z' } },
 }));
 vi.mock('@state/appStore.tsx', () => ({ useAppStore: () => ({ side: 'left', setSide: fixture.setSide }) }));
@@ -18,7 +21,10 @@ vi.mock('@api/services.ts', () => ({
 }));
 beforeEach(() => {
   fixture.enabled = true;
+  fixture.settings.left.awayMode = false;
   fixture.settings.right.awayMode = false;
+  fixture.settings.left.scheduleOverrides.pause = { active: false, expiresAt: '' };
+  fixture.settings.right.scheduleOverrides.pause = { active: false, expiresAt: '' };
   fixture.setSide.mockClear();
   vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-28T05:00:00Z'));
 });
@@ -69,4 +75,24 @@ it('uses the selected night captions instead of live bed states when supplied', 
   expect(screen.getByRole('radio', { name: 'Alex. 86, 6h 30m.' })).toBeChecked();
   expect(screen.getByRole('radio', { name: 'Sam. No recording.' })).toBeInTheDocument();
   expect(screen.queryByText('Off')).not.toBeInTheDocument();
+});
+
+it('marks a paused side without touching the partner', () => {
+  fixture.settings.left.scheduleOverrides.pause = { active: true, expiresAt: '' };
+  render(<SideControl compact={ false }/>);
+  expect(screen.getByRole('radio', { name: 'Alex. Paused, off. In bed 12 min.' })).toBeChecked();
+  expect(screen.getByRole('radio', { name: 'Sam. Off.' })).toBeInTheDocument();
+});
+
+it('drops the paused label once the pause has ended', () => {
+  fixture.settings.left.scheduleOverrides.pause = { active: true, expiresAt: '2026-09-28T04:00:00Z' };
+  render(<SideControl compact={ false }/>);
+  expect(screen.getByRole('radio', { name: 'Alex. Off. In bed 12 min.' })).toBeChecked();
+});
+
+it('shows away rather than paused for a side that is both', () => {
+  fixture.settings.left.awayMode = true;
+  fixture.settings.left.scheduleOverrides.pause = { active: true, expiresAt: '' };
+  render(<SideControl compact={ false } mergeAwaySides={ false }/>);
+  expect(screen.getByRole('radio', { name: 'Alex. Away.' })).toBeChecked();
 });

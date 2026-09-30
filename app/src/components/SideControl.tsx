@@ -6,6 +6,7 @@ import { useSettings } from '@api/settings.ts';
 import { useDeviceStatus } from '@api/deviceStatus.ts';
 import { useServices } from '@api/services.ts';
 import { usePresence, PresenceSide } from '@api/presence.ts';
+import { isSchedulePaused } from '@api/schedulePause.ts';
 import { fahrenheitToLevel, formatTemperature } from '@lib/temperatureConversions.ts';
 import { temperatureColor } from '@lib/temperatureColor';
 import { palette } from '@design/tokens';
@@ -55,11 +56,13 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
         const status = deviceStatus?.[key];
         const name = settings?.[key]?.name || (key === 'left' ? 'Left side' : 'Right side');
         const away = settings?.[key]?.awayMode;
+        // Away mode wins over a pause.
+        const paused = !away && !!settings && isSchedulePaused(settings, key, new Date(Date.now()));
         const temperature = status ? formatTemperature(status.targetTemperatureF, format) : '';
         const direction = status && (status.currentTemperatureF > status.targetTemperatureF ? 'cooling'
           : status.currentTemperatureF < status.targetTemperatureF ? 'warming' : 'holding');
-        const state = captions?.[key] ?? (away ? 'Away' : !status ? 'Status unavailable' : !status.isOn ? 'Off'
-          : `${temperature}, ${direction}`);
+        const live = away ? 'Away' : !status ? 'Status unavailable' : !status.isOn ? 'Off' : `${temperature}, ${direction}`;
+        const state = captions?.[key] ?? (paused && status ? `Paused, ${status.isOn ? live : 'off'}` : live);
         const calibration = services?.biometrics?.jobs?.[key === 'left' ? 'calibrateLeft' : 'calibrateRight'];
         const occupancy = !captions && !compact && !away && services?.biometrics?.enabled && calibration?.status === 'healthy'
           ? presenceLabel(presence?.[key]) : undefined;
@@ -91,7 +94,7 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
                 color={ !captions?.[key] && status?.isOn && !away
                   ? temperatureColor(fahrenheitToLevel(status.targetTemperatureF)) : 'text.secondary' }
                 sx={ { lineHeight: compact ? 1.2 : 1.5 } }>
-                { captions?.[key] ?? (compact && status?.isOn && !away ? temperature : state) }
+                { captions?.[key] ?? (compact && status?.isOn && !away ? `${paused ? 'Paused, ' : ''}${temperature}` : state) }
               </Typography>
             </Box>
             { occupancy && <Typography variant="caption" color="text.secondary">{ occupancy }</Typography> }
