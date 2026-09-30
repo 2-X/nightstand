@@ -70,12 +70,11 @@ it('does not count dependent feature switches while biometrics is off', async ()
 });
 
 
-it('credits the source projects and contributors in About', async () => {
+it('links the original free-sleep project in About', async () => {
   renderWithProviders(<SettingsPage/>, { initialRoute: '/settings/about' });
   expect(await screen.findByText(/community project/)).toBeVisible();
-  for (const name of ['throwaway31265/free-sleep', 'jmew/free-sleep', 'bobobo1618', 'LTimothy/nightstand']) {
-    expect(screen.getByRole('link', { name })).toHaveAttribute('href', `https://github.com/${name}`);
-  }
+  expect(screen.getByRole('link', { name: 'free-sleep' })).toHaveAttribute('href', 'https://github.com/throwaway31265/free-sleep');
+  expect(screen.queryByText(/Built on/)).not.toBeInTheDocument();
   expect(screen.queryByText(/Jailbreak/)).not.toBeInTheDocument();
 });
 

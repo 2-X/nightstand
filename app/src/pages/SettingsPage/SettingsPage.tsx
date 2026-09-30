@@ -175,13 +175,9 @@ export default function SettingsPage() {
       { category === 'about' && (
         <Section>
           <Typography sx={ { mb: 2 } }>
-            Nightstand is a community project based on free-sleep. It is not affiliated with Eight Sleep.
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Built on <MuiLink href="https://github.com/throwaway31265/free-sleep">throwaway31265/free-sleep</MuiLink> and{ ' ' }
-            <MuiLink href="https://github.com/jmew/free-sleep">jmew/free-sleep</MuiLink>, with contributions from{ ' ' }
-            <MuiLink href="https://github.com/bobobo1618">bobobo1618</MuiLink>.
-            This fork is <MuiLink href="https://github.com/LTimothy/nightstand">LTimothy/nightstand</MuiLink>.
+            Nightstand is a community project based on{ ' ' }
+            <MuiLink href="https://github.com/throwaway31265/free-sleep">free-sleep</MuiLink>.
+            It is not affiliated with Eight Sleep.
           </Typography>
           { runningVersion && <Typography sx={ { my: 2 } }>Nightstand v{ runningVersion }</Typography> }
           <LicenseModal />
