@@ -1,7 +1,10 @@
 import { z } from 'zod';
-import { DeviceStatusSchema } from './deviceStatusSchema';
+import moment from 'moment-timezone';
+import { DeviceStatusSchema, Version } from './deviceStatusSchema';
 import { SettingsSchema } from './settingsSchema';
-import { AlarmScheduleSchema, DailyScheduleSchema, SideScheduleSchema, SchedulesSchema } from './schedulesSchema';
+import {
+  AlarmScheduleSchema, DailyScheduleSchema, SideScheduleSchema, SchedulesSchema, TemperatureSchema, TimeSchema,
+} from './schedulesSchema';
 import { ServicesSchema } from '../../../server/src/db/servicesSchema';
 import { sleepRecordSchema } from './sleepSchema';
 import { ChangelogResponseSchema } from './changelogSchema';
@@ -13,15 +16,62 @@ import { movementRecordSchema } from '../../../server/src/db/movementRecordSchem
 
 import { responseSchema } from './responseSchema';
 
-const dailyResponse = DailyScheduleSchema.extend({ alarms: z.array(AlarmScheduleSchema).default([]) });
+// Response compatibility: a field the app only displays, or can safely treat
+// as unset, degrades on its own instead of failing the whole read. A field a
+// control acts on or edits (temperatures the bed is set to, the on and off
+// times, alarm times, away mode, override flags, daily priming) stays
+// validated, since a made-up default there would be shown as fact or saved.
+const soft = <T extends z.ZodTypeAny>(schema: T, fallback: z.output<T>) => responseSchema(schema).catch(fallback);
+
+// Steps the app cannot draw or save are dropped, so one bad step cannot lock
+// every day of the schedule. Saving the day rewrites it without them.
+const temperaturesResponse = z.record(z.unknown()).transform(steps => {
+  const kept = Object.entries(steps).filter(([time, temperature]) =>
+    TimeSchema.safeParse(time).success && TemperatureSchema.safeParse(temperature).success);
+  if (kept.length < Object.keys(steps).length) console.warn('Ignored invalid schedule temperature steps');
+  return Object.fromEntries(kept);
+});
+const dailyResponse = DailyScheduleSchema.extend({
+  temperatures: temperaturesResponse, alarms: z.array(AlarmScheduleSchema).default([]),
+});
 const sideResponse = SideScheduleSchema.extend(Object.fromEntries(
   Object.keys(SideScheduleSchema.shape).map(day => [day, dailyResponse]),
 ) as Record<keyof typeof SideScheduleSchema.shape, typeof dailyResponse>);
 
-const sideSettingsResponse = SettingsSchema.shape.left.partial({ oneOffAlarm: true, alarmsEnabled: true });
-const settingsResponse = SettingsSchema.partial({ features: true, rebootDaily: true, rawArchiveRetentionDays: true, updateChannel: true })
-  .extend({ left: sideSettingsResponse, right: sideSettingsResponse,
-    features: SettingsSchema.shape.features.partial().optional() });
+const sideSettingsShape = SettingsSchema.shape.left.shape;
+const overrideShape = sideSettingsShape.scheduleOverrides.shape;
+const sideSettingsResponse = SettingsSchema.shape.left.extend({
+  name: soft(sideSettingsShape.name, ''),
+  alarmsEnabled: soft(sideSettingsShape.alarmsEnabled.optional(), undefined),
+  scheduleOverrides: z.object({
+    temperatureSchedules: z.object({
+      disabled: overrideShape.temperatureSchedules.shape.disabled,
+      expiresAt: soft(overrideShape.temperatureSchedules.shape.expiresAt, ''),
+    }),
+    alarm: z.object({
+      disabled: overrideShape.alarm.shape.disabled,
+      timeOverride: soft(overrideShape.alarm.shape.timeOverride, ''),
+      expiresAt: soft(overrideShape.alarm.shape.expiresAt, ''),
+    }),
+  }),
+  oneOffAlarm: soft(sideSettingsShape.oneOffAlarm.optional(), undefined),
+  taps: soft(sideSettingsShape.taps.optional(), undefined),
+});
+// The zone list is a picker, not a limit: any zone the app can format is kept.
+const timeZoneResponse = z.string().refine(zone => !!moment.tz.zone(zone)).catch('UTC') as unknown as typeof SettingsSchema.shape.timeZone;
+const settingsShape = SettingsSchema.shape;
+const settingsResponse = SettingsSchema.extend({
+  id: soft(settingsShape.id, ''),
+  timeZone: timeZoneResponse,
+  left: sideSettingsResponse,
+  right: sideSettingsResponse,
+  temperatureFormat: soft(settingsShape.temperatureFormat, 'fahrenheit'),
+  rebootDaily: soft(settingsShape.rebootDaily.optional(), undefined),
+  rawArchiveRetentionDays: soft(settingsShape.rawArchiveRetentionDays.optional(), undefined),
+  updateChannel: soft(settingsShape.updateChannel.optional(), undefined),
+  features: soft(z.object(Object.fromEntries(Object.entries(settingsShape.features.shape)
+    .map(([key, flag]) => [key, soft(flag.optional(), undefined)]))).optional(), undefined),
+});
 const servicesResponse = ServicesSchema.extend({ biometrics: ServicesSchema.shape.biometrics.extend({
   jobs: ServicesSchema.shape.biometrics.shape.jobs.partial({ calibrateLeft: true, calibrateRight: true, pumpLeft: true, pumpRight: true }),
 }) });
@@ -44,9 +94,21 @@ const calibrationSide = z.object({
   lastRunStatus: z.string().nullable(),
 });
 
-// HTTP and WebSocket status reads share the same compatibility boundary.
+// HTTP and WebSocket status reads share the same compatibility boundary. The
+// bed controls need the temperatures, power and alarm state; hardware labels,
+// Wi-Fi, water level and sensor readings are display-only.
+const deviceSideResponse = DeviceStatusSchema.shape.left.extend({
+  currentTemperatureLevel: soft(z.number().optional(), undefined),
+  secondsRemaining: soft(z.number().optional(), undefined),
+});
 export const deviceStatusResponseSchema = responseSchema(DeviceStatusSchema.extend({
-  sensorTemps: DeviceStatusSchema.shape.sensorTemps.optional(),
+  left: deviceSideResponse,
+  right: deviceSideResponse,
+  waterLevel: soft(DeviceStatusSchema.shape.waterLevel.optional(), undefined),
+  coverVersion: soft(DeviceStatusSchema.shape.coverVersion, Version.NotFound),
+  hubVersion: soft(DeviceStatusSchema.shape.hubVersion, Version.NotFound),
+  wifiStrength: soft(DeviceStatusSchema.shape.wifiStrength, 0),
+  sensorTemps: soft(DeviceStatusSchema.shape.sensorTemps.optional(), undefined),
 }));
 
 // Validate a list row by row so one malformed record cannot hide the rest.
