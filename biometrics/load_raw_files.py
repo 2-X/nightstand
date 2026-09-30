@@ -302,14 +302,17 @@ def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Si
                 if not start_time <= record_time <= end_time:
                     continue
 
-                if presence_capture is not None:
-                    _feed_presence(presence_collector, presence_capture, int(record_time.timestamp()))
-
                 if decoded_data['type'] == 'piezo-dual':
                     load_piezo_row(decoded_data, side)
 
                 decoded_data['ts'] = record_time.strftime("%Y-%m-%d %H:%M:%S")
                 data[decoded_data['type']].append(decoded_data)
+
+                if presence_capture is not None:
+                    try:
+                        _feed_presence(presence_collector, presence_capture, int(record_time.timestamp()))
+                    except Exception as error:
+                        logger.error(error)
 
             except EOFError:
                 break
@@ -347,6 +350,8 @@ def load_raw_files(folder_path: str, start_time: datetime, end_time: datetime, s
 
     presence_collector, when given, also receives both sides' capSense2
     values and per-record piezo ranges (see presence.replay.FrameCollector).
+    It sees only the types listed in raw_data_types, so a caller that feeds
+    one lists both 'capSense' and 'piezo-dual'.
     """
     try:
         data = {}

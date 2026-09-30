@@ -66,6 +66,19 @@ class PresenceCollectorLoadTest(unittest.TestCase):
             self.assertNotIn('right1', after)
             np.testing.assert_array_equal(before['left1'], after['left1'])
 
+    def test_a_collector_that_raises_costs_no_row(self):
+        class Raising:
+            def add_cap(self, *args):
+                raise ValueError('bad reading')
+
+            def add_piezo(self, *args):
+                raise ValueError('bad reading')
+
+        plain = self._load()
+        collected = self._load(Raising())
+        self.assertEqual(plain['cap_senses'], collected['cap_senses'])
+        self.assertEqual(len(plain['piezo_dual']), len(collected['piezo_dual']))
+
     def test_the_collector_keeps_no_raw_samples(self):
         collector = FrameCollector(BASELINES)
         self._load(collector)
