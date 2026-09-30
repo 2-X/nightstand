@@ -6,6 +6,7 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime
 import os
 import sys
+import time
 
 
 LoggerName = Literal['sleep-analyzer', 'calibrate-sensor', 'free-sleep-stream']
@@ -26,8 +27,9 @@ class BaseLogger(logging.Logger):
 
     def error(self, msg, *args, **kwargs):
         super().error(msg, *args, **kwargs)
-        if isinstance(msg, Exception):
-            super().error(traceback.print_exception(msg), *args, **kwargs)
+        if isinstance(msg, BaseException):
+            trace = ''.join(traceback.format_exception(type(msg), msg, msg.__traceback__))
+            super().error(trace.rstrip())
 
 
 def _get_logger_instance(name: str = None) -> Tuple[BaseLogger, LoggerName]:
@@ -49,6 +51,8 @@ def _get_log_level():
 
 
 class FixedWidthFormatter(logging.Formatter):
+    converter = time.gmtime
+
     def format(self, record):
         # Format timestamp
         timestamp = self.formatTime(record, datefmt='%Y-%m-%d %H:%M:%S')
@@ -98,16 +102,28 @@ def _get_console_handler():
     return handler
 
 
+def data_folder() -> str:
+    """The persistent data folder, with a trailing slash.
+
+    DATA_FOLDER wins when set (the server passes its own to the jobs it
+    starts). Otherwise the Pod path on Linux, or the repo's local mirror
+    under server/free-sleep-data elsewhere.
+    """
+    folder = os.environ.get('DATA_FOLDER')
+    if not folder:
+        if platform.system().lower() == 'linux':
+            folder = '/persistent/free-sleep-data/'
+        else:
+            folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'server', 'free-sleep-data')
+    return os.path.join(os.path.normpath(folder), '')
+
+
 def _build_logger(logger: BaseLogger, name: LoggerName):
     logger.date = datetime.now().strftime('%Y-%m-%d')
     logger.start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     logger.propagate = False
-    if platform.system().lower() == 'linux':
-        logger.env = 'prod'
-        logger.folder_path = '/persistent/free-sleep-data/'
-    else:
-        logger.env = 'local'
-        logger.folder_path = '/Users/ds/free-sleep/server/free-sleep-data/'
+    logger.env = 'prod' if platform.system().lower() == 'linux' else 'local'
+    logger.folder_path = data_folder()
 
     logger.setLevel(logging.DEBUG)
     logger.addHandler(_get_console_handler())
