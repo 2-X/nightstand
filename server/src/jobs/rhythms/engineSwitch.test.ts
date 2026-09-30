@@ -177,6 +177,28 @@ describe('choosing the engine on every rebuild', () => {
     assert.equal(payload.pl, 35, 'the replacement did not find the sleep that ends at its minute');
   });
 
+  it('does not ring a replacement again at the end of a full-day sleep it opened', async () => {
+    writeRhythms(testRhythmsDB(schedulesDB.data, everyNight(testNight('13:00', '13:00', { alarms: ['13:30'] }))));
+    settingsDB.data.left.scheduleOverrides.alarm = { disabled: false, timeOverride: '13:00', expiresAt: '2026-09-29T13:00:00+00:00' };
+    await settingsDB.write();
+    await setupJobs();
+    const name = 'left-alarm-override-13:00';
+    assert.equal(schedule.scheduledJobs[name]?.nextInvocation()?.getTime(), Date.parse('2026-09-28T13:00:00Z'));
+    mock.timers.setTime(Date.parse('2026-09-28T13:00:00Z'));
+    const timer = mock.method(globalThis, 'setTimeout', () => ({ unref() {} }) as unknown as NodeJS.Timeout);
+    try {
+      await schedule.scheduledJobs[name].invoke();
+      mock.timers.setTime(Date.parse('2026-09-28T13:05:00Z'));
+      await setupJobs();
+      assert.equal(schedule.scheduledJobs[name], undefined, 'the replacement would ring again when the sleep it opened ends');
+    } finally {
+      timer.mock.restore();
+      mock.timers.setTime(Date.parse('2026-09-28T12:00:00Z'));
+      settingsDB.data.left.scheduleOverrides.alarm = { disabled: false, timeOverride: '', expiresAt: '' };
+      await settingsDB.write();
+    }
+  });
+
   it('does not lose a switch that lands during a rebuild', async () => {
     writeRhythms(testRhythmsDB(schedulesDB.data, everyNight(testNight('22:12', '06:00'))));
     await setFlag(false);
