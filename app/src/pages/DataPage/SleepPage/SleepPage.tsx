@@ -27,7 +27,7 @@ import type { VitalsMetric } from '@lib/vitalsPoints';
 import { vitalsRecordsToPoints } from '@lib/vitalsPoints';
 import PageContainer from '../../PageContainer';
 import WeekStrip from './WeekStrip';
-import { recordForNight, recordsInWeek } from './sleepContext';
+import { recordForNight, recordsInWeek, withoutFutureRecords } from './sleepContext';
 import MissingNightCard, { MissingNightState } from './MissingNightCard';
 import useAnalyzeSleep from '@lib/useAnalyzeSleep';
 import { SLEEP_ANALYSIS_HOUR, SLEEP_ANALYSIS_MINUTE } from '../../../../../server/src/sleepAnalysisSchedule';
@@ -106,9 +106,7 @@ function SleepContext({ side, timeZone }: { side: Side; timeZone: string }) {
   const [view, setView] = useState('night');
   const { data, isPending, isError, refetch } = useSleepRecords({ side });
   const now = moment.tz(timeZone);
-  // A record that ends after now is a clock error, not a night that happened.
-  const sideRecords = isError ? [] : data?.filter(record => record.side === side
-    && Date.parse(record.left_bed_at) <= now.valueOf()) ?? [];
+  const sideRecords = isError ? [] : withoutFutureRecords(data?.filter(record => record.side === side) ?? [], now.valueOf());
   const latestRecord = [...sideRecords].sort((left, right) => Date.parse(right.left_bed_at) - Date.parse(left.left_bed_at))[0];
   const newest = latestRecord && recordForNight(sideRecords, moment.tz(latestRecord.left_bed_at, timeZone).format('YYYY-MM-DD'), timeZone);
   const { data: services, isError: servicesError, refetch: refetchServices } = useServices();

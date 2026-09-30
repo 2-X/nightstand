@@ -54,6 +54,21 @@ describe('Sleep records dated in the future', () => {
     expect(screen.getByText(/7h in bed on average/)).toBeInTheDocument();
   });
 
+  it('keeps a record that ends within an hour of now, in case the phone clock runs behind the Pod', async () => {
+    const soon = { ...record(3, '2026-09-24', 9), left_bed_at: '2026-09-24T20:40:00Z', entered_bed_at: '2026-09-24T11:40:00Z' };
+    records = [record(1, '2026-09-22', 6), soon];
+    renderWithProviders(<SleepPage />);
+    expect(await screen.findByText('9h')).toBeInTheDocument();
+  });
+
+  it('ignores a record that ends more than an hour ahead', async () => {
+    const later = { ...record(3, '2026-09-24', 6), left_bed_at: '2026-09-24T21:30:00Z', entered_bed_at: '2026-09-24T15:30:00Z' };
+    records = [record(1, '2026-09-23', 8), later];
+    renderWithProviders(<SleepPage />);
+    expect(await screen.findByText('8h')).toBeInTheDocument();
+    expect(screen.queryByText('6h')).not.toBeInTheDocument();
+  });
+
   it('starts empty when every record is in the future', async () => {
     records = [record(1, '2099-06-01', 5)];
     renderWithProviders(<SleepPage />);

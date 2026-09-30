@@ -9,6 +9,13 @@ export const SLEEP_GOAL_MAX_SECONDS = 9 * 3600;
 export const nightMarkHeight = (seconds: number) =>
   Math.round(4 + 36 * Math.min(1, Math.max(0, seconds) / SLEEP_GOAL_MAX_SECONDS));
 
+// A record that ends after now is a clock error, not a night that happened.
+// The hour of grace covers a phone clock that runs slightly behind the Pod.
+const FUTURE_GRACE_MS = 60 * 60 * 1000;
+export function withoutFutureRecords(records: SleepRecord[], nowMs: number) {
+  return records.filter(record => Date.parse(record.left_bed_at) <= nowMs + FUTURE_GRACE_MS);
+}
+
 // Nights belong to their wake date in the Pod timezone. Weekly aggregates
 // filter the full recording history to these boundaries.
 export function recordsInWeek(records: SleepRecord[] | undefined, weekStart: moment.Moment, timeZone: string) {

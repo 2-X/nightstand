@@ -1,9 +1,10 @@
+import moment from 'moment-timezone';
 import SideControl from '@components/SideControl';
 import { useSleepRecords } from '@api/sleep';
 import type { SleepRecord } from '@api/sleepSchema';
 import { useSleepStages } from '@api/sleepStages';
 import { useSleepScore, useSleepScoreEnabled } from '@api/sleepScore';
-import { formatSleepDuration, nightDuration, recordForNight } from './sleepContext';
+import { formatSleepDuration, nightDuration, recordForNight, withoutFutureRecords } from './sleepContext';
 
 function useNightCaption(record: SleepRecord | undefined, enabled: boolean) {
   const query = { side: record?.side === 'right' ? 'right' as const : 'left' as const,
@@ -21,7 +22,7 @@ export default function SleepSideControl({ selectedDate, timeZone }: { selectedD
   const right = useSleepRecords({ side: 'right' });
   const enabled = useSleepScoreEnabled();
   const nightFor = (side: 'left' | 'right', records: SleepRecord[] | undefined) =>
-    recordForNight((records ?? []).filter(record => record.side === side), selectedDate, timeZone);
+    recordForNight(withoutFutureRecords((records ?? []).filter(record => record.side === side), moment().valueOf()), selectedDate, timeZone);
   const leftCaption = useNightCaption(nightFor('left', left.isError ? [] : left.data), enabled);
   const rightCaption = useNightCaption(nightFor('right', right.isError ? [] : right.data), enabled);
   return <SideControl
