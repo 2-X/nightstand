@@ -77,13 +77,16 @@ it('keeps future keys through narrow POST flows and schedules only known days', 
     for (const name of ['settingsDB', 'schedulesDB', 'servicesDB', 'rhythmsDB']) {
       const saved = JSON.parse(readFileSync(path.join(lowdb, `${name}.json`), 'utf8'));
       const input = fixture(name);
-      for (const key of ['futureTop', 'futureSide', 'strayScalar', 'sentryLogging', 'futureService', 'rhythms']) {
+      for (const key of ['futureTop', 'futureSide', 'strayScalar', 'sentryLogging', 'futureService']) {
         if (key in input) assert.deepEqual(saved[key], input[key]);
       }
       if (name === 'settingsDB') {
         assert.deepEqual(saved.left.futureSide, input.left.futureSide);
         assert.deepEqual(saved.left.scheduleOverrides.pause, input.left.scheduleOverrides.pause);
         assert.equal(saved.features.rhythms, true);
+      }
+      if (name === 'rhythmsDB') {
+        assert.equal(readFileSync(path.join(lowdb, 'rhythmsDB.json'), 'utf8'), JSON.stringify(input), 'nothing rewrote rhythmsDB.json');
       }
       if (name === 'schedulesDB') {
         assert.deepEqual(saved.left.futureDay, input.left.futureDay);

@@ -1,9 +1,92 @@
 {
   "version": 1,
-  "rhythms": [
-    {
-      "name": "weekday",
-      "pause": true
+  "legacyFingerprint": "0000000000000000000000000000000000000000000000000000000000000000",
+  "futureTop": {
+    "kept": true
+  },
+  "left": {
+    "rhythms": {
+      "workday": {
+        "id": "workday",
+        "name": "Workday",
+        "night": {
+          "temperatures": {
+            "23:00": 78
+          },
+          "alarm": {
+            "time": "06:30",
+            "enabled": true,
+            "vibrationIntensity": 80,
+            "vibrationPattern": "rise",
+            "duration": 30,
+            "alarmTemperature": 82
+          },
+          "alarms": [
+            {
+              "time": "06:30",
+              "enabled": true,
+              "vibrationIntensity": 80,
+              "vibrationPattern": "rise",
+              "duration": 30,
+              "alarmTemperature": 82,
+              "futureAlarm": true
+            }
+          ],
+          "power": {
+            "on": "22:00",
+            "off": "07:00",
+            "onTemperature": 82,
+            "enabled": true
+          },
+          "futureNight": true
+        },
+        "wake": "06:30",
+        "temperatureMode": "manual",
+        "smart": {
+          "baseLevel": 0,
+          "intensity": "standard",
+          "warmStart": true,
+          "warmUp": true,
+          "upEarly": false,
+          "futureCurve": 1
+        },
+        "futureRhythm": {
+          "kept": true
+        }
+      }
+    },
+    "week": {
+      "sunday": null,
+      "monday": "workday",
+      "tuesday": "workday",
+      "wednesday": "workday",
+      "thursday": "workday",
+      "friday": "workday",
+      "saturday": null,
+      "futureDay": "workday"
+    },
+    "changes": [
+      {
+        "date": "2026-10-12",
+        "rhythmId": null,
+        "futureChange": true
+      }
+    ],
+    "futureSide": {
+      "kept": true
     }
-  ]
+  },
+  "right": {
+    "rhythms": {},
+    "week": {
+      "sunday": null,
+      "monday": null,
+      "tuesday": null,
+      "wednesday": null,
+      "thursday": null,
+      "friday": null,
+      "saturday": null
+    },
+    "changes": []
+  }
 }
