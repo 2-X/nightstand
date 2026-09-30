@@ -2,7 +2,7 @@ import _ from 'lodash';
 import { DeepPartial } from 'ts-essentials';
 import cbor from 'cbor';
 
-import { DeviceStatus, SideStatus } from './deviceStatusSchema.js';
+import { DeviceStatus, MAX_ON_DURATION_SECONDS, SideStatus } from './deviceStatusSchema.js';
 import { executeFunction } from '../../8sleep/deviceApi.js';
 import logger from '../../logger.js';
 import settingsDB from '../../db/settings.js';
@@ -39,7 +39,7 @@ const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideSt
   }
 
   if (isOn !== undefined) {
-    const onDuration = isOn ? '43200' : '0';
+    const onDuration = isOn ? String(MAX_ON_DURATION_SECONDS) : '0';
     if (updateLeft) await executeFunction('LEFT_TEMP_DURATION', onDuration);
     if (updateRight) await executeFunction('RIGHT_TEMP_DURATION', onDuration);
   }

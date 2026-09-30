@@ -1,10 +1,9 @@
 import express, { Request, Response } from 'express';
 import { FrankenCommandTimeoutError, getDeviceStatusCoalesced, isFrankenConnected } from '../../8sleep/frankenServer.js';
-import { DeviceStatus, DeviceStatusSchema } from './deviceStatusSchema.js';
+import { DeviceStatusUpdateSchema } from './deviceStatusSchema.js';
 import logger from '../../logger.js';
 import { updateDeviceStatus } from './updateDeviceStatus.js';
 import { markManualTempChange } from '../../jobs/scheduleOverride.js';
-import { DeepPartial } from 'ts-essentials';
 
 const router = express.Router();
 
@@ -41,8 +40,7 @@ router.get('/deviceStatus', async (req: Request, res: Response) => {
 
 
 router.post('/deviceStatus', async (req: Request, res: Response) => {
-  const { body } = req;
-  const validationResult = DeviceStatusSchema.deepPartial().safeParse(body);
+  const validationResult = DeviceStatusUpdateSchema.safeParse(req.body);
   if (!validationResult.success) {
     logger.error('Invalid device status update:', validationResult.error);
     res.status(400).json({
@@ -52,12 +50,13 @@ router.post('/deviceStatus', async (req: Request, res: Response) => {
     return;
   }
 
-  await updateDeviceStatus(body as DeepPartial<DeviceStatus>);
+  const update = validationResult.data;
+  await updateDeviceStatus(update);
 
   // If the user manually set a target temperature on a side, maybe pause the
   // remaining schedule (see scheduleOverride.markManualTempChange for rules).
   for (const side of ['left', 'right'] as const) {
-    if (body?.[side]?.targetTemperatureF !== undefined) {
+    if (update[side]?.targetTemperatureF !== undefined) {
       await markManualTempChange(side);
     }
   }

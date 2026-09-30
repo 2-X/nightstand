@@ -91,7 +91,7 @@ filter is not authentication or protection from non-browser clients.
 }
 ```
 
-`targetTemperatureF` is clamped to 55-110. Setting a side's `targetTemperatureF` pauses that side's remaining temperature schedule for the rest of the day (see `scheduleOverride`).
+`targetTemperatureF` must be 55-110, `secondsRemaining` a whole number of seconds from 0 to 43200, `settings.ledBrightness` a whole number from 0 to 100, and `settings.v`, `settings.gainLeft` and `settings.gainRight` whole numbers from 0 to 2147483647. Out-of-range values and unknown keys return 400 and nothing is sent to the Pod. Read-only fields from the GET response (such as `currentTemperatureF` or `waterLevel`) are accepted and ignored. Setting a side's `targetTemperatureF` pauses that side's remaining temperature schedule for the rest of the day (see `scheduleOverride`).
 
 ---
 

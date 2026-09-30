@@ -6,8 +6,8 @@ import type { frankenCommands } from '../../8sleep/deviceApi.js';
 
 // This route sends `arg` straight to hardware, bypassing the range checks
 // the validated /api/deviceStatus path enforces (calculateLevelFromF's
-// -100..100 level range, and its 12-hour max "on" duration in
-// updateDeviceStatus.ts). Mirror those bounds here so the raw passthrough
+// -100..100 level range, and the 12-hour max "on" duration in
+// DeviceStatusUpdateSchema). Mirror those bounds here so the raw passthrough
 // can't send hardware something the UI path would reject.
 export const NUMERIC_ARG_BOUNDS: Partial<Record<keyof typeof frankenCommands, [number, number]>> = {
   TEMP_LEVEL_LEFT: [-100, 100],
