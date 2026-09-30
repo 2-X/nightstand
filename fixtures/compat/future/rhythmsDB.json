@@ -36,7 +36,8 @@
             "on": "22:00",
             "off": "07:00",
             "onTemperature": 82,
-            "enabled": true
+            "enabled": true,
+            "futurePower": true
           },
           "futureNight": true
         },

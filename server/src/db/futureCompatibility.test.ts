@@ -85,9 +85,6 @@ it('keeps future keys through narrow POST flows and schedules only known days', 
         assert.deepEqual(saved.left.scheduleOverrides.pause, input.left.scheduleOverrides.pause);
         assert.equal(saved.features.rhythms, true);
       }
-      if (name === 'rhythmsDB') {
-        assert.equal(readFileSync(path.join(lowdb, 'rhythmsDB.json'), 'utf8'), JSON.stringify(input), 'nothing rewrote rhythmsDB.json');
-      }
       if (name === 'schedulesDB') {
         assert.deepEqual(saved.left.futureDay, input.left.futureDay);
         assert.deepEqual(saved.left.monday.futureDay, input.left.monday.futureDay);
@@ -136,6 +133,9 @@ it('keeps future keys through narrow POST flows and schedules only known days', 
     assert.equal(schedule.scheduledJobs['left-monday-21:00-power-on'], undefined);
     assert.equal(status.status.jobs.status, 'healthy');
     scheduleReadMock.mock.restore();
+    assert.equal(
+      readFileSync(path.join(lowdb, 'rhythmsDB.json'), 'utf8'), JSON.stringify(fixture('rhythmsDB')), 'nothing rewrote rhythmsDB.json',
+    );
   } finally {
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
