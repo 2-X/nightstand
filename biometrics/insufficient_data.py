@@ -40,3 +40,11 @@ def outcome_for_exception(error: BaseException) -> "tuple[str, str]":
     if isinstance(error, InsufficientDataError):
         return WAITING_FOR_DATA, str(error) or _DEFAULT_WAITING_MESSAGE
     return 'failed', repr(error)
+
+
+# Health message for an analysis run that found no sleep. The run still
+# succeeded, so the job stays `healthy`; the cause is unknown, so say so.
+NO_SLEEP_MESSAGE = (
+    'The last run found no sleep. The bed may have been empty, '
+    'or presence was not detected.'
+)

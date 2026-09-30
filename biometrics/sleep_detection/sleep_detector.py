@@ -262,7 +262,7 @@ def _set_final_occupancy(merged_df: pd.DataFrame, side: Side, cap_baseline) -> p
     return merged_df
 
 
-def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_path: str) -> pd.DataFrame:
+def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_path: str) -> Tuple[pd.DataFrame, List[SleepRecord]]:
     expected_row_count = int((end_time - start_time).total_seconds())
     logger.info(f"Detecting sleep interval for {side} side | {start_time.isoformat()} -> {end_time.isoformat()} | Expected row count: {expected_row_count:,}")
 
@@ -302,7 +302,7 @@ def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_pa
     else:
         insert_sleep_records(sleep_records)
     # Cleanup
-    return merged_df
+    return merged_df, sleep_records
 
 
 

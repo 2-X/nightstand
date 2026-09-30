@@ -467,7 +467,7 @@ const createServerStatus = (): ServerStatus => ({
     name: 'Alarm schedule',
     status: 'healthy',
     description: 'Alarm scheduling service',
-    message: 'Next alarm ready',
+    message: '',
   },
   database: {
     name: 'Database',
@@ -479,7 +479,7 @@ const createServerStatus = (): ServerStatus => ({
     name: 'Express',
     status: 'healthy',
     description: 'HTTP server',
-    message: 'Running in demo mode',
+    message: '',
   },
   franken: {
     name: 'Franken sock',

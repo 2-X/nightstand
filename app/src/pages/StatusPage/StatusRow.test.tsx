@@ -50,3 +50,17 @@ it('labels the Web server timestamp as its startup time', () => {
   renderWithProviders(<StatusRow job="express" statusInfo={ { ...status, name: 'Express' } } divider={ false }/>);
   expect(screen.getByText(/^Started .+/)).toBeVisible();
 });
+
+describe('status text', () => {
+  it('shows a healthy message instead of the canned meaning, without error styling', () => {
+    const statusInfo = { ...status, message: 'No sleep found between Sep 29 22:00 and Sep 30 09:30.' };
+    renderWithProviders(<StatusRow job="analyzeSleepLeft" statusInfo={ statusInfo } divider={ false }/>);
+    expect(screen.getByText(/No sleep found between/)).toBeVisible();
+    expect(screen.queryByText(/^Error:/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Finished analyzing the most recent sleep session.')).not.toBeInTheDocument();
+  });
+  it('keeps the canned meaning for a healthy status with no message', () => {
+    renderWithProviders(<StatusRow job="analyzeSleepLeft" statusInfo={ status } divider={ false }/>);
+    expect(screen.getByText('Finished analyzing the most recent sleep session.')).toBeVisible();
+  });
+});

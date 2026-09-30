@@ -40,7 +40,7 @@ from sleep_detector import detect_sleep, detect_movement
 from resource_usage import get_memory_usage_unix, get_available_memory_mb
 from biometrics_helpers import validate_datetime_utc
 from service_health import update_health, is_biometrics_enabled
-from insufficient_data import outcome_for_exception
+from insufficient_data import outcome_for_exception, NO_SLEEP_MESSAGE
 
 
 
@@ -105,7 +105,7 @@ if __name__ == "__main__":
             update_health(job_key, 'failed', message)
             raise MemoryError(message)
 
-        merged_df = detect_sleep(
+        merged_df, sleep_records = detect_sleep(
             args.side,
             args.start_time,
             args.end_time,
@@ -113,7 +113,8 @@ if __name__ == "__main__":
         )
 
         detect_movement(args.side, merged_df)
-        update_health(job_key, 'healthy', '')
+        # No sleep found is not an error, but say so instead of a silent green.
+        update_health(job_key, 'healthy', '' if sleep_records else NO_SLEEP_MESSAGE)
 
         logger.debug(f"END Memory Usage: {get_memory_usage_unix():.2f} MB")
         logger.debug(f"END Free Memory: {get_available_memory_mb()} MB")

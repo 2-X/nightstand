@@ -82,15 +82,18 @@ async function rebuildJobs() {
     schedulePrimingRebootAndCalibration(settingsData);
 
     logger.info('Done scheduling jobs!');
-    serverStatus.status.alarmSchedule.status = 'healthy';
     serverStatus.status.jobs.status = failedDays > 0 ? 'failed' : 'healthy';
     serverStatus.status.jobs.message = failedDays > 0
       ? `Skipped ${failedDays} unschedulable day(s), check the schedule data`
       : '';
-    serverStatus.status.primeSchedule.status = 'healthy';
-    serverStatus.status.powerSchedule.status = 'healthy';
-    serverStatus.status.rebootSchedule.status = 'healthy';
-    serverStatus.status.temperatureSchedule.status = 'healthy';
+    // A fresh set of jobs starts clean, so drop any earlier failure text.
+    const scheduleKeys = [
+      'alarmSchedule', 'primeSchedule', 'powerSchedule', 'rebootSchedule', 'temperatureSchedule',
+    ] as const;
+    for (const key of scheduleKeys) {
+      serverStatus.status[key].status = 'healthy';
+      serverStatus.status[key].message = '';
+    }
     emitJobEvent({ jobName: 'setupJobs', status: 'ok' });
     eventBus.emit('service-health', {
       jobs: serverStatus.status.jobs,
