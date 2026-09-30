@@ -44,7 +44,7 @@ export default function ReleaseRow({ release, runningVersion, offerReinstall = f
         { isRunning && <Chip label="Running" size="small" color="success"/> }
         <Box sx={ { flex: 1 } }/>
         { (!isRunning || isReinstall) && (
-          <Button size="small" variant="outlined" onClick={ () => setOpen(true) }>
+          <Button variant="outlined" onClick={ () => setOpen(true) }>
             { isReinstall ? 'Reinstall' : isDowngrade ? 'Install (downgrade)' : 'Install' }
           </Button>
         ) }

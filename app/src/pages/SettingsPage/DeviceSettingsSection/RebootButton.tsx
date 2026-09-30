@@ -26,7 +26,7 @@ export default function RebootButton() {
     }
   };
   return <>
-    <Button variant="outlined" size="small" onClick={ () => { setOpen(true); setError(null); setRequested(false); } }>Restart Pod</Button>
+    <Button variant="outlined" onClick={ () => { setOpen(true); setError(null); setRequested(false); } }>Restart Pod</Button>
     <Dialog open={ open } onClose={ () => !pending && setOpen(false) } aria-labelledby="restart-title" fullWidth maxWidth="xs">
       <DialogTitle id="restart-title">Restart Pod?</DialogTitle>
       <DialogContent>

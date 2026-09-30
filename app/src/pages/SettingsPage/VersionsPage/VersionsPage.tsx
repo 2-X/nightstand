@@ -134,7 +134,7 @@ export default function VersionsPage() {
         { dataUpdatedAt > 0 && <Typography variant="body2" color="text.secondary">
           Checked { moment(dataUpdatedAt).format('h:mm A') }
         </Typography> }
-        <Button disabled={ isFetching } onClick={ () => void checkReleases() }>Check again</Button>
+        <Button disabled={ isFetching } sx={ { ml: -1 } } onClick={ () => void checkReleases() }>Check again</Button>
       </Section> }
       { updateProblem && <Alert severity="warning">
         { updateOutcome === 'failed' ? 'The Pod did not accept the update request. Nothing was installed.'

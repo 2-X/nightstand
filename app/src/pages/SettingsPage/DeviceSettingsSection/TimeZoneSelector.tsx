@@ -40,7 +40,7 @@ export default function TimeZoneSelector({ settings, updateSettings }: TimeZoneS
           {
             // A stored zone outside the list still needs an option, or the select shows blank.
             [...(settings?.timeZone && !TIME_ZONES.includes(settings.timeZone) ? [settings.timeZone] : []), ...TIME_ZONES].map(zone => (
-              <MenuItem value={ zone } key={ zone }>{ friendlyTimeZone(zone) }</MenuItem>
+              <MenuItem value={ zone } key={ zone } sx={ { whiteSpace: 'normal' } }>{ friendlyTimeZone(zone) }</MenuItem>
             ))
           }
         </Select>

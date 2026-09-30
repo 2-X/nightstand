@@ -114,7 +114,7 @@ export default function SettingsPage() {
           <ErrorBoundary componentName="Side settings">
             <Section>
               <SideSettings side="left" settings={ settings } updateSettings={ updateSettings } />
-              <Box sx={ { my: 3, borderTop: 1, borderColor: 'divider' } } />
+              <Box sx={ { my: 2, borderTop: 1, borderColor: 'divider' } } />
               <SideSettings side="right" settings={ settings } updateSettings={ updateSettings } />
               <Typography variant="body2" color="text.secondary" sx={ { mt: 2 } }>
                 Away mode pauses that side's schedules and mirrors the active side. If both sides are away, neither
