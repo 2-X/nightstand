@@ -6,7 +6,7 @@ const router = express.Router();
 
 import settingsDB, { updateSettings } from '../../db/settings.js';
 import { SettingsSchema } from '../../db/settingsSchema.js';
-import { wouldOrphanLevelFormat } from './settingsGuards.js';
+import { pauseRejection, wouldOrphanLevelFormat } from './settingsGuards.js';
 import { syncRawArchiveConf } from '../../jobs/rawArchiveConf.js';
 
 router.get('/settings', async (req: Request, res: Response) => {
@@ -33,9 +33,15 @@ router.post('/settings', async (req: Request, res: Response) => {
   const validatedUpdate = validationResult.data;
   delete validatedUpdate.id;
   let conflict = false;
+  const rejected: { error?: string } = {};
   const saved = await updateSettings(draft => {
     if (wouldOrphanLevelFormat(draft, validatedUpdate)) {
       conflict = true;
+      return false;
+    }
+    const pauseError = pauseRejection(draft, validatedUpdate, new Date());
+    if (pauseError) {
+      rejected.error = pauseError;
       return false;
     }
     _.merge(draft, validatedUpdate);
@@ -48,6 +54,10 @@ router.post('/settings', async (req: Request, res: Response) => {
     res.status(409).json({
       error: 'Set temperature display away from Level before disabling this feature',
     });
+    return;
+  }
+  if (rejected.error) {
+    res.status(400).json({ error: rejected.error });
     return;
   }
   res.status(200).json(saved);

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, beforeEach, after } from 'node:test';
 import { mkdtempSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -139,4 +139,77 @@ describe('POST /settings rawArchiveRetentionDays', () => {
       assert.equal(res.status, 400, `expected 400, got ${res.status}`);
     });
   }
+});
+
+describe('POST /settings schedule pause', () => {
+  const pause = (side: 'left' | 'right', active: boolean, expiresAt: string) =>
+    postSettings({ [side]: { scheduleOverrides: { pause: { active, expiresAt } } } });
+
+  beforeEach(async () => {
+    await postSettings({
+      left: { awayMode: false, scheduleOverrides: { pause: { active: false, expiresAt: '' } } },
+      right: { awayMode: false, scheduleOverrides: { pause: { active: false, expiresAt: '' } } },
+    });
+  });
+
+  it('saves a pause that ends tomorrow', async () => {
+    const expiresAt = moment().add(1, 'day').format();
+    const res = await pause('left', true, expiresAt);
+    assert.equal(res.status, 200, `expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert.deepEqual(res.body.left.scheduleOverrides.pause, { active: true, expiresAt });
+    assert.deepEqual(res.body.right.scheduleOverrides.pause, { active: false, expiresAt: '' });
+  });
+
+  it('saves a pause until resumed', async () => {
+    const res = await pause('left', true, '');
+    assert.equal(res.status, 200, `expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
+  });
+
+  it('rejects an end in the past', async () => {
+    const res = await pause('left', true, moment().subtract(1, 'minute').format());
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error, 'Choose a pause end time in the future');
+  });
+
+  it('rejects an end more than 14 days away', async () => {
+    const res = await pause('left', true, moment().add(15, 'days').format());
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error, 'A pause can end at most 14 days from now');
+  });
+
+  it('rejects an end that is not a datetime', async () => {
+    const res = await pause('left', true, 'tomorrow');
+    assert.equal(res.status, 400);
+  });
+
+  it('rejects pausing a side in away mode and keeps the stored pause', async () => {
+    await postSettings({ left: { awayMode: true } });
+    const res = await pause('left', true, '');
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error, 'Turn off away mode before pausing this side\'s schedule');
+    const after = await postSettings({});
+    assert.deepEqual(after.body.left.scheduleOverrides.pause, { active: false, expiresAt: '' });
+  });
+
+  it('resumes a side even while it is away', async () => {
+    await pause('left', true, '');
+    await postSettings({ left: { awayMode: true } });
+    const res = await pause('left', false, '');
+    assert.equal(res.status, 200, `expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
+  });
+
+  it('accepts a bare active flag and rejects a non-boolean one', async () => {
+    const ok = await postSettings({ left: { scheduleOverrides: { pause: { active: true } } } });
+    assert.equal(ok.status, 200, `expected 200, got ${ok.status}: ${JSON.stringify(ok.body)}`);
+    const bad = await postSettings({ left: { scheduleOverrides: { pause: { active: 'yes' } } } });
+    assert.equal(bad.status, 400);
+  });
+
+  it('does not store unknown keys inside the pause', async () => {
+    const res = await postSettings({
+      left: { scheduleOverrides: { pause: { active: true, expiresAt: '', note: 'x' } } },
+    });
+    assert.equal(res.status, 200, `expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert.deepEqual(res.body.left.scheduleOverrides.pause, { active: true, expiresAt: '' });
+  });
 });

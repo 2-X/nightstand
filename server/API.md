@@ -118,7 +118,8 @@ filter is not authentication or protection from non-browser clients.
     "alarmsEnabled": true,
     "scheduleOverrides": {
       "temperatureSchedules": { "disabled": false, "expiresAt": "" },
-      "alarm": { "disabled": false, "timeOverride": "", "expiresAt": "" }
+      "alarm": { "disabled": false, "timeOverride": "", "expiresAt": "" },
+      "pause": { "active": false, "expiresAt": "" }
     },
     "oneOffAlarm": {
       "enabled": false,
@@ -151,12 +152,13 @@ filter is not authentication or protection from non-browser clients.
 - `updateChannel` is `stable` or `beta` and controls which releases the in-app updater treats as available.
 - `rawArchiveRetentionDays` (1 to 60, default 14) is how long the pod keeps raw sensor recordings. Changing it rewrites `raw-archive.conf` in the data folder, which `scripts/archive-raw.sh` reads.
 - `oneOffAlarm` is a single alarm that fires once at `fireAt` (an ISO 8601 datetime with offset) then disables itself, independent of the recurring per-day schedule in `/api/schedules`.
+- `scheduleOverrides.pause` pauses one side's schedule. While `active`, that side's scheduled power, temperature and recurring alarm jobs are skipped when they come due, and presence auto-off leaves the side alone. The one-time alarm is not affected by the pause, so it rings if the side is on. `expiresAt` is an ISO 8601 datetime with offset, at most 14 days ahead, or `""` to pause until the side is resumed. When `expiresAt` passes, the server clears the pause itself and does not switch the side on or off at that moment.
 - `taps` maps each gesture (`doubleTap`/`tripleTap`/`quadTap`) to a `temperature`, `alarm`, or `base_control` action.
 - `features` are runtime feature flags read by the app.
 
 ### POST
 
-- Updates system settings; send only the fields you want to change. Returns the full updated settings object. Returns `409` if the update would disable `levelTemps` while `temperatureFormat` is still `"level"`.
+- Updates system settings; send only the fields you want to change. Returns the full updated settings object. Returns `409` if the update would disable `levelTemps` while `temperatureFormat` is still `"level"`. Returns `400` if a pause would end in the past or more than 14 days ahead, or is turned on while that side is in away mode.
 
 #### Request Body
 
