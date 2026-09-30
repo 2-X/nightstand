@@ -42,7 +42,9 @@ def side_params(occupied_level: Optional[float], noise: float) -> SideParams:
 
 def piezo_floor(floors) -> float:
     """Median of the recent learned floors, bounded; the default when none are usable."""
-    usable = [float(value) for value in floors or () if _positive(value)]
+    if not isinstance(floors, (list, tuple)):
+        floors = ()
+    usable = [_number(value) for value in floors if _positive(value)]
     if not usable:
         return DEFAULT_PIEZO_FLOOR
     return min(PIEZO_FLOOR_MAX, max(PIEZO_FLOOR_MIN, statistics.median(usable)))
@@ -52,7 +54,7 @@ def baselines_from_calibration(profiles) -> Optional[Dict[str, CapBaseline]]:
     """Both sides' capacitance baselines, or None unless both are calibrated."""
     baselines = {}
     for side in SIDES:
-        baseline = _cap_baseline(side, ((profiles or {}).get(side) or {}).get('cap'))
+        baseline = _cap_baseline(side, _side_entry(profiles, side).get('cap'))
         if baseline is None:
             return None
         baselines[side] = baseline
@@ -67,30 +69,47 @@ def params_from_calibration(profiles) -> Optional[DetectorParams]:
     sides = {}
     floors = {}
     for side in SIDES:
-        entry = profiles.get(side) or {}
+        entry = _side_entry(profiles, side)
         sides[side] = side_params(_occupied_level(entry.get('cap_occupied')), baselines[side].noise)
         floors[side] = piezo_floor(entry.get('piezo_floors'))
     return DetectorParams(left=sides['left'], right=sides['right'], piezo_floor=floors)
 
 
+def _side_entry(profiles, side: str) -> dict:
+    entry = profiles.get(side) if isinstance(profiles, dict) else None
+    return entry if isinstance(entry, dict) else {}
+
+
 def _cap_baseline(side: str, payload) -> Optional[CapBaseline]:
-    try:
-        mean = tuple(float(payload[f'{side}_{channel}']['mean']) for channel in CHANNELS)
-    except (TypeError, KeyError, ValueError):
+    if not isinstance(payload, dict):
         return None
-    if not all(math.isfinite(value) for value in mean):
-        return None
+    mean = []
+    for channel in CHANNELS:
+        entry = payload.get(f'{side}_{channel}')
+        value = _number(entry.get('mean')) if isinstance(entry, dict) else None
+        if value is None:
+            return None
+        mean.append(value)
     noise = payload.get('delta_noise')
-    return CapBaseline(mean=mean, noise=float(noise) if _positive(noise) else 0.0)
+    return CapBaseline(mean=tuple(mean), noise=_number(noise) if _positive(noise) else 0.0)
 
 
 def _occupied_level(payload) -> Optional[float]:
     level = payload.get('level') if isinstance(payload, dict) else None
-    return float(level) if _positive(level) else None
+    return _number(level) if _positive(level) else None
+
+
+def _number(value) -> Optional[float]:
+    """A finite float, or None for anything else, bools and ints too large for a float included."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except OverflowError:
+        return None
+    return number if math.isfinite(number) else None
 
 
 def _positive(value) -> bool:
-    return (
-        isinstance(value, (int, float)) and not isinstance(value, bool)
-        and math.isfinite(value) and value > 0
-    )
+    number = _number(value)
+    return number is not None and number > 0

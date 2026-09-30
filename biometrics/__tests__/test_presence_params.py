@@ -109,6 +109,26 @@ class FromCalibrationTest(unittest.TestCase):
         self.assertEqual(baselines['left'], CapBaseline(mean=(11.3, 9.9, 14.8), noise=0.05))
         self.assertEqual(baselines['right'], CapBaseline(mean=(11.0, 10.0, 15.0), noise=0.0))
 
+    def test_malformed_entries_read_as_missing_rather_than_raising(self):
+        self.assertIsNone(params_from_calibration({'left': 5, 'right': profiles()['right']}))
+        self.assertIsNone(params_from_calibration(['left', 'right']))
+        self.assertIsNone(params_from_calibration(profiles(left={'cap': ['left_out']})))
+        params = params_from_calibration(profiles(left={'piezo_floors': 5}, right={'piezo_floors': 'x'}))
+        self.assertEqual(params.piezo_floor, {'left': DEFAULT_PIEZO_FLOOR, 'right': DEFAULT_PIEZO_FLOOR})
+
+    def test_numbers_too_large_for_a_float_read_as_missing(self):
+        huge = 10 ** 400
+        self.assertIsNone(params_from_calibration(profiles(left={'cap': cap_payload('left', (huge, 10.0, 15.0))})))
+        self.assertEqual(piezo_floor([huge]), DEFAULT_PIEZO_FLOOR)
+        params = params_from_calibration(profiles(
+            left={'cap_occupied': {'level': huge}, 'cap': cap_payload('left', delta_noise=huge), 'piezo_floors': [huge]},
+        ))
+        self.assertEqual(params.left, SideParams(enter_delta=4.0, exit_delta=2.0))
+        self.assertEqual(params.piezo_floor['left'], DEFAULT_PIEZO_FLOOR)
+
+    def test_bool_channel_means_are_not_numbers(self):
+        self.assertIsNone(params_from_calibration(profiles(left={'cap': cap_payload('left', (True, 10.0, 15.0))})))
+
 
 if __name__ == '__main__':
     unittest.main()
