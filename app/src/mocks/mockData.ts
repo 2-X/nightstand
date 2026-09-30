@@ -163,6 +163,8 @@ const createSleepScore = (startTime: string, endTime: string): SleepScore => {
   const continuityScore = 84;
   const hrvScore = 76;
   const restingHrScore = 88;
+  const { totals } = createSleepStages(startTime, endTime);
+  const asleepMinutes = Math.round((totals.light + totals.rem + totals.deep) / 60);
   const score = Math.round(
     durationScore * 0.35 + continuityScore * 0.25 + hrvScore * 0.2 + restingHrScore * 0.2
   );
@@ -173,7 +175,7 @@ const createSleepScore = (startTime: string, endTime: string): SleepScore => {
     components: {
       duration: {
         score: durationScore, weight: 0.35, available: true,
-        value: `${Math.floor(durationHours)}h ${Math.round((durationHours % 1) * 60)}m asleep`,
+        value: `${Math.floor(asleepMinutes / 60)}h ${asleepMinutes % 60}m asleep`,
       },
       continuity: { score: continuityScore, weight: 0.25, value: '1 awakening', available: true },
       hrv: { score: hrvScore, weight: 0.2, value: '63 ms', available: true },
