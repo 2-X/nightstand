@@ -94,6 +94,14 @@ describe('FEATURES_MANIFEST', () => {
     }
   });
 
+  it('points biometrics-v2 at files that exist', () => {
+    const entry = FEATURES_MANIFEST.find((candidate) => candidate.id === 'biometrics-v2');
+    assert.ok(entry, 'biometrics-v2 has no featuresManifest entry');
+    for (const file of [...entry.touchpoints, ...entry.tests]) {
+      assert.ok(existsSync(path.join(repoRoot, file)), `${file} does not exist`);
+    }
+  });
+
   // No bundle releases exist yet, so this passes vacuously today. It is the
   // guard that arms the moment the first one lands.
   it('has every feature id named by a bundle release', () => {
