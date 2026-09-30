@@ -33,7 +33,8 @@ export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZon
   const duration = nightDuration(sleepRecord.sleep_period_seconds, enabled ? stages : undefined);
   const asleep = duration.kind === 'asleep' ? duration.seconds : undefined;
   const hasScore = enabled && score?.active && score.score !== null && Number.isFinite(score?.score);
-  const band = hasScore ? score.score! >= 85 ? 'Good night' : score.score! >= 70 ? 'Fair night' : 'Rough night' : undefined;
+  const shownScore = hasScore ? Math.round(score.score!) : undefined;
+  const band = shownScore === undefined ? undefined : shownScore >= 85 ? 'Good night' : shownScore >= 70 ? 'Fair night' : 'Rough night';
 
   return (
     <GlassCard aria-label="Night summary">
@@ -47,7 +48,7 @@ export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZon
                 sx={ {
                   ...typography.metricLarge, lineHeight: 1.1, color: palette.lamp, fontVariantNumeric: 'tabular-nums',
                 } }>
-                { Math.round(score.score!) }
+                { shownScore }
               </Typography>
               <Typography>{ band }</Typography>
             </Box>

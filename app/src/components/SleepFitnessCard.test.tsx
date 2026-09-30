@@ -93,3 +93,10 @@ it('rounds a fractional score for display', () => {
   renderWithProviders(<SleepFitnessCard sleepRecord={ record } timeZone="UTC"/>);
   expect(screen.getByText('83')).toBeInTheDocument();
 });
+
+it('names the band from the score that is shown', () => {
+  fixture.score = 84.6;
+  renderWithProviders(<SleepFitnessCard sleepRecord={ record } timeZone="UTC"/>);
+  expect(screen.getByText('85')).toBeInTheDocument();
+  expect(screen.getByText('Good night')).toBeInTheDocument();
+});
