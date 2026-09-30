@@ -57,7 +57,7 @@ def is_side_swap(entering: BiometricProcessor, other: BiometricProcessor, epoch:
     """True when this entry looks like the partner moving across, not the side's occupant returning."""
     if other.present or other.last_exit_at is None:
         return False
-    if epoch - other.last_exit_at > SIDE_SWAP_SECONDS:
+    if not 0 <= epoch - other.last_exit_at <= SIDE_SWAP_SECONDS:
         return False
     return entering.last_exit_at is None or other.last_exit_at >= entering.last_exit_at
 

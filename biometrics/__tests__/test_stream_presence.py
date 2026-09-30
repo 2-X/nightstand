@@ -228,6 +228,12 @@ class SideSwapTest(unittest.TestCase):
         self.left.last_exit_at = 100
         self.assertFalse(is_side_swap(self.left, self.right, 2000))
 
+    def test_an_exit_after_the_entry_is_not(self):
+        # The clock stepped back after the partner left.
+        self.left.last_exit_at = 1000
+        self.right.last_exit_at = 2100
+        self.assertFalse(is_side_swap(self.left, self.right, 2000))
+
     def test_partner_still_in_bed_is_not(self):
         self.right.present = True
         self.right.last_exit_at = 1990
