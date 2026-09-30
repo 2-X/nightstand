@@ -71,7 +71,7 @@ export class FrankenMonitor {
                 newTemperatureTargetF = currentTemperatureTarget + (-1 * change);
             }
             logger.debug(`Processing gesture temperature change for ${side}. ${currentTemperatureTarget} -> ${newTemperatureTargetF}`);
-            await updateDeviceStatus({ [side]: { targetTemperatureF: newTemperatureTargetF } });
+            await updateDeviceStatus({ [side]: { targetTemperatureF: newTemperatureTargetF } }, { background: true });
             // Tap counts as a manual change for schedule-override purposes.
             await markManualTempChange(side);
             return;

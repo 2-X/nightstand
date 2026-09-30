@@ -1,9 +1,9 @@
 import express from 'express';
-import moment from 'moment-timezone';
 import { prisma } from '../../db/prisma.js';
 import settingsDB from '../../db/settings.js';
 import servicesDB from '../../db/services.js';
 import { isSleepScoreActive } from './sleepScoreGuard.js';
+import { parseNightQuery } from './metricsQuery.js';
 const router = express.Router();
 // Heuristic sleep-stage classifier with three improvements over the original
 // per-epoch version:
@@ -276,10 +276,11 @@ export async function loadStageSummary(side, startUnix, endUnix) {
     return summarizeStages(vitalsRaw.map(toStageVitals), movements.map((m) => ({ timestamp: m.timestamp, total_movement: m.total_movement })), startUnix, endUnix);
 }
 router.get('/sleep-stages', async (req, res) => {
-    const { side, startTime, endTime } = req.query;
-    if (!side || !startTime || !endTime) {
-        return res.status(400).json({ error: 'side, startTime, endTime required' });
+    const night = parseNightQuery(req.query);
+    if (!night) {
+        return res.status(400).json({ error: 'side, startTime and endTime are required, and the range must be at most 48 hours' });
     }
+    const { side, start: startUnix, end: endUnix } = night;
     await settingsDB.read();
     await servicesDB.read();
     if (!isSleepScoreActive(settingsDB.data, servicesDB.data)) {
@@ -291,8 +292,6 @@ router.get('/sleep-stages', async (req, res) => {
             totalSeconds: 0,
         });
     }
-    const startUnix = moment(startTime).unix();
-    const endUnix = moment(endTime).unix();
     const { epochs, totals, percentages, totalSeconds, lowCoverage } = await loadStageSummary(side, startUnix, endUnix);
     return res.json({ active: true, epochs, totals, percentages, totalSeconds, lowCoverage });
 });

@@ -8,7 +8,18 @@ import config from '../config.js';
 import { wait } from './promises.js';
 import { promiseWithTimeout } from './timeoutPromise.js';
 import metrics from '../metrics/metrics.js';
-const FRANKEN_CONNECTION_TIMEOUT_MS = 25_000;
+import { FrankenSupersededError } from './frankenErrors.js';
+// 0 disables the connection timeout; only a missing or non-numeric value falls back.
+const connectionTimeoutFromEnv = (raw) => {
+    const parsed = raw === undefined || raw.trim() === '' ? Number.NaN : Number(raw);
+    return Number.isNaN(parsed) ? 25_000 : parsed;
+};
+const FRANKEN_CONNECTION_TIMEOUT_MS = connectionTimeoutFromEnv(process.env.FRANKEN_CONNECTION_TIMEOUT_MS);
+// How long a hardware command waits for a missing connection before failing.
+// A request gets a prompt answer; a scheduled job also covers a cold-start
+// handshake. A command that gave up is never sent later.
+const FRANKEN_CONNECT_WAIT_MS = Number(process.env.FRANKEN_CONNECT_WAIT_MS) || 10_000;
+const FRANKEN_BACKGROUND_CONNECT_WAIT_MS = Number(process.env.FRANKEN_BACKGROUND_CONNECT_WAIT_MS) || 120_000;
 const FRANKEN_COMMAND_TIMEOUT_MS = Number(process.env.FRANKEN_COMMAND_TIMEOUT_MS) || 5_000;
 // Hard ceiling on a command's whole trip: queue wait + socket write + read.
 // The per-command timeout above only covers the read, so it never fires for
@@ -18,6 +29,12 @@ class FrankenConnectionTimeoutError extends Error {
     constructor() {
         super('Timed out waiting for Franken hardware connection');
         this.name = 'FrankenConnectionTimeoutError';
+    }
+}
+export class FrankenUnavailableError extends Error {
+    constructor(message = 'Pod hardware is not connected') {
+        super(message);
+        this.name = 'FrankenUnavailableError';
     }
 }
 export class FrankenCommandTimeoutError extends Error {
@@ -33,6 +50,9 @@ let frankenServer;
 let franken;
 // eslint-disable-next-line no-use-before-define
 let connectPromise;
+// Bumped by disconnectFranken so an older connect loop stops instead of
+// racing the next one for the socket.
+let connectGeneration = 0;
 export class Franken {
     socket;
     messageStream;
@@ -226,23 +246,39 @@ export async function connectFranken() {
         return franken;
     if (connectPromise)
         return connectPromise;
+    const generation = connectGeneration;
+    const cancelled = () => new FrankenUnavailableError('Franken connection attempt was cancelled');
     connectPromise = (async () => {
         // eslint-disable-next-line no-constant-condition
         while (true) {
             if (!frankenServer) {
-                frankenServer = await FrankenServer.start(config.dacSockPath);
+                const started = await FrankenServer.start(config.dacSockPath);
+                if (generation !== connectGeneration) {
+                    await started.close();
+                    throw cancelled();
+                }
+                frankenServer = started;
                 logger.debug('FrankenServer started');
             }
             try {
                 logger.debug('Waiting for Franken hardware connection...');
-                franken = await waitForFrankenWithTimeout(frankenServer);
+                const connected = await waitForFrankenWithTimeout(frankenServer);
+                if (generation !== connectGeneration) {
+                    connected.close();
+                    throw cancelled();
+                }
+                franken = connected;
                 logger.info('Franken socket connected');
                 return franken;
             }
             catch (error) {
+                if (generation !== connectGeneration)
+                    throw error;
                 if (error instanceof FrankenConnectionTimeoutError) {
                     logger.warn('Unable to connect to Franken within timeout, restarting socket server...');
                     await shutdownFrankenServer();
+                    if (generation !== connectGeneration)
+                        throw cancelled();
                     continue;
                 }
                 await shutdownFrankenServer();
@@ -250,16 +286,62 @@ export async function connectFranken() {
             }
         }
     })();
+    const attempt = connectPromise;
     try {
-        return await connectPromise;
+        return await attempt;
     }
     finally {
-        connectPromise = undefined;
+        if (connectPromise === attempt)
+            connectPromise = undefined;
     }
 }
 export async function disconnectFranken() {
+    connectGeneration += 1;
     connectPromise = undefined;
     await shutdownFrankenServer();
+}
+// Newest waiting command per setting; older ones drop out when superseded.
+const latestWaiting = new Map();
+function assertBefore(notAfter) {
+    if (notAfter !== undefined && Date.now() > notAfter) {
+        throw new FrankenUnavailableError('Pod hardware became available too late for this command');
+    }
+}
+async function connectFrankenLatest(key, notAfter) {
+    const ticket = Symbol(key);
+    latestWaiting.set(key, ticket);
+    try {
+        const connection = franken ?? await connectFranken();
+        if (latestWaiting.get(key) !== ticket)
+            throw new FrankenSupersededError();
+        assertBefore(notAfter);
+        return connection;
+    }
+    finally {
+        if (latestWaiting.get(key) === ticket)
+            latestWaiting.delete(key);
+    }
+}
+// Connection for a command that changes hardware state. Fails after a bounded
+// wait rather than waiting for the firmware indefinitely; a caller that gave
+// up never gets a connection later, so its command is dropped, not replayed.
+// A latest command is the exception: it waits without a limit, and only the
+// newest command for its key is sent.
+export async function connectFrankenWithin({ background = false, latest = false, notAfter } = {}, key = '') {
+    if (background && latest && key)
+        return connectFrankenLatest(key, notAfter);
+    if (franken) {
+        assertBefore(notAfter);
+        return franken;
+    }
+    let waitMs = background ? FRANKEN_BACKGROUND_CONNECT_WAIT_MS : FRANKEN_CONNECT_WAIT_MS;
+    if (notAfter !== undefined)
+        waitMs = Math.max(0, Math.min(waitMs, notAfter - Date.now()));
+    const connection = await promiseWithTimeout(connectFranken(), waitMs, {
+        onTimeout: () => new FrankenUnavailableError(`Pod hardware is not connected; gave up after ${waitMs / 1_000}s`),
+    });
+    assertBefore(notAfter);
+    return connection;
 }
 export function getFrankenQueueDepth() {
     return franken?.sequentialQueue.depth() ?? 0;

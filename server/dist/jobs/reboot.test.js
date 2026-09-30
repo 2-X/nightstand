@@ -7,7 +7,11 @@ let activeUnit = '';
 let checkFailed = false;
 let dailyJob;
 mock.module('child_process', { namedExports: {
-        exec: (command) => reboots.push(command),
+        // Report each reboot as failed so the reboot latch does not carry between tests.
+        exec: (command, callback) => {
+            reboots.push(command);
+            callback(new Error('not rebooting under test'));
+        },
         execFile: (_command, args, _options, callback) => {
             callback(checkFailed ? new Error('check failed') : null, args.includes(activeUnit) ? 'active' : 'inactive');
         },

@@ -15,13 +15,18 @@ const analyses = [];
 mock.module(new URL('../8sleep/deviceApi.js', import.meta.url).href, {
     namedExports: { executeFunction: async (...args) => { commands.push(args); } },
 });
+let leftOn = true;
 mock.module(new URL('../8sleep/frankenServer.js', import.meta.url).href, {
-    namedExports: { connectFranken: async () => ({
-            getDeviceStatus: async () => ({ left: { isOn: true }, right: { isOn: true } }),
+    namedExports: { connectFrankenWithin: async () => ({
+            getDeviceStatus: async () => ({ left: { isOn: leftOn }, right: { isOn: true } }),
         }) },
 });
 mock.module(new URL('../routes/deviceStatus/updateDeviceStatus.js', import.meta.url).href, {
-    namedExports: { updateDeviceStatus: async (value) => { updates.push(value); } },
+    namedExports: { updateDeviceStatus: async (value) => {
+            updates.push(value);
+            if (value?.left?.isOn !== undefined)
+                leftOn = value.left.isOn;
+        } },
 });
 mock.module(new URL('./analyzeSleep.js', import.meta.url).href, {
     namedExports: { executeAnalyzeSleep: (...args) => { analyses.push(args); } },
@@ -33,8 +38,9 @@ const { default: services } = await import('../db/services.js');
 let { executeAlarm, scheduleAlarm, scheduleAlarmOverride } = await import('./alarmScheduler.js');
 let schedulerInstance = 0;
 const { scheduleTemperatures } = await import('./temperatureScheduler.js');
-const { scheduleSleepAnalysis } = await import('./powerScheduler.js');
+const { scheduleSleepAnalysis, schedulePowerOn, schedulePowerOff, resetPowerOnTimes } = await import('./powerScheduler.js');
 const { markManualTempChange } = await import('./scheduleOverride.js');
+const { resetAlarmActivity, abortAlarmWaits } = await import('./alarmActivity.js');
 const alarm = {
     time: '07:00', enabled: true, vibrationIntensity: 100,
     duration: 10, vibrationPattern: 'rise', alarmTemperature: 80,
@@ -51,6 +57,7 @@ beforeEach(async () => {
     moment.now = () => now;
     commands.length = 0;
     updates.length = 0;
+    leftOn = true;
     analyses.length = 0;
     settings.data.timeZone = 'UTC';
     settings.data.left.awayMode = false;
@@ -71,6 +78,8 @@ beforeEach(async () => {
 });
 afterEach(() => {
     Object.keys(schedule.scheduledJobs).forEach(name => schedule.cancelJob(name));
+    resetAlarmActivity();
+    resetPowerOnTimes();
     moment.now = originalMomentNow;
 });
 after(() => rmSync(folder, { recursive: true, force: true }));
@@ -215,15 +224,35 @@ test('a previous full-day override expires at the next night start', async (t) =
     await schedule.scheduledJobs['left-monday-07:00-0-alarm'].invoke();
     assert.equal(commands.length, 1);
 });
-test('a full-day replacement rebuilt after ringing cannot fire at the next night start', t => {
-    now = Date.parse('2026-09-28T21:01:00Z');
+test('a full-day replacement rebuilt after ringing cannot fire at the next night start', async (t) => {
     t.mock.method(Date, 'now', () => now);
+    t.mock.method(globalThis, 'setTimeout', () => ({ unref() { } }));
     schedules.data.left.monday.power = { ...night.power, on: '21:00', off: '21:00' };
     settings.data.left.scheduleOverrides.alarm = {
         disabled: false, timeOverride: '21:00', expiresAt: '2026-09-29T21:00:00Z',
     };
     scheduleAlarmOverride(settings.data, 'left');
+    now = Date.parse('2026-09-28T21:00:00Z');
+    await schedule.scheduledJobs['left-alarm-override-21:00'].invoke();
+    assert.equal(commands.length, 1);
+    schedule.cancelJob('left-alarm-override-21:00');
+    now = Date.parse('2026-09-28T21:01:00Z');
+    scheduleAlarmOverride(settings.data, 'left');
     assert.equal(schedule.scheduledJobs['left-alarm-override-21:00'], undefined);
+});
+test('a full-day override set after its night began still rings when the night ends', async (t) => {
+    t.mock.method(Date, 'now', () => now);
+    t.mock.method(globalThis, 'setTimeout', () => ({ unref() { } }));
+    now = Date.parse('2026-09-29T15:00:00Z');
+    schedules.data.left.monday.power = { ...night.power, on: '21:00', off: '21:00' };
+    settings.data.left.scheduleOverrides.alarm = {
+        disabled: false, timeOverride: '21:00', expiresAt: '2026-09-29T21:00:00Z',
+    };
+    scheduleAlarmOverride(settings.data, 'left');
+    assert.ok(schedule.scheduledJobs['left-alarm-override-21:00'], 'the override was never scheduled');
+    now = Date.parse('2026-09-29T21:00:00Z');
+    await schedule.scheduledJobs['left-alarm-override-21:00'].invoke();
+    assert.equal(commands.length, 1);
 });
 test('toggling an earlier alarm cannot replay a later alarm after a rebuild', async (t) => {
     t.mock.method(Date, 'now', () => now);
@@ -243,5 +272,191 @@ test('concurrent callbacks for one occurrence issue only one device command', as
         executeAlarm({ side: 'left', ...alarm }, 'same-occurrence'),
     ]);
     assert.equal(commands.length, 1);
+});
+test('an override at exactly the turn-off minute rings once', async (t) => {
+    t.mock.method(Date, 'now', () => now);
+    t.mock.method(globalThis, 'setTimeout', () => ({ unref() { } }));
+    const wakeNight = { ...night, power: { ...night.power, off: '07:00' }, alarms: [{ ...alarm, time: '06:30' }] };
+    schedules.data.left.monday = structuredClone(wakeNight);
+    await schedules.write();
+    now = Date.parse('2026-09-28T22:00:00Z');
+    settings.data.left.scheduleOverrides.alarm = {
+        disabled: false, timeOverride: '07:00', expiresAt: '2026-09-29T07:00:00Z',
+    };
+    await settings.write();
+    scheduleAlarmOverride(settings.data, 'left');
+    scheduleAlarm(settings.data, 'left', 'monday', wakeNight);
+    assert.ok(schedule.scheduledJobs['left-alarm-override-07:00'], 'the override at the turn-off minute was not scheduled');
+    now = Date.parse('2026-09-29T06:30:00Z');
+    await schedule.scheduledJobs['left-monday-06:30-0-alarm'].invoke();
+    assert.equal(commands.length, 0, 'the replaced alarm must stay silent');
+    now = Date.parse('2026-09-29T07:00:00Z');
+    await schedule.scheduledJobs['left-alarm-override-07:00'].invoke();
+    assert.equal(commands.length, 1);
+});
+// Runs a job as node-schedule does, passing the time it was due.
+const invokeAt = (name, fireDate) => schedule.scheduledJobs[name].invoke(fireDate);
+const nextRun = (name) => new Date(schedule.scheduledJobs[name].nextInvocation()?.getTime() ?? 0);
+test('an alarm at the power-off minute rings before the side turns off', async (t) => {
+    const timers = [];
+    t.mock.method(Date, 'now', () => now);
+    t.mock.method(globalThis, 'setTimeout', (callback, ms) => {
+        timers.push({ callback, ms });
+        return { unref() { } };
+    });
+    t.mock.method(globalThis, 'clearTimeout', () => { });
+    const wakeNight = { ...night, power: { ...night.power, off: '07:00' } };
+    schedules.data.left.monday = structuredClone(wakeNight);
+    await schedules.write();
+    schedulePowerOff(settings.data, 'left', 'monday', wakeNight.power);
+    scheduleAlarm(settings.data, 'left', 'monday', wakeNight);
+    const fireDate = nextRun('left-monday-07:00-0-alarm');
+    now = Date.parse('2026-09-29T07:00:00Z');
+    // node-schedule runs the power-off first because it was registered first.
+    const powerOff = invokeAt('left-monday-07:00-power-off', fireDate);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(updates, [], 'the side turned off before the alarm could ring');
+    await invokeAt('left-monday-07:00-0-alarm', fireDate);
+    assert.equal(commands.length, 1, 'the alarm did not reach the device');
+    for (let turn = 0; turn < 5 && updates.length === 0; turn++) {
+        await new Promise(resolve => setImmediate(resolve));
+        timers.filter(timer => timer.ms === alarm.duration * 1_000).forEach(timer => timer.callback());
+    }
+    await powerOff;
+    assert.deepEqual(updates, [{ left: { isOn: false } }]);
+});
+test('a power-off with no alarm in its minute turns the side off at once', async () => {
+    const wakeNight = { ...night, power: { ...night.power, off: '07:00' }, alarms: [{ ...alarm, time: '06:30' }] };
+    schedulePowerOff(settings.data, 'left', 'monday', wakeNight.power);
+    scheduleAlarm(settings.data, 'left', 'monday', wakeNight);
+    await invokeAt('left-monday-07:00-power-off', nextRun('left-monday-07:00-power-off'));
+    assert.deepEqual(updates, [{ left: { isOn: false } }]);
+});
+test('a power-off that runs after its minute\'s alarm waits for the alarm to end', async (t) => {
+    const timers = [];
+    t.mock.method(Date, 'now', () => now);
+    t.mock.method(globalThis, 'setTimeout', (callback, ms) => {
+        timers.push({ callback, ms });
+        return { unref() { } };
+    });
+    t.mock.method(globalThis, 'clearTimeout', () => { });
+    const wakeNight = { ...night, power: { ...night.power, off: '07:00' } };
+    schedulePowerOff(settings.data, 'left', 'monday', wakeNight.power);
+    scheduleAlarm(settings.data, 'left', 'monday', wakeNight);
+    const fireDate = nextRun('left-monday-07:00-0-alarm');
+    now = Date.parse('2026-09-29T07:00:00Z');
+    await invokeAt('left-monday-07:00-0-alarm', fireDate);
+    // As node-schedule does once a run starts, move the alarm to next week.
+    schedule.scheduledJobs['left-monday-07:00-0-alarm'].cancelNext(true);
+    const powerOff = invokeAt('left-monday-07:00-power-off', fireDate);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(commands.length, 1);
+    assert.deepEqual(updates, [], 'the side turned off while the alarm was ringing');
+    timers.filter(timer => timer.ms === alarm.duration * 1_000).forEach(timer => timer.callback());
+    await powerOff;
+    assert.deepEqual(updates, [{ left: { isOn: false } }]);
+});
+// Monday's night runs from 07:00 to 07:00, so Tuesday 07:00 both ends it and
+// starts Tuesday's night with an alarm.
+const backToBack = { ...night, power: { ...night.power, on: '07:00', off: '07:00' }, alarms: [alarm] };
+function scheduleBackToBack() {
+    schedules.data.left.tuesday = structuredClone(backToBack);
+    schedulePowerOn(settings.data, 'left', 'tuesday', backToBack.power);
+    schedulePowerOff(settings.data, 'left', 'monday', backToBack.power);
+    scheduleAlarm(settings.data, 'left', 'tuesday', backToBack);
+    return nextRun('left-tuesday-07:00-power-on');
+}
+test('the power-off ending one night does not wait for the alarm of the night starting with it', async (t) => {
+    t.mock.method(Date, 'now', () => now);
+    t.mock.method(globalThis, 'setTimeout', () => ({ unref() { } }));
+    const fireDate = scheduleBackToBack();
+    now = fireDate.getTime();
+    await invokeAt('left-monday-07:00-power-off', fireDate);
+    assert.deepEqual(updates, [{ left: { isOn: false } }]);
+    await invokeAt('left-tuesday-07:00-power-on', fireDate);
+    await invokeAt('left-tuesday-07:00-0-alarm', fireDate);
+    assert.equal(leftOn, true, 'the new session ended up off');
+    assert.equal(commands.length, 1, 'the new night\'s alarm did not ring');
+});
+test('a power-off that runs after the next session started leaves it on', async (t) => {
+    t.mock.method(Date, 'now', () => now);
+    t.mock.method(globalThis, 'setTimeout', () => ({ unref() { } }));
+    const fireDate = scheduleBackToBack();
+    now = fireDate.getTime();
+    await invokeAt('left-tuesday-07:00-power-on', fireDate);
+    await invokeAt('left-monday-07:00-power-off', fireDate);
+    assert.equal(leftOn, true);
+    assert.ok(updates.every(update => update.left.isOn), JSON.stringify(updates));
+});
+test('a power-off that waited for its alarm still leaves a session that started meanwhile on', async (t) => {
+    const timers = [];
+    t.mock.method(Date, 'now', () => now);
+    t.mock.method(globalThis, 'setTimeout', (callback, ms) => {
+        timers.push({ callback, ms });
+        return { unref() { } };
+    });
+    t.mock.method(globalThis, 'clearTimeout', () => { });
+    const wakeNight = { ...night, power: { ...night.power, off: '07:00' } };
+    const tuesday = { ...night.power, on: '07:00', off: '21:00' };
+    schedulePowerOff(settings.data, 'left', 'monday', wakeNight.power);
+    scheduleAlarm(settings.data, 'left', 'monday', wakeNight);
+    schedulePowerOn(settings.data, 'left', 'tuesday', tuesday);
+    const fireDate = nextRun('left-monday-07:00-0-alarm');
+    now = fireDate.getTime();
+    const powerOff = invokeAt('left-monday-07:00-power-off', fireDate);
+    await new Promise(resolve => setImmediate(resolve));
+    await invokeAt('left-monday-07:00-0-alarm', fireDate);
+    await invokeAt('left-tuesday-07:00-power-on', fireDate);
+    for (let turn = 0; turn < 5; turn++) {
+        await new Promise(resolve => setImmediate(resolve));
+        timers.filter(timer => timer.ms === alarm.duration * 1_000).forEach(timer => timer.callback());
+    }
+    await powerOff;
+    assert.equal(commands.length, 1);
+    assert.equal(leftOn, true);
+    assert.ok(updates.every(update => update.left.isOn), JSON.stringify(updates));
+});
+test('shutdown ends a power-off\'s wait for a ringing alarm so the side turns off at once', async (t) => {
+    t.mock.method(Date, 'now', () => now);
+    t.mock.method(globalThis, 'setTimeout', () => ({ unref() { } }));
+    t.mock.method(globalThis, 'clearTimeout', () => { });
+    const wakeNight = { ...night, power: { ...night.power, off: '07:00' } };
+    schedulePowerOff(settings.data, 'left', 'monday', wakeNight.power);
+    scheduleAlarm(settings.data, 'left', 'monday', wakeNight);
+    const fireDate = nextRun('left-monday-07:00-0-alarm');
+    now = fireDate.getTime();
+    const powerOff = invokeAt('left-monday-07:00-power-off', fireDate);
+    await invokeAt('left-monday-07:00-0-alarm', fireDate);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(updates, [], 'the side turned off while the alarm was ringing');
+    abortAlarmWaits();
+    await powerOff;
+    assert.deepEqual(updates, [{ left: { isOn: false } }]);
+});
+test('shutdown ends a power-off\'s wait for an alarm that has not started', async (t) => {
+    t.mock.method(globalThis, 'setTimeout', () => ({ unref() { } }));
+    t.mock.method(globalThis, 'clearTimeout', () => { });
+    const wakeNight = { ...night, power: { ...night.power, off: '07:00' } };
+    schedulePowerOff(settings.data, 'left', 'monday', wakeNight.power);
+    scheduleAlarm(settings.data, 'left', 'monday', wakeNight);
+    const powerOff = invokeAt('left-monday-07:00-power-off', nextRun('left-monday-07:00-0-alarm'));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(updates, []);
+    abortAlarmWaits();
+    await powerOff;
+    assert.deepEqual(updates, [{ left: { isOn: false } }]);
+});
+test('a scheduled alarm counts its lateness from when it was due', async (t) => {
+    t.mock.method(Date, 'now', () => now);
+    t.mock.method(globalThis, 'setTimeout', () => ({ unref() { } }));
+    scheduleAlarm(settings.data, 'left', 'monday', night);
+    const due = Date.parse('2026-09-29T07:00:00Z');
+    now = due + 4 * 60_000;
+    await invokeAt('left-monday-07:00-0-alarm', new Date(due));
+    assert.equal(commands.length, 0, 'an alarm four minutes past its time rang');
+    now = due + 2 * 60_000;
+    await invokeAt('left-monday-07:00-0-alarm', new Date(due));
+    assert.equal(commands.length, 1);
+    assert.equal(commands[0][2].notAfter, due + 3 * 60_000);
 });
 //# sourceMappingURL=schedulingRegression.test.js.map

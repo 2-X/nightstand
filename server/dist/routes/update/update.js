@@ -5,7 +5,7 @@ import { triggerUpdateService } from '../../jobs/update.js';
 import { triggerRollbackService } from '../../jobs/rollback.js';
 import { triggerRevertToStockService } from '../../jobs/revertToStock.js';
 import { UpdateRequestSchema } from './updateSchema.js';
-import { PrivilegedCommandError } from '../../jobs/privilegedCommand.js';
+import { PrivilegedCommandError, privilegedErrorStatus } from '../../jobs/privilegedCommand.js';
 const router = express.Router();
 // The updater keeps the previous install here after every swap (see
 // scripts/update.sh): reading its serverInfo.json is how we know whether an
@@ -40,7 +40,9 @@ router.post('/', async (req, res) => {
     }
     catch (error) {
         logger.error('Failed to start update', error);
-        res.status(500).json({ message: error instanceof PrivilegedCommandError ? error.message : 'Unable to start update' });
+        res.status(privilegedErrorStatus(error)).json({
+            message: error instanceof PrivilegedCommandError ? error.message : 'Unable to start update',
+        });
     }
 });
 router.get('/rollback-info', async (_req, res) => {
@@ -64,7 +66,9 @@ router.post('/rollback', async (_req, res) => {
     }
     catch (error) {
         logger.error('Failed to start rollback', error);
-        res.status(500).json({ message: error instanceof PrivilegedCommandError ? error.message : 'Unable to start rollback' });
+        res.status(privilegedErrorStatus(error)).json({
+            message: error instanceof PrivilegedCommandError ? error.message : 'Unable to start rollback',
+        });
     }
 });
 // Switch the app to upstream free-sleep. System configuration and backups can remain.
@@ -77,7 +81,7 @@ router.post('/revert-to-stock', async (_req, res) => {
     }
     catch (error) {
         logger.error('Could not start switching to upstream free-sleep.', error);
-        res.status(500).json({
+        res.status(privilegedErrorStatus(error)).json({
             message: error instanceof PrivilegedCommandError ? error.message : 'Could not start switching to upstream free-sleep.',
         });
     }

@@ -27,7 +27,7 @@ const scheduleAdjustment = (timeZone, side, day, time, temperature, powerOn) => 
                 [side]: {
                     targetTemperatureF: temperature,
                 }
-            });
+            }, { background: true });
             serverStatus.status.temperatureSchedule.status = 'healthy';
             serverStatus.status.temperatureSchedule.message = '';
         }

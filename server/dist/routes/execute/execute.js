@@ -1,20 +1,21 @@
 import express from 'express';
 import { frankenCommands, executeFunction } from '../../8sleep/deviceApi.js';
-import { isArgWithinBounds } from './executeHelpers.js';
+import { normalizeExecuteArg } from './executeHelpers.js';
 const router = express.Router();
 router.post('/execute', async (req, res) => {
-    const { command, arg } = req.body;
+    const { command, arg } = (req.body ?? {});
     // Basic validation
-    if (!Object.keys(frankenCommands).includes(command)) {
-        res.status(400).send('Invalid command');
+    if (typeof command !== 'string' || !Object.hasOwn(frankenCommands, command)) {
+        res.status(400).json({ message: 'Invalid command' });
         return;
     }
-    if (!isArgWithinBounds(command, arg)) {
-        res.status(400).send(`Invalid arg for ${command}`);
+    const normalizedArg = normalizeExecuteArg(command, arg);
+    if (normalizedArg === undefined) {
+        res.status(400).json({ message: `Invalid arg for ${command}` });
         return;
     }
     // Execute the 8sleep command
-    await executeFunction(command, arg || 'empty');
+    await executeFunction(command, normalizedArg);
     // Respond with success
     res.json({ success: true, message: `Command '${command}' executed successfully.` });
     return;

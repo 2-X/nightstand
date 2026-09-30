@@ -9,13 +9,22 @@ import settingsDB, { updateSettings } from '../db/settings.js';
 import { dailyAlarmSchedules } from '../db/scheduleAlarms.js';
 import { executeFunction } from '../8sleep/deviceApi.js';
 import { compareTimes, getDayIndexForTime, isValidTime, logJob } from './utils.js';
-import { connectFranken } from '../8sleep/frankenServer.js';
+import { connectFrankenWithin } from '../8sleep/frankenServer.js';
 import { nightBounds } from './nightBounds.js';
 import { emitJobEvent } from './jobEvents.js';
+import { trackAlarm } from './alarmActivity.js';
 const alarmOccurrences = new Map();
 const activeAlarms = new Map();
+// Overrides that have already run, so a rebuild cannot ring them again.
+const overrideRuns = new Map();
 const OCCURRENCE_RETENTION_MS = 48 * 60 * 60 * 1000;
-export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPattern, side, force = false }, occurrenceId) => {
+// A scheduled alarm may wait out a hardware reconnect, but one that would
+// start more than this after its due time is dropped rather than
+// vibrating long after it.
+const ALARM_LATE_LIMIT_MS = 3 * 60_000;
+// Resolves to how long the alarm rings in milliseconds, or 0 if it did not ring.
+export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPattern, side, force = false }, occurrenceId, { dueAt, ...options } = {}) => {
+    const due = dueAt ?? Date.now();
     // Reserve recurring occurrences before awaiting I/O; manual alarms can repeat.
     const occurrenceKey = !force && occurrenceId ? `${side}:${occurrenceId}` : undefined;
     const cutoff = Date.now() - OCCURRENCE_RETENTION_MS;
@@ -24,7 +33,7 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
             alarmOccurrences.delete(key);
     }
     if (occurrenceKey && alarmOccurrences.has(occurrenceKey))
-        return;
+        return 0;
     if (occurrenceKey)
         alarmOccurrences.set(occurrenceKey, Date.now());
     let fired = false;
@@ -36,15 +45,15 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
         if (settingsDB.data[side].awayMode && !force) {
             if (settingsDB.data[side].awayMode) {
                 logger.debug('Not executing alarm, this side is in away mode!');
-                return;
+                return 0;
             }
         }
         // Exit if side is off
-        const franken = await connectFranken();
+        const franken = await connectFrankenWithin(options);
         const resp = await franken.getDeviceStatus();
         if (!resp[side].isOn && !force) {
             logger.debug('Not executing alarm, side is off!');
-            return;
+            return 0;
         }
         const currentTime = moment.tz(settingsDB.data.timeZone);
         const alarmTimeEpoch = currentTime.unix();
@@ -57,8 +66,16 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
         const cborPayload = cbor.encode(alarmPayload);
         const hexPayload = cborPayload.toString('hex');
         const command = side === 'left' ? 'ALARM_LEFT' : 'ALARM_RIGHT';
+        const lateMs = Date.now() - due;
+        const notAfter = options.background ? due + ALARM_LATE_LIMIT_MS : undefined;
+        if (notAfter !== undefined && lateMs > ALARM_LATE_LIMIT_MS) {
+            const message = `Skipped the ${side} alarm: the Pod was reachable only ${Math.round(lateMs / 1_000)}s after its time`;
+            logger.warn(message);
+            emitJobEvent({ jobName: `alarm-${side}`, status: 'fail', message });
+            return 0;
+        }
         logger.debug(`Executing alarm... ${JSON.stringify(alarmPayload)}`);
-        await executeFunction(command, hexPayload);
+        await executeFunction(command, hexPayload, { ...options, notAfter });
         fired = true;
         const activeAlarm = Symbol(side);
         activeAlarms.set(side, activeAlarm);
@@ -78,6 +95,7 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
         serverStatus.status.alarmSchedule.status = 'healthy';
         serverStatus.status.alarmSchedule.message = '';
         emitJobEvent({ jobName: `alarm-${side}`, status: 'ok' });
+        return min10Duration * 1_000;
     }
     catch (error) {
         serverStatus.status.alarmSchedule.status = 'failed';
@@ -85,6 +103,7 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
         serverStatus.status.alarmSchedule.message = message;
         logger.error(error);
         emitJobEvent({ jobName: `alarm-${side}`, status: 'fail', message });
+        return 0;
     }
     finally {
         if (occurrenceKey && !fired)
@@ -137,14 +156,15 @@ export function scheduleOneOffAlarm(settingsData, side) {
         return null;
     }
     logger.debug(`Scheduling one-off alarm for ${side} at ${fireAt.format()}`);
-    schedule.scheduleJob(`${side}-one-off-alarm`, fireAt.toDate(), async () => {
+    const jobName = `${side}-one-off-alarm`;
+    schedule.scheduleJob(jobName, fireAt.toDate(), (fireDate) => trackAlarm(side, jobName, async () => {
         try {
-            await executeAlarm({
+            return await executeAlarm({
                 side,
                 vibrationIntensity: o.vibrationIntensity,
                 duration: o.duration,
                 vibrationPattern: o.vibrationPattern,
-            });
+            }, undefined, { background: true, dueAt: fireDate?.getTime() });
         }
         finally {
             // Auto-disable after firing (or after attempt) so the user doesn't
@@ -161,7 +181,22 @@ export function scheduleOneOffAlarm(settingsData, side) {
                 logger.error(`Failed to auto-disable one-off alarm for ${side}: ${err}`);
             }
         }
-    });
+    }));
+}
+// An override may ring at the very end of its night (the turn-off minute).
+// In a full-day schedule that same time also opened the night; an override
+// that already ran then must not ring again at the end.
+function openedItsNight(side, occurrence) {
+    for (const offset of [-1, 0]) {
+        const date = occurrence.clone().startOf('day').add(offset, 'day');
+        const daily = schedulesDB.data?.[side]?.[date.format('dddd').toLowerCase()];
+        if (!daily?.power.enabled)
+            continue;
+        const { start, end } = nightBounds(date, daily.power);
+        if (end.isSame(occurrence))
+            return !occurrence.clone().subtract(1, 'day').isBefore(start);
+    }
+    return false;
 }
 export function scheduleAlarmOverride(settingsData, side) {
     if (!settingsData[side].alarmsEnabled)
@@ -176,10 +211,19 @@ export function scheduleAlarmOverride(settingsData, side) {
     if (!expiresAt.isAfter(now))
         return null;
     const next = nextOccurrenceHhMm(settingsData.timeZone, alarmOverride.timeOverride);
-    if (!next.isBefore(expiresAt))
+    if (next.isAfter(expiresAt))
+        return null;
+    const overrideKey = `${side}:${alarmOverride.timeOverride}:${alarmOverride.expiresAt}`;
+    for (const [key, ranAt] of overrideRuns) {
+        if (ranAt < Date.now() - OCCURRENCE_RETENTION_MS)
+            overrideRuns.delete(key);
+    }
+    if (next.isSame(expiresAt) && overrideRuns.has(overrideKey) && openedItsNight(side, next))
         return null;
     logger.debug(`Alarm override is set! Scheduling alarm for ${next.format()}`);
-    schedule.scheduleJob(`${side}-alarm-override-${alarmOverride.timeOverride}`, next.toDate(), async () => {
+    const jobName = `${side}-alarm-override-${alarmOverride.timeOverride}`;
+    schedule.scheduleJob(jobName, next.toDate(), (fireDate) => trackAlarm(side, jobName, async () => {
+        overrideRuns.set(overrideKey, Date.now());
         // The replacement belongs to a night starting today or yesterday, not
         // necessarily the calendar date on which it rings.
         let sourceAlarm;
@@ -208,13 +252,13 @@ export function scheduleAlarmOverride(settingsData, side) {
             duration: 60,
             vibrationPattern: 'rise',
         };
-        await executeAlarm({
+        return executeAlarm({
             side,
             vibrationIntensity,
             duration,
             vibrationPattern,
-        });
-    });
+        }, undefined, { background: true, dueAt: fireDate?.getTime() });
+    }));
 }
 export const scheduleAlarm = (settingsData, side, day, dailySchedule) => {
     // Recurring alarms stay coupled to the day's power schedule; the runtime
@@ -249,7 +293,8 @@ export const scheduleAlarm = (settingsData, side, day, dailySchedule) => {
         alarmRule.minute = alarmMinute;
         alarmRule.tz = settingsData.timeZone;
         logJob('Scheduling alarm job', side, day, dayIndex, time);
-        schedule.scheduleJob(`${side}-${day}-${time}-${alarmIndex}-alarm`, alarmRule, async () => {
+        const jobName = `${side}-${day}-${time}-${alarmIndex}-alarm`;
+        schedule.scheduleJob(jobName, alarmRule, (fireDate) => trackAlarm(side, jobName, async () => {
             try {
                 logJob('Executing alarm job', side, day, dayIndex, time);
                 await settingsDB.read();
@@ -263,23 +308,24 @@ export const scheduleAlarm = (settingsData, side, day, dailySchedule) => {
                     const { start: nightStart, end: nightEnd } = nightBounds(date, dailySchedule.power);
                     if (expiresAt.isAfter(now) || expiresAt.isBetween(nightStart, nightEnd, undefined, '(]')) {
                         logJob(`Detected alarm override! Skipping alarm! Override expires at: ${expiresAt.format()}`, side, day, dayIndex, time);
-                        return;
+                        return 0;
                     }
                 }
-                await executeAlarm({
+                return await executeAlarm({
                     side,
                     vibrationIntensity: alarm.vibrationIntensity,
                     duration: alarm.duration,
                     vibrationPattern: alarm.vibrationPattern,
-                }, `recurring:${day}:${time}:${now.format('YYYY-MM-DD')}`);
+                }, `recurring:${day}:${time}:${now.format('YYYY-MM-DD')}`, { background: true, dueAt: fireDate?.getTime() });
             }
             catch (error) {
                 serverStatus.status.alarmSchedule.status = 'failed';
                 const message = error instanceof Error ? error.message : String(error);
                 serverStatus.status.alarmSchedule.message = message;
                 logger.error(error);
+                return 0;
             }
-        });
+        }));
     });
 };
 //# sourceMappingURL=alarmScheduler.js.map

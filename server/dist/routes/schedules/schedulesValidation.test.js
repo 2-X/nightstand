@@ -123,4 +123,29 @@ it('allows editing and reducing existing oversized days without spreading or gro
     const invalidAlarms = alarms.slice(1).map(alarm => ({ ...alarm, duration: 999 }));
     assert.equal((await postSchedules({ left: { saturday: { alarms: invalidAlarms } } })).status, 400);
 });
+describe('temperature set point limit', () => {
+    const setPoints = (count) => Object.fromEntries(Array.from({ length: count }, (_, index) => [
+        `${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}`, 70,
+    ]));
+    const limit = async () => (await import('../../db/schedulesSchema.js')).MAX_TEMPERATURES_PER_DAY;
+    it('refuses more set points in a day than the cap', async () => {
+        const max = await limit();
+        assert.equal((await postSchedules({ left: { thursday: { temperatures: setPoints(max + 1) } } })).status, 400);
+        assert.equal((await postSchedules({ right: { thursday: { temperatures: setPoints(1440) } } })).status, 400);
+    });
+    it('allows exactly the cap', async () => {
+        const max = await limit();
+        assert.equal((await postSchedules({ left: { thursday: { temperatures: setPoints(max) } } })).status, 200);
+    });
+    it('keeps an existing oversized day editable without letting it grow or spread', async () => {
+        const max = await limit();
+        const stored = setPoints(max + 12);
+        schedulesDB.data.right.sunday.temperatures = stored;
+        await schedulesDB.write();
+        assert.equal((await postSchedules({ right: { sunday: { power: { on: '21:30' } } } })).status, 200);
+        assert.equal((await postSchedules({ right: { sunday: { temperatures: stored } } })).status, 200);
+        assert.equal((await postSchedules({ right: { sunday: { temperatures: setPoints(max + 13) } } })).status, 400);
+        assert.equal((await postSchedules({ right: { monday: { temperatures: stored } } })).status, 400);
+    });
+});
 //# sourceMappingURL=schedulesValidation.test.js.map

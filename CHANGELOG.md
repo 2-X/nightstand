@@ -92,6 +92,40 @@ A redesigned app, sleep records that start at your real bedtime, and safer updat
 - Hardware commands release stalled or dropped connections, and HTTP and
   WebSocket connections apply the same origin checks.
 
+- When the Pod's hardware does not answer, for example while it reconnects
+  after a restart, turning a side on or off, changing its temperature or
+  priming now fails after a short wait and says so next to the control.
+  Before, the request could hang and the change could reach the Pod much
+  later. Scheduled power and temperature changes still wait for the hardware
+  and apply once it answers. A scheduled alarm that would start more than a
+  few minutes late is skipped.
+
+- An alarm set for the same minute as a scheduled turn-off now rings before
+  the side turns off, including an alarm change made for that minute during
+  the night.
+
+- The server checks writes more closely. Temperatures, durations and LED
+  settings must be within the Pod's range, a day holds at most 48 temperature
+  changes, sleep record edits are validated, and `/execute` checks its input
+  before sending it to the Pod. Refused requests answer 400 or 409 with a
+  short message, and 500 responses no longer include internal error text.
+  The schedule editor stops adding temperature changes at that limit.
+
+- The Sleep page copes better with bad or partial data. One bad row no longer
+  hides a whole night, records dated in the future are ignored, and stage
+  totals are hidden when there are too few heart readings. The Bed page
+  scores the same night the Sleep page shows, and requests that never answer
+  now show an error instead of loading.
+
+- Schedule editing keeps turn-off after the latest alarm, accepts the wake
+  time in the alarm change dialog, sends one alarm test per press and keeps
+  keyboard focus after saving or discarding.
+
+- Keyboard use is easier across the app. Buttons, tabs and accordions show a
+  focus outline, a skip link and the navigation come first in tab order, and
+  focused controls scroll clear of the navigation bar. Side names save on
+  Enter, and LED brightness applies every key press.
+
 - Update notices and the Update button use the selected release channel and
   offer only newer releases. Failed updates restart the restored biometrics
   service. Migration stops if database setup fails; dry-run leaves the Pod

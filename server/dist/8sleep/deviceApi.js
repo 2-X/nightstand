@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import { connectFranken } from './frankenServer.js';
+import { connectFrankenWithin } from './frankenServer.js';
 import logger from '../logger.js';
 export const frankenCommands = {
     HELLO: '0',
@@ -30,9 +30,9 @@ export const frankenCommands = {
     STOP_PRIME: '17',
 };
 export const invertedFrankenCommands = _.invert(frankenCommands);
-export async function executeFunction(command, arg = 'empty') {
+export async function executeFunction(command, arg = 'empty', options = {}) {
     logger.debug(`Executing command | command: ${command} | arg: ${arg}`);
-    const franken = await connectFranken();
+    const franken = await connectFrankenWithin(options, command);
     // const frankenCommand = funcNameToFrankenCommand[name];
     // if franken disconnects right before a function call this will throw
     // the error will bubble up to the main loop of the device-api-client (protocol handling)

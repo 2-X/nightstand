@@ -16,7 +16,12 @@ router.post('/alarm', async (req, res) => {
         return;
     }
     const alarmJob = validationResult.data;
-    void executeAlarm(alarmJob);
+    // Answer after the start command, so a Pod that could not be reached is not reported as ringing.
+    const ringMs = await executeAlarm(alarmJob);
+    if (!ringMs) {
+        res.status(503).json({ error: { message: 'The alarm did not start. Try again in a moment.' } });
+        return;
+    }
     res.status(200).json(schedulesDB.data);
 });
 export default router;

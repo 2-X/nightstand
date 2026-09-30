@@ -6,6 +6,7 @@ import { FrankenMonitor } from './8sleep/frankenMonitor.js';
 import { initWaterLevel } from './8sleep/waterLevel.js';
 import { startPresenceAutoOff, stopPresenceAutoOff } from './8sleep/presenceAutoOffMonitor.js';
 import './jobs/jobScheduler.js';
+import { abortAlarmWaits } from './jobs/alarmActivity.js';
 // Setup code
 import setupMiddleware from './setup/middleware.js';
 import setupRoutes from './setup/routes.js';
@@ -57,6 +58,8 @@ async function gracefulShutdown(signal) {
         process.exit(1);
     }, 15_000);
     logger.debug('Stopping node-schedule');
+    // A power-off waiting for an alarm goes out now; the shutdown waits for it.
+    abortAlarmWaits();
     await schedule.gracefulShutdown();
     await disconnectPrisma();
     try {

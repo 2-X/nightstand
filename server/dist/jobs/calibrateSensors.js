@@ -1,9 +1,11 @@
 import { executePythonScript } from './executePython.js';
+export const calibrateSensorsKey = (side) => `calibrateSensors:${side}`;
 // force skips the script's bed-occupancy guard. Only pass it for
 // user-initiated runs (the Status page button), where the user is asserting
 // the bed is empty; scheduled runs keep the guard.
 export const executeCalibrateSensors = (side, startTime, endTime, force = false) => {
     executePythonScript({
+        key: calibrateSensorsKey(side),
         script: '/home/dac/free-sleep/biometrics/sleep_detection/calibrate_sensor_thresholds.py',
         args: [
             `--side=${side}`,

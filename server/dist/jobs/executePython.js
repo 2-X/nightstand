@@ -37,10 +37,24 @@ async function runPythonScript({ script, args = [] }) {
     });
 }
 let executionQueue = Promise.resolve();
-// Analysis and calibration share the server's memory budget.
+const pendingKeys = new Set();
+export const isPythonJobPending = (key) => pendingKeys.has(key);
+// Analysis and calibration share the server's memory budget. A keyed job that
+// is already queued or running is skipped rather than queued again.
 export const executePythonScript = (options) => {
+    const { key } = options;
+    if (key !== undefined) {
+        if (pendingKeys.has(key)) {
+            logger.info(`Skipping ${key}: already queued or running`);
+            return executionQueue;
+        }
+        pendingKeys.add(key);
+    }
     executionQueue = executionQueue.then(() => runPythonScript(options)).catch((error) => {
         logger.error(`Execution error: ${error instanceof Error ? error.message : String(error)}`);
+    }).finally(() => {
+        if (key !== undefined)
+            pendingKeys.delete(key);
     });
     return executionQueue;
 };

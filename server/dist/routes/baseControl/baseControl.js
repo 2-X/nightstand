@@ -106,8 +106,8 @@ router.post('/base-control', async (req, res) => {
 // POST /api/base-control/preset
 router.post('/base-control/preset', async (req, res) => {
     try {
-        const { preset } = req.body;
-        if (!preset || !BASE_PRESETS[preset]) {
+        const { preset } = (req.body ?? {});
+        if (typeof preset !== 'string' || !Object.hasOwn(BASE_PRESETS, preset)) {
             res.status(400).json({ error: 'Invalid preset' });
             return;
         }

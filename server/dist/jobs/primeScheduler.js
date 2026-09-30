@@ -91,7 +91,7 @@ export const schedulePrimingRebootAndCalibration = (settingsData) => {
     schedule.scheduleJob(`daily-priming-${time}`, dailyRule, async () => {
         try {
             logger.info(`Executing scheduled prime job`);
-            await updateDeviceStatus({ isPriming: true });
+            await updateDeviceStatus({ isPriming: true }, { background: true });
             serverStatus.status.primeSchedule.status = 'healthy';
             serverStatus.status.primeSchedule.message = '';
         }

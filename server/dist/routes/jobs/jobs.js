@@ -1,11 +1,12 @@
 import express from 'express';
 import logger from '../../logger.js';
-import { executeAnalyzeSleep } from '../../jobs/analyzeSleep.js';
-import { executeCalibrateSensors } from '../../jobs/calibrateSensors.js';
+import { analyzeSleepKey, executeAnalyzeSleep } from '../../jobs/analyzeSleep.js';
+import { calibrateSensorsKey, executeCalibrateSensors } from '../../jobs/calibrateSensors.js';
+import { isPythonJobPending } from '../../jobs/executePython.js';
 import moment from 'moment-timezone';
 import { JobKeyListSchema } from './jobsSchema.js';
 import update from '../../jobs/update.js';
-import { PrivilegedCommandError } from '../../jobs/privilegedCommand.js';
+import { PrivilegedCommandError, privilegedErrorStatus } from '../../jobs/privilegedCommand.js';
 import reboot from '../../jobs/reboot.js';
 const router = express.Router();
 const analyzeSleepLeft = () => executeAnalyzeSleep('left', moment().subtract(24, 'hours').toISOString(), moment().add(1, 'hours').toISOString());
@@ -25,6 +26,12 @@ const JOB_MAP = {
     reboot,
     update,
 };
+const QUEUED_JOB_KEYS = {
+    analyzeSleepLeft: analyzeSleepKey('left'),
+    analyzeSleepRight: analyzeSleepKey('right'),
+    biometricsCalibrationLeft: calibrateSensorsKey('left'),
+    biometricsCalibrationRight: calibrateSensorsKey('right'),
+};
 router.post('/jobs', async (req, res) => {
     const { body } = req;
     const validationResult = JobKeyListSchema.safeParse(body);
@@ -36,14 +43,27 @@ router.post('/jobs', async (req, res) => {
         });
         return;
     }
+    const jobs = [...new Set(validationResult.data)];
+    if (jobs.includes('reboot') && jobs.includes('update')) {
+        res.status(400).json({ message: 'Restart and update cannot be requested together' });
+        return;
+    }
+    const busy = jobs.filter(job => {
+        const key = QUEUED_JOB_KEYS[job];
+        return key !== undefined && isPythonJobPending(key);
+    });
+    if (busy.length > 0) {
+        res.status(409).json({ message: `Already queued or running: ${busy.join(', ')}` });
+        return;
+    }
     try {
-        for (const job of validationResult.data) {
+        for (const job of jobs) {
             await JOB_MAP[job]();
         }
     }
     catch (error) {
         logger.error('Failed to start job', error);
-        res.status(500).json({ message: error instanceof PrivilegedCommandError ? error.message : 'Unable to start job' });
+        res.status(privilegedErrorStatus(error)).json({ message: error instanceof PrivilegedCommandError ? error.message : 'Unable to start job' });
         return;
     }
     res.status(204).end();

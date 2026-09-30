@@ -10,6 +10,14 @@ import memoryDB from '../db/memoryDB.js';
 import settingsDB from '../db/settings.js';
 import { isTempScheduleOverridden } from './scheduleOverride.js';
 import { SLEEP_ANALYSIS_HOUR, SLEEP_ANALYSIS_MINUTE } from '../sleepAnalysisSchedule.js';
+import { letAlarmsFinish } from './alarmActivity.js';
+// Minute of each side's latest scheduled power-on. A power-off due in that
+// minute or earlier ends the night before, and must not switch off the
+// session the power-on just started.
+const lastPowerOn = new Map();
+const minuteOf = (date) => Math.floor(date.getTime() / 60_000) * 60_000;
+// Test isolation only.
+export const resetPowerOnTimes = () => lastPowerOn.clear();
 export const schedulePowerOn = (settingsData, side, day, power) => {
     if (!power.enabled)
         return;
@@ -26,7 +34,8 @@ export const schedulePowerOn = (settingsData, side, day, power) => {
     onRule.minute = onMinute;
     onRule.tz = settingsData.timeZone;
     logJob('Scheduling power on job', side, day, dayOfWeekIndex, time);
-    schedule.scheduleJob(`${side}-${day}-${time}-power-on`, onRule, async () => {
+    schedule.scheduleJob(`${side}-${day}-${time}-power-on`, onRule, async (fireDate) => {
+        lastPowerOn.set(side, minuteOf(fireDate ?? new Date()));
         try {
             logJob('Executing power on job', side, day, dayOfWeekIndex, time);
             // A manual temperature change pauses the schedule's temperature control,
@@ -42,7 +51,7 @@ export const schedulePowerOn = (settingsData, side, day, power) => {
                 [side]: overridden
                     ? { isOn: true }
                     : { isOn: true, targetTemperatureF: power.onTemperature },
-            });
+            }, { background: true });
             serverStatus.status.powerSchedule.status = 'healthy';
             serverStatus.status.powerSchedule.message = '';
         }
@@ -104,14 +113,22 @@ export const schedulePowerOff = (settingsData, side, day, power) => {
     offRule.minute = offMinute;
     offRule.tz = settingsData.timeZone;
     logJob('Scheduling power off job', side, day, dayOfWeekIndex, time);
-    schedule.scheduleJob(`${side}-${day}-${time}-power-off`, offRule, async () => {
+    schedule.scheduleJob(`${side}-${day}-${time}-power-off`, offRule, async (fireDate) => {
         try {
             logJob('Executing power off job', side, day, dayOfWeekIndex, time);
+            // An alarm in this minute rings first and the side turns off after it;
+            // otherwise the alarm would find the side already off and skip.
+            const dueAt = fireDate ?? new Date();
+            await letAlarmsFinish(side, day, dueAt);
+            if ((lastPowerOn.get(side) ?? -Infinity) >= minuteOf(dueAt)) {
+                logJob('Skipping power off, the next session already started', side, day, dayOfWeekIndex, time);
+                return;
+            }
             await updateDeviceStatus({
                 [side]: {
                     isOn: false,
                 }
-            });
+            }, { background: true });
             serverStatus.status.powerSchedule.status = 'healthy';
             serverStatus.status.powerSchedule.message = '';
         }
