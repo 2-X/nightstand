@@ -31,6 +31,8 @@ logger = get_logger()
 # exit came earlier, is taken as the partner moving across, so the side's
 # vitals state is cleared instead of carried over.
 SIDE_SWAP_SECONDS = 120
+# How far ahead of the clock a reading may be stamped and still count as current.
+CAP_FUTURE_TOLERANCE_SECONDS = 5
 
 PresenceInputs = Tuple[DetectorParams, Dict[str, CapBaseline]]
 
@@ -50,7 +52,7 @@ class LatestCap:
 
     def is_fresh(self, now: float, max_age: float) -> bool:
         reading = self._reading
-        return reading is not None and now - reading[0] <= max_age
+        return reading is not None and -CAP_FUTURE_TOLERANCE_SECONDS <= now - reading[0] <= max_age
 
 
 def is_side_swap(entering: BiometricProcessor, other: BiometricProcessor, epoch: int) -> bool:

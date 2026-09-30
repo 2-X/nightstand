@@ -211,6 +211,28 @@ class OutOfOrderRecordTest(unittest.TestCase):
         self.assertEqual([change[1:] for change in changes], [('right', True), ('right', False)])
 
 
+class LatestCapFreshnessTest(unittest.TestCase):
+    def test_recent_readings_are_fresh(self):
+        cap = LatestCap()
+        cap.update(1000, [1.0], [1.0])
+        self.assertTrue(cap.is_fresh(1000, 60))
+        self.assertTrue(cap.is_fresh(1060, 60))
+        self.assertFalse(cap.is_fresh(1061, 60))
+
+    def test_a_small_clock_lead_is_tolerated(self):
+        cap = LatestCap()
+        cap.update(1003, [1.0], [1.0])
+        self.assertTrue(cap.is_fresh(1000, 60))
+
+    def test_a_reading_stamped_well_ahead_is_not_fresh(self):
+        cap = LatestCap()
+        cap.update(1000 + 3600, [1.0], [1.0])
+        self.assertFalse(cap.is_fresh(1000, 60))
+
+    def test_no_reading_is_not_fresh(self):
+        self.assertFalse(LatestCap().is_fresh(1000, 60))
+
+
 class SideSwapTest(unittest.TestCase):
     def setUp(self):
         self.left = BiometricProcessor(side='left')
