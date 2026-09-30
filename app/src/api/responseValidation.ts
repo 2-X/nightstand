@@ -2,9 +2,7 @@ import { z } from 'zod';
 import moment from 'moment-timezone';
 import { DeviceStatusSchema, Version } from './deviceStatusSchema';
 import { SettingsSchema } from './settingsSchema';
-import {
-  AlarmScheduleSchema, DailyScheduleSchema, SideScheduleSchema, SchedulesSchema, TemperatureSchema, TimeSchema,
-} from './schedulesSchema';
+import { AlarmScheduleSchema, DailyScheduleSchema, SideScheduleSchema, SchedulesSchema } from './schedulesSchema';
 import { ServicesSchema } from '../../../server/src/db/servicesSchema';
 import { sleepRecordSchema } from './sleepSchema';
 import { ChangelogResponseSchema } from './changelogSchema';
@@ -23,13 +21,48 @@ import { responseSchema } from './responseSchema';
 // validated, since a made-up default there would be shown as fact or saved.
 const soft = <T extends z.ZodTypeAny>(schema: T, fallback: z.output<T>) => responseSchema(schema).catch(fallback);
 
-// Steps the app cannot draw or save are dropped, so one bad step cannot lock
-// every day of the schedule. Saving the day rewrites it without them.
+// The Pod reads override times and steps with plain moment and string splits,
+// so values zod would reject can still be honored there. Read them the same
+// way, so an active override or armed alarm never shows as absent.
+const isoWithOffset = z.string().datetime({ offset: true });
+function normalizeInstant(value: unknown): string {
+  if (value === '') return '';
+  if (typeof value === 'string') {
+    if (isoWithOffset.safeParse(value).success) return value;
+    const iso = moment(value, moment.ISO_8601);
+    if (iso.isValid()) return iso.format();
+    const date = new Date(value);
+    // Unreadable text stays as sent: still present, and the Pod ignores it.
+    return Number.isNaN(date.getTime()) ? value : moment(date).format();
+  }
+  return typeof value === 'number' && Number.isFinite(value) && moment(value).isValid() ? moment(value).format() : '';
+}
+function normalizeClock(value: unknown): string {
+  const match = typeof value === 'string' ? /^(\d{1,2}):(\d{1,2})(?::\d+(?:\.\d+)?)?$/.exec(value) : null;
+  if (!match || Number(match[1]) > 23 || Number(match[2]) > 59) return '';
+  return `${match[1].padStart(2, '0')}:${match[2].padStart(2, '0')}`;
+}
+const instantResponse = z.unknown().transform(normalizeInstant);
+// The Pod tests these flags for truthiness, so a stray value reads as on or off, not as absent.
+const flagResponse = z.unknown().transform(value => (value === undefined ? undefined : Boolean(value)));
+const clockResponse = z.unknown().transform(normalizeClock);
+
+// Steps are padded and rounded to what the request schema accepts. Only steps
+// with no readable time or no numeric value are dropped, because the server
+// refuses to save those, so keeping them would make the day impossible to save.
+// Out-of-range numbers are kept so the schedule page can flag them on save.
 const temperaturesResponse = z.record(z.unknown()).transform(steps => {
-  const kept = Object.entries(steps).filter(([time, temperature]) =>
-    TimeSchema.safeParse(time).success && TemperatureSchema.safeParse(temperature).success);
-  if (kept.length < Object.keys(steps).length) console.warn('Ignored invalid schedule temperature steps');
-  return Object.fromEntries(kept);
+  const kept: Record<string, number> = {};
+  let changed = false;
+  for (const [time, temperature] of Object.entries(steps)) {
+    const clock = normalizeClock(time);
+    const usable = clock && typeof temperature === 'number' && Number.isFinite(temperature);
+    if (!usable || (clock !== time && Object.keys(steps).includes(clock))) { changed = true; continue; }
+    kept[clock] = Math.round(temperature);
+    if (clock !== time || kept[clock] !== temperature) changed = true;
+  }
+  if (changed) console.warn('Adjusted schedule temperature steps that were not stored in the usual form');
+  return kept;
 });
 const dailyResponse = DailyScheduleSchema.extend({
   temperatures: temperaturesResponse, alarms: z.array(AlarmScheduleSchema).default([]),
@@ -40,25 +73,39 @@ const sideResponse = SideScheduleSchema.extend(Object.fromEntries(
 
 const sideSettingsShape = SettingsSchema.shape.left.shape;
 const overrideShape = sideSettingsShape.scheduleOverrides.shape;
+const oneOffShape = responseSchema(sideSettingsShape.oneOffAlarm.extend({ fireAt: z.string() }));
+// An enabled alarm is armed by the Pod, so it is normalized or rejected, never
+// hidden. One that is switched off is ignored by the Pod and may be dropped.
+const oneOffResponse = z.unknown().transform((value, context) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const alarm = value as Record<string, unknown>;
+  const parsed = oneOffShape.safeParse({ ...alarm, fireAt: normalizeInstant(alarm.fireAt) });
+  if (parsed.success) return parsed.data;
+  if (alarm.enabled === false) return undefined;
+  context.addIssue({ code: z.ZodIssueCode.custom, message: 'Unreadable one-time alarm' });
+  return z.NEVER;
+});
 const sideSettingsResponse = SettingsSchema.shape.left.extend({
   name: soft(sideSettingsShape.name, ''),
-  alarmsEnabled: soft(sideSettingsShape.alarmsEnabled.optional(), undefined),
+  alarmsEnabled: flagResponse,
   scheduleOverrides: z.object({
     temperatureSchedules: z.object({
       disabled: overrideShape.temperatureSchedules.shape.disabled,
-      expiresAt: soft(overrideShape.temperatureSchedules.shape.expiresAt, ''),
+      expiresAt: instantResponse,
     }),
     alarm: z.object({
       disabled: overrideShape.alarm.shape.disabled,
-      timeOverride: soft(overrideShape.alarm.shape.timeOverride, ''),
-      expiresAt: soft(overrideShape.alarm.shape.expiresAt, ''),
+      timeOverride: clockResponse,
+      expiresAt: instantResponse,
     }),
   }),
-  oneOffAlarm: soft(sideSettingsShape.oneOffAlarm.optional(), undefined),
+  oneOffAlarm: oneOffResponse,
   taps: soft(sideSettingsShape.taps.optional(), undefined),
 });
 // The zone list is a picker, not a limit: any zone the app can format is kept.
-const timeZoneResponse = z.string().refine(zone => !!moment.tz.zone(zone)).catch('UTC') as unknown as typeof SettingsSchema.shape.timeZone;
+// Unset stays unset (the Pod schedules nothing without a zone); so does one the
+// app cannot use.
+const timeZoneResponse = z.unknown().transform(zone => (typeof zone === 'string' && moment.tz.zone(zone) ? zone : null));
 const settingsShape = SettingsSchema.shape;
 const settingsResponse = SettingsSchema.extend({
   id: soft(settingsShape.id, ''),
@@ -70,7 +117,7 @@ const settingsResponse = SettingsSchema.extend({
   rawArchiveRetentionDays: soft(settingsShape.rawArchiveRetentionDays.optional(), undefined),
   updateChannel: soft(settingsShape.updateChannel.optional(), undefined),
   features: soft(z.object(Object.fromEntries(Object.entries(settingsShape.features.shape)
-    .map(([key, flag]) => [key, soft(flag.optional(), undefined)]))).optional(), undefined),
+    .map(([key]) => [key, flagResponse]))).optional(), undefined),
 });
 const servicesResponse = ServicesSchema.extend({ biometrics: ServicesSchema.shape.biometrics.extend({
   jobs: ServicesSchema.shape.biometrics.shape.jobs.partial({ calibrateLeft: true, calibrateRight: true, pumpLeft: true, pumpRight: true }),
