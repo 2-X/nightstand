@@ -16,6 +16,7 @@ import type { CommandOptions } from '../8sleep/frankenServer.js';
 import { Settings } from '../db/settingsSchema.js';
 import { nightBounds } from './nightBounds.js';
 import { emitJobEvent } from './jobEvents.js';
+import { trackAlarm } from './alarmActivity.js';
 
 
 const alarmOccurrences = new Map<string, number>();
@@ -25,11 +26,12 @@ const OCCURRENCE_RETENTION_MS = 48 * 60 * 60 * 1000;
 // only start this late is dropped rather than vibrating long after its time.
 const ALARM_LATE_LIMIT_MS = 3 * 60_000;
 
+// Resolves to how long the alarm rings in milliseconds, or 0 if it did not ring.
 export const executeAlarm = async (
   { vibrationIntensity, duration, vibrationPattern, side, force=false }: AlarmJob,
   occurrenceId?: string,
   options: CommandOptions = {},
-) => {
+): Promise<number> => {
   const startedAt = Date.now();
   // Reserve recurring occurrences before awaiting I/O; manual alarms can repeat.
   const occurrenceKey = !force && occurrenceId ? `${side}:${occurrenceId}` : undefined;
@@ -37,7 +39,7 @@ export const executeAlarm = async (
   for (const [key, timestamp] of alarmOccurrences) {
     if (timestamp < cutoff) alarmOccurrences.delete(key);
   }
-  if (occurrenceKey && alarmOccurrences.has(occurrenceKey)) return;
+  if (occurrenceKey && alarmOccurrences.has(occurrenceKey)) return 0;
   if (occurrenceKey) alarmOccurrences.set(occurrenceKey, Date.now());
   let fired = false;
   emitJobEvent({ jobName: `alarm-${side}`, status: 'started' });
@@ -48,7 +50,7 @@ export const executeAlarm = async (
     if (settingsDB.data[side].awayMode && !force) {
       if (settingsDB.data[side].awayMode) {
         logger.debug('Not executing alarm, this side is in away mode!');
-        return;
+        return 0;
       }
     }
 
@@ -57,7 +59,7 @@ export const executeAlarm = async (
     const resp = await franken.getDeviceStatus();
     if (!resp[side].isOn && !force) {
       logger.debug('Not executing alarm, side is off!');
-      return;
+      return 0;
     }
 
     const currentTime = moment.tz(settingsDB.data.timeZone);
@@ -79,7 +81,7 @@ export const executeAlarm = async (
       const message = `Skipped the ${side} alarm: the Pod was reachable only ${Math.round(lateMs / 1_000)}s after its time`;
       logger.warn(message);
       emitJobEvent({ jobName: `alarm-${side}`, status: 'fail', message });
-      return;
+      return 0;
     }
 
     logger.debug(`Executing alarm... ${JSON.stringify(alarmPayload)}`);
@@ -105,12 +107,14 @@ export const executeAlarm = async (
     serverStatus.status.alarmSchedule.status = 'healthy';
     serverStatus.status.alarmSchedule.message = '';
     emitJobEvent({ jobName: `alarm-${side}`, status: 'ok' });
+    return min10Duration * 1_000;
   } catch (error: unknown) {
     serverStatus.status.alarmSchedule.status = 'failed';
     const message = error instanceof Error ? error.message : String(error);
     serverStatus.status.alarmSchedule.message = message;
     logger.error(error);
     emitJobEvent({ jobName: `alarm-${side}`, status: 'fail', message });
+    return 0;
   } finally {
     if (occurrenceKey && !fired) alarmOccurrences.delete(occurrenceKey);
   }
@@ -165,9 +169,10 @@ export function scheduleOneOffAlarm(settingsData: Settings, side: Side) {
   }
 
   logger.debug(`Scheduling one-off alarm for ${side} at ${fireAt.format()}`);
-  schedule.scheduleJob(`${side}-one-off-alarm`, fireAt.toDate(), async () => {
+  const jobName = `${side}-one-off-alarm`;
+  schedule.scheduleJob(jobName, fireAt.toDate(), () => trackAlarm(side, jobName, async () => {
     try {
-      await executeAlarm({
+      return await executeAlarm({
         side,
         vibrationIntensity: o.vibrationIntensity,
         duration: o.duration,
@@ -186,7 +191,7 @@ export function scheduleOneOffAlarm(settingsData: Settings, side: Side) {
         logger.error(`Failed to auto-disable one-off alarm for ${side}: ${err}`);
       }
     }
-  });
+  }));
 }
 
 
@@ -218,7 +223,8 @@ export function scheduleAlarmOverride(settingsData: Settings, side: Side) {
   if (next.isSame(expiresAt) && openedItsNight(side, next)) return null;
   logger.debug(`Alarm override is set! Scheduling alarm for ${next.format()}`);
 
-  schedule.scheduleJob(`${side}-alarm-override-${alarmOverride.timeOverride}`, next.toDate(), async () => {
+  const jobName = `${side}-alarm-override-${alarmOverride.timeOverride}`;
+  schedule.scheduleJob(jobName, next.toDate(), () => trackAlarm(side, jobName, async () => {
     // The replacement belongs to a night starting today or yesterday, not
     // necessarily the calendar date on which it rings.
     let sourceAlarm;
@@ -245,13 +251,13 @@ export function scheduleAlarmOverride(settingsData: Settings, side: Side) {
       vibrationPattern: 'rise',
     };
 
-    await executeAlarm({
+    return executeAlarm({
       side,
       vibrationIntensity,
       duration,
       vibrationPattern,
     }, undefined, { background: true });
-  });
+  }));
 }
 
 
@@ -288,7 +294,8 @@ export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek
 
     logJob('Scheduling alarm job', side, day, dayIndex, time);
 
-    schedule.scheduleJob(`${side}-${day}-${time}-${alarmIndex}-alarm`, alarmRule, async () => {
+    const jobName = `${side}-${day}-${time}-${alarmIndex}-alarm`;
+    schedule.scheduleJob(jobName, alarmRule, () => trackAlarm(side, jobName, async () => {
       try {
         logJob('Executing alarm job', side, day, dayIndex, time);
         await settingsDB.read();
@@ -302,11 +309,11 @@ export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek
           const { start: nightStart, end: nightEnd } = nightBounds(date, dailySchedule.power);
           if (expiresAt.isAfter(now) || expiresAt.isBetween(nightStart, nightEnd, undefined, '(]')) {
             logJob(`Detected alarm override! Skipping alarm! Override expires at: ${expiresAt.format()}`, side, day, dayIndex, time);
-            return;
+            return 0;
           }
         }
 
-        await executeAlarm({
+        return await executeAlarm({
           side,
           vibrationIntensity: alarm.vibrationIntensity,
           duration: alarm.duration,
@@ -317,7 +324,8 @@ export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek
         const message = error instanceof Error ? error.message : String(error);
         serverStatus.status.alarmSchedule.message = message;
         logger.error(error);
+        return 0;
       }
-    });
+    }));
   });
 };

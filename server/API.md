@@ -234,6 +234,7 @@ filter is not authentication or protection from non-browser clients.
 ### POST
 
 - Updates the schedules for the system. Up to 10 alarms and 48 temperature changes per side/day; a day already stored above a limit can be saved at its current size but not grown.
+- A scheduled power off waits for an alarm of the same side that is due at that minute to finish ringing, for at most nine minutes, so the alarm does not find the side already off. It does not wait for an alarm that starts the next night, and it is skipped if a scheduled power on for the same side is due at that minute or later.
 
 #### Request Body
 
