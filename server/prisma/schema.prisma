@@ -82,6 +82,28 @@ model calibration_runs {
   @@index([side, started_at])
 }
 
+// One row per sleep analyzer run, written by the biometrics jobs. The server
+// only reads it.
+model analysis_runs {
+  id               Int     @id @default(autoincrement())
+  side             String
+  kind             String
+  started_at       Int
+  finished_at      Int?
+  window_start     Int
+  window_end       Int
+  status           String
+  rows_loaded      Int?
+  records_written  Int?
+  movement_written Int?
+  duration_ms      Int?
+  peak_rss_mb      Float?
+  error            String?
+  code_version     String?
+
+  @@index([side, started_at])
+}
+
 
 
 // Transitions of the tank's water sensor between ok and low, not every

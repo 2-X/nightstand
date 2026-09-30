@@ -55,3 +55,22 @@ def get_available_memory_mb():
         return 0.0
     else:
         return 1000
+
+
+def get_peak_rss_mb() -> float:
+    """This process's peak resident memory in MB.
+
+    VmHWM is reset when the process execs. ru_maxrss on Linux is not: a child
+    of a Python parent starts with the parent's size, so it is only the fallback.
+    """
+    try:
+        with open('/proc/self/status') as status:
+            for line in status:
+                if line.startswith('VmHWM:'):
+                    return round(int(line.split()[1]) / 1024, 1)
+    except (OSError, ValueError, IndexError):
+        pass
+    import resource
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    divisor = 1024 * 1024 if platform.system() == 'Darwin' else 1024
+    return round(peak / divisor, 1)
