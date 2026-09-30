@@ -46,12 +46,20 @@ import threading
 from get_logger import get_logger
 logger = get_logger('free-sleep-stream')
 
-from stream_processor import StreamProcessor
+import calibration
+from features import biometrics_v2_enabled
+from presence.params import baselines_from_calibration, params_from_calibration
+from stream_processor import LatestCap, StreamProcessor
 from load_raw_files import load_piezo_row, _read_raw_record
 from service_health import update_health, update_sensor_temps, update_pump_health
 
 # Global queue for processing decoded biometric data
 piezo_record_queue = queue.Queue()
+# Newest capSense2 reading, for capacitance presence.
+latest_cap = LatestCap()
+# Capacitance presence runs only while capSense2 records keep arriving, so a
+# Pod without them keeps piezo presence with the switch on.
+CAP_FRESH_SECONDS = 60
 
 # How often the NATS consumer loop reports itself healthy. Matches the 60s
 # cadence of BiometricProcessor._presence_heartbeat_interval; frequent enough
@@ -119,6 +127,82 @@ def _queue_decoded_piezo_record(decoded_data) -> bool:
     piezo_record_queue.put(decoded_data)
     _mark_sequence_processed(sequence)
     return True
+
+
+def _store_decoded_cap_record(decoded_data) -> bool:
+    """Keep the newest capSense2 values; True for every capSense2 record, stored or not."""
+    if not isinstance(decoded_data, dict) or decoded_data.get('type') != 'capSense2':
+        return False
+    ts = decoded_data.get('ts')
+    if not _is_number(ts):
+        return True
+    try:
+        recorded_at = datetime.fromtimestamp(ts)
+    except (ValueError, OverflowError, OSError):
+        return True
+    if datetime.now() - recorded_at > RECENT_RECORD_WINDOW:
+        return True
+    left_values = _cap_values(decoded_data.get('left'))
+    right_values = _cap_values(decoded_data.get('right'))
+    if left_values is not None and right_values is not None:
+        latest_cap.update(ts, left_values, right_values)
+    return True
+
+
+def _is_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _cap_values(side):
+    values = side.get('values') if isinstance(side, dict) else None
+    if isinstance(values, (list, tuple)) and all(_is_number(value) for value in values):
+        return values
+    return None
+
+
+def _presence_v2_inputs():
+    """Capacitance detector parameters and baselines when it should run, else None."""
+    if not biometrics_v2_enabled():
+        return None
+    if not latest_cap.is_fresh(time.time(), CAP_FRESH_SECONDS):
+        return None
+    profiles = calibration.load_presence_profiles()
+    params = params_from_calibration(profiles)
+    baselines = baselines_from_calibration(profiles)
+    if params is None or baselines is None:
+        return None
+    return params, baselines
+
+
+def _refresh_presence_mode(stream_processor) -> None:
+    # A failed read is not an answer: only the definite conditions in _presence_v2_inputs hand presence back.
+    try:
+        inputs = _presence_v2_inputs()
+    except Exception as error:
+        logger.warning(f'Could not work out the presence mode, keeping the current one: {error}')
+        return
+    _switch_presence_mode(stream_processor, inputs)
+
+
+def _switch_presence_mode(stream_processor, inputs) -> None:
+    # A failed switch keeps the current mode; it must never end the processing thread.
+    try:
+        stream_processor.use_presence_v2(inputs)
+    except Exception as error:
+        logger.error(f'Could not switch presence mode, keeping the current one: {error}')
+
+
+def _drop_stale_presence_v2(stream_processor) -> None:
+    """Hand presence back to piezo as soon as capSense2 stops, not at the next refresh."""
+    if stream_processor.presence is not None and not latest_cap.is_fresh(time.time(), CAP_FRESH_SECONDS):
+        _switch_presence_mode(stream_processor, None)
+
+
+def _report_stream_health(processing_thread) -> None:
+    if processing_thread.is_alive():
+        update_health('stream', 'healthy', '')
+    else:
+        update_health('stream', 'failed', 'processing thread stopped')
 
 
 class LatestRawFileHandler(FileSystemEventHandler):
@@ -198,6 +282,10 @@ class LatestRawFileHandler(FileSystemEventHandler):
                     self.last_pos = self.latest_file_obj.tell()
                     continue
 
+                if _store_decoded_cap_record(decoded_data):
+                    self.last_pos = self.latest_file_obj.tell()
+                    continue
+
                 # Shared filter/queue path with the NATS consumer, so the
                 # sequence dedup also covers a NATS -> fallback transition.
                 _queue_decoded_piezo_record(decoded_data)
@@ -220,12 +308,14 @@ class LatestRawFileHandler(FileSystemEventHandler):
 
 def process_biometrics():
     piezo_record = piezo_record_queue.get()
-    stream_processor = StreamProcessor(piezo_record, debug=False)
+    stream_processor = StreamProcessor(piezo_record, debug=False, cap_source=latest_cap)
+    _refresh_presence_mode(stream_processor)
     ix = 0
     while True:
         ix += 1
         if ix == 60:
             update_health('stream', 'healthy')
+            _refresh_presence_mode(stream_processor)
             ix = 0
         try:
             piezo_record = piezo_record_queue.get(timeout=5)
@@ -234,6 +324,7 @@ def process_biometrics():
                 # Stop if None is received
                 break
 
+            _drop_stale_presence_v2(stream_processor)
             stream_processor.process_piezo_record(piezo_record)
             piezo_record_queue.task_done()
         except queue.Empty:
@@ -320,7 +411,7 @@ async def watch_nats_stream():
 
         while True:
             if time.monotonic() - last_health_update >= STREAM_HEALTH_INTERVAL_SECONDS:
-                update_health('stream', 'healthy', '')
+                _report_stream_health(processing_thread)
                 last_health_update = time.monotonic()
                 logger.debug(f'NATS stream heartbeat; queued piezo records={queued_count}')
 
@@ -337,7 +428,7 @@ async def watch_nats_stream():
                         update_sensor_temps(decoded_data)
                     elif isinstance(decoded_data, dict) and decoded_data.get('type') == 'frzHealth':
                         update_pump_health(decoded_data)
-                    elif _queue_decoded_piezo_record(decoded_data):
+                    elif not _store_decoded_cap_record(decoded_data) and _queue_decoded_piezo_record(decoded_data):
                         queued_count += 1
                     await _ack_message(message)
                 except Exception as error:
