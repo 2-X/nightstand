@@ -66,6 +66,8 @@ export default function WeekStrip({ weekStart, selectedDate, timeZone, records, 
       aria-label="Nights in selected week"
       sx={ {
         display: 'flex', width: '100%', gap: 0,
+        // At 320 px the days would be 41 px wide; borrow the page gutter to reach 44.
+        '@media (max-width: 359.95px)': { width: 'calc(100% + 24px)', mx: -1.5 },
       } }>
       { Array.from({ length: 7 }, (_, index) => {
         const day = weekStart.clone().add(index, 'days');

@@ -16,6 +16,20 @@ test('Monday opens the latest recorded night and expanded charts fill their pane
   await expect(page.locator('[id="detail-heart_rate"]')).toHaveCount(1);
 });
 
+test('week strip days are at least 44px wide at 320px', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto('/sleep');
+  const strip = page.getByRole('group', { name: 'Nights in selected week' });
+  await expect(strip.getByRole('button')).toHaveCount(7);
+  for (const day of await strip.getByRole('button').all()) {
+    const box = await day.boundingBox();
+    expect(box!.width).toBeGreaterThanOrEqual(44);
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(320);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+});
+
 test('expanded measurements fit a 320px screen without widening the page', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 700 });
   await page.goto('/sleep?metric=hrv');
