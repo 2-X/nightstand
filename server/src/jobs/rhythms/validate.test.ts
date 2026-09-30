@@ -33,7 +33,7 @@ describe('sideIssues', () => {
   it('rejects rhythms that are missing, misfiled or too many', () => {
     const missing = sideOf([], { monday: 'workday' }, [{ date: '2026-10-10', rhythmId: 'nap' }]);
     assert.deepEqual(sideIssues(missing, TODAY), [
-      'The monday plan uses a rhythm that does not exist (workday)',
+      'The Monday plan uses a rhythm that does not exist (workday)',
       'The change on 2026-10-10 uses a rhythm that does not exist (nap)',
     ]);
     const misfiled = { ...valid, rhythms: { other: valid.rhythms.workday } };
@@ -45,9 +45,27 @@ describe('sideIssues', () => {
   it('does not mistake an inherited property name for a rhythm', () => {
     const side = sideOf([], { monday: 'constructor' }, [{ date: '2026-10-10', rhythmId: 'constructor' }]);
     assert.deepEqual(sideIssues(side, TODAY), [
-      'The monday plan uses a rhythm that does not exist (constructor)',
+      'The Monday plan uses a rhythm that does not exist (constructor)',
       'The change on 2026-10-10 uses a rhythm that does not exist (constructor)',
     ]);
+  });
+
+  it('does not mistake toString for a rhythm', () => {
+    const side = sideOf([], { friday: 'toString' }, [{ date: '2026-10-10', rhythmId: 'toString' }]);
+    assert.deepEqual(sideIssues(side, TODAY), [
+      'The Friday plan uses a rhythm that does not exist (toString)',
+      'The change on 2026-10-10 uses a rhythm that does not exist (toString)',
+    ]);
+  });
+
+  it('leaves the wake time to the resolver, even outside the night', () => {
+    const side = sideOf([rhythmOf('workday', WORKDAY, { wake: '15:00' })], { monday: 'workday' });
+    assert.deepEqual(sideIssues(side, TODAY), []);
+  });
+
+  it('names a repeated unreal date once', () => {
+    const side = sideOf([], {}, [{ date: '2026-02-30', rhythmId: null }, { date: '2026-02-30', rhythmId: null }]);
+    assert.deepEqual(sideIssues(side, TODAY), ['2026-02-30 is not a real date']);
   });
 
   it('rejects unreal, repeated and far future dates', () => {

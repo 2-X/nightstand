@@ -8,6 +8,7 @@ export const KEEP_PAST_CHANGE_DAYS = 7;
 
 const DATE_FORMAT = 'YYYY-MM-DD';
 const exists = (side: SideRhythms, id: string) => Object.hasOwn(side.rhythms, id);
+const dayName = (day: string) => day[0].toUpperCase() + day.slice(1);
 const shift = (date: string, days: number) => moment.utc(date, DATE_FORMAT, true).add(days, 'day').format(DATE_FORMAT);
 
 // Changes more than a week old no longer matter to any sleep.
@@ -32,18 +33,20 @@ export function sideIssues(side: SideRhythms, today: string, stored?: SideRhythm
   }
   for (const day of SCHEDULE_DAYS) {
     const id = side.week[day];
-    if (id && !exists(side, id)) issues.push(`The ${day} plan uses a rhythm that does not exist (${id})`);
+    if (id && !exists(side, id)) issues.push(`The ${dayName(day)} plan uses a rhythm that does not exist (${id})`);
   }
   const latest = shift(today, MAX_CHANGE_DAYS_AHEAD);
   const seen = new Set<string>();
   for (const change of side.changes) {
-    if (!moment.utc(change.date, DATE_FORMAT, true).isValid()) issues.push(`${change.date} is not a real date`);
+    const real = moment.utc(change.date, DATE_FORMAT, true).isValid();
+    if (!real) issues.push(`${change.date} is not a real date`);
     else if (change.date > latest) issues.push(`${change.date} is more than ${MAX_CHANGE_DAYS_AHEAD} days ahead`);
-    if (seen.has(change.date)) issues.push(`${change.date} has more than one change`);
+    if (real && seen.has(change.date)) issues.push(`${change.date} has more than one change`);
     seen.add(change.date);
     if (change.rhythmId && !exists(side, change.rhythmId)) {
       issues.push(`The change on ${change.date} uses a rhythm that does not exist (${change.rhythmId})`);
     }
   }
-  return issues;
+  // A date repeated several times is named once for each problem.
+  return [...new Set(issues)];
 }
