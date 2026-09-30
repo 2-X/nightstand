@@ -31,12 +31,15 @@ const { default: reboot } = await import('./reboot.js');
 const { triggerUpdateService } = await import('./update.js');
 const { triggerRollbackService } = await import('./rollback.js');
 const { default: jobsRouter } = await import('../routes/jobs/jobs.js');
+const { default: updateRouter } = await import('../routes/update/update.js');
 
 const app = express();
 app.use(express.json(), jobsRouter);
+app.use('/update', updateRouter);
 const server = app.listen(0, '127.0.0.1');
 await new Promise<void>(resolve => server.once('listening', resolve));
-const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/jobs`;
+const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+const url = `${base}/jobs`;
 after(async () => {
   await new Promise<void>(resolve => server.close(() => resolve()));
   rmSync(folder, { recursive: true, force: true });
@@ -94,4 +97,13 @@ it('lets operations start again after a reboot fails', async () => {
   failPendingReboots();
   await triggerUpdateService();
   assert.equal(starts.length, 1);
+});
+
+it('reports a refused operation as a conflict, not a failure', async () => {
+  await reboot();
+  assert.equal(await postJobs(['update']), 409);
+  assert.equal(await postJobs(['reboot']), 409);
+  const rollback = await fetch(`${base}/update/rollback`, { method: 'POST' });
+  assert.equal(rollback.status, 409);
+  assert.match((await rollback.json() as { message: string }).message, /restarting/);
 });

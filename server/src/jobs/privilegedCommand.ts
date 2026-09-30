@@ -2,6 +2,9 @@ import { execFile } from 'child_process';
 
 export class PrivilegedCommandError extends Error {}
 export class OperationCheckError extends PrivilegedCommandError {}
+// A refusal because another operation or a reboot is under way, not a failure.
+export class OperationBusyError extends PrivilegedCommandError {}
+export const privilegedErrorStatus = (error: unknown) => (error instanceof OperationBusyError ? 409 : 500);
 
 function execute(file: string, args: readonly string[], timeout = 30_000): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -38,19 +41,19 @@ async function assertOperationUnitsIdle() {
       throw new OperationCheckError('Cannot check running operations. Check the service logs before trying again.');
     }
     if (!['inactive', 'failed'].includes(state)) {
-      throw new PrivilegedCommandError(OPERATION_RUNNING);
+      throw new OperationBusyError(OPERATION_RUNNING);
     }
   }
 }
 
 export async function assertOperationsIdle() {
   if (operationStarting) {
-    throw new PrivilegedCommandError(OPERATION_RUNNING);
+    throw new OperationBusyError(OPERATION_RUNNING);
   }
   await assertOperationUnitsIdle();
   // An operation can enter admission while the systemd checks are in flight.
   if (operationStarting) {
-    throw new PrivilegedCommandError(OPERATION_RUNNING);
+    throw new OperationBusyError(OPERATION_RUNNING);
   }
 }
 
@@ -58,8 +61,8 @@ export async function assertOperationsIdle() {
 // the reboot latch from the first check so an operation or a second reboot
 // cannot slip in while the systemd checks run.
 export async function admitReboot() {
-  if (rebootPending()) throw new PrivilegedCommandError(POD_RESTARTING);
-  if (operationStarting) throw new PrivilegedCommandError(OPERATION_RUNNING);
+  if (rebootPending()) throw new OperationBusyError(POD_RESTARTING);
+  if (operationStarting) throw new OperationBusyError(OPERATION_RUNNING);
   const issuedAt = Date.now();
   rebootIssuedAt = issuedAt;
   try {
@@ -100,10 +103,10 @@ async function startCommand(command: readonly string[], unit: string, operation:
 export async function runPrivilegedCommand(command: readonly string[], unit: string, hooks: CommandOptions = {}): Promise<void> {
   const operation = OPERATION_UNITS.includes(unit);
   if (operation && rebootPending()) {
-    throw new PrivilegedCommandError(POD_RESTARTING);
+    throw new OperationBusyError(POD_RESTARTING);
   }
   if (operation && operationStarting) {
-    throw new PrivilegedCommandError(OPERATION_RUNNING);
+    throw new OperationBusyError(OPERATION_RUNNING);
   }
   if (operation) operationStarting = true;
   try {

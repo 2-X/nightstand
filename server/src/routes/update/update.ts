@@ -6,7 +6,7 @@ import { triggerRollbackService } from '../../jobs/rollback.js';
 import { triggerRevertToStockService } from '../../jobs/revertToStock.js';
 import { UpdateRequestSchema, RollbackInfo } from './updateSchema.js';
 
-import { PrivilegedCommandError } from '../../jobs/privilegedCommand.js';
+import { PrivilegedCommandError, privilegedErrorStatus } from '../../jobs/privilegedCommand.js';
 
 const router = express.Router();
 
@@ -47,7 +47,9 @@ router.post('/', async (req, res) => {
     res.status(204).end();
   } catch (error) {
     logger.error('Failed to start update', error);
-    res.status(500).json({ message: error instanceof PrivilegedCommandError ? error.message : 'Unable to start update' });
+    res.status(privilegedErrorStatus(error)).json({
+      message: error instanceof PrivilegedCommandError ? error.message : 'Unable to start update',
+    });
   }
 });
 
@@ -71,7 +73,9 @@ router.post('/rollback', async (_req, res) => {
     res.status(204).end();
   } catch (error) {
     logger.error('Failed to start rollback', error);
-    res.status(500).json({ message: error instanceof PrivilegedCommandError ? error.message : 'Unable to start rollback' });
+    res.status(privilegedErrorStatus(error)).json({
+      message: error instanceof PrivilegedCommandError ? error.message : 'Unable to start rollback',
+    });
   }
 });
 
@@ -84,7 +88,7 @@ router.post('/revert-to-stock', async (_req, res) => {
     res.status(204).end();
   } catch (error) {
     logger.error('Could not start switching to upstream free-sleep.', error);
-    res.status(500).json({
+    res.status(privilegedErrorStatus(error)).json({
       message: error instanceof PrivilegedCommandError ? error.message : 'Could not start switching to upstream free-sleep.',
     });
   }

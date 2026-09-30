@@ -6,7 +6,7 @@ import { isPythonJobPending } from '../../jobs/executePython.js';
 import moment from 'moment-timezone';
 import { Job, JobKeyListSchema } from './jobsSchema.js';
 import update from '../../jobs/update.js';
-import { PrivilegedCommandError } from '../../jobs/privilegedCommand.js';
+import { PrivilegedCommandError, privilegedErrorStatus } from '../../jobs/privilegedCommand.js';
 import reboot from '../../jobs/reboot.js';
 
 const router = express.Router();
@@ -96,7 +96,7 @@ router.post('/jobs', async (req: Request, res: Response) => {
     }
   } catch (error) {
     logger.error('Failed to start job', error);
-    res.status(500).json({ message: error instanceof PrivilegedCommandError ? error.message : 'Unable to start job' });
+    res.status(privilegedErrorStatus(error)).json({ message: error instanceof PrivilegedCommandError ? error.message : 'Unable to start job' });
     return;
   }
 

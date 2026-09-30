@@ -1056,6 +1056,8 @@ returns `400`. Presence has no WebSocket push; clients poll this endpoint.
 
 ## `/api/update`
 
+All three POST routes below, like `update` and `reboot` in `/api/jobs`, return 409 with a `message` when they are refused because another update, rollback, switch or a reboot is already under way, and 500 with a `message` when the operation could not be started.
+
 ### POST `/api/update`
 
 - Requests an asynchronous update via `free-sleep-update.service`. Returns
