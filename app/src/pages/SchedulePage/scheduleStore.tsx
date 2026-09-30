@@ -12,6 +12,7 @@ import { addMinutes } from './scheduleRoutine';
 const NEW_ALARM_GAP_MINUTES = 30;
 
 // A new alarm starts after the last enabled one, held inside the night: at turn-off, or the final minute of a full-day night.
+// When that minute is taken, it moves earlier to the nearest free one.
 function nextAlarmTime(power: DailySchedule['power'], alarms: AlarmSchedule[]): string {
   const enabled = alarms.filter(alarm => alarm.enabled);
   const last = (enabled.length ? enabled : alarms).reduce((latest, alarm) =>
@@ -19,8 +20,10 @@ function nextAlarmTime(power: DailySchedule['power'], alarms: AlarmSchedule[]): 
   const fullDay = power.on === power.off;
   const end = fullDay ? 1439 : minutesSincePowerOn(power.off, power.on);
   const lastOffset = minutesSincePowerOn(last.time, power.on);
-  if (lastOffset > end) return last.time;
-  return addMinutes(power.on, Math.min(lastOffset + NEW_ALARM_GAP_MINUTES, end));
+  const taken = new Set(alarms.map(alarm => minutesSincePowerOn(alarm.time, power.on)));
+  let offset = lastOffset > end ? end : Math.min(lastOffset + NEW_ALARM_GAP_MINUTES, end);
+  while (offset > 0 && taken.has(offset)) offset -= 1;
+  return taken.has(offset) ? last.time : addMinutes(power.on, offset);
 }
 
 export const DEFAULT_DAYS_SELECTED: DaysSelected = {

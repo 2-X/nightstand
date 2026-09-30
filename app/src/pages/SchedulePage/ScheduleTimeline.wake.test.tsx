@@ -291,6 +291,17 @@ it('seeds a new alarm inside the night when turn-off is a set time', () => {
   fireEvent.click(screen.getByRole('option', { name: 'At a set time' }));
   fireEvent.click(screen.getByRole('button', { name: 'Add alarm' }));
   fireEvent.click(screen.getByRole('button', { name: 'Add alarm' }));
-  expect(useScheduleStore.getState().getEditedAlarms().map(alarm => alarm.time)).toEqual(['07:00', '07:30', '07:30']);
+  expect(useScheduleStore.getState().getEditedAlarms().map(alarm => alarm.time)).toEqual(['07:00', '07:30', '07:29']);
+  expect(useScheduleStore.getState().isValid()).toBe(true);
+});
+
+it('does not add an alarm at the same minute as one that ends the night', () => {
+  const store = useScheduleStore.getState();
+  store.updateSelectedSchedule({ power: { on: '21:00', off: '07:00' } });
+  store.updateSelectedAlarm({ time: '07:00' });
+  store.addAlarm();
+  const times = useScheduleStore.getState().getEditedAlarms().map(alarm => alarm.time);
+  expect(new Set(times).size).toBe(times.length);
+  expect(times).toEqual(['07:00', '06:59']);
   expect(useScheduleStore.getState().isValid()).toBe(true);
 });
