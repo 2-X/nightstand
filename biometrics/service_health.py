@@ -50,7 +50,7 @@ def _frz_record_epoch(record: dict):
 
 def is_biometrics_enabled() -> bool:
     try:
-        services_db_file_path = '/persistent/free-sleep-data/lowdb/servicesDB.json'
+        services_db_file_path = os.path.join(logger.folder_path, 'lowdb', 'servicesDB.json')
         if os.path.isfile(services_db_file_path):
             print('Loading servicesDB.json...')
             with open(services_db_file_path) as file:

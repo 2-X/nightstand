@@ -17,7 +17,6 @@ class BaseLogger(logging.Logger):
     date: str
     start_time: str
     folder_path: str
-    env: Literal['local', 'prod']
 
     def __init__(self, name):
         super().__init__(name)
@@ -122,7 +121,6 @@ def _build_logger(logger: BaseLogger, name: LoggerName):
     logger.date = datetime.now().strftime('%Y-%m-%d')
     logger.start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     logger.propagate = False
-    logger.env = 'prod' if platform.system().lower() == 'linux' else 'local'
     logger.folder_path = data_folder()
 
     logger.setLevel(logging.DEBUG)

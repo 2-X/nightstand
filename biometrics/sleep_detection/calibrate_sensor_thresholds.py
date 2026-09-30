@@ -14,7 +14,6 @@ Run the script with required parameters:
     cd /home/dac/free-sleep/biometrics/sleep_detection && /home/dac/venv/bin/python calibrate_sensor_thresholds.py --side=left --start_time="YYYY-MM-DD HH:MM:SS" --end_time="YYYY-MM-DD HH:MM:SS"
 """
 import sys
-import platform
 import os
 import gc
 import json
@@ -27,10 +26,10 @@ from datetime import datetime, timezone, timedelta
 
 
 sys.path.append(os.getcwd())
-FOLDER_PATH = '/Users/ds/main/8sleep_biometrics/data/people/david/raw/loaded/2025-01-10/'
-if platform.system().lower() == 'linux':
-    FOLDER_PATH = '/persistent/'
-    sys.path.append('/home/dac/free-sleep/biometrics/')
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Live RAW files; the archive under the data folder is read as well.
+FOLDER_PATH = '/persistent/'
 
 # This must run before the other local import in order to set up the logger
 from get_logger import get_logger
@@ -359,18 +358,7 @@ if __name__ == "__main__":
         if get_available_memory_mb() < 400:
             raise MemoryError('Available memory is too little, exiting...')
 
-        if logger.env == 'prod':
-            args = _parse_args()
-        else:
-            # DEBUGGING
-            date = '2025-01-20'
-            FOLDER_PATH = f'/Users/ds/main/8sleep_biometrics/data/people/david/raw/loaded/{date}/'
-            args = Namespace(
-                side="right",
-                start_time=datetime.strptime(f'{date} 07:00:00', '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc),
-                end_time=datetime.strptime(f'{date} 15:00:00', '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc),
-                force=False,
-            )
+        args = _parse_args()
 
         # Bail before doing anything if the bed is occupied right now. The daily
         # cron runs at 17:00/17:30 PDT, when someone may already be in bed.

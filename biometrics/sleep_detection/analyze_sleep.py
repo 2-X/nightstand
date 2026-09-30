@@ -1,36 +1,23 @@
 """
-This script calibrates sensor thresholds by analyzing historical raw data to establish a baseline
-for sleep detection using piezoelectric and capacitance sensors.
+Analyze one side's sleep for a time window: load RAW sensor data, find time in
+bed and movement, and write sleep_records and movement.
 
-Key functionalities:
-- Loads raw `.RAW` sensor data for a specified time range and bed side.
-- Processes piezoelectric sensor data to detect presence using signal thresholds.
-- Analyzes capacitance sensor data to create a baseline for occupancy detection.
-- Identifies a baseline period and saves the capacitance sensor baseline for future reference.
-- Optimized for memory efficiency using garbage collection (`gc`).
+Usage (on the Pod the server runs this daily and from the Status page):
+    /home/dac/venv/bin/python -B analyze_sleep.py --side=left --start_time=2026-09-28T19:00:00Z --end_time=2026-09-29T20:00:00Z
 
-Usage:
-Run the script with required parameters:
-    /home/dac/venv/bin/python calibrate_sensor_thresholds.py --side=left --start_time="YYYY-MM-DD HH:MM:SS" --end_time="YYYY-MM-DD HH:MM:SS"
-    cd /home/dac/free-sleep/biometrics/sleep_detection && /home/dac/venv/bin/python -B analyze_sleep.py --side=left --start_time="2025-08-07 04:00:00" --end_time="2025-08-07 15:00:00"
+Off the Pod, set DATA_FOLDER to a folder holding free-sleep.db, lowdb/ and
+raw-archive/.
 """
 
 import sys
-import platform
-
-import json
-import gc
 import os
-import traceback
 from argparse import ArgumentParser, Namespace
-import numpy as np
-from datetime import datetime, timezone
 
 sys.path.append(os.getcwd())
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-if platform.system().lower() == 'linux':
-    FOLDER_PATH = '/persistent/'
-    sys.path.append('/home/dac/free-sleep/biometrics/')
+# Live RAW files; the archive under the data folder is read as well.
+FOLDER_PATH = '/persistent/'
 
 from get_logger import get_logger
 # This must run before the other local import in order to set up the logger
@@ -43,12 +30,8 @@ from service_health import update_health, is_biometrics_enabled
 from insufficient_data import outcome_for_exception, NO_SLEEP_MESSAGE
 
 
-
 def _parse_args() -> Namespace:
-    # Argument parser setup
     parser = ArgumentParser(description="Process presence intervals with UTC datetime.")
-
-    # Named arguments with default values if needed
     parser.add_argument(
         "--side",
         choices=["left", "right"],
@@ -67,17 +50,15 @@ def _parse_args() -> Namespace:
         required=True,
         help="End time in UTC format 'YYYY-MM-DD HH:MM:SS'."
     )
-
-    # Parse arguments
     args = parser.parse_args()
-
-    # Validate that start_time is before end_time
     if args.start_time >= args.end_time:
         raise ValueError("--start_time must be earlier than --end_time")
     return args
 
 
 if __name__ == "__main__":
+    args = _parse_args()
+    job_key = f'analyzeSleep{args.side.capitalize()}'
     try:
         if not is_biometrics_enabled():
             logger.info('Not analyzing sleep, biometrics is disabled')
@@ -85,19 +66,6 @@ if __name__ == "__main__":
         logger.debug(f"START Free Memory: {get_available_memory_mb()} MB")
         logger.debug(f"START Memory Usage: {get_memory_usage_unix():.2f} MB")
 
-        if logger.env == 'prod':
-            args = _parse_args()
-        else:
-            # DEBUGGING
-            date = '2025-01-20'
-            FOLDER_PATH = f'/Users/ds/main/8sleep_biometrics/data/people/david/raw/loaded/{date}/'
-            args = Namespace(
-                side="right",
-                start_time=datetime.strptime(f'{date} 07:00:00', '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc),
-                end_time=datetime.strptime(f'{date} 15:00:00', '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc),
-            )
-
-        job_key = f'analyzeSleep{args.side.capitalize()}'
         update_health(job_key, 'started', '')
 
         if get_available_memory_mb() < 400:
@@ -124,14 +92,11 @@ if __name__ == "__main__":
     except Exception as error:
         # No full night archived yet (fresh install) reports the calm
         # 'waiting_for_data' state instead of a failure; real errors stay
-        # 'failed', logged with their stack as before.
+        # 'failed', logged with their traceback.
         status, message = outcome_for_exception(error)
         if status == 'failed':
             logger.error(error)
-            stack = traceback.format_exc()
-            logger.error(stack)
             logger.error('Error analyzing sleep, exiting...')
         else:
             logger.info(message)
         update_health(job_key, status, message)
-

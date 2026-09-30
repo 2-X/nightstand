@@ -107,18 +107,15 @@ def _read_raw_record(f):
 
 
 def get_current_files(folder_path: str):
-    # Scan the live /persistent/ folder where frankenfirmware writes RAW files
-    # AND the local archive that hardlinks them before frank truncates its
-    # rolling buffer (~75 min). Without the archive a daily analyze run
-    # routinely sees only the last ~hour of data instead of the previous
-    # day, missing most of the user's sleep. The archive lives at:
-    #   /persistent/free-sleep-data/raw-archive/
-    # populated by /home/dac/free-sleep/scripts/archive-raw.sh on a
-    # systemd timer. Files in both locations point to the same inode (until
-    # frank deletes its entry, after which only the archive entry survives).
-    # Dedupe by filename so we don't decode the same file twice.
+    # Scan the live folder where frankenfirmware writes RAW files AND the
+    # archive that hardlinks them before frank truncates its rolling buffer
+    # (~75 min). Without the archive a daily analyze run sees only the last
+    # hour. The archive is raw-archive/ under the data folder
+    # (/persistent/free-sleep-data/raw-archive/ on the Pod), filled by
+    # scripts/archive-raw.sh on a systemd timer. Both entries point to the
+    # same inode until frank deletes its own, so dedupe by filename.
     candidates: dict[str, str] = {}
-    archive_path = '/persistent/free-sleep-data/raw-archive'
+    archive_path = os.path.join(logger.folder_path, 'raw-archive')
     for folder in (folder_path, archive_path):
         if not folder:
             continue

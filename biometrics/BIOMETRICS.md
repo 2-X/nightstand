@@ -81,6 +81,9 @@ nothing while it is off.
   hours. Manual calibration looks back 2 hours, separately from the scheduled
   6-hour window. It skips the occupied-bed check, so only run it when the bed
   is empty.
+- **Off the Pod.** Both jobs read their data folder from `DATA_FOLDER`
+  (`/persistent/free-sleep-data/` on the Pod), so they can be run against a
+  copy of the database, `lowdb/` and `raw-archive/`.
 - **Sleep stages and score** are computed by the server when the app asks for
   them (`server/src/routes/metrics/sleepStages.ts` and `sleepScore.ts`). Stages
   come from fixed rules over 5-minute buckets of heart rate, HRV, and
