@@ -17,13 +17,17 @@ const analyses: string[][] = [];
 mock.module(new URL('../8sleep/deviceApi.js', import.meta.url).href, {
   namedExports: { executeFunction: async (...args: unknown[]) => { commands.push(args); } },
 });
+let leftOn = true;
 mock.module(new URL('../8sleep/frankenServer.js', import.meta.url).href, {
   namedExports: { connectFrankenWithin: async () => ({
-    getDeviceStatus: async () => ({ left: { isOn: true }, right: { isOn: true } }),
+    getDeviceStatus: async () => ({ left: { isOn: leftOn }, right: { isOn: true } }),
   }) },
 });
 mock.module(new URL('../routes/deviceStatus/updateDeviceStatus.js', import.meta.url).href, {
-  namedExports: { updateDeviceStatus: async (value: unknown) => { updates.push(value); } },
+  namedExports: { updateDeviceStatus: async (value: { left?: { isOn?: boolean } }) => {
+    updates.push(value);
+    if (value?.left?.isOn === false) leftOn = false;
+  } },
 });
 mock.module(new URL('./analyzeSleep.js', import.meta.url).href, {
   namedExports: { executeAnalyzeSleep: (...args: string[]) => { analyses.push(args); } },
@@ -54,6 +58,7 @@ beforeEach(async () => {
   moment.now = () => now;
   commands.length = 0;
   updates.length = 0;
+  leftOn = true;
   analyses.length = 0;
   settings.data.timeZone = 'UTC';
   settings.data.left.awayMode = false;
@@ -262,5 +267,28 @@ test('concurrent callbacks for one occurrence issue only one device command', as
     executeAlarm({ side: 'left', ...alarm }, 'same-occurrence'),
     executeAlarm({ side: 'left', ...alarm }, 'same-occurrence'),
   ]);
+  assert.equal(commands.length, 1);
+});
+
+
+test('an override at exactly the turn-off minute rings once', async t => {
+  t.mock.method(Date, 'now', () => now);
+  t.mock.method(globalThis, 'setTimeout', () => ({ unref() {} }) as NodeJS.Timeout);
+  const wakeNight = { ...night, power: { ...night.power, off: '07:00' }, alarms: [{ ...alarm, time: '06:30' }] };
+  schedules.data.left.monday = structuredClone(wakeNight);
+  await schedules.write();
+  now = Date.parse('2026-09-28T22:00:00Z');
+  settings.data.left.scheduleOverrides.alarm = {
+    disabled: false, timeOverride: '07:00', expiresAt: '2026-09-29T07:00:00Z',
+  };
+  await settings.write();
+  scheduleAlarmOverride(settings.data, 'left');
+  scheduleAlarm(settings.data, 'left', 'monday', wakeNight);
+  assert.ok(schedule.scheduledJobs['left-alarm-override-07:00'], 'the override at the turn-off minute was not scheduled');
+  now = Date.parse('2026-09-29T06:30:00Z');
+  await schedule.scheduledJobs['left-monday-06:30-0-alarm'].invoke();
+  assert.equal(commands.length, 0, 'the replaced alarm must stay silent');
+  now = Date.parse('2026-09-29T07:00:00Z');
+  await schedule.scheduledJobs['left-alarm-override-07:00'].invoke();
   assert.equal(commands.length, 1);
 });

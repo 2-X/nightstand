@@ -190,6 +190,20 @@ export function scheduleOneOffAlarm(settingsData: Settings, side: Side) {
 }
 
 
+// An override may ring at the very end of its night (the turn-off minute).
+// In a full-day schedule that same time also opened the night, when the
+// override already had its chance, so it must not ring again at the end.
+function openedItsNight(side: Side, occurrence: moment.Moment) {
+  for (const offset of [-1, 0]) {
+    const date = occurrence.clone().startOf('day').add(offset, 'day');
+    const daily = schedulesDB.data?.[side]?.[date.format('dddd').toLowerCase() as DayOfWeek];
+    if (!daily?.power.enabled) continue;
+    const { start, end } = nightBounds(date, daily.power);
+    if (end.isSame(occurrence)) return !occurrence.clone().subtract(1, 'day').isBefore(start);
+  }
+  return false;
+}
+
 export function scheduleAlarmOverride(settingsData: Settings, side: Side) {
   if (!settingsData[side].alarmsEnabled) return null;
   const alarmOverride = settingsData[side]?.scheduleOverrides?.alarm;
@@ -200,7 +214,8 @@ export function scheduleAlarmOverride(settingsData: Settings, side: Side) {
   const expiresAt = moment.tz(alarmOverride.expiresAt, settingsData.timeZone);
   if (!expiresAt.isAfter(now)) return null;
   const next = nextOccurrenceHhMm(settingsData.timeZone, alarmOverride.timeOverride);
-  if (!next.isBefore(expiresAt)) return null;
+  if (next.isAfter(expiresAt)) return null;
+  if (next.isSame(expiresAt) && openedItsNight(side, next)) return null;
   logger.debug(`Alarm override is set! Scheduling alarm for ${next.format()}`);
 
   schedule.scheduleJob(`${side}-alarm-override-${alarmOverride.timeOverride}`, next.toDate(), async () => {
