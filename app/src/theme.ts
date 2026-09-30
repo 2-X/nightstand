@@ -66,6 +66,12 @@ const buildComponents = (mode: PaletteMode) => {
   return {
     MuiCssBaseline: {
       styleOverrides: {
+        // Keep a focused control clear of the fixed bars: the bottom navigation
+        // below the md breakpoint and the top bar above it.
+        html: {
+          scrollPaddingBottom: 'calc(64px + env(safe-area-inset-bottom, 0px) + 16px)',
+          '@media (min-width: 900px)': { scrollPaddingTop: '80px', scrollPaddingBottom: '16px' },
+        },
         summary: { minHeight: 44, paddingBlock: 10, boxSizing: 'border-box', cursor: 'pointer' },
         ':focus-visible': { outline: `2px solid ${palette.lamp}`, outlineOffset: '3px' },
         '@media (prefers-reduced-motion: reduce)': {
