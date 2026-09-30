@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import api, { LONG_REQUEST_TIMEOUT_MS, REQUEST_TIMEOUT_MS, SERVICES_REQUEST_TIMEOUT_MS } from './api';
+import api, { HARDWARE_REQUEST_TIMEOUT_MS, LONG_REQUEST_TIMEOUT_MS, REQUEST_TIMEOUT_MS, SERVICES_REQUEST_TIMEOUT_MS } from './api';
 import { postJobs } from './jobs';
+import { postDeviceStatus } from './deviceStatus';
+import { postAlarm } from './alarm';
 import { postServices } from './services';
 import { postRevertToStock, postRollback, postUpdate } from './update';
 import { sleepStagesQueryOptions } from './sleepStages';
@@ -23,6 +25,18 @@ describe('request timeouts', () => {
     await send();
     expect(post.mock.calls[0]?.[2]?.timeout).toBe(LONG_REQUEST_TIMEOUT_MS);
     expect(LONG_REQUEST_TIMEOUT_MS).toBeGreaterThan(REQUEST_TIMEOUT_MS);
+  });
+
+  it.each([
+    ['device status', () => postDeviceStatus({ left: { isOn: true } })],
+    ['alarm test', () => postAlarm({ side: 'left', vibrationIntensity: 1, vibrationPattern: 'rise', duration: 10, force: true })],
+  ])('waits longer than the server does for a %s command, and reads keep the default', async (_name, send) => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: undefined });
+    await send();
+    expect(post.mock.calls[0]?.[2]?.timeout).toBe(HARDWARE_REQUEST_TIMEOUT_MS);
+    // 10 s connect wait, then 15 s for each of the two commands Turn on sends.
+    expect(HARDWARE_REQUEST_TIMEOUT_MS).toBeGreaterThan(10_000 + 2 * 15_000);
+    expect(api.defaults.timeout).toBe(REQUEST_TIMEOUT_MS);
   });
 
   it('waits longer than the server does for a biometrics stop, so a slow one is not reported as failed', async () => {

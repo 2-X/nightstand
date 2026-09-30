@@ -1,4 +1,4 @@
-import axios from './api';
+import axios, { HARDWARE_REQUEST_TIMEOUT_MS } from './api';
 import { useQuery } from '@tanstack/react-query';
 import { DeepPartial } from 'ts-essentials';
 import { DeviceStatus } from './deviceStatusSchema';
@@ -28,7 +28,7 @@ export const postDeviceStatus = async (deviceStatus: DeepPartial<DeviceStatus>) 
       throw new Error('Invalid target temperature.');
     }
   }
-  return axios.post('/deviceStatus', deviceStatus);
+  return axios.post('/deviceStatus', deviceStatus, { timeout: HARDWARE_REQUEST_TIMEOUT_MS });
 };
 
 
