@@ -49,6 +49,26 @@ export const deviceStatusResponseSchema = responseSchema(DeviceStatusSchema.exte
   sensorTemps: DeviceStatusSchema.shape.sensorTemps.optional(),
 }));
 
+// Validate a list row by row so one malformed record cannot hide the rest.
+// A list where no row is usable still fails, which keeps a wholesale format
+// change visible as an error instead of an empty history.
+function rowsSchema(label: string, row: z.ZodTypeAny) {
+  return z.array(z.unknown()).transform((rows, context) => {
+    const kept = rows.flatMap(item => {
+      const result = row.safeParse(item);
+      return result.success ? [result.data as unknown] : [];
+    });
+    const dropped = rows.length - kept.length;
+    if (dropped === 0) return kept;
+    if (kept.length === 0) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: `No valid ${label} rows` });
+      return z.NEVER;
+    }
+    console.warn(`Ignored ${dropped} invalid ${label} ${dropped === 1 ? 'row' : 'rows'}`);
+    return kept;
+  });
+}
+
 // Validate before responses reach query caches or controls. The Pod's schemas
 // remain the source of truth; local schemas cover responses with only TS types.
 const responseSchemas: Record<string, z.ZodTypeAny> = {
@@ -56,12 +76,12 @@ const responseSchemas: Record<string, z.ZodTypeAny> = {
   '/settings': responseSchema(settingsResponse),
   '/schedules': responseSchema(SchedulesSchema.extend({ left: sideResponse, right: sideResponse })),
   '/services': responseSchema(servicesResponse),
-  '/metrics/sleep': sleepRecordSchema.refine(record => record.sleep_period_seconds >= 0
-    && Date.parse(record.left_bed_at) >= Date.parse(record.entered_bed_at), 'Invalid sleep interval').array(),
+  '/metrics/sleep': rowsSchema('sleep', sleepRecordSchema.refine(record => record.sleep_period_seconds >= 0
+    && Date.parse(record.left_bed_at) >= Date.parse(record.entered_bed_at), 'Invalid sleep interval')),
   // Reads accept any recorded value; charts drop empty and non-positive ones.
-  '/metrics/vitals': vitalsRecordSchema.extend({
+  '/metrics/vitals': rowsSchema('vitals', vitalsRecordSchema.extend({
     heart_rate: z.number().nullable(), hrv: z.number().nullable(), breathing_rate: z.number().nullable(),
-  }).array(),
+  })),
   '/metrics/movement': movementRecordSchema.array(),
   '/metrics/vitals/summary': z.object({
     avgHeartRate: seconds,

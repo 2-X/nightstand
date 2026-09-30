@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { validateResponse } from './responseValidation';
 import { getDeviceStatus, getSchedules, getServices, getSettings } from '../mocks/mockData';
 import { SettingsSchema } from './settingsSchema';
@@ -104,4 +104,49 @@ it('accepts vitals rows beyond today\'s recorder limits', () => {
     { side: 'left', timestamp: 1790664360, heart_rate: 92.4, hrv: null, breathing_rate: 0 },
     vitals[1],
   ]);
+});
+
+const goodSleep = { id: 1, side: 'left', entered_bed_at: '2026-09-28T23:45:30-07:00', left_bed_at: '2026-09-29T05:40:14-07:00',
+  sleep_period_seconds: 20684, times_exited_bed: 1, present_intervals: [], not_present_intervals: [] };
+
+describe('row-level validation', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('drops invalid sleep records and keeps the rest', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const rows = [
+      goodSleep,
+      { ...goodSleep, id: 2, left_bed_at: '2026-09-28T20:00:00-07:00' },
+      { ...goodSleep, id: 3, sleep_period_seconds: -5 },
+      { ...goodSleep, id: 4, entered_bed_at: '2026-09-27T23:45:30' },
+      { id: 5 },
+      { ...goodSleep, id: 6 },
+    ];
+    expect(validateResponse('/metrics/sleep', rows)).toEqual([goodSleep, { ...goodSleep, id: 6 }]);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops malformed vitals rows and keeps the rest', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const good = { side: 'left', timestamp: 1790664360, heart_rate: 58, hrv: 61, breathing_rate: 14 };
+    const rows = [good, { ...good, side: 'middle' }, { ...good, hrv: 'x' }, { ...good, timestamp: 1.5 }, { ...good, timestamp: 1790664420 }];
+    expect(validateResponse('/metrics/vitals', rows)).toEqual([good, { ...good, timestamp: 1790664420 }]);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not warn when every row is valid', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    validateResponse('/metrics/sleep', [goodSleep]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('still rejects a response where no row is usable', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(() => validateResponse('/metrics/sleep', [{ id: 1 }, { id: 2 }])).toThrow();
+    expect(validateResponse('/metrics/sleep', [])).toEqual([]);
+  });
+
+  it('rejects a body that is not a list', () => {
+    expect(() => validateResponse('/metrics/vitals', {})).toThrow();
+  });
 });
