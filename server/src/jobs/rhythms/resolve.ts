@@ -30,6 +30,9 @@ type Overlap = { first: string; second: string };
 // wake is left out for the weekly schedule, which takes it from the night.
 type NightSource = { rhythmId: string | null; night: DailySchedule; wake?: string; mode: 'manual' | 'smart'; smart?: SmartSchedule };
 
+// Longer than any caller needs, so a mistaken window cannot resolve years of sleeps.
+export const MAX_RESOLVE_WINDOW_MS = 70 * 24 * 60 * 60 * 1000;
+
 const KIND_ORDER: Record<RhythmEvent['kind'], number> = { 'power-on': 0, temperature: 1, alarm: 2, 'power-off': 3 };
 const DATE_FORMAT = 'YYYY-MM-DD';
 
@@ -77,6 +80,9 @@ function resolveNight(side: Side, date: string, source: NightSource, timeZone: s
 // A sleep starting the day before `from` can still be running at `from`.
 function resolveWindow(window: Window, sourceFor: (date: string) => NightSource | null): ResolvedSleep[] {
   const { side, timeZone, from, to } = window;
+  // An invalid date formats as 'Invalid date', which would never end the loop.
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return [];
+  if (to.getTime() - from.getTime() > MAX_RESOLVE_WINDOW_MS) throw new RangeError('The window to resolve is longer than 70 days');
   const last = moment.tz(to, timeZone).format(DATE_FORMAT);
   const sleeps: ResolvedSleep[] = [];
   for (let date = addDays(moment.tz(from, timeZone).format(DATE_FORMAT), -1); date <= last; date = addDays(date, 1)) {

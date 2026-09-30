@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { DEFAULT_SMART, RhythmsDB } from '../../db/rhythmsSchema.js';
 import { Schedules } from '../../db/schedulesSchema.js';
-import { applyAlarmsEnabled, findOverlaps, ResolvedSleep, resolveLegacySleeps, resolveSleeps } from './resolve.js';
+import {
+  applyAlarmsEnabled, findOverlaps, MAX_RESOLVE_WINDOW_MS, ResolvedSleep, resolveLegacySleeps, resolveSleeps,
+} from './resolve.js';
 import { alarmAt, dbOf, nightOf, rhythmOf, schedulesOf, sideOf, WORKDAY } from './rhythmsTestData.js';
 
 const at = (value: string) => new Date(value);
@@ -103,6 +105,23 @@ describe('resolveSleeps', () => {
     ]));
     const sleeps = left(db, 'UTC', '2026-10-04T00:00:00Z', '2026-10-20T00:00:00Z');
     assert.deepEqual(sleeps.map(sleep => [sleep.date, sleep.rhythmId]), [['2026-10-12', 'nap'], ['2026-10-19', 'workday']]);
+  });
+
+  it('returns no sleeps for an invalid window instead of looping', () => {
+    assert.deepEqual(resolveSleeps({ db: workdayDb, side: 'left', timeZone: 'UTC', from: at('2026-10-05T00:00:00Z'), to: at('x') }), []);
+    assert.deepEqual(resolveSleeps({ db: workdayDb, side: 'left', timeZone: 'UTC', from: at('x'), to: at('2026-10-07T00:00:00Z') }), []);
+  });
+
+  it('refuses a window longer than the cap', () => {
+    const from = at('2026-10-04T00:00:00Z');
+    const longest = new Date(from.getTime() + MAX_RESOLVE_WINDOW_MS);
+    assert.equal(MAX_RESOLVE_WINDOW_MS, 70 * 24 * 60 * 60 * 1000);
+    assert.equal(resolveSleeps({ db: workdayDb, side: 'left', timeZone: 'UTC', from, to: longest }).length, 10);
+    const tooLong = { db: workdayDb, side: 'left' as const, timeZone: 'UTC', from, to: new Date(longest.getTime() + 1) };
+    assert.throws(() => resolveSleeps(tooLong), RangeError);
+    assert.throws(() => findOverlaps(tooLong), RangeError);
+    const schedules = schedulesOf({ monday: WORKDAY });
+    assert.throws(() => resolveLegacySleeps({ ...tooLong, schedules }), RangeError);
   });
 
   it('includes sleeps that touch the window at either edge', () => {
