@@ -35,7 +35,7 @@ export default function UsageBar({ label, usedBytes, totalBytes, usedPercent, ca
         sx={ {
           height: 6,
           borderRadius: 999,
-          backgroundColor: palette.bg.elevated,
+          backgroundColor: palette.border.subtle,
           '& .MuiLinearProgress-bar': { backgroundColor: barColor, borderRadius: 999 },
         } }
       />
