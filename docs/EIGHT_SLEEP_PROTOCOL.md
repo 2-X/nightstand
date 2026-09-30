@@ -34,7 +34,7 @@ newline-delimited response.
 | 2 | `SET_ALARM` | ? | ❓ | Named by position only; free-sleep uses `ALARM_LEFT`/`ALARM_RIGHT` (5/6) instead. |
 | 3 | `REBOOT` | none | 📖 (8rp) | Reboots the device. Free-sleep has this commented out as `RESET` and doesn't call it: the pod's daily reboot schedule reboots at the OS level instead, not through this socket. |
 | 4 | `FORCE_RESET` | ? | ❓ | Commented out, never used or tested. |
-| 5 | `ALARM_LEFT` | CBOR alarm string | ✅ | Free-sleep uses this actively. Encodes target time (unix ts), duration (seconds), vibration pattern (`double` or `rise`), power level (0-100). |
+| 5 | `ALARM_LEFT` | CBOR alarm string | ✅ | Free-sleep uses this actively. Encodes target time (unix ts), duration (seconds), vibration pattern (`double` or `rise`), power level (0-100). Nightstand sends `rise` only to a Pod 5 and `double` to every other Pod, see [other Pod generations](#other-pod-generations). |
 | 6 | `ALARM_RIGHT` | CBOR alarm string | ✅ | Same shape as 5, right side. |
 | 7 | `FORMAT` | ? | ❓ | Commented out, never used or tested. Sounds destructive: do not try without a strong reason and a backup plan. |
 | 8 | `SET_SETTINGS` | CBOR settings string | ✅ | Free-sleep uses this actively. Encodes `gl`/`gr` (gain left/right) and `lb` (LED brightness). |
@@ -45,7 +45,7 @@ newline-delimited response.
 | 13 | `PRIME` | none (arg ignored) | ✅ starts, ❌ can't stop | Starts a priming cycle. `isPriming` goes `true` ~10s after the command and clears on its own after ~11-12 minutes: a genuinely long operation, not a quick flush. No known way to stop one early (see [below](#priming-cancellation)). |
 | 14 | `DEVICE_STATUS` | none | ✅ | Returns the full status blob: see [DEVICE_STATUS response fields](#device_status-response-fields) below. |
 | 15 | n/a | n/a | ❓ | Unused/unknown. Not referenced by free-sleep, jmew, or 8rp. |
-| 16 | `ALARM_CLEAR` | none | ✅ | Free-sleep uses this to stop an active alarm vibration. |
+| 16 | `ALARM_CLEAR` | none | ✅ | Free-sleep uses this to stop an active alarm vibration. Other projects send a side argument, and a Pod 3 report says it does not stop a running alarm, see [other Pod generations](#other-pod-generations). |
 | 17 | `STOP_PRIME` | none (arg ignored) | ❌ | Documented by 8rp as stopping an active prime. Tested directly against this pod: sent both immediately and again once priming was confirmed active, `isPriming` stayed `true` for 5+ minutes with no visible effect. May need a different argument or apply only in another context/Pod generation. A "Cancel priming" button built on this was reverted: don't re-add without a positive test. |
 
 <a id="priming-cancellation"></a>
@@ -163,17 +163,77 @@ revision string prefix observed on a Discord thread, not an official spec.
 They're marked as guesses in the source and have held up in practice so
 far, but treat them as best-effort.
 
+<a id="other-pod-generations"></a>
+
+## Other Pod generations
+
+We test on a Pod 5. These notes come from Pod 3 and Pod 4 owners and from
+other projects, and none of them has been checked on our hardware.
+
+- 📖 **Alarm pattern.** Pod 3 firmware accepts only `double`: with `rise`
+  it answers with an error code and does not vibrate
+  ([throwaway31265/free-sleep#55](https://github.com/throwaway31265/free-sleep/issues/55)).
+  Pod 4 firmware logs an invalid pattern and falls back to `double`
+  ([jmakes/free-sleep](https://github.com/jmakes/free-sleep/commit/9be14cdb)).
+  sleepypod's notes say the two patterns feel the same on a Pod 5
+  ([sleepypod alarms notes](https://github.com/sleepypod/core/blob/dev/docs/hardware/alarms.md)).
+  Nightstand sends the chosen pattern when the hub is detected as a Pod 5
+  and `double` for any other or unknown hub, since `double` rings on every
+  Pod. The app offers "Builds up" only on a Pod 5. Saved schedules keep
+  accepting `rise`.
+- 📖 **Stopping a running alarm.** On a Pod 3, `ALARM_CLEAR` with the
+  argument `empty` produced no firmware log line and the alarm ran its full
+  length; re-sending `ALARM_LEFT`/`ALARM_RIGHT` with a duration of 1 second
+  replaced the running alarm and stopped it
+  ([throwaway31265/free-sleep#54](https://github.com/throwaway31265/free-sleep/issues/54)).
+  sleepypod sends `ALARM_CLEAR` with `0` (left) or `1` (right) on a Pod 5
+  and notes that a clear sent within about 100 ms of the start cancels the
+  alarm before it is felt. Whether the side argument works on a Pod 3 has
+  not been tested.
+- 📖 **`SET_SETTINGS` keys.** The firmware reads only the two-letter keys
+  `v`, `gl`, `gr` and `lb`, and a write changes only the keys it contains
+  (sleepypod, Pod 5,
+  [sleepypod/core#607](https://github.com/sleepypod/core/pull/607)).
+  On a Pod 3, [ninesleep](https://github.com/bobobo1618/ninesleep) sets
+  the light by sending `lb` on its own. opensleep describes the
+  Pod 3 light as an I2C LED driver that other firmware processes also
+  write to
+  ([opensleep background](https://github.com/LiamSnow/opensleep/blob/main/BACKGROUND.md)),
+  so a brightness write may be overridden. Reading `settings` back from
+  `DEVICE_STATUS` shows whether a write took.
+- 📖 **Capacitance scale.** Pod 3 `capSense` reports three integer channels
+  per side, and someone getting into bed moves them by hundreds. Pod 5
+  `capSense2` values move by about 5 to 20
+  ([sleepypod sensor profiles](https://github.com/sleepypod/core/blob/dev/docs/hardware/sensor-profiles.md)).
+  Nightstand's presence thresholds were checked against Pod 5 data only.
+- 📖 **Files the firmware keeps in `/persistent`.** Pod 3 firmware reads
+  `frozen.heartbeat` relative to its working directory; moving it made the
+  firmware reload every 30 seconds and leak file descriptors
+  ([sleepypod/core#690](https://github.com/sleepypod/core/issues/690)).
+  Leave `SEQNO.RAW`, `frozen.heartbeat`, `alarm.cbr` and `uptime.log` in
+  place when cleaning up RAW files.
+- 📖 **Firmware without RAW files.** Firmware from about April 2026 writes
+  sensor data to a NATS JetStream stream and creates no `.RAW` files
+  ([sleepypod ADR 0018](https://github.com/sleepypod/core/blob/dev/docs/adr/0018-tmpfs-raw-frames.md)).
+
 ## Credits & sources
 
 - [Schluggi/8rp](https://github.com/Schluggi/8rp), `dac.sock` command
   table and `DEVICE_STATUS` field names.
 - [sleepypod/core](https://github.com/sleepypod/core), pump-stall failure
   mode, the `flowrate`-is-temperature correction, `frzHealth`/`frzTherm`
-  wire shapes (their ADR 0022).
+  wire shapes (their ADR 0022), and the Pod 5 alarm, `SET_SETTINGS`,
+  capacitance, `/persistent` and RAW-less firmware notes under
+  [other Pod generations](#other-pod-generations).
 - [LiamSnow/opensleep](https://github.com/LiamSnow/opensleep), lower-level
-  STM32 serial protocol (Pod 3 hardware; not confirmed to match Pod 5).
+  STM32 serial protocol (Pod 3 hardware; not confirmed to match Pod 5) and
+  the Pod 3 light driver notes.
 - [bobobo1618/ninesleep](https://github.com/bobobo1618/ninesleep), cross-
   checked `dac.sock` client implementation.
+- [caseyWebb](https://github.com/caseyWebb), Pod 3 alarm findings in
+  throwaway31265/free-sleep#54 and #55.
+- [jmakes/free-sleep](https://github.com/jmakes/free-sleep), Pod 4 alarm
+  pattern behavior.
 - Hardware-generation detection heuristics: a Discord thread linked inline
   in `loadDeviceStatus.ts`.
 - [jmew/free-sleep](https://github.com/jmew/free-sleep/commit/3ffaa0d), the
