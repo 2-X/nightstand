@@ -91,7 +91,7 @@ def run_analysis(side: str, start_time: datetime, end_time: datetime, folder_pat
             if run_id is not None:
                 try:
                     analysis_runs.set_window(run_id, window_start, window_end, conn=conn)
-                except sqlite3.Error as error:
+                except Exception as error:
                     logger.warning(f'Could not record the widened window: {error}')
         if get_available_memory_mb() < MIN_AVAILABLE_MB:
             raise MemoryError('Available memory is too little, exiting...')

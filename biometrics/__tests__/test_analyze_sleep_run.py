@@ -111,6 +111,16 @@ class RunAnalysisTest(unittest.TestCase):
         self.assertEqual(status, 'healthy')
         self.assertIn('boom', warned.call_args.args[0])
 
+    def test_a_failing_set_window_does_not_stop_the_run(self):
+        wide = (int(START.timestamp()) - 1800, int(END.timestamp()) + 1800)
+        self.module.widen_window.side_effect = lambda side, start, end: wide
+        with unittest.mock.patch.object(self.module.analysis_runs, 'set_window', side_effect=RuntimeError('boom')), \
+                unittest.mock.patch.object(self.module.logger, 'warning') as warned:
+            status, _ = self._run()
+        self.assertEqual(status, 'healthy')
+        self.assertIn('boom', warned.call_args.args[0])
+        self.assertEqual(self.module.replace_analysis_results.call_args.args[3:], wide)
+
     def test_a_failing_widen_window_is_a_recorded_failure(self):
         self.module.widen_window.side_effect = sqlite3.OperationalError('database is locked')
         with unittest.mock.patch.object(self.module.logger, 'error'):
