@@ -177,16 +177,13 @@ not branches: each release's channel is a field in `releases.json`.
 Avoid a series of one-commit releases. They make the changelog noisy and the
 version number less meaningful.
 
-Every release starts on `beta`. Promotion to `stable` is part of the release
-ritual: at each release, review the existing betas and promote any that have
-run for at least **seven nights** on real hardware with no regressions.
+Every release starts on `beta`, which gets new work first and has had less
+testing. A release moves to `stable` at the maintainer's discretion, usually
+after it has been in everyday use for a while without problems; there is no
+fixed waiting period, so `stable` changes less often.
 `scripts/promote_release.sh <version>` changes a single entry's channel in
-`releases.json` and prints the matching `gh release edit` command to run. Two
-rules keep the channels meaningful:
+`releases.json` and prints the matching `gh release edit` command to run.
 
-- **Stable floor.** The newest `stable` release must never be older than a
-  beta that has already passed its seven nights. Beta is for testing, not for
-  holding finished work.
 - Trivial or documentation-only releases can start on `stable` directly.
 
 Downgrades and rollbacks never reverse a Prisma migration: the older server

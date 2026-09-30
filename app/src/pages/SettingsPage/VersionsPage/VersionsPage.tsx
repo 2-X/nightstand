@@ -151,7 +151,7 @@ export default function VersionsPage() {
           <Box sx={ { p: 3, width: '100%', maxWidth: 720, mx: 'auto' } }>
             <Typography variant="h2">Update channel</Typography>
             <Typography variant="body2" color="text.secondary" sx={ { my: 2 } }>
-            Beta gets every release right away. Stable waits for a week of real use.
+            Stable updates less often, with releases that have been in use for a while. Beta gets each release as soon as it is out, with less testing.
             </Typography>
             <RadioGroup
               aria-label="Update channel"
