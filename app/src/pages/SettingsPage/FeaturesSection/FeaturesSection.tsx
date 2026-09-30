@@ -129,6 +129,19 @@ export default function FeaturesSection() {
           }
         />
       </Box>
+      <Box sx={ { pl: 2, borderLeft: 1, borderColor: 'divider' } }>
+        <FeatureToggleRow
+          label="New sleep tracking (beta)"
+          disabled={ isUpdating || features?.biometricsV2 === undefined || !biometricsEnabled }
+          checked={ features?.biometricsV2 ?? false }
+          onChange={ (next) => updateFeature({ biometricsV2: next }) }
+          description={
+            !biometricsEnabled
+              ? <Link href="#biometrics" sx={ { display: 'inline-flex', minHeight: 44, alignItems: 'center' } }>Needs Biometrics</Link>
+              : 'Tells the two sides apart with the bed\'s capacitance sensors. Still being tested.'
+          }
+        />
+      </Box>
       <FeatureToggleRow
         label="Level temperature display"
         disabled={ isUpdating || features?.levelTemps === undefined }

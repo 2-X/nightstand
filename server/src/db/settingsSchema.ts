@@ -100,6 +100,7 @@ export const defaultFeatures = {
   presenceAutoOff: true,
   nightstandTheme: true,
   rhythms: false,
+  biometricsV2: false,
 } as const;
 const FeaturesSchema = z.object({
   sleepScore: z.boolean(),
@@ -108,6 +109,7 @@ const FeaturesSchema = z.object({
   presenceAutoOff: z.boolean(),
   nightstandTheme: z.boolean(),
   rhythms: z.boolean(),
+  biometricsV2: z.boolean(),
 }).strict();
 
 export const SettingsSchema = z.object({

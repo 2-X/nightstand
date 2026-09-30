@@ -267,6 +267,33 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
       + 'correctly.',
   },
   {
+    id: 'biometrics-v2',
+    title: 'New sleep tracking (beta)',
+    description: 'Tells the two sides apart with the bed\'s capacitance sensors, in live presence and the '
+      + 'nightly analysis, and keeps vitals through short trips out of bed.',
+    category: 'biometrics',
+    version: 'n/a',
+    flag: 'biometricsV2',
+    default: false,
+    touchpoints: [
+      'biometrics/presence', 'biometrics/features.py', 'biometrics/stream/stream.py',
+      'biometrics/stream/stream_processor.py', 'biometrics/stream/biometric_processor.py',
+      'biometrics/sleep_detection/sleep_detector.py', 'biometrics/calibration.py',
+      'server/src/features/biometricsV2.ts', 'app/src/pages/SettingsPage/FeaturesSection',
+    ],
+    depends_on: ['biometrics'],
+    reversible: true,
+    tests: [
+      'biometrics/__tests__/test_presence_detector.py', 'biometrics/__tests__/test_presence_replay.py',
+      'biometrics/__tests__/test_sleep_detector_presence.py', 'biometrics/__tests__/test_stream_presence.py',
+      'biometrics/__tests__/test_toggle_off_identity.py', 'server/src/features/biometricsV2.test.ts',
+    ],
+    upstream_offer: false,
+    rationale: 'Off by default while it is checked against more nights and more beds. Off leaves live '
+      + 'presence, the nightly analysis and every stored value exactly as before. Older versions keep '
+      + 'the setting and ignore it.',
+  },
+  {
     id: 'daily-reboot',
     title: 'Daily reboot',
     description: 'Restarts the pod an hour before daily priming.',

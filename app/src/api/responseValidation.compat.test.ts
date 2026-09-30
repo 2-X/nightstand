@@ -56,6 +56,15 @@ it('accepts fields absent from older settings and services', () => {
   expect(() => validateResponse('/services', services)).not.toThrow();
 });
 
+it('accepts settings from a version without the new sleep tracking switch', () => {
+  const settings = structuredClone(getSettings());
+  const features: Record<string, unknown> = { ...settings.features };
+  delete features.biometricsV2;
+  const parsed = validateResponse('/settings', { ...settings, features }) as typeof settings;
+  expect(parsed.features).not.toHaveProperty('biometricsV2');
+  expect(parsed.features?.sleepScore).toBe(true);
+});
+
 it('strips future compatibility fixtures after defaults are backfilled', async () => {
   const { default: merge } = await import('lodash/merge');
   const settings = await import('../../../fixtures/compat/future/settingsDB.json');

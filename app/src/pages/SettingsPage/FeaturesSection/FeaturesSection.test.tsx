@@ -41,6 +41,25 @@ describe('FeaturesSection', () => {
 
     expect(posted).toEqual({ features: { presenceAutoOff: false } });
   });
+
+  it('posts biometricsV2 when new sleep tracking is switched on', async () => {
+    let posted: unknown;
+    server.use(
+      http.post('*/api/settings', async ({ request }) => {
+        posted = await request.json();
+        return HttpResponse.json({});
+      }),
+    );
+
+    const { user } = renderWithProviders(<FeaturesSection />);
+
+    const toggle = await screen.findByRole('switch', { name: 'New sleep tracking (beta)' });
+    expect(toggle).not.toBeChecked();
+    expect(screen.getByText('Tells the two sides apart with the bed\'s capacitance sensors. Still being tested.')).toBeVisible();
+    await user.click(toggle);
+
+    expect(posted).toEqual({ features: { biometricsV2: true } });
+  });
 });
 
 it.each([null, ''])('reports invalid settings instead of leaving features loading for %s', async body => {
