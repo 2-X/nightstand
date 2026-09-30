@@ -17,6 +17,14 @@ describe('manual diagnostic jobs', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not start');
     expect(screen.getByRole('button', { name: 'Analyze left-side sleep' })).toBeEnabled();
   });
+  it('says a refused duplicate is already queued or running, not failed', async () => {
+    server.use(http.post('*/jobs', () => HttpResponse.json({ message: 'Already queued or running: analyzeSleepLeft' }, { status: 409 })));
+    const { user } = renderWithProviders(<StatusRow job="analyzeSleepLeft" statusInfo={ status } divider={ false }/>);
+    await user.click(screen.getByRole('button', { name: 'Analyze left-side sleep' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Already queued or running.');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Try again/)).not.toBeInTheDocument();
+  });
   it('reports acceptance without claiming completion from the POST alone', async () => {
     server.use(http.post('*/jobs', () => new HttpResponse(null, { status: 204 })));
     const { user } = renderWithProviders(<StatusRow job="analyzeSleepLeft" statusInfo={ status } divider={ false }/>);

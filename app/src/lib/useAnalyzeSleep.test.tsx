@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { act, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { useAppStore } from '@state/appStore';
+import { AxiosError, AxiosHeaders } from 'axios';
 import useAnalyzeSleep from './useAnalyzeSleep';
 
 const fixture = vi.hoisted(() => ({ enabled: true, away: false, status: 'healthy', post: vi.fn() }));
@@ -21,6 +22,7 @@ function AnalysisControl() {
     <button disabled={ !analysis.canAnalyze } onClick={ () => { void analysis.analyze(); void analysis.analyze(); } }>Analyze</button>
     { analysis.isPending && <span>Running</span> }
     { analysis.error && <span>Failed</span> }
+    { analysis.alreadyQueued && <span>Queued</span> }
   </>;
 }
 beforeEach(() => {
@@ -137,4 +139,15 @@ it('refreshes cached classifications when returning after analysis completed els
   await waitFor(() => expect(queryClient.getQueryState(olderStages)?.isInvalidated).toBe(true));
   expect(queryClient.getQueryState(recentStages)?.isInvalidated).toBe(false);
   expect(queryClient.getQueryState(otherSideStages)?.isInvalidated).toBe(false);
+});
+
+it('treats a 409 as already queued or running, not a failure', async () => {
+  const config = { headers: new AxiosHeaders() };
+  fixture.post.mockRejectedValueOnce(new AxiosError('Conflict', 'ERR_BAD_REQUEST', config, undefined,
+    { status: 409, statusText: 'Conflict', headers: {}, config, data: { message: 'Already queued or running: analyzeSleepLeft' } }));
+  const { user } = renderWithProviders(<AnalysisControl/>);
+  await user.click(screen.getByRole('button', { name: 'Analyze' }));
+  expect(await screen.findByText('Queued')).toBeInTheDocument();
+  expect(screen.getByText('Running')).toBeInTheDocument();
+  expect(screen.queryByText('Failed')).not.toBeInTheDocument();
 });

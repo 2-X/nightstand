@@ -7,6 +7,7 @@ import StatusChip from './StatusChip.tsx';
 import { postJobs, JobSchema, Jobs } from '@api/jobs.ts';
 import { useCalibration } from '@api/calibration.ts';
 import { Link } from 'react-router-dom';
+import { isConflict } from '@lib/requestError.ts';
 import { useId, useState } from 'react';
 import { palette } from '@design/tokens';
 import { STATUS_META, GENERIC_MEANING, statusName } from './statusMeta.ts';
@@ -30,7 +31,7 @@ export default function StatusRow({ job, statusInfo, divider }: StatusRowProps) 
     ? 'left'
     : job === 'biometricsCalibrationRight' ? 'right' : null;
 
-  const [request, setRequest] = useState<'idle' | 'pending' | 'accepted' | 'failed'>('idle');
+  const [request, setRequest] = useState<'idle' | 'pending' | 'accepted' | 'queued' | 'failed'>('idle');
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const [requestedTimestamp, setRequestedTimestamp] = useState<string>();
   const actionLabel = meta.runLabel ?? `Run ${statusInfo.name}`;
@@ -38,6 +39,7 @@ export default function StatusRow({ job, statusInfo, divider }: StatusRowProps) 
   let feedback: string | undefined;
   if (request === 'failed') feedback = 'Could not start this job. Try again.';
   else if (request === 'pending') feedback = 'Sending request...';
+  else if (request === 'queued') feedback = 'Already queued or running.';
   else if (request === 'accepted') {
     if (statusInfo.status === 'started') feedback = 'Running.';
     else if (newStatus && statusInfo.status === 'healthy') feedback = 'Completed, as reported by the server.';
@@ -53,8 +55,8 @@ export default function StatusRow({ job, statusInfo, divider }: StatusRowProps) 
     try {
       await postJobs([job] as Jobs);
       setRequest('accepted');
-    } catch {
-      setRequest('failed');
+    } catch (failure) {
+      setRequest(isConflict(failure) ? 'queued' : 'failed');
     }
   };
 
@@ -104,7 +106,8 @@ export default function StatusRow({ job, statusInfo, divider }: StatusRowProps) 
             onClick={ () => calibrationSide ? setConfirmationOpen(true) : void startJob() }
             variant="outlined"
             size="small"
-            disabled={ request === 'pending' || (request === 'accepted' && !newStatus) || statusInfo.status === 'started' }
+            disabled={ request === 'pending' || ((request === 'accepted' || request === 'queued') && !newStatus)
+              || statusInfo.status === 'started' }
             startIcon={ <PlayArrowIcon /> }
             sx={ { flexShrink: 0 } }
           >

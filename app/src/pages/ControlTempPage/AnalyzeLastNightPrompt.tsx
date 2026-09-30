@@ -15,7 +15,7 @@ const HIDE_AFTER_MS = 20_000;
 export default function AnalyzeLastNightPrompt() {
   const { side } = useAppStore();
   const poweredOff = useControlTempStore(state => state.poweredOff);
-  const { analyze, canAnalyze, isPending: analyzing, error: analysisError } = useAnalyzeSleep();
+  const { analyze, canAnalyze, isPending: analyzing, error: analysisError, alreadyQueued } = useAnalyzeSleep();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -38,7 +38,7 @@ export default function AnalyzeLastNightPrompt() {
         <Button variant="text" onClick={ () => void analyze() }>Analyze last night</Button>
       ) }
       { analysisError && <Alert severity="error">Could not start sleep analysis. Try again.</Alert> }
-      { analyzing && <AnalyzeSleepNotification/> }
+      { analyzing && <AnalyzeSleepNotification alreadyQueued={ alreadyQueued }/> }
     </Box>
   );
 }

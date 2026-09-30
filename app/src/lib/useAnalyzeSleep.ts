@@ -4,12 +4,14 @@ import { Side, useAppStore } from '@state/appStore';
 import { useSettings } from '@api/settings';
 import { useServices } from '@api/services';
 import { postJobs } from '@api/jobs';
+import { isConflict } from '@lib/requestError';
 
 type AnalysisRequest = {
   id: number;
   timestamp: string | undefined;
   submitting: boolean;
   error: boolean;
+  queued: boolean;
   awaitingJob: boolean;
   expiresAt: number;
 };
@@ -29,6 +31,7 @@ export default function useAnalyzeSleep() {
   const awaitingJob = request?.awaitingJob && request.timestamp === job?.timestamp;
   const isPending = !!request?.submitting || !!isRunning || !!awaitingJob;
   const error = !!request?.error;
+  const alreadyQueued = !!request?.queued && isPending;
   const canAnalyze = !settingsError && !servicesError && !!settings && !!services?.biometrics?.enabled
     && !settings[side]?.awayMode && !isUpdating && !isPending;
 
@@ -84,20 +87,27 @@ export default function useAnalyzeSleep() {
     const id = ++nextRequestId.current;
     submitting.current[requestSide] = id;
     setRequests(previous => ({ ...previous, [requestSide]: {
-      id, timestamp: job?.timestamp, submitting: true, error: false, awaitingJob: true, expiresAt: Date.now() + 120_000,
+      id, timestamp: job?.timestamp, submitting: true, error: false, queued: false, awaitingJob: true, expiresAt: Date.now() + 120_000,
     } }));
     try {
       await postJobs([requestSide === 'left' ? 'analyzeSleepLeft' : 'analyzeSleepRight']);
       await queryClient.invalidateQueries({ queryKey: ['useServices'] });
       await queryClient.invalidateQueries({ queryKey: ['useSleepRecords'] });
-    } catch {
-      setRequests(previous => previous[requestSide]?.id === id
-        ? { ...previous, [requestSide]: { ...previous[requestSide]!, awaitingJob: false, error: true } } : previous);
+    } catch (failure) {
+      if (isConflict(failure)) {
+        // The server already has this analysis queued or running.
+        setRequests(previous => previous[requestSide]?.id === id
+          ? { ...previous, [requestSide]: { ...previous[requestSide]!, queued: true } } : previous);
+        void queryClient.invalidateQueries({ queryKey: ['useServices'] });
+      } else {
+        setRequests(previous => previous[requestSide]?.id === id
+          ? { ...previous, [requestSide]: { ...previous[requestSide]!, awaitingJob: false, error: true } } : previous);
+      }
     } finally {
       if (submitting.current[requestSide] === id) delete submitting.current[requestSide];
       setRequests(previous => previous[requestSide]?.id === id
         ? { ...previous, [requestSide]: { ...previous[requestSide]!, submitting: false } } : previous);
     }
   };
-  return { analyze, canAnalyze, isPending, error };
+  return { analyze, canAnalyze, isPending, error, alreadyQueued };
 }
