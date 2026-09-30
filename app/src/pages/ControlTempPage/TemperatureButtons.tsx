@@ -8,6 +8,7 @@ import { postDeviceStatus } from '@api/deviceStatus.ts';
 import { useSettings } from '@api/settings.ts';
 import { MIN_TEMP_F, MAX_TEMP_F } from '@lib/temperatureConversions.ts';
 import { stepTemperature, TemperatureStepState } from '@lib/temperatureStep';
+import { bedCommandMessage } from '@lib/requestError.ts';
 
 type TemperatureButtonsProps = {
   refetch: any;
@@ -24,7 +25,7 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
     holdsUpdating.current = value;
     setStoreUpdating(value);
   }, [setStoreUpdating]);
-  const { deviceStatus, setDeviceStatus, beginEdit, endEdit } = useControlTempStore();
+  const { deviceStatus, setDeviceStatus, beginEdit, endEdit, setCommandError } = useControlTempStore();
   const { data: settings } = useSettings();
   const format = settings?.temperatureFormat ?? 'fahrenheit';
   const steps = useRef<{ side: typeof side; state?: TemperatureStepState }>({ side });
@@ -82,10 +83,12 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
     setIsUpdating(true);
     try {
       await postDeviceStatus({ [side]: { targetTemperatureF: target } });
+      setCommandError(undefined);
       if (target !== undefined) savedTarget.current = target;
       await new Promise(resolve => setTimeout(resolve, 1500));
     } catch (error) {
       console.error(error);
+      setCommandError(bedCommandMessage(error));
       if (mounted.current && !ready.current && !debounceTimer.current) {
         setDeviceStatus({ [side]: { targetTemperatureF: savedTarget.current } });
       }
@@ -104,7 +107,7 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
         setIsUpdating(false);
       }
     }
-  }, [side, refetch, setIsUpdating, endEdit, setDeviceStatus, sendLatest, sideIsOff]);
+  }, [side, refetch, setIsUpdating, endEdit, setDeviceStatus, setCommandError, sendLatest, sideIsOff]);
 
   const scheduleUpdate = useCallback(() => {
     ready.current = false;

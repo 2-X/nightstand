@@ -25,6 +25,8 @@ export default function ControlTempPage() {
   const syncFromServer = useControlTempStore((state) => state.syncFromServer);
   const { data: settings, isError: settingsError } = useSettings();
   const { isUpdating, side } = useAppStore();
+  const commandError = useControlTempStore((state) => state.commandError);
+  const setCommandError = useControlTempStore((state) => state.setCommandError);
 
   const sideStatus = deviceStatus?.[side];
   const isOn = sideStatus?.isOn || false;
@@ -32,6 +34,11 @@ export default function ControlTempPage() {
   useEffect(() => {
     refetch();
   }, [side]);
+
+  useEffect(() => {
+    setCommandError(undefined);
+    return () => setCommandError(undefined);
+  }, [side, setCommandError]);
 
   useEffect(() => {
     if (!deviceStatus) return;
@@ -80,6 +87,7 @@ export default function ControlTempPage() {
           ) : (
             sideStatus && <PowerButton isOn={ sideStatus.isOn } refetch={ refetch } />
           ) }
+          { commandError && <Alert severity="error" sx={ { width: '100%' } }>{ commandError }</Alert> }
         </Box>
         <Box sx={ { display: 'flex', flexDirection: 'column', gap: 2, width: '100%' } }>
           <ErrorBoundary componentName="Schedule override banner">

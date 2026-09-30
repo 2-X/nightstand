@@ -11,6 +11,9 @@ type ControlTempStore = {
   // When a side was last turned off from the Bed page, so the analysis
   // prompt can follow it without living next to the power button.
   poweredOff: { side: Side; at: number } | undefined;
+  // Why the last power or temperature change did not reach the Pod.
+  commandError: string | undefined;
+  setCommandError: (message: string | undefined) => void;
   markPoweredOff: (side: Side) => void;
   clearPoweredOff: () => void;
   setDeviceStatus: (newDeviceStatus: DeepPartial<DeviceStatus>) => void;
@@ -23,6 +26,8 @@ export const useControlTempStore = create<ControlTempStore>((set, get) => ({
   deviceStatus: undefined,
   pendingEdits: 0,
   poweredOff: undefined,
+  commandError: undefined,
+  setCommandError: (commandError) => set({ commandError }),
   markPoweredOff: (side) => set({ poweredOff: { side, at: Date.now() } }),
   clearPoweredOff: () => set({ poweredOff: undefined }),
   setDeviceStatus: (newDeviceStatus) => {

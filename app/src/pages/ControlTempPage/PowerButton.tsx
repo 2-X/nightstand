@@ -8,6 +8,7 @@ import { useSettings } from '@api/settings.ts';
 import { useSchedules } from '@api/schedules.ts';
 import { getScheduledTargetTemperature } from '@lib/scheduleTemperature.ts';
 import { useControlTempStore } from './controlTempStore.tsx';
+import { bedCommandMessage } from '@lib/requestError.ts';
 
 
 type PowerButtonProps = {
@@ -24,6 +25,7 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
   const endEdit = useControlTempStore(state => state.endEdit);
   const markPoweredOff = useControlTempStore(state => state.markPoweredOff);
   const clearPoweredOff = useControlTempStore(state => state.clearPoweredOff);
+  const setCommandError = useControlTempStore(state => state.setCommandError);
   const isInAwayMode = settings?.[side]?.awayMode;
   const disabled = isUpdating || isInAwayMode;
 
@@ -51,6 +53,7 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
     postDeviceStatus(deviceStatus)
       .then(() => {
         saved = true;
+        setCommandError(undefined);
         if (powerOn) clearPoweredOff();
         else markPoweredOff(side);
         // Wait 1 second before refreshing the device status
@@ -70,6 +73,7 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
           endEdit();
         }
         console.error(error);
+        if (!saved) setCommandError(bedCommandMessage(error));
         // The write failed, so the optimistic power state is a lie; a target
         // set for Turn on goes back too.
         if (!saved && previous) {
