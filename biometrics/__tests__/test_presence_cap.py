@@ -68,6 +68,11 @@ class CapDeltaTest(unittest.TestCase):
         values = [None, 13.0, 10.0, 10.0, 15.0, 15.0, 1.2, 1.2]
         self.assertAlmostEqual(cap_delta(values, BASELINE), 2.0)
 
+    def test_nan_entries_are_left_out_like_sentinels(self):
+        values = [float('nan'), 13.0, 10.0, 10.0, 15.0, 15.0, 1.2, 1.2]
+        self.assertAlmostEqual(cap_delta(values, BASELINE), 2.0)
+        self.assertIsNone(cap_delta([float('nan')] * 6 + [1.2, 1.2], BASELINE))
+
     def test_integer_sentinels_are_masked(self):
         values = [-1, -1, 12, 12, 17, 17, 1, 1]
         self.assertAlmostEqual(cap_delta(values, BASELINE), (2.0 + 2.0) * 3 / 2)

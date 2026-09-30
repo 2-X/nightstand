@@ -1,6 +1,7 @@
 """Capacitance rise over the empty-bed baseline, per side."""
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Optional, Sequence, Tuple
 
@@ -24,10 +25,10 @@ class CapBaseline:
 def cap_delta(values: Optional[Sequence[float]], baseline: CapBaseline) -> Optional[float]:
     """Sum of the three channel rises over the baseline, or None with no reading.
 
-    A sentinel value is missing: a pair falls back to its other value, and a
-    channel whose pair is all sentinel is left out and the remaining ones are
-    scaled up to three channels, so one dead channel does not read as a drop
-    in occupancy.
+    A sentinel, None or NaN value is missing: a pair falls back to its other
+    value, and a channel whose pair is all missing is left out and the
+    remaining ones are scaled up to three channels, so one dead channel does
+    not read as a drop in occupancy.
     """
     if values is None or len(values) < 6:
         return None
@@ -35,7 +36,7 @@ def cap_delta(values: Optional[Sequence[float]], baseline: CapBaseline) -> Optio
     used = 0
     for channel, (first, second) in enumerate(CHANNEL_PAIRS):
         readings = [value for value in (values[first], values[second])
-                    if value is not None and value != SENTINEL]
+                    if value is not None and value != SENTINEL and not math.isnan(value)]
         if not readings:
             continue
         total += sum(readings) / len(readings) - baseline.mean[channel]
