@@ -238,18 +238,24 @@ export default function SleepStagesCard({ startTime, endTime, timeZone }: Props)
 
       { !isError && data && data.epochs.length > 0 && (
         <>
-          <Box sx={ { display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' } }>
-            <StatBlock
-              label="Deep sleep"
-              duration={ formatSleepDuration(data.totals.deep) }
-              pct={ `${data.percentages.deep}%` }
-            />
-            <StatBlock
-              label="REM"
-              duration={ formatSleepDuration(data.totals.rem) }
-              pct={ `${data.percentages.rem}%` }
-            />
-          </Box>
+          { data.lowCoverage ? (
+            <Typography variant="body2" color="text.secondary" sx={ { mb: 2 } }>
+              Too few heart readings to total deep sleep and REM for this night.
+            </Typography>
+          ) : (
+            <Box sx={ { display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' } }>
+              <StatBlock
+                label="Deep sleep"
+                duration={ formatSleepDuration(data.totals.deep) }
+                pct={ `${data.percentages.deep}%` }
+              />
+              <StatBlock
+                label="REM"
+                duration={ formatSleepDuration(data.totals.rem) }
+                pct={ `${data.percentages.rem}%` }
+              />
+            </Box>
+          ) }
 
           <StagesChart
             epochs={ data.epochs }

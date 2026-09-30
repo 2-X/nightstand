@@ -30,4 +30,18 @@ describe('Sleep stages card', () => {
     expect(screen.getByText('2:00 AM')).toHaveStyle({ transform: 'translateX(-50%)' });
     expect(screen.getByText('5:00 AM')).toHaveStyle({ transform: 'translateX(-100%)' });
   });
+
+  it('marks the totals as unreliable when stage coverage is low', async () => {
+    server.use(http.get('*/metrics/sleep-stages', () => HttpResponse.json(stages({ lowCoverage: true }))));
+    renderWithProviders(<SleepStagesCard startTime={ START } endTime={ END } timeZone="America/Los_Angeles"/>);
+    expect(await screen.findByText(/Too few heart readings/i)).toBeInTheDocument();
+    expect(screen.queryByText('Deep sleep')).not.toBeInTheDocument();
+  });
+
+  it('shows deep and REM totals when coverage is fine', async () => {
+    server.use(http.get('*/metrics/sleep-stages', () => HttpResponse.json(stages())));
+    renderWithProviders(<SleepStagesCard startTime={ START } endTime={ END } timeZone="America/Los_Angeles"/>);
+    expect(await screen.findByText('Deep sleep')).toBeInTheDocument();
+    expect(screen.queryByText(/Too few heart readings/i)).not.toBeInTheDocument();
+  });
 });
