@@ -12,7 +12,7 @@ function useNightCaption(record: SleepRecord | undefined, enabled: boolean) {
   const { data: score } = useSleepScore(query, enabled && !!record);
   if (!record) return 'No recording';
   const duration = nightDuration(record.sleep_period_seconds, enabled ? stages : undefined);
-  const estimate = enabled && score?.active && score.score !== null && Number.isFinite(score.score) ? `${score.score}, ` : '';
+  const estimate = enabled && score?.active && score.score !== null && Number.isFinite(score.score) ? `${Math.round(score.score)}, ` : '';
   return `${estimate}${formatSleepDuration(duration.seconds)}${duration.kind === 'in bed' ? ' in bed' : ''}`;
 }
 
@@ -20,8 +20,10 @@ export default function SleepSideControl({ selectedDate, timeZone }: { selectedD
   const left = useSleepRecords({ side: 'left' });
   const right = useSleepRecords({ side: 'right' });
   const enabled = useSleepScoreEnabled();
-  const leftCaption = useNightCaption(recordForNight(left.isError ? [] : left.data ?? [], selectedDate, timeZone), enabled);
-  const rightCaption = useNightCaption(recordForNight(right.isError ? [] : right.data ?? [], selectedDate, timeZone), enabled);
+  const nightFor = (side: 'left' | 'right', records: SleepRecord[] | undefined) =>
+    recordForNight((records ?? []).filter(record => record.side === side), selectedDate, timeZone);
+  const leftCaption = useNightCaption(nightFor('left', left.isError ? [] : left.data), enabled);
+  const rightCaption = useNightCaption(nightFor('right', right.isError ? [] : right.data), enabled);
   return <SideControl
     mergeAwaySides={ false }
     captions={ {
