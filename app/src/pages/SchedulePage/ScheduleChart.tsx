@@ -248,7 +248,8 @@ export default function TemperatureScheduleChart() {
           x={ todayAt(enabledAlarms[0].time, timeZone, enabledAlarms[0].time < selectedSchedule!.power.on ? 1 : 0) }
           label="Wake"
           labelAlign="start"
-          labelStyle={ { fill: axisColor, fontSize: 12, textAnchor: 'end', transform: 'translateX(-4px)' } }
+          spacing={ { x: -6, y: 5 } }
+          labelStyle={ { fill: axisColor, fontSize: 12, textAnchor: 'end' } }
           lineStyle={ { stroke: axisColor, strokeDasharray: '3 3' } }/> }
         <HorizontalTempGradient
           idArea={ gradAreaId }

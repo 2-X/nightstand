@@ -83,6 +83,15 @@ test('level steppers stay bounded and boundary errors focus the affected row', a
   await expect(invalid).toBeInViewport();
 });
 
+test('the chart Wake label sits left of its reference line', async ({ page }) => {
+  await page.goto('/schedules');
+  const label = page.locator('svg text', { hasText: /^Wake$/ });
+  await expect(label).toBeVisible();
+  const line = page.locator('.MuiChartsReferenceLine-line').first();
+  const [labelBox, lineBox] = await Promise.all([label.boundingBox(), line.boundingBox()]);
+  expect(labelBox!.x + labelBox!.width).toBeLessThan(lineBox!.x);
+});
+
 test('the unsaved summary fits at 320 px with side and days intact', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 844 });
   await page.goto('/schedules');
