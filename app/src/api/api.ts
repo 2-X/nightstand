@@ -13,8 +13,17 @@ if (inDev && !import.meta.env.VITE_POD_IP) {
 }
 const baseURL = inDev && import.meta.env.VITE_POD_IP ? `http://${import.meta.env.VITE_POD_IP}:3000` : `${window.location.origin}`;
 
+// A request that never answers should end in an error the pages can show,
+// not a spinner. Calls that legitimately wait on the Pod (privileged
+// commands, on-demand sleep analysis) pass the longer one.
+export const REQUEST_TIMEOUT_MS = 20_000;
+export const LONG_REQUEST_TIMEOUT_MS = 60_000;
+// Stopping biometrics can take the server up to two minutes.
+export const SERVICES_REQUEST_TIMEOUT_MS = 130_000;
+
 const axiosInstance = axios.create({
   baseURL: `${baseURL}/api/`,
+  timeout: REQUEST_TIMEOUT_MS,
   responseType: 'json',
   transitional: { silentJSONParsing: false },
 });

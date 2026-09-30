@@ -1,4 +1,4 @@
-import axios from './api';
+import axios, { LONG_REQUEST_TIMEOUT_MS } from './api';
 import { queryOptions, useQuery } from '@tanstack/react-query';
 
 export type SleepStage = 'awake' | 'rem' | 'light' | 'deep';
@@ -36,6 +36,7 @@ export const sleepStagesQueryOptions = ({ side, startTime, endTime }: Args, enab
       const response = await axios.get<SleepStagesResponse>('/metrics/sleep-stages', {
         params: { side, startTime, endTime },
         signal,
+        timeout: LONG_REQUEST_TIMEOUT_MS,
       });
       return response.data;
     },

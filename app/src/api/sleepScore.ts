@@ -1,4 +1,4 @@
-import axios from './api';
+import axios, { LONG_REQUEST_TIMEOUT_MS } from './api';
 import { useQuery } from '@tanstack/react-query';
 import { useSettings } from './settings.ts';
 import { useServices } from './services.ts';
@@ -38,6 +38,7 @@ export const useSleepScore = ({ side, startTime, endTime }: Args, enabled = true
       const response = await axios.get<SleepScore>('/metrics/sleep-score', {
         params: { side, startTime, endTime },
         signal,
+        timeout: LONG_REQUEST_TIMEOUT_MS,
       });
       return response.data;
     },

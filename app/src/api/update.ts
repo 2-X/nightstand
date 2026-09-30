@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import axios from './api';
+import axios, { LONG_REQUEST_TIMEOUT_MS } from './api';
 import { RollbackInfo, UpdateRequest } from './updateSchema.ts';
 
-export const postUpdate = (body: UpdateRequest = {}) => axios.post('/update', body);
+export const postUpdate = (body: UpdateRequest = {}) => axios.post('/update', body, { timeout: LONG_REQUEST_TIMEOUT_MS });
 
-export const postRollback = () => axios.post('/update/rollback');
+export const postRollback = () => axios.post('/update/rollback', undefined, { timeout: LONG_REQUEST_TIMEOUT_MS });
 
-export const postRevertToStock = () => axios.post('/update/revert-to-stock');
+export const postRevertToStock = () => axios.post('/update/revert-to-stock', undefined, { timeout: LONG_REQUEST_TIMEOUT_MS });
 
 export const useRollbackInfo = () => useQuery<RollbackInfo>({
   queryKey: ['useRollbackInfo'],

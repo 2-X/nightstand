@@ -1,4 +1,4 @@
-import axios from './api';
+import axios, { SERVICES_REQUEST_TIMEOUT_MS } from './api';
 import { useQuery } from '@tanstack/react-query';
 
 // WARNING! - Any changes here MUST be the same between app/src/api & server/src/db/
@@ -18,6 +18,6 @@ export const useServices = () => {
 };
 
 export const postServices = (services: DeepPartial<Services>) => {
-  return axios.post('/services', services);
+  return axios.post('/services', services, { timeout: SERVICES_REQUEST_TIMEOUT_MS });
 };
 
