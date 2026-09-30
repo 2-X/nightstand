@@ -13,6 +13,7 @@ import { scheduleAlarm, scheduleAlarmOverride, scheduleOneOffAlarm } from './ala
 import { schedulePowerOff, schedulePowerOn, scheduleSleepAnalysis } from './powerScheduler.js';
 import { schedulePrimingRebootAndCalibration } from './primeScheduler.js';
 import { scheduleTemperatures } from './temperatureScheduler.js';
+import { schedulePauseResume } from './pauseResume.js';
 import eventBus from '../events/eventBus.js';
 import { emitJobEvent } from './jobEvents.js';
 import { isScheduleDbChange } from './isScheduleDbChange.js';
@@ -31,6 +32,10 @@ async function rebuildJobs() {
         const schedulesData = schedulesDB.data;
         const settingsData = settingsDB.data;
         logger.info('Scheduling jobs...');
+        // Clearing a pause that ended while the server was down writes settings,
+        // which triggers another rebuild.
+        await schedulePauseResume(settingsData, 'left');
+        await schedulePauseResume(settingsData, 'right');
         scheduleAlarmOverride(settingsData, 'left');
         scheduleAlarmOverride(settingsData, 'right');
         if (settingsData.features.oneOffAlarms) {
@@ -68,15 +73,18 @@ async function rebuildJobs() {
         });
         schedulePrimingRebootAndCalibration(settingsData);
         logger.info('Done scheduling jobs!');
-        serverStatus.status.alarmSchedule.status = 'healthy';
         serverStatus.status.jobs.status = failedDays > 0 ? 'failed' : 'healthy';
         serverStatus.status.jobs.message = failedDays > 0
             ? `Skipped ${failedDays} unschedulable day(s), check the schedule data`
             : '';
-        serverStatus.status.primeSchedule.status = 'healthy';
-        serverStatus.status.powerSchedule.status = 'healthy';
-        serverStatus.status.rebootSchedule.status = 'healthy';
-        serverStatus.status.temperatureSchedule.status = 'healthy';
+        // A fresh set of jobs starts clean, so drop any earlier failure text.
+        const scheduleKeys = [
+            'alarmSchedule', 'primeSchedule', 'powerSchedule', 'rebootSchedule', 'temperatureSchedule',
+        ];
+        for (const key of scheduleKeys) {
+            serverStatus.status[key].status = 'healthy';
+            serverStatus.status[key].message = '';
+        }
         emitJobEvent({ jobName: 'setupJobs', status: 'ok' });
         eventBus.emit('service-health', {
             jobs: serverStatus.status.jobs,

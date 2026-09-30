@@ -12,7 +12,9 @@ import { compareTimes, getDayIndexForTime, isValidTime, logJob } from './utils.j
 import { connectFrankenWithin } from '../8sleep/frankenServer.js';
 import { nightBounds } from './nightBounds.js';
 import { emitJobEvent } from './jobEvents.js';
+import { describePause, isAlarmPaused } from './schedulePause.js';
 import { trackAlarm } from './alarmActivity.js';
+import { alarmPatternFor } from './alarmPattern.js';
 const alarmOccurrences = new Map();
 const activeAlarms = new Map();
 // Overrides that have already run, so a rebuild cannot ring them again.
@@ -60,7 +62,7 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
         const alarmPayload = {
             pl: vibrationIntensity,
             du: min10Duration,
-            pi: vibrationPattern,
+            pi: alarmPatternFor(resp.hubVersion, vibrationPattern),
             tt: alarmTimeEpoch,
         };
         const cborPayload = cbor.encode(alarmPayload);
@@ -224,6 +226,17 @@ export function scheduleAlarmOverride(settingsData, side) {
     const jobName = `${side}-alarm-override-${alarmOverride.timeOverride}`;
     schedule.scheduleJob(jobName, next.toDate(), (fireDate) => trackAlarm(side, jobName, async () => {
         overrideRuns.set(overrideKey, Date.now());
+        try {
+            await settingsDB.read();
+            if (isAlarmPaused(settingsDB.data, side, fireDate ?? moment().toDate())) {
+                logger.info(`Skipping ${side} alarm override at ${alarmOverride.timeOverride}, schedule paused ${describePause(settingsDB.data, side)}`);
+                return 0;
+            }
+        }
+        catch (error) {
+            logger.error(error);
+            return 0;
+        }
         // The replacement belongs to a night starting today or yesterday, not
         // necessarily the calendar date on which it rings.
         let sourceAlarm;
@@ -299,6 +312,10 @@ export const scheduleAlarm = (settingsData, side, day, dailySchedule) => {
                 logJob('Executing alarm job', side, day, dayIndex, time);
                 await settingsDB.read();
                 const now = moment.tz(settingsData.timeZone);
+                if (isAlarmPaused(settingsDB.data, side, fireDate ?? now.toDate())) {
+                    logger.info(`Skipping ${side} ${day} alarm at ${time}, schedule paused ${describePause(settingsDB.data, side)}`);
+                    return 0;
+                }
                 if (settingsDB.data[side].scheduleOverrides.alarm.expiresAt) {
                     const expiresAt = moment.tz(settingsDB.data[side].scheduleOverrides.alarm.expiresAt, settingsData.timeZone);
                     // Keep the night's original alarms suppressed after an earlier replacement.

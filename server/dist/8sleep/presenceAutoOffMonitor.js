@@ -2,9 +2,10 @@
 //
 // If a side has been ON without any reported presence for PRESENCE_AUTO_OFF_MS,
 // we turn it off automatically. Acts independently per side. Skipped while a
-// side is in awayMode, and never acts while features.presenceAutoOff is off. The grace period from "user just turned the side on"
-// counts toward the timeout - if the user turns the side on but never lays
-// down, we still shut it off after the timeout elapses.
+// side is in awayMode or its schedule is paused, and never acts while
+// features.presenceAutoOff is off. The grace period from "user just turned
+// the side on" counts toward the timeout: if the user turns the side on but
+// never lays down, we still shut it off after the timeout elapses.
 //
 // IMPORTANT: skipped while we're inside the user's explicit power schedule's
 // on-window. Without this guard, a noisy partner can starve the dominance
@@ -23,6 +24,7 @@ import { getPresenceData } from '../routes/metrics/presence.js';
 import { getDeviceStatusCoalesced } from './frankenServer.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import { scheduleWrapsToNextDay } from '../jobs/utils.js';
+import { isSchedulePaused } from '../jobs/schedulePause.js';
 export const PRESENCE_AUTO_OFF_MS = 45 * 60 * 1000;
 // Matches the presence stream's own ~once-a-minute heartbeat cadence, so a
 // tighter poll wouldn't see any new information between checks.
@@ -117,6 +119,9 @@ async function tick() {
         if (settingsDB.data.features?.presenceAutoOff === false)
             continue;
         if (settingsDB.data[side].awayMode)
+            continue;
+        // A paused side has no schedule window, and its sleeper may be up for a while.
+        if (isSchedulePaused(settingsDB.data, side, new Date(now)))
             continue;
         // Respect the user's explicit power schedule. If we're inside their
         // declared on-window (e.g., 21:50 → 09:50 overnight), don't auto-off -

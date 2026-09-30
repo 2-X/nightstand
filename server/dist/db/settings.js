@@ -18,7 +18,11 @@ const defaultSideSettings = {
             disabled: false,
             timeOverride: '',
             expiresAt: '',
-        }
+        },
+        pause: {
+            active: false,
+            expiresAt: '',
+        },
     },
     oneOffAlarm: {
         enabled: false,

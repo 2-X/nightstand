@@ -65,6 +65,7 @@ beforeEach(async () => {
     settings.data.left.scheduleOverrides = {
         alarm: { disabled: false, timeOverride: '', expiresAt: '' },
         temperatureSchedules: { disabled: false, expiresAt: '' },
+        pause: { active: false, expiresAt: '' },
     };
     await settings.write();
     memory.data.left = { isAlarmVibrating: false, analyzeSleep: {} };

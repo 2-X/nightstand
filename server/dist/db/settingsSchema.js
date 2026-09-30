@@ -57,7 +57,12 @@ const SideSettingsSchema = z.object({
             disabled: z.boolean(),
             timeOverride: OptionalTimeSchema,
             expiresAt: OptionalDateTimeSchema,
-        })
+        }),
+        // An empty expiresAt pauses the schedule until it is resumed.
+        pause: z.object({
+            active: z.boolean(),
+            expiresAt: OptionalDateTimeSchema,
+        }),
     }),
     oneOffAlarm: OneOffAlarmSchema,
     taps: z.object({

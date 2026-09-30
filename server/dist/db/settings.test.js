@@ -24,5 +24,10 @@ describe('settingsDB defaultData merge', () => {
     it('backfills the features object on an old doc that predates it', () => {
         assert.deepEqual(settingsDB.data.features, defaultFeatures);
     });
+    it('backfills an inactive schedule pause for both sides', () => {
+        for (const side of ['left', 'right']) {
+            assert.deepEqual(settingsDB.data[side].scheduleOverrides.pause, { active: false, expiresAt: '' });
+        }
+    });
 });
 //# sourceMappingURL=settings.test.js.map

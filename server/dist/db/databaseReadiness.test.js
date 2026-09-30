@@ -34,6 +34,7 @@ it('offers Reinstall for a real v3.0.0 database with only the original migration
             '20260803054442_calibration',
             '20260825052500_calibration_run_payload',
             '20260926170000_water_level_events',
+            '20260930000000_analysis_runs',
         ]);
         assert.match(serverStatus.status.database.message ?? '', /Reinstall/);
         // The health check reports only. It must not migrate a live database.

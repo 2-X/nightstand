@@ -9,6 +9,7 @@ import servicesDB from '../db/services.js';
 import memoryDB from '../db/memoryDB.js';
 import settingsDB from '../db/settings.js';
 import { isTempScheduleOverridden } from './scheduleOverride.js';
+import { describePause, isSchedulePaused } from './schedulePause.js';
 import { SLEEP_ANALYSIS_HOUR, SLEEP_ANALYSIS_MINUTE } from '../sleepAnalysisSchedule.js';
 import { letAlarmsFinish } from './alarmActivity.js';
 // Minute of each side's latest scheduled power-on. A power-off due in that
@@ -38,11 +39,15 @@ export const schedulePowerOn = (settingsData, side, day, power) => {
         lastPowerOn.set(side, minuteOf(fireDate ?? new Date()));
         try {
             logJob('Executing power on job', side, day, dayOfWeekIndex, time);
+            await settingsDB.read();
+            if (isSchedulePaused(settingsDB.data, side, fireDate ?? moment().toDate())) {
+                logger.info(`Skipping ${side} ${day} power on at ${time}, schedule paused ${describePause(settingsDB.data, side)}`);
+                return;
+            }
             // A manual temperature change pauses the schedule's temperature control,
             // so turn the side on but leave the user's chosen temperature in place.
             // Applying onTemperature here would undo the override minutes after the
             // user set it, which is exactly what the temperature jobs already avoid.
-            await settingsDB.read();
             const overridden = isTempScheduleOverridden(side);
             if (overridden) {
                 logJob('Temperature schedule overridden, powering on without setting temperature', side, day, dayOfWeekIndex, time);
@@ -120,6 +125,13 @@ export const schedulePowerOff = (settingsData, side, day, power) => {
             // otherwise the alarm would find the side already off and skip.
             const dueAt = fireDate ?? new Date();
             await letAlarmsFinish(side, day, dueAt);
+            // Judged at the time the off was due: waiting for an alarm must not
+            // carry it past the end of a pause.
+            await settingsDB.read();
+            if (isSchedulePaused(settingsDB.data, side, dueAt)) {
+                logger.info(`Skipping ${side} ${day} power off at ${time}, schedule paused ${describePause(settingsDB.data, side)}`);
+                return;
+            }
             if ((lastPowerOn.get(side) ?? -Infinity) >= minuteOf(dueAt)) {
                 logJob('Skipping power off, the next session already started', side, day, dayOfWeekIndex, time);
                 return;
