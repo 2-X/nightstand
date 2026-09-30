@@ -16,6 +16,7 @@ import math
 import numbers
 from collections import deque
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Dict, Optional
 
 import numpy as np
@@ -65,18 +66,46 @@ class DetectorParams:
 
 
 def piezo_range(samples) -> Optional[float]:
-    """p98 - p2 of one record's samples with glitch samples dropped, or None."""
+    """p98 - p2 of one record's samples with glitch samples dropped, or None.
+
+    Equal to np.percentile's linear method bit for bit, at a fraction of its
+    per-call cost; the analyzer calls this twice per RAW record.
+    """
     if samples is None:
         return None
     values = np.asarray(samples)
     if values.size == 0:
         return None
     values = values.astype(np.int64, copy=False)
-    values = values[np.abs(values) <= SANE_MAX_SAMPLE]
+    sane = np.abs(values) <= SANE_MAX_SAMPLE
+    if not sane.all():
+        values = values[sane]
     if values.size == 0:
         return None
-    low, high = np.percentile(values, [2, 98])
+    kth, picks = _range_picks(values.size)
+    ordered = np.partition(values, kth)
+    low, high = (_lerp(int(ordered[lower]), int(ordered[upper]), gamma) for lower, upper, gamma in picks)
     return float(high - low)
+
+
+@lru_cache(maxsize=32)
+def _range_picks(size: int):
+    """Partition points and (lower, upper, weight) for p2 and p98, as np.percentile computes them."""
+    picks = []
+    for quantile in (0.02, 0.98):
+        virtual = (size - 1) * quantile
+        lower = math.floor(virtual)
+        picks.append((lower, min(lower + 1, size - 1), virtual - lower))
+    kth = sorted({index for lower, upper, _ in picks for index in (lower, upper)})
+    return kth, tuple(picks)
+
+
+def _lerp(low: int, high: int, weight: float) -> float:
+    # np.percentile's interpolation, including its switch at 0.5.
+    diff = high - low
+    if weight >= 0.5:
+        return high - diff * (1 - weight)
+    return low + diff * weight
 
 
 class _SideState:

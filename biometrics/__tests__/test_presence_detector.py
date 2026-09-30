@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(HERE, '..'))
 sys.path.insert(0, HERE)
 
 from presence.detector import (
-    BED_QUIET_SECONDS, ENTER_ALIVE_SECONDS, DetectorParams, PresenceDetector, SideParams, piezo_range,
+    BED_QUIET_SECONDS, ENTER_ALIVE_SECONDS, SANE_MAX_SAMPLE, DetectorParams, PresenceDetector, SideParams, piezo_range,
 )
 import presence_scenarios as scenarios
 from presence_scenarios import Night
@@ -342,6 +342,48 @@ class PiezoRangeTest(unittest.TestCase):
         self.assertIsNone(piezo_range(None))
         self.assertIsNone(piezo_range(np.array([], dtype=np.int32)))
         self.assertIsNone(piezo_range(np.array([2_147_000_000], dtype=np.int32)))
+
+
+def percentile_range(samples):
+    """The range as np.percentile gives it, which piezo_range must match exactly."""
+    values = np.asarray(samples).astype(np.int64, copy=False)
+    values = values[np.abs(values) <= SANE_MAX_SAMPLE]
+    if values.size == 0:
+        return None
+    low, high = np.percentile(values, [2, 98])
+    return float(high - low)
+
+
+def record_samples(rng, occupied, glitches=0, size=500):
+    """One second of sensor-1 samples shaped like a RAW record: breathing, heartbeat and noise."""
+    t = np.arange(size) / size
+    scale = 2_000_000 if occupied else 15_000
+    wave = scale * (np.sin(2 * np.pi * 0.25 * t + rng.uniform(0, 6)) + 0.3 * np.sin(2 * np.pi * 1.1 * t))
+    samples = (rng.uniform(-3e6, 3e6) + wave + rng.normal(0, scale / 20, size)).astype(np.int32)
+    samples[rng.integers(0, size, glitches)] = rng.choice([2_147_000_000, -2_146_959_111], glitches)
+    return samples
+
+
+class PiezoRangeMatchesPercentileTest(unittest.TestCase):
+    def assert_matches(self, samples):
+        self.assertEqual(piezo_range(samples), percentile_range(samples), msg=f'{len(samples)} samples')
+
+    def test_record_shaped_samples(self):
+        rng = np.random.default_rng(7)
+        for index in range(3000):
+            self.assert_matches(record_samples(rng, occupied=index % 2 == 0, glitches=index % 4))
+
+    def test_random_samples_of_every_small_size(self):
+        rng = np.random.default_rng(11)
+        for size in range(1, 1100):
+            self.assert_matches(rng.integers(-30_000_000, 30_000_000, size).astype(np.int32))
+            self.assert_matches(rng.integers(-3, 3, size).astype(np.int32))
+            self.assert_matches(rng.integers(-2**31, 2**31, size, dtype=np.int64).astype(np.int32))
+
+    def test_a_raw_record_and_a_list(self):
+        samples = record_samples(np.random.default_rng(3), occupied=True)
+        self.assert_matches(np.frombuffer(samples.tobytes(), dtype=np.int32))
+        self.assert_matches(samples.tolist())
 
 
 if __name__ == '__main__':
