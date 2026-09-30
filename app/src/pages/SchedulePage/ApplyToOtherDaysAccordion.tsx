@@ -63,7 +63,7 @@ export default function ApplyToOtherDaysAccordion() {
         <Typography component="span" variant="inherit">Apply settings to other days</Typography>
       </AccordionSummary>
       <AccordionDetails>
-        <Box sx={ { display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 } }>
+        <Box sx={ { display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1, ml: -1 } }>
           <Button onClick={ setWeekdays }>Weekdays</Button>
           <Button onClick={ setWeekends }>Weekends</Button>
           <Button onClick={ setEveryday }>Every day</Button>
