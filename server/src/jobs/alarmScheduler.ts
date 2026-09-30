@@ -11,7 +11,8 @@ import { AlarmJob, DailySchedule, DayOfWeek, Side } from '../db/schedulesSchema.
 import { dailyAlarmSchedules } from '../db/scheduleAlarms.js';
 import { executeFunction } from '../8sleep/deviceApi.js';
 import { compareTimes, getDayIndexForTime, isValidTime, logJob } from './utils.js';
-import { connectFranken } from '../8sleep/frankenServer.js';
+import { connectFrankenWithin } from '../8sleep/frankenServer.js';
+import type { CommandOptions } from '../8sleep/frankenServer.js';
 import { Settings } from '../db/settingsSchema.js';
 import { nightBounds } from './nightBounds.js';
 import { emitJobEvent } from './jobEvents.js';
@@ -20,11 +21,16 @@ import { emitJobEvent } from './jobEvents.js';
 const alarmOccurrences = new Map<string, number>();
 const activeAlarms = new Map<Side, symbol>();
 const OCCURRENCE_RETENTION_MS = 48 * 60 * 60 * 1000;
+// A scheduled alarm may wait out a hardware reconnect, but one that could
+// only start this late is dropped rather than vibrating long after its time.
+const ALARM_LATE_LIMIT_MS = 3 * 60_000;
 
 export const executeAlarm = async (
   { vibrationIntensity, duration, vibrationPattern, side, force=false }: AlarmJob,
   occurrenceId?: string,
+  options: CommandOptions = {},
 ) => {
+  const startedAt = Date.now();
   // Reserve recurring occurrences before awaiting I/O; manual alarms can repeat.
   const occurrenceKey = !force && occurrenceId ? `${side}:${occurrenceId}` : undefined;
   const cutoff = Date.now() - OCCURRENCE_RETENTION_MS;
@@ -47,7 +53,7 @@ export const executeAlarm = async (
     }
 
     // Exit if side is off
-    const franken = await connectFranken();
+    const franken = await connectFrankenWithin(options);
     const resp = await franken.getDeviceStatus();
     if (!resp[side].isOn && !force) {
       logger.debug('Not executing alarm, side is off!');
@@ -68,8 +74,16 @@ export const executeAlarm = async (
     const hexPayload = cborPayload.toString('hex');
     const command = side === 'left' ? 'ALARM_LEFT' : 'ALARM_RIGHT';
 
+    const lateMs = Date.now() - startedAt;
+    if (options.background && lateMs > ALARM_LATE_LIMIT_MS) {
+      const message = `Skipped the ${side} alarm: the Pod was reachable only ${Math.round(lateMs / 1_000)}s after its time`;
+      logger.warn(message);
+      emitJobEvent({ jobName: `alarm-${side}`, status: 'fail', message });
+      return;
+    }
+
     logger.debug(`Executing alarm... ${JSON.stringify(alarmPayload)}`);
-    await executeFunction(command, hexPayload);
+    await executeFunction(command, hexPayload, options);
     fired = true;
     const activeAlarm = Symbol(side);
     activeAlarms.set(side, activeAlarm);
@@ -158,7 +172,7 @@ export function scheduleOneOffAlarm(settingsData: Settings, side: Side) {
         vibrationIntensity: o.vibrationIntensity,
         duration: o.duration,
         vibrationPattern: o.vibrationPattern,
-      });
+      }, undefined, { background: true });
     } finally {
       // Auto-disable after firing (or after attempt) so the user doesn't
       // need to come back and manually toggle it off, which is the whole
@@ -221,7 +235,7 @@ export function scheduleAlarmOverride(settingsData: Settings, side: Side) {
       vibrationIntensity,
       duration,
       vibrationPattern,
-    });
+    }, undefined, { background: true });
   });
 }
 
@@ -282,7 +296,7 @@ export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek
           vibrationIntensity: alarm.vibrationIntensity,
           duration: alarm.duration,
           vibrationPattern: alarm.vibrationPattern,
-        }, `recurring:${day}:${time}:${now.format('YYYY-MM-DD')}`);
+        }, `recurring:${day}:${time}:${now.format('YYYY-MM-DD')}`, { background: true });
       } catch (error: unknown) {
         serverStatus.status.alarmSchedule.status = 'failed';
         const message = error instanceof Error ? error.message : String(error);

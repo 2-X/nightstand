@@ -1,4 +1,4 @@
-import express, { Express, Request, Response, NextFunction } from 'express';
+import express, { Express, Request, Response } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import deviceStatus from '../routes/deviceStatus/deviceStatus.js';
@@ -24,6 +24,7 @@ import memory from '../routes/memory/memory.js';
 import calibration from '../routes/calibration/calibration.js';
 import changelog from '../routes/changelog/changelog.js';
 import logger from '../logger.js';
+import { registerErrorHandlers } from './errorHandlers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -57,24 +58,7 @@ export default function (app: Express) {
   });
 
 
-  // --- JSON parse / body parser errors (normalize to 400)
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
-    // If this isn't a body-parse error, pass it on to the central handler
-    if (!err || err.type !== 'entity.parse.failed') return next(err);
-    res.status(400).json({ error: { message: 'Invalid JSON' } });
-  });
-
-  // --- Central error handler (must be AFTER routes and special-case handlers)
-  // eslint-disable-next-line no-unused-vars,@typescript-eslint/no-unused-vars
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const isProd = process.env.NODE_ENV === 'production';
-    const status = Number(err?.status) || 500;
-    const body: any = { error: { message: err?.message || 'Internal Server Error' } };
-    if (!isProd) body.error.stack = err?.stack;
-    logger.error(body);
-    logger.error(JSON.stringify(body));
-    res.status(status).json(body);
-  });
+  registerErrorHandlers(app);
 
   // --- Static files for the SPA
   app.use(express.static(path.join(__dirname, '../../public')));

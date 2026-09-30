@@ -74,6 +74,7 @@ filter is not authentication or protection from non-browser clients.
 ### POST
 
 - Updates the device; send only the fields you want to change. Returns `204 No Content` on success.
+- Returns 503 if the hardware connection is not back within 10 seconds or a command gets no answer. A command that failed this way is dropped, never sent later when the connection returns. `/api/execute` behaves the same. Scheduled alarms follow the same rule: one that could only start more than 3 minutes after its time is skipped. Scheduled power and set point changes are the exception: they wait for the hardware for as long as it takes, and when several changes for the same setting are waiting, only the newest is sent.
 
 #### Request Body
 

@@ -4,6 +4,8 @@ import cbor from 'cbor';
 
 import { DeviceStatus, MAX_ON_DURATION_SECONDS, SideStatus } from './deviceStatusSchema.js';
 import { executeFunction } from '../../8sleep/deviceApi.js';
+import { FrankenSupersededError } from '../../8sleep/frankenErrors.js';
+import type { CommandOptions } from '../../8sleep/frankenServer.js';
 import logger from '../../logger.js';
 import settingsDB from '../../db/settings.js';
 import memoryDB from '../../db/memoryDB.js';
@@ -16,7 +18,7 @@ const calculateLevelFromF = (temperatureF: number) => {
   return Math.round(level).toString();
 };
 
-const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideStatus>) => {
+const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideStatus>, options: CommandOptions) => {
   await settingsDB.read();
   const settings = settingsDB.data;
   if (side === 'left') {
@@ -33,6 +35,9 @@ const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideSt
   const updateRight = side === 'right' || controlBothSides;
 
   const { isOn, targetTemperatureF, secondsRemaining, isAlarmVibrating } = sideStatus;
+  // Scheduled power and set point changes stay correct when applied late, so
+  // they wait out an outage; only the newest one per setting is applied.
+  const stateOptions = { ...options, latest: true };
 
   if (controlBothSides) {
     logger.debug('One side is in away mode, updating both sides...');
@@ -40,25 +45,25 @@ const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideSt
 
   if (isOn !== undefined) {
     const onDuration = isOn ? String(MAX_ON_DURATION_SECONDS) : '0';
-    if (updateLeft) await executeFunction('LEFT_TEMP_DURATION', onDuration);
-    if (updateRight) await executeFunction('RIGHT_TEMP_DURATION', onDuration);
+    if (updateLeft) await executeFunction('LEFT_TEMP_DURATION', onDuration, stateOptions);
+    if (updateRight) await executeFunction('RIGHT_TEMP_DURATION', onDuration, stateOptions);
   }
 
   if (targetTemperatureF !== undefined) {
     const level = calculateLevelFromF(targetTemperatureF);
-    if (updateLeft) await executeFunction('TEMP_LEVEL_LEFT', level);
-    if (updateRight) await executeFunction('TEMP_LEVEL_RIGHT', level);
+    if (updateLeft) await executeFunction('TEMP_LEVEL_LEFT', level, stateOptions);
+    if (updateRight) await executeFunction('TEMP_LEVEL_RIGHT', level, stateOptions);
   }
 
   if (secondsRemaining) {
     const seconds = Math.round(secondsRemaining).toString();
-    if (updateLeft) await executeFunction('LEFT_TEMP_DURATION', seconds);
-    if (updateRight) await executeFunction('RIGHT_TEMP_DURATION', seconds);
+    if (updateLeft) await executeFunction('LEFT_TEMP_DURATION', seconds, stateOptions);
+    if (updateRight) await executeFunction('RIGHT_TEMP_DURATION', seconds, stateOptions);
   }
 
   if (isAlarmVibrating !== undefined) {
     logger.debug('Can only set isAlarmVibrating to false for now...');
-    if (!isAlarmVibrating) await executeFunction('ALARM_CLEAR', 'empty');
+    if (!isAlarmVibrating) await executeFunction('ALARM_CLEAR', 'empty', options);
     await memoryDB.read();
     memoryDB.data[side].isAlarmVibrating = false;
     await memoryDB.write();
@@ -66,20 +71,27 @@ const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideSt
 };
 
 
-const updateSettings = async (settings: Partial<DeviceStatus['settings']>) => {
+const updateSettings = async (settings: Partial<DeviceStatus['settings']>, options: CommandOptions) => {
   const renamedSettings = _.mapKeys(settings, (value, key) => INVERTED_SETTINGS_KEY_MAPPING[key] || key);
   const encodedBuffer = cbor.encode(renamedSettings);
   const hexString = encodedBuffer.toString('hex');
-  await executeFunction('SET_SETTINGS', hexString);
+  await executeFunction('SET_SETTINGS', hexString, options);
 };
 
-export const updateDeviceStatus = async (deviceStatus: DeepPartial<DeviceStatus>) => {
+// Scheduled callers pass { background: true } to wait longer for the hardware.
+export const updateDeviceStatus = async (deviceStatus: DeepPartial<DeviceStatus>, options: CommandOptions = {}) => {
   logger.info(`Updating device status..`);
 
-  if (deviceStatus.isPriming === true) await executeFunction('PRIME');
-  else if (deviceStatus.isPriming === false) await executeFunction('STOP_PRIME');
-  if (deviceStatus?.left) await updateSide('left', deviceStatus.left);
-  if (deviceStatus?.right) await updateSide('right', deviceStatus.right);
-  if (deviceStatus?.settings) await updateSettings(deviceStatus.settings);
+  try {
+    if (deviceStatus.isPriming === true) await executeFunction('PRIME', 'empty', options);
+    else if (deviceStatus.isPriming === false) await executeFunction('STOP_PRIME', 'empty', options);
+    if (deviceStatus?.left) await updateSide('left', deviceStatus.left, options);
+    if (deviceStatus?.right) await updateSide('right', deviceStatus.right, options);
+    if (deviceStatus?.settings) await updateSettings(deviceStatus.settings, options);
+  } catch (error) {
+    if (!(error instanceof FrankenSupersededError)) throw error;
+    logger.info('Dropped an update replaced by a newer one while the Pod was unreachable');
+    return;
+  }
   logger.info('Finished updating device status');
 };

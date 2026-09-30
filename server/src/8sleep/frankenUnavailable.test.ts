@@ -1,0 +1,179 @@
+import { test, mock, afterEach, after, type TestContext } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import cbor from 'cbor';
+import net, { type Socket, type AddressInfo } from 'node:net';
+
+const folder = mkdtempSync(path.join(tmpdir(), 'nightstand-franken-unavailable-'));
+mkdirSync(path.join(folder, 'lowdb'));
+const previousEnv = {
+  DATA_FOLDER: process.env.DATA_FOLDER,
+  ENV: process.env.ENV,
+  FRANKEN_CONNECT_WAIT_MS: process.env.FRANKEN_CONNECT_WAIT_MS,
+  FRANKEN_CONNECTION_TIMEOUT_MS: process.env.FRANKEN_CONNECTION_TIMEOUT_MS,
+  FRANKEN_BACKGROUND_CONNECT_WAIT_MS: process.env.FRANKEN_BACKGROUND_CONNECT_WAIT_MS,
+};
+process.env.DATA_FOLDER = `${folder}/`;
+process.env.ENV = 'local';
+process.env.FRANKEN_CONNECT_WAIT_MS = '100';
+process.env.FRANKEN_CONNECTION_TIMEOUT_MS = '200';
+process.env.FRANKEN_BACKGROUND_CONNECT_WAIT_MS = '800';
+
+// The firmware connects when the test says so, like a Pod whose firmware
+// is restarting.
+let deliver: ((socket: Socket) => void) | undefined;
+mock.module(new URL('./unixSocketServer.js', import.meta.url).href, {
+  namedExports: { UnixSocketServer: class {
+    static async start() {
+      return {
+        waitForConnection: () => new Promise<Socket>(resolve => { deliver = resolve; }),
+        close: async () => {},
+      };
+    }
+  } },
+});
+const { disconnectFranken, isFrankenConnected, FrankenUnavailableError } = await import('./frankenServer.js');
+const { FrankenSupersededError } = await import('./frankenErrors.js');
+const { executeFunction } = await import('./deviceApi.js');
+const { executeAlarm } = await import('../jobs/alarmScheduler.js');
+
+const listener = net.createServer();
+listener.listen(0, '127.0.0.1');
+await new Promise<void>(resolve => listener.once('listening', resolve));
+const sockets: Socket[] = [];
+
+const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// The firmware's answer to a status request, with the left side heating.
+const leftOnStatus = [
+  'tgHeatLevelR = 0', 'tgHeatLevelL = 0', 'heatTimeL = 3600', 'heatLevelL = 0', 'heatTimeR = 0',
+  'heatLevelR = 0', 'sensorLabel = test', 'waterLevel = true', 'priming = false', `settings = ${cbor.encode({}).toString('hex')}`,
+].join('\n') + '\n\n';
+
+// Connects a fake firmware client that records every command it receives.
+// It answers a status request with a real status and any other command with
+// its own bytes.
+async function connectFirmware() {
+  const accepted = new Promise<Socket>(resolve => listener.once('connection', resolve));
+  const client = net.createConnection((listener.address() as AddressInfo).port, '127.0.0.1');
+  const peer = await accepted;
+  sockets.push(client, peer);
+  const received: string[] = [];
+  peer.on('data', data => {
+    received.push(data.toString());
+    peer.write(data.toString() === '14\n\n' ? leftOnStatus : data);
+  });
+  while (!deliver) await new Promise(resolve => setTimeout(resolve, 5));
+  deliver(client);
+  deliver = undefined;
+  while (!isFrankenConnected()) await new Promise(resolve => setTimeout(resolve, 5));
+  return received;
+}
+
+afterEach(async () => {
+  await disconnectFranken();
+  deliver = undefined;
+  sockets.splice(0).forEach(socket => socket.destroy());
+});
+after(async () => {
+  await new Promise<void>(resolve => listener.close(() => resolve()));
+  rmSync(folder, { recursive: true, force: true });
+  for (const [key, value] of Object.entries(previousEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+});
+
+test('a command fails promptly while the firmware is disconnected', async () => {
+  const startedAt = Date.now();
+  await assert.rejects(executeFunction('TEMP_LEVEL_LEFT', '-45'), FrankenUnavailableError);
+  assert.ok(Date.now() - startedAt < 2_000);
+});
+
+test('a command that gave up is never sent after the firmware reconnects', async () => {
+  await assert.rejects(executeFunction('TEMP_LEVEL_LEFT', '-45'), FrankenUnavailableError);
+  const received = await connectFirmware();
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.deepEqual(received, []);
+  await executeFunction('TEMP_LEVEL_RIGHT', '10');
+  assert.deepEqual(received, ['12\n10\n\n']);
+});
+
+test('a manual alarm made during an outage does not vibrate on reconnect', async () => {
+  await executeAlarm({ side: 'left', vibrationIntensity: 50, duration: 10, vibrationPattern: 'rise', force: true });
+  const received = await connectFirmware();
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.deepEqual(received, []);
+});
+
+test('a scheduled command waits through a reconnect and is sent once', async () => {
+  const pending = executeFunction('TEMP_LEVEL_LEFT', '-45', { background: true });
+  await new Promise(resolve => setTimeout(resolve, 300));
+  const received = await connectFirmware();
+  await pending;
+  assert.deepEqual(received, ['11\n-45\n\n']);
+});
+
+// The dismissal timer of a sent alarm would otherwise keep the process alive.
+const unrefLongTimers = (t: TestContext) => {
+  const original = globalThis.setTimeout;
+  t.mock.method(globalThis, 'setTimeout', ((callback: () => void, ms?: number, ...args: unknown[]) => {
+    const timer = original(callback, ms, ...args) as unknown as NodeJS.Timeout;
+    if (ms === 10_000) timer.unref();
+    return timer;
+  }) as unknown as typeof setTimeout);
+};
+const alarm = { side: 'left', vibrationIntensity: 50, duration: 10, vibrationPattern: 'rise' } as const;
+
+test('a scheduled alarm that would start minutes late is skipped', async t => {
+  unrefLongTimers(t);
+  let clock = Date.now();
+  t.mock.method(Date, 'now', () => clock);
+  const ringing = executeAlarm(alarm, undefined, { background: true });
+  await pause(50);
+  clock += 4 * 60_000;
+  const received = await connectFirmware();
+  await ringing;
+  await pause(50);
+  assert.deepEqual(received, ['14\n\n'], 'the alarm should have checked the side and then stopped');
+});
+
+test('a scheduled alarm that is on time is sent', async t => {
+  unrefLongTimers(t);
+  const ringing = executeAlarm(alarm, undefined, { background: true });
+  await pause(50);
+  const received = await connectFirmware();
+  assert.ok(await ringing > 0);
+  assert.equal(received.length, 2);
+  assert.ok(received[1].startsWith('5\n'), JSON.stringify(received));
+});
+
+test('a scheduled state command waits out an outage longer than the limit for other commands', async () => {
+  const pending = executeFunction('LEFT_TEMP_DURATION', '0', { background: true, latest: true });
+  await pause(1_200);
+  const received = await connectFirmware();
+  await pending;
+  assert.deepEqual(received, ['9\n0\n\n']);
+});
+
+test('a state command without the background flag still gives up and is never replayed', async () => {
+  await assert.rejects(executeFunction('LEFT_TEMP_DURATION', '0', { latest: true }), FrankenUnavailableError);
+  const received = await connectFirmware();
+  await pause(50);
+  assert.deepEqual(received, []);
+});
+
+test('only the newest waiting state command for a setting is applied on reconnect', async () => {
+  const on = executeFunction('LEFT_TEMP_DURATION', '43200', { background: true, latest: true });
+  const onOutcome = on.then(() => undefined, (error: unknown) => error);
+  await pause(20);
+  const level = executeFunction('TEMP_LEVEL_LEFT', '10', { background: true, latest: true });
+  const off = executeFunction('LEFT_TEMP_DURATION', '0', { background: true, latest: true });
+  await pause(1_000);
+  const received = await connectFirmware();
+  await Promise.all([off, level]);
+  assert.ok(await onOutcome instanceof FrankenSupersededError);
+  assert.deepEqual([...received].sort(), ['11\n10\n\n', '9\n0\n\n']);
+});

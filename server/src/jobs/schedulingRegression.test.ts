@@ -18,7 +18,7 @@ mock.module(new URL('../8sleep/deviceApi.js', import.meta.url).href, {
   namedExports: { executeFunction: async (...args: unknown[]) => { commands.push(args); } },
 });
 mock.module(new URL('../8sleep/frankenServer.js', import.meta.url).href, {
-  namedExports: { connectFranken: async () => ({
+  namedExports: { connectFrankenWithin: async () => ({
     getDeviceStatus: async () => ({ left: { isOn: true }, right: { isOn: true } }),
   }) },
 });

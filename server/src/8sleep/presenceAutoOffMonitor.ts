@@ -172,7 +172,7 @@ async function tick(): Promise<void> {
       const idleMin = Math.round((now - ref) / 60_000);
       logger.info(`presenceAutoOff: turning off ${side}, no presence for ${idleMin} min`);
       try {
-        await updateDeviceStatus({ [side]: { isOn: false } });
+        await updateDeviceStatus({ [side]: { isOn: false } }, { background: true });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`presenceAutoOff: failed to turn off ${side}: ${msg}`);

@@ -17,12 +17,13 @@ process.env.ENV = 'local';
 // dropped an explicit `0` (a valid Fahrenheit target), since `0` is falsy.
 // executeFunction talks to the Franken hardware socket, so it's mocked here
 // rather than exercised for real.
-const executeFunctionMock = mock.fn(async (...args: [string, string?]) => { void args; });
+const executeFunctionMock = mock.fn(async (...args: [string, string?, object?]) => { void args; });
 mock.module('../../8sleep/deviceApi.js', {
   namedExports: { executeFunction: executeFunctionMock },
 });
 
 const { updateDeviceStatus } = await import('./updateDeviceStatus.js');
+const { FrankenSupersededError } = await import('../../8sleep/frankenErrors.js');
 
 describe('updateDeviceStatus', () => {
   it('applies an explicit targetTemperatureF of 0 instead of silently dropping it', async () => {
@@ -48,5 +49,26 @@ describe('updateDeviceStatus', () => {
     );
     assert.ok(levelCall);
     assert.equal(levelCall!.arguments[1], '0');
+  });
+
+  it('marks power and set point commands as state, and alarm clearing as not', async () => {
+    executeFunctionMock.mock.resetCalls();
+
+    await updateDeviceStatus({ left: { isOn: false, targetTemperatureF: 80, isAlarmVibrating: false } }, { background: true });
+
+    const options = (command: string) => executeFunctionMock.mock.calls
+      .find(call => call.arguments[0] === command)?.arguments[2] as { latest?: boolean } | undefined;
+    assert.equal(options('LEFT_TEMP_DURATION')?.latest, true);
+    assert.equal(options('TEMP_LEVEL_LEFT')?.latest, true);
+    assert.equal(options('ALARM_CLEAR')?.latest, undefined);
+  });
+
+  it('stops quietly when a newer update replaced this one while the Pod was unreachable', async () => {
+    executeFunctionMock.mock.resetCalls();
+    executeFunctionMock.mock.mockImplementationOnce(async () => { throw new FrankenSupersededError(); });
+
+    await updateDeviceStatus({ left: { isOn: true, targetTemperatureF: 80 } }, { background: true });
+
+    assert.equal(executeFunctionMock.mock.callCount(), 1, 'the set point of a replaced power-on must not be sent');
   });
 });

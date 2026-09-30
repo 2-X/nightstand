@@ -48,7 +48,7 @@ export const schedulePowerOn = (settingsData: Settings, side: Side, day: DayOfWe
         [side]: overridden
           ? { isOn: true }
           : { isOn: true, targetTemperatureF: power.onTemperature },
-      });
+      }, { background: true });
       serverStatus.status.powerSchedule.status = 'healthy';
       serverStatus.status.powerSchedule.message = '';
     } catch (error: unknown) {
@@ -122,7 +122,7 @@ export const schedulePowerOff = (settingsData: Settings, side: Side, day: DayOfW
         [side]: {
           isOn: false,
         }
-      });
+      }, { background: true });
       serverStatus.status.powerSchedule.status = 'healthy';
       serverStatus.status.powerSchedule.message = '';
     } catch (error: unknown) {
