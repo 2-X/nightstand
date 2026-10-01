@@ -433,3 +433,231 @@ describe('"When I get up" past the set off', () => {
     assert.deepEqual(h.history, []);
   });
 });
+
+describe('"When I get up" after the wake time', () => {
+  it('turns off 10 minutes after getting up, once no alarm is left', async () => {
+    const h = harness({ alarms: { left: null } });
+    await h.runUntil('06:55', inBed('06:40'));
+    assert.deepEqual(h.offs, [['left', '06:50']]);
+    assert.equal(h.controller.powerOffFor('left', DATE)?.toISOString(), iso('06:50'));
+    assert.equal(h.last()?.offReason, 'got-up');
+    assert.equal(h.last()?.actualOff, iso('06:50'));
+    assert.equal(h.last()?.powerOff, iso('07:30'));
+  });
+
+  it('counts from the wake time, not from an earlier exit', async () => {
+    const h = harness({ alarms: { left: null } });
+    await h.runUntil('06:45', () => ({ left: false }));
+    assert.deepEqual(h.offs, [['left', '06:40']]);
+  });
+
+  it('waits for an alarm still ahead, from the sleep itself', async () => {
+    const h = harness({ alarms: { left: '07:00' } });
+    await h.runUntil('07:05', inBed('06:35'));
+    assert.deepEqual(h.offs, [['left', '07:02']]);
+  });
+
+  it('never turns off while an alarm rings', async () => {
+    const h = harness({ alarms: { left: null }, jobsPending: now => now >= t('06:40') && now < t('06:45') });
+    await h.runUntil('06:50', inBed('06:30'));
+    assert.deepEqual(h.offs, [['left', '06:45']]);
+  });
+
+  it('both sides in one tick: a rebuild after the first off leaves the second its own alarm', async () => {
+    const h = harness({
+      smart: { left: { offWhenUp: true }, right: { offWhenUp: true } },
+      alarms: { left: null, right: '07:00' },
+    });
+    await h.runUntil('07:05', () => ({ left: false, right: false }));
+    assert.deepEqual(h.offs, [['left', '06:40'], ['right', '07:02']]);
+  });
+
+  it('waits while the jobs are re-planned', async () => {
+    const h = harness({ smart: { left: { offWhenUp: true }, right: { offWhenUp: true } }, alarms: { left: null, right: null } });
+    await h.runUntil('06:45', () => ({ left: false, right: false }));
+    // The left off starts a rebuild in the same tick, so the right side waits a minute.
+    assert.deepEqual(h.offs, [['left', '06:40'], ['right', '06:41']]);
+  });
+
+  it('restarts the count when they get back into bed', async () => {
+    const h = harness({ alarms: { left: null } });
+    const stream: Stream = now => ({ left: now < t('06:35') || (now >= t('06:42') && now < t('06:50')) });
+    await h.runUntil('07:05', stream);
+    assert.deepEqual(h.offs, [['left', '07:00']]);
+  });
+
+  it('restarts the count for a return to bed between two ticks', async () => {
+    const h = harness({ alarms: { left: null } });
+    await h.runUntil('06:40', inBed('06:35'));
+    // In and out again before the next look: only the newer change time shows it.
+    h.report('left', true);
+    h.report('left', false);
+    await h.runUntil('06:55', inBed('06:35'));
+    assert.deepEqual(h.offs, [['left', '06:50']]);
+  });
+
+  it('stays off once off, even back in bed', async () => {
+    const h = harness({ alarms: { left: null } });
+    const stream: Stream = now => ({ left: now < t('06:40') || now >= t('06:55') });
+    await h.runUntil('07:40', stream);
+    assert.deepEqual(h.offs, [['left', '06:50']]);
+    assert.deepEqual(h.arms, []);
+    assert.equal(h.controller.status('left', h.now()), null);
+    assert.equal(h.history.length, 1);
+  });
+
+  it('counts a failed alarm check as an alarm still to come', async () => {
+    const h = harness({
+      alarms: { left: null },
+      jobsPending: now => {
+        if (now < t('06:45')) throw new Error('check failed');
+        return false;
+      },
+    });
+    await h.runUntil('06:50', inBed('06:30'));
+    assert.deepEqual(h.offs, [['left', '06:45']]);
+  });
+
+  it('holds the wake level instead of dropping to the base when out of bed', async () => {
+    const up = harness({ alarms: { left: null } });
+    await up.runUntil('06:39', inBed('06:31'));
+    assert.deepEqual(up.applied, []);
+    assert.equal(up.curve()?.points.at(-1)?.phase, 'wake');
+
+    const plain = harness({ alarms: { left: null }, smart: { left: {} } });
+    await plain.runUntil('06:39', inBed('06:31'));
+    assert.deepEqual(plain.applied, [['left', 0, '06:31']]);
+  });
+});
+
+describe('"When I get up" with pause, holds, away mode and both sides', () => {
+  it('never turns off early while paused', async () => {
+    const h = harness({ alarms: { left: null }, paused: () => true });
+    await h.runUntil('07:20', inBed('06:30'));
+    assert.deepEqual(h.offs, []);
+  });
+
+  it('a pause while kept on sets the timer to the latest and leaves the side to it', async () => {
+    const h = harness({ paused: now => now >= t('08:00') });
+    await h.runUntil('07:30', inBed('08:10'));
+    assert.equal(h.decide(), 'keep');
+    await h.runUntil('10:31', inBed('08:10'));
+    assert.deepEqual(h.arms.at(-1), ['left', '10:30', '08:00']);
+    assert.deepEqual(h.offs, []);
+    assert.equal(h.last()?.offReason, 'paused');
+    assert.equal(h.last()?.actualOff, iso('10:30'));
+  });
+
+  it('a pause right after the keep, on a side it cannot read, writes nothing and logs nothing early', async () => {
+    const h = harness({ paused: now => now >= t('07:31'), sideOn: () => null });
+    await h.runUntil('07:30', always);
+    assert.equal(h.decide(), 'keep');
+    await h.runUntil('09:00', always);
+    assert.deepEqual(h.offs, []);
+    assert.deepEqual(h.history, []);
+    await h.runUntil('10:31', always);
+    assert.deepEqual(h.offs, []);
+    assert.equal(h.last()?.offReason, 'paused');
+    assert.equal(h.last()?.actualOff, iso('10:30'));
+  });
+
+  it('tries the pause timer again when its write fails, and leaves the side to it', async () => {
+    const h = harness({ paused: now => now >= t('08:00'), failWrites: 'left' });
+    await h.runUntil('07:30', always);
+    assert.equal(h.decide(), 'keep');
+    await h.runUntil('10:31', always);
+    const during = h.failed.filter(([, kind, at]) => kind === 'arm' && at >= '08:00').map(([, , at]) => at);
+    assert.deepEqual(during.slice(0, 3), ['08:00', '08:01', '08:02']);
+    assert.deepEqual(h.failed.filter(([, kind]) => kind === 'off'), []);
+    assert.equal(h.last()?.offReason, 'paused');
+    assert.equal(h.last()?.actualOff, iso('10:30'));
+  });
+
+  it('records a side found off at a pause as off then, without writing', async () => {
+    const h = harness({ paused: now => now >= t('08:00'), sideOn: now => now < t('08:00') });
+    await h.runUntil('07:30', always);
+    assert.equal(h.decide(), 'keep');
+    await h.runUntil('08:05', always);
+    assert.deepEqual(h.offs, []);
+    assert.deepEqual(h.arms.filter(([, , at]) => at >= '08:00'), []);
+    assert.equal(h.last()?.offReason, 'side-off');
+    assert.equal(h.last()?.actualOff, iso('08:00'));
+    assert.equal(h.controller.powerOffFor('left', DATE)?.toISOString(), iso('08:00'));
+  });
+
+  it('lets presence decide again once a pause ends before the latest off', async () => {
+    const h = harness({ paused: now => now >= t('08:00') && now < t('08:30') });
+    await h.runUntil('07:30', inBed('08:40'));
+    assert.equal(h.decide(), 'keep');
+    await h.runUntil('09:00', inBed('08:40'));
+    assert.deepEqual(h.arms.filter(([, , at]) => at === '08:00' || at === '08:30'), [['left', '10:30', '08:00'], ['left', '08:45', '08:30']]);
+    assert.deepEqual(h.offs, [['left', '08:50']]);
+  });
+
+  it('a manual change while kept on holds to the off, and getting up still turns it off', async () => {
+    const h = harness();
+    await h.runUntil('07:30', inBed('08:30'));
+    assert.equal(h.decide(), 'keep');
+    await h.runUntil('08:00', inBed('08:30'));
+    assert.equal(h.controller.noteManualChange('left', h.now()), 'held');
+    assert.equal(h.controller.status('left', h.now())?.holdUntil?.toISOString(), iso('10:30'));
+    await h.runUntil('08:45', inBed('08:30'));
+    assert.deepEqual(h.offs, [['left', '08:40']]);
+  });
+
+  it('reads both sides when the other side is away, and writes the present side', async () => {
+    const h = harness({ away: { left: false, right: true } });
+    const stream: Stream = now => ({ right: now < t('08:00') });
+    await h.runUntil('07:30', stream);
+    assert.equal(h.decide(), 'keep');
+    await h.runUntil('08:15', stream);
+    assert.deepEqual(h.offs, [['left', '08:10']]);
+  });
+
+  it('keeps two sides apart: one when up, one at its set time', async () => {
+    const h = harness({ smart: { left: { offWhenUp: true }, right: {} } });
+    const stream: Stream = () => ({ left: true, right: true });
+    await h.runUntil('07:30', stream);
+    assert.equal(h.decide('left'), 'keep');
+    assert.equal(h.decide('right'), 'off');
+    await h.runUntil('07:45', stream);
+    assert.equal(h.controller.powerOffFor('right', DATE), undefined);
+    assert.equal(h.last('right')?.offReason, 'set-time');
+    assert.equal(h.last('right')?.offWhenUp, false);
+    assert.equal(h.arms.length > 0, true);
+    assert.equal(h.arms.every(([side]) => side === 'left'), true);
+  });
+
+  it('stops keeping the side on when the rhythm no longer turns off when up', async () => {
+    const h = harness();
+    await h.runUntil('07:30', always);
+    assert.equal(h.decide(), 'keep');
+    await h.runUntil('08:00', always);
+    h.setSmart({ left: {} });
+    await h.runUntil('08:05', always);
+    assert.deepEqual(h.offs, []);
+    assert.equal(h.last()?.offReason, 'stopped');
+    assert.equal(h.last()?.actualOff, iso('08:01'));
+  });
+
+  it('says when it turns off at the latest while presence is fresh, before and while kept on', async () => {
+    const h = harness({ laterStart: '09:00' });
+    await h.runUntil('07:00', always);
+    assert.equal(h.controller.status('left', h.now())?.offBy?.toISOString(), iso('08:30'));
+    await h.runUntil('07:30', always);
+    assert.equal(h.decide(), 'keep');
+    await h.runUntil('07:35', always);
+    assert.equal(h.controller.status('left', h.now())?.offBy?.toISOString(), iso('08:30'));
+
+    const plain = harness({ smart: { left: {} } });
+    await plain.runUntil('07:00', always);
+    assert.equal(plain.controller.status('left', plain.now())?.offBy, null);
+  });
+
+  it('promises nothing while presence is stale, since the set time then applies', async () => {
+    const h = harness();
+    await h.runUntil('07:00');
+    assert.notEqual(h.controller.status('left', h.now()), null);
+    assert.equal(h.controller.status('left', h.now())?.offBy, null);
+  });
+});

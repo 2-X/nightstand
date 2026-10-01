@@ -15,7 +15,7 @@ import {
 } from './confirmation.js';
 import { latestOff, SMART_OFF } from '../../db/smartOff.js';
 import {
-  decideAtSetOff, DECISION_GRACE_MS, nextStep, OFF_MEMORY_MS, stepStreak, upFor, type OffReason, type Streak,
+  alarmAhead, decideAtSetOff, DECISION_GRACE_MS, nextStep, OFF_MEMORY_MS, stepStreak, upFor, type OffReason, type Streak,
 } from './offWhenUp.js';
 
 const MINUTE = 60_000;
@@ -109,6 +109,7 @@ export type CurveStatus = {
   holdUntil: Date | null;
   baseSince: Date | null;
   nextChange: { at: Date; level: number; phase: CurvePhase } | null;
+  offBy: Date | null;
 };
 
 type SleepState = {
@@ -237,6 +238,10 @@ export class CurveController {
     const time = now.getTime();
     for (const state of this.states.values()) {
       if (state.side !== side || time >= state.powerOff.getTime()) continue;
+      const record = this.offs.get(keyOf(state.side, state.date));
+      if (record?.status === 'done') continue;
+      // Only fresh presence can move the turn-off; otherwise it is the set time.
+      const fresh = presenceRun(this.deps.presence(), this.sidesFor(state.side), time, PRESENCE_STALE_MS).known;
       const level = levelAt(state.points, now);
       const next = state.points.find(point => point.at.getTime() > time && point.level !== level
         && this.gate(state.side, state.date, point.at) === 'run');
@@ -249,6 +254,8 @@ export class CurveController {
         holdUntil: state.hold?.until ?? null,
         baseSince: state.upEarlyAt ?? state.outOfBedAt,
         nextChange: next ? { at: next.at, level: next.level, phase: next.phase } : null,
+        offBy: !state.offWhenUp || !fresh ? null
+          : record?.status === 'extended' ? record.latest : this.latestOffFor(state.side, state.date, state.setOff),
       };
     }
     return null;
@@ -272,6 +279,7 @@ export class CurveController {
         // A paused night is not tracked; once the pause ends it is, as not observed if past its bedtime.
         if (this.deps.isPaused(side, now)) {
           if (this.states.has(key)) seen.add(key);
+          await this.pauseExtension(key);
           continue;
         }
         seen.add(key);
@@ -463,7 +471,22 @@ export class CurveController {
     }
     const time = now.getTime();
     state.streak = stepStreak(state.streak, run, time);
-    if (record?.status !== 'extended' || record.paused) return false;
+    if (!record) {
+      // After the wake, once up for 10 minutes, with no alarm of the night left.
+      const setOff = state.setOff.getTime();
+      const due = time >= state.wake.getTime() && time < setOff
+        && upFor(state.streak, time, state.wake.getTime())
+        && !alarmAhead(state.alarms, time, setOff)
+        && !this.alarmPending(smartOff, state);
+      if (due) this.endOff(key, state, now, 'got-up', { write: true, retime: true });
+      return due;
+    }
+    if (record.status !== 'extended') return false;
+    if (record.paused) {
+      // The pause ended before the latest off: presence decides again and the steps resume.
+      record.paused = false;
+      record.armedUntil = null;
+    }
     const latest = this.latestOffFor(state.side, state.date, state.setOff);
     if (latest.getTime() < record.latest.getTime()) {
       record.latest = latest;
@@ -496,6 +519,32 @@ export class CurveController {
       record.armedUntil = until;
     }
     return false;
+  }
+
+  // A failed check counts as an alarm still to come, so an early off never strands one.
+  private alarmPending(smartOff: SmartOffDeps, state: SleepState): boolean {
+    try {
+      return smartOff.alarmPending(state.side, { date: state.date, start: state.sleepStart, end: state.setOff }, state.setOff);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`smart schedule ${state.side} ${state.date}: could not check the alarms: ${message}`);
+      return true;
+    }
+  }
+
+  // A pause leaves the bed to its own timer, as for any paused sleep: the
+  // timer goes to the latest off, and presence no longer decides.
+  private async pauseExtension(key: string): Promise<void> {
+    const record = this.offs.get(key);
+    const smartOff = this.deps.smartOff;
+    if (!smartOff || record?.status !== 'extended' || record.paused) return;
+    const on = await this.readSideOn(smartOff, record);
+    if (on === false) this.endOff(key, record, this.deps.now(), 'side-off', { write: false, retime: true });
+    if (on !== true) return;
+    // A write that did not land is tried again on the next tick.
+    if (!this.tryWrite(record, 'move the timer', () => smartOff.armTimer(record.side, record.latest, record.latest))) return;
+    record.paused = true;
+    logger.info(`smart schedule ${record.side} ${record.date}: paused while kept on, its timer ends it by ${record.latest.toISOString()}`);
   }
 
   private async step(state: SleepState, snapshot: PresenceSnapshot, now: Date): Promise<void> {
@@ -534,7 +583,8 @@ export class CurveController {
       return;
     }
     const wake = state.wake.getTime();
-    const outOfBed = !state.upEarlyAt && !state.outOfBedAt && run.known && run.presentSince === null
+    // A sleep that turns off when up holds the wake level until it does.
+    const outOfBed = !state.smart.offWhenUp && !state.upEarlyAt && !state.outOfBedAt && run.known && run.presentSince === null
       && time >= wake && time < wake + AFTER_WAKE_MS && wake < state.powerOff.getTime();
     if (outOfBed) {
       state.outOfBedAt = now;
@@ -666,5 +716,6 @@ export function liveCurveState(side: Side, now: Date = new Date()): RhythmsLive 
     nextChange: status.nextChange
       ? { at: status.nextChange.at.toISOString(), level: status.nextChange.level, phase: status.nextChange.phase }
       : null,
+    ...(status.offBy ? { offWhenUp: { by: status.offBy.toISOString() } } : {}),
   };
 }

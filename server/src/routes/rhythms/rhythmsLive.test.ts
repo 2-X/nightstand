@@ -47,7 +47,7 @@ const alarm = {
 };
 
 // A Smart Schedule night that starts at bedtime and lasts the given minutes.
-const smartNight = (bedtime: Date, minutes: number) => {
+const smartNight = (bedtime: Date, minutes: number, offWhenUp = false) => {
   const end = new Date(bedtime.getTime() + minutes * MINUTE);
   return applySmartCurve({
     side: 'left',
@@ -58,7 +58,7 @@ const smartNight = (bedtime: Date, minutes: number) => {
     wake: new Date(end.getTime() - 60 * MINUTE),
     night: { temperatures: {}, alarm, alarms: [], power: { on: '22:45', off: '07:45', onTemperature: 80, enabled: true } },
     mode: 'smart',
-    smart: { baseLevel: 0, intensity: 'standard', warmStart: true, warmUp: true, upEarly: false },
+    smart: { baseLevel: 0, intensity: 'standard', warmStart: true, warmUp: true, upEarly: false, ...(offWhenUp ? { offWhenUp } : {}) },
     events: [
       { kind: 'power-on', at: bedtime, temperatureF: 80 },
       { kind: 'alarm', at: new Date(end.getTime() - 60 * MINUTE), alarm, index: 0 },
@@ -153,5 +153,26 @@ describe('GET /rhythms/live', () => {
     assert.ok(state);
     assert.ok(state.baseSince && Math.abs(Date.parse(state.baseSince) - Date.now()) < 5_000);
     assert.equal(state.waiting, false);
+  });
+
+  it('says when a "When I get up" sleep turns off at the latest while presence is fresh', async () => {
+    const sleep = smartNight(new Date(Math.floor(Date.now() / MINUTE) * MINUTE - 60 * MINUTE), 9 * 60, true);
+    const controller = startCurveController({
+      now: () => new Date(),
+      presence: () => {
+        const stamp = new Date().toISOString();
+        return { left: { present: true, lastUpdatedAt: stamp, stateChangedAt: stamp }, right: { present: false } };
+      },
+      awayMode: () => ({ left: false, right: false }),
+      isPaused: () => false,
+      sleeps: side => (side === 'left' ? [sleep] : []),
+      applyLevel: async () => {},
+      retime: () => {},
+      recordHistory: async () => {},
+      smartOff: { sideIsOn: async () => true, powerOff: () => {}, armTimer: () => {}, alarmPending: () => false, nextRestart: () => null },
+    });
+    await controller.tick();
+    const state = RhythmsLiveResponseSchema.parse((await live('?side=left')).body);
+    assert.equal(state?.offWhenUp?.by, new Date(sleep.end.getTime() + 3 * 60 * MINUTE).toISOString());
   });
 });
