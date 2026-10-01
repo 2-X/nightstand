@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
 import type { ResolvedSleepResponse } from '@api/rhythmsResponse';
 import { createDemoRhythms } from '../../../mocks/rhythmsMock';
@@ -7,7 +7,7 @@ import ComingUp from './ComingUp';
 
 const left = createDemoRhythms(new Date('2026-09-28T19:00:00Z')).left;
 
-function renderComingUp(dates: string[], sleeps: ResolvedSleepResponse[] = [], pausedUntil?: Date | null) {
+function renderComingUp(dates: string[], sleeps: ResolvedSleepResponse[] = [], pausedUntil?: Date | null, disabled = false) {
   const onChoose = vi.fn();
   const onChooseMany = vi.fn();
   const view = renderWithProviders(<ComingUp
@@ -16,7 +16,7 @@ function renderComingUp(dates: string[], sleeps: ResolvedSleepResponse[] = [], p
     dates={ dates }
     today="2026-09-28"
     timeZone="America/Los_Angeles"
-    disabled={ false }
+    disabled={ disabled }
     pausedUntil={ pausedUntil }
     onChoose={ onChoose }
     onChooseMany={ onChooseMany }/>);
@@ -97,5 +97,44 @@ it('gives several dates one rhythm', async () => {
   expect(within(picker).getByRole('button', { name: /^Back to Week/ })).toBeInTheDocument();
   await user.click(within(picker).getByRole('button', { name: /^Weekend/ }));
   expect(onChooseMany).toHaveBeenCalledWith(['2026-09-29', '2026-09-30'], { kind: 'rhythm', id: 'weekend' });
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
+
+it('says a sleep that started yesterday is the one in progress', async () => {
+  const now = Date.now();
+  const { user, onChoose } = renderComingUp(['2026-09-27', '2026-09-28'], [sleepAround(now - 3_600_000, now + 3_600_000, '2026-09-27')]);
+  await user.click(screen.getByRole('button', { name: /^Yesterday, Sep 27: .*, now$/ }));
+  const picker = await screen.findByRole('dialog', { name: 'Yesterday, Sep 27' });
+  expect(within(picker).getByText('For the sleep in progress now')).toBeInTheDocument();
+  await user.click(within(picker).getByRole('button', { name: /^No sleep scheduled/ }));
+  expect(onChoose).toHaveBeenCalledWith('2026-09-27', { kind: 'none' });
+});
+
+it('starts the later date empty after Cancel and after a pick', async () => {
+  const { user } = renderComingUp(['2026-09-28']);
+  await user.click(screen.getByRole('button', { name: 'Change a later date' }));
+  let ask = await screen.findByRole('dialog', { name: 'Pick a date' });
+  fireEvent.change(within(ask).getByLabelText('Date'), { target: { value: '2026-10-20' } });
+  await user.click(within(ask).getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Pick a date' })).not.toBeInTheDocument());
+  await user.click(screen.getByRole('button', { name: 'Change a later date' }));
+  ask = await screen.findByRole('dialog', { name: 'Pick a date' });
+  expect(within(ask).getByLabelText('Date')).toHaveValue('');
+  fireEvent.change(within(ask).getByLabelText('Date'), { target: { value: '2026-10-20' } });
+  await user.click(within(ask).getByRole('button', { name: 'Choose a rhythm' }));
+  await user.click(within(await screen.findByRole('dialog', { name: 'Tue, Oct 20' })).getByRole('button', { name: /^Weekend/ }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  await user.click(screen.getByRole('button', { name: 'Change a later date' }));
+  expect(within(await screen.findByRole('dialog', { name: 'Pick a date' })).getByLabelText('Date')).toHaveValue('');
+});
+
+it('keeps the date buttons focusable while a save runs', async () => {
+  const { user } = renderComingUp(['2026-09-28'], [], undefined, true);
+  for (const name of ['Change a later date', 'Change several dates']) {
+    const button = screen.getByRole('button', { name });
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).not.toBeDisabled();
+    await user.click(button);
+  }
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });

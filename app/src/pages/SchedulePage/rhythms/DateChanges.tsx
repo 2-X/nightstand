@@ -4,6 +4,7 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import type { SideRhythms } from '@api/rhythmsSchema';
 import { palette } from '@design/tokens';
 import { dayLabel, rhythmName, upcomingChanges, weekLabel, type DateChoice } from './rhythmsModel';
+import { INACTIVE } from './sheetStyles';
 
 type Props = {
   sideData: SideRhythms;
@@ -48,9 +49,9 @@ export default function DateChanges({ sideData, from, today, disabled, onChoose 
             <Button
               size="small"
               aria-label={ `${label}: back to ${weekLabel(sideData, change.date)}` }
-              disabled={ disabled }
-              onClick={ () => onChoose(change.date, { kind: 'weekly' }) }
-              sx={ { minHeight: 44, flexShrink: 0 } }>
+              aria-disabled={ disabled || undefined }
+              onClick={ () => { if (!disabled) onChoose(change.date, { kind: 'weekly' }); } }
+              sx={ { minHeight: 44, flexShrink: 0, ...INACTIVE } }>
               Back to Week
             </Button>
           </ListItem>;

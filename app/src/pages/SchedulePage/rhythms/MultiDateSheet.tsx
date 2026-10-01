@@ -6,6 +6,7 @@ import ChevronRight from '@mui/icons-material/ChevronRight';
 import type { SideRhythms } from '@api/rhythmsSchema';
 import { palette } from '@design/tokens';
 import { changeFor, formatDate, MAX_CHANGE_DAYS_AHEAD } from './rhythmsModel';
+import { BOTTOM_SHEET } from './sheetStyles';
 
 const DATE = 'YYYY-MM-DD';
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -56,8 +57,7 @@ export default function MultiDateSheet({ sideData, today, onNext, onClose }: Pro
     aria-labelledby={ titleId }
     fullWidth
     maxWidth="sm"
-    sx={ { '& .MuiDialog-container': { alignItems: 'flex-end' },
-      '& .MuiDialog-paper': { m: 0, width: '100%', borderRadius: '20px 20px 0 0' } } }>
+    sx={ BOTTOM_SHEET }>
     <DialogTitle id={ titleId }>Change several dates</DialogTitle>
     <DialogContent sx={ { px: { xs: 0.75, sm: 3 } } }>
       <Typography variant="body2" color="text.secondary" sx={ { px: { xs: 1.25, sm: 0 }, mb: 1 } }>

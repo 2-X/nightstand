@@ -43,8 +43,10 @@ export function useRhythmsState() {
   const { data: settings } = useSettings();
   const flag = !!settings?.features?.rhythms;
   const query = useRhythms({ enabled: flag });
-  const state: RhythmsState = !settings ? 'unknown' : !flag ? 'off' : query.isError ? 'error' : !query.data ? 'loading'
-    : query.data.status.active && query.data.data ? 'active' : 'inactive';
+  // A failed refetch keeps the last answer, so an open draft stays. Running, but this app cannot read
+  // the file: an error, so the weekly editor never stands in for Rhythms.
+  const state: RhythmsState = !settings ? 'unknown' : !flag ? 'off' : query.isError && !query.data ? 'error' : !query.data ? 'loading'
+    : !query.data.status.active ? 'inactive' : query.data.data ? 'active' : 'error';
   return { state, response: query.data, refetch: query.refetch };
 }
 

@@ -43,8 +43,12 @@ it('puts a date back to the Week', async () => {
   expect(onChoose).toHaveBeenCalledWith('2026-09-30', { kind: 'weekly' });
 });
 
-it('disables going back while a save runs', async () => {
-  const { user } = renderChanges(withChanges([{ date: '2026-09-30', rhythmId: null }]), true);
+it('keeps going back focusable but inactive while a save runs', async () => {
+  const { user, onChoose } = renderChanges(withChanges([{ date: '2026-09-30', rhythmId: null }]), true);
   await user.click(screen.getByRole('button', { name: 'Date changes (1)' }));
-  expect(screen.getByRole('button', { name: /^Wed, Sep 30: back to/ })).toBeDisabled();
+  const back = screen.getByRole('button', { name: /^Wed, Sep 30: back to/ });
+  expect(back).toHaveAttribute('aria-disabled', 'true');
+  expect(back).not.toBeDisabled();
+  await user.click(back);
+  expect(onChoose).not.toHaveBeenCalled();
 });

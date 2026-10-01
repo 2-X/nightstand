@@ -6,15 +6,13 @@ import {
 import type { SideRhythms } from '@api/rhythmsSchema';
 import type { ResolvedSleepResponse } from '@api/rhythmsResponse';
 import { palette } from '@design/tokens';
+import { BOTTOM_SHEET, INACTIVE } from './sheetStyles';
 import MultiDateSheet from './MultiDateSheet';
 import RhythmPicker from './RhythmPicker';
 import {
   changeFor, dayLabel, effectiveRhythmId, formatDate, MAX_CHANGE_DAYS_AHEAD, NO_SLEEP, rhythmDetail, rhythmOptions,
   sleepDetail, weekLabel, type DateChoice, type PickerOption,
 } from './rhythmsModel';
-
-const SHEET = { '& .MuiDialog-container': { alignItems: 'flex-end' },
-  '& .MuiDialog-paper': { m: 0, width: '100%', borderRadius: '20px 20px 0 0' } };
 
 type Props = {
   sideData: SideRhythms;
@@ -44,6 +42,12 @@ export default function ComingUp({
   const laterError = !!laterDate && !laterValid;
   const range = `Pick a date from today to ${formatDate(maxDate)}`;
   const now = Date.now();
+  // A sleep still running from yesterday can change too; its picker says it is the one in progress.
+  const runningDate = sleeps.find(sleep => Date.parse(sleep.start) <= now && now < Date.parse(sleep.end))?.date;
+  const closeLater = () => {
+    setAskDate(false);
+    setLaterDate('');
+  };
   const openPicker = (date: string) => {
     onSheetOpen?.();
     setPickerDate(date);
@@ -79,7 +83,7 @@ export default function ComingUp({
           // A sleep that starts before the pause ends is skipped, so its times are dimmed.
           const paused = !!sleep && pausedUntil !== undefined && (pausedUntil === null || Date.parse(sleep.start) < pausedUntil.getTime());
           const marks = [running && 'now', paused && 'paused', changed && 'changed'].filter(Boolean).join(', ');
-          // Focusable while a save runs, like the week row, so focus comes back here after a pick.
+          // Focusable while a save runs, like the Week lines, so focus comes back here after a pick.
           return <ListItemButton
             key={ date }
             divider
@@ -87,7 +91,7 @@ export default function ComingUp({
             aria-disabled={ disabled || undefined }
             aria-label={ `${label}: ${text}${marks ? `, ${marks}` : ''}` }
             onClick={ () => { if (!disabled) openPicker(date); } }
-            sx={ { gap: 1, '&[aria-disabled="true"]': { opacity: 0.6 } } }>
+            sx={ { gap: 1, ...INACTIVE } }>
             <ListItemText
               primary={ label }
               secondary={ text }
@@ -104,18 +108,20 @@ export default function ComingUp({
     { more }
     <Button
       onClick={ () => {
+        if (disabled) return;
         onSheetOpen?.();
         setAskDate(true);
       } }
-      disabled={ disabled }
-      sx={ { alignSelf: 'flex-start', px: 0 } }>Change a later date</Button>
+      aria-disabled={ disabled || undefined }
+      sx={ { alignSelf: 'flex-start', px: 0, ...INACTIVE } }>Change a later date</Button>
     <Button
       onClick={ () => {
+        if (disabled) return;
         onSheetOpen?.();
         setSeveralOpen(true);
       } }
-      disabled={ disabled }
-      sx={ { alignSelf: 'flex-start', px: 0 } }>Change several dates</Button>
+      aria-disabled={ disabled || undefined }
+      sx={ { alignSelf: 'flex-start', px: 0, ...INACTIVE } }>Change several dates</Button>
     { severalOpen && <MultiDateSheet
       sideData={ sideData }
       today={ today }
@@ -138,11 +144,11 @@ export default function ComingUp({
       } }/> }
     <Dialog
       open={ askDate }
-      onClose={ () => setAskDate(false) }
+      onClose={ closeLater }
       aria-labelledby="later-date-title"
       fullWidth
       maxWidth="sm"
-      sx={ SHEET }>
+      sx={ BOTTOM_SHEET }>
       <DialogTitle id="later-date-title">Pick a date</DialogTitle>
       <DialogContent>
         <TextField
@@ -156,19 +162,19 @@ export default function ComingUp({
           onChange={ event => setLaterDate(event.target.value) }/>
       </DialogContent>
       <DialogActions>
-        <Button onClick={ () => setAskDate(false) }>Cancel</Button>
+        <Button onClick={ closeLater }>Cancel</Button>
         <Button
           variant="contained"
           disabled={ !laterValid }
           onClick={ () => {
-            setAskDate(false);
+            closeLater();
             setPickerDate(laterDate);
           } }>Choose a rhythm</Button>
       </DialogActions>
     </Dialog>
     { pickerDate && <RhythmPicker
       title={ dayLabel(pickerDate, today) }
-      subtitle="For the sleep that starts on this date"
+      subtitle={ pickerDate === runningDate ? 'For the sleep in progress now' : 'For the sleep that starts on this date' }
       options={ options(pickerDate) }
       selected={ selected(pickerDate) }
       onClose={ () => setPickerDate(undefined) }

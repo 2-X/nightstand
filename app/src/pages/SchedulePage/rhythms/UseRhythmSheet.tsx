@@ -5,6 +5,7 @@ import type { DayOfWeek } from '@api/schedulesSchema';
 import { describeDays, WEEK_DAYS } from '@api/rhythmDays';
 import { palette } from '@design/tokens';
 import { dayName } from './rhythmsModel';
+import { BOTTOM_SHEET } from './sheetStyles';
 
 type Props = { name: string; onUse: (days: DayOfWeek[]) => void; onClose: () => void };
 
@@ -18,8 +19,7 @@ export default function UseRhythmSheet({ name, onUse, onClose }: Props) {
     aria-labelledby={ titleId }
     fullWidth
     maxWidth="sm"
-    sx={ { '& .MuiDialog-container': { alignItems: 'flex-end' },
-      '& .MuiDialog-paper': { m: 0, width: '100%', borderRadius: '20px 20px 0 0' } } }>
+    sx={ BOTTOM_SHEET }>
     <DialogTitle id={ titleId }>Use <bdi>{ name }</bdi> on</DialogTitle>
     <DialogContent>
       <ToggleButtonGroup

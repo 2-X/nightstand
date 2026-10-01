@@ -145,3 +145,10 @@ it('reports off by default, active when the flag and file agree, inactive otherw
   renderWithProviders(<StateProbe/>);
   expect(await screen.findByText('inactive')).toBeInTheDocument();
 });
+
+it('reports an error when Rhythms runs but its file cannot be read', async () => {
+  resetMockRhythms(null, true);
+  server.use(http.get('*/rhythms', () => HttpResponse.json({ status: { enabled: true, active: true }, data: { version: 'unreadable' } })));
+  renderWithProviders(<StateProbe/>);
+  expect(await screen.findByText('error')).toBeInTheDocument();
+});

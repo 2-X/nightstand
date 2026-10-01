@@ -1,6 +1,6 @@
 import SectionHeading from '@components/SectionHeading';
 import _ from 'lodash';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, CircularProgress, Dialog, DialogTitle, DialogActions, Typography,
 } from '@mui/material';
@@ -53,7 +53,10 @@ const getAdjustedDayOfWeek = (timeZone?: string): DayOfWeek => {
 };
 
 
-export default function SchedulePage() {
+// A notice can be a function, to ask before an action of its own drops the draft.
+type Notice = ReactNode | ((confirmLeave: (leave: () => void) => void) => ReactNode);
+
+export default function SchedulePage({ notice: noticeProp }: { notice?: Notice } = {}) {
   const { setIsUpdating, side, isUpdating } = useAppStore();
   const focusSaveAfterUpdate = useRef(false);
   const { data: schedules, refetch, isError: schedulesError } = useSchedules();
@@ -70,7 +73,7 @@ export default function SchedulePage() {
   const risePattern = supportsRisePattern(deviceStatus?.hubVersion);
   const format = settings?.temperatureFormat ?? 'fahrenheit';
   const [saveError, setSaveError] = useState('');
-  const [pendingChange, setPendingChange] = useState<{ day: number } | { side: 'left' | 'right' }>();
+  const [pendingChange, setPendingChange] = useState<{ day: number } | { side: 'left' | 'right' } | { leave: () => void }>();
   const changesPresent = useScheduleStore(state => state.changesPresent);
   const titleDay = selectedDay.charAt(0).toUpperCase() + selectedDay.slice(1);
   const nextDay = LOWERCASE_DAYS[(LOWERCASE_DAYS.indexOf(selectedDay) + 1) % 7];
@@ -133,8 +136,20 @@ export default function SchedulePage() {
     setPendingChange(change);
     return false;
   };
+  const confirmLeave = (leave: () => void) => {
+    if (useScheduleStore.getState().changesPresent) setPendingChange({ leave });
+    else leave();
+  };
+  const notice = typeof noticeProp === 'function' ? noticeProp(confirmLeave) : noticeProp;
   const discardAndSwitch = () => {
     if (!pendingChange) return;
+    if ('leave' in pendingChange) {
+      setPendingChange(undefined);
+      // Leaving can be refused, so the draft is dropped first.
+      reloadScheduleData();
+      pendingChange.leave();
+      return;
+    }
     reloadScheduleData();
     if ('day' in pendingChange) selectDay(pendingChange.day);
     else useAppStore.getState().setSide(pendingChange.side);
@@ -219,6 +234,7 @@ export default function SchedulePage() {
   // Editing requires schedules and the Pod timezone.
   if (!settings || !schedules) return <PageContainer>
     <PageHeader title="Schedule"/>
+    { notice }
     { schedulesError || settingsError ? <Alert
       severity="error"
       action={ <Button
@@ -235,6 +251,7 @@ export default function SchedulePage() {
       sx={ { mb: changesPresent ? 9 : 0,
         '& input, & button, & [tabindex]': { scrollMarginBottom: changesPresent ? '160px' : '88px', scrollMarginTop: '16px' } } }>
       <PageHeader title="Schedule"/>
+      { notice }
       <SideControl beforeSideChange={ nextSide => confirmDiscard({ side: nextSide }) }/>
       <DayTabs beforeDayChange={ day => confirmDiscard({ day }) }/>
       <SchedulePauseNotice framed note="Changes you save apply after the pause." onResumed={ () => setFocusAfterResume(true) }/>

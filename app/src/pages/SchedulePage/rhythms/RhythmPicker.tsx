@@ -8,6 +8,7 @@ import type { DayOfWeek } from '@api/schedulesSchema';
 import { palette } from '@design/tokens';
 import { describeDays } from '@api/rhythmDays';
 import { choiceKey, dayName, type DateChoice, type PickerOption } from './rhythmsModel';
+import { BOTTOM_SHEET } from './sheetStyles';
 
 // Lets a grouped week line change some of its days, not only all of them.
 export type DayChoice = { days: DayOfWeek[]; chosen: DayOfWeek[]; onChange: (chosen: DayOfWeek[]) => void };
@@ -33,8 +34,7 @@ export default function RhythmPicker({ title, subtitle, options, selected, dayCh
     aria-labelledby={ titleId }
     fullWidth
     maxWidth="sm"
-    sx={ { '& .MuiDialog-container': { alignItems: 'flex-end' },
-      '& .MuiDialog-paper': { m: 0, width: '100%', borderRadius: '20px 20px 0 0' } } }>
+    sx={ BOTTOM_SHEET }>
     <DialogTitle id={ titleId }>{ title }</DialogTitle>
     <DialogContent sx={ { px: 1, pb: 0 } }>
       { subtitle && <Typography variant="body2" color="text.secondary" sx={ { px: 2, mb: 1 } }>{ subtitle }</Typography> }

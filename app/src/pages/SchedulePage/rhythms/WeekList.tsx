@@ -5,6 +5,7 @@ import type { SideRhythms } from '@api/rhythmsSchema';
 import { palette } from '@design/tokens';
 import RhythmPicker from './RhythmPicker';
 import { describeDays, rhythmName, rhythmOptions, weekRuns, type DateChoice } from './rhythmsModel';
+import { INACTIVE } from './sheetStyles';
 
 type Props = {
   sideData: SideRhythms;
@@ -47,7 +48,7 @@ export default function WeekList({ sideData, disabled, onPick, onSheetOpen }: Pr
               onSheetOpen?.();
               setOpen({ days: run.days, chosen: run.days });
             } }
-            sx={ { gap: 2, minHeight: 48, '&[aria-disabled="true"]': { opacity: 0.6 } } }>
+            sx={ { gap: 2, minHeight: 48, ...INACTIVE } }>
             <ListItemText
               primary={ label }
               sx={ { flex: '0 0 auto', my: 0 } }

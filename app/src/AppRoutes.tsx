@@ -13,7 +13,7 @@ import PageContainer from './pages/PageContainer';
 const ControlTempPage = lazy(() => import('./pages/ControlTempPage/ControlTempPage'));
 const BaseControlPage = lazy(() => import('./pages/BaseControlPage/BaseControlPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage/SettingsPage'));
-const SchedulePage = lazy(() => import('./pages/SchedulePage/SchedulePage.tsx'));
+const ScheduleTab = lazy(() => import('./pages/SchedulePage/ScheduleTab.tsx'));
 const SleepPage = lazy(() => import('./pages/DataPage/SleepPage/SleepPage.tsx'));
 const LogsPage = lazy(() => import('./pages/DataPage/LogsPage/LogsPage.tsx'));
 const ChangelogPage = lazy(() => import('./pages/DataPage/ChangelogPage/ChangelogPage.tsx'));
@@ -48,7 +48,7 @@ export default function AppRoutes() {
         <Route path="settings/sleep-data" element={ <Navigate to="/settings/features" replace/> }/>
         <Route path="settings" element={ <SettingsPage/> }/>
         <Route path="settings/:category" element={ <SettingsPage/> }/>
-        <Route path="schedules" element={ <SchedulePage/> }/>
+        <Route path="schedules" element={ <ScheduleTab/> }/>
         <Route
           path="*"
           element={ <PageContainer>
