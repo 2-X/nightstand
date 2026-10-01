@@ -37,6 +37,9 @@ const record = (date: string, powerOff: string): import('./history.js').SleepHis
   bedExitsLastHour: 0,
   upEarlyAt: null,
   outOfBedAt: null,
+  offWhenUp: false,
+  actualOff: powerOff,
+  offReason: 'set-time',
   onsetEstimate: null,
   onsetNote: 'no-vitals',
 });

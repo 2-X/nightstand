@@ -50,6 +50,9 @@ const summary: import('./curveController.js').SleepSummary = {
   bedExitsLastHour: 0,
   upEarlyAt: null,
   outOfBedAt: null,
+  offWhenUp: false,
+  actualOff: '2026-09-30T14:30:00.000Z',
+  offReason: 'set-time',
 };
 const readLast = (file: string) => JSON.parse(readFileSync(file, 'utf8').trim().split('\n').at(-1) ?? '{}') as Record<string, unknown>;
 

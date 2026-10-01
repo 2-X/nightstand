@@ -533,7 +533,7 @@ describe('CurveController after an edit during the night', () => {
 
 describe('CurveController writes no files', () => {
   it('has no file system or lowdb imports', () => {
-    for (const file of ['./curveController.ts', './confirmation.ts']) {
+    for (const file of ['./curveController.ts', './confirmation.ts', './offWhenUp.ts']) {
       const source = readFileSync(new URL(file, import.meta.url), 'utf8');
       assert.doesNotMatch(source, /from '(node:)?fs(\/promises)?'|lowdb|db\/rhythms\.js|db\/settings\.js/, file);
     }
