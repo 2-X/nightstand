@@ -14,9 +14,20 @@ is a hard fork; for the history of the projects it descends from, see
   live and in the nightly analysis, and heart rate and breathing tracking
   carries on through short trips out of bed instead of starting over. It is an
   estimate from bed sensors and may be wrong. With the switch off, presence,
-  sleep records and everything stored behave exactly as before. On Pod 3 and
-  Pod 4 the switch has no effect yet: the new tracking reads the Pod 5's
-  capacitance format and has only been checked on Pod 5 data.
+  sleep records and everything stored behave exactly as before. It has been
+  checked only on a Pod 5 whose cover writes the newer capacitance records. On
+  Pods that write the older records (Pod 3, and possibly Pod 4 and some Pod 5
+  covers) it is experimental, has not been checked against anyone's sleep, and
+  Settings > Features says "Experimental on this Pod". There it changes the
+  nightly sleep records, starting from 300 counts (the entry level sleepypod
+  uses for that format) and then following each side's level as learned from
+  the Pod's own nights. A side keeps the older reading for a night whenever
+  its capacitance had gaps, found a much shorter night or came in two formats.
+  Once both sides' levels are learned and vibration readings arrive once a
+  second, capacitance also decides when heart rate and breathing are recorded.
+  The in-bed indicator, presence auto-off and schedules that react to presence
+  stay on the vibration sensor. A capacitance format it does not recognize, as
+  a Pod 6 may write, leaves sleep tracking as it was and is noted in the log.
 
   On one night checked against both sleepers' own notes, the old live
   presence split the two sleepers' nights into 20 and 31 pieces, and the old

@@ -35,14 +35,22 @@ The maintainer tests Nightstand on a Pod 5. Pod 3 and Pod 4 support comes
 from upstream free-sleep; this fork's biometrics and base controls have not
 been tested on those models.
 
+New sleep tracking (beta) goes by the capacitance format a Pod writes, not its
+model name. It has been checked against sleepers' own notes only on a Pod 5
+whose cover writes `capSense2` records. On Pods that write the older `capSense`
+records (Pod 3, and possibly Pod 4 and some Pod 5 covers) it is experimental,
+has not been checked against anyone's sleep, and Settings > Features says
+"Experimental on this Pod". On a Pod whose capacitance format it does not
+recognize, the switch leaves sleep tracking as it was and notes this in the log.
+
 | Pod | Temperature and schedules | Biometrics | Adjustable base |
 | --- | --- | --- | --- |
 | Pod 1, Pod 2 | Not supported | Not supported | Not supported |
-| Pod 3 (with SD card) | Upstream support; uses the [SD card method](INSTALLATION.md#compatibility) | Untested on this fork | Untested on this fork |
-| Pod 3 (no SD card) | Upstream support; FCC ID `2AYXT61100001` | Untested on this fork | Untested on this fork |
-| Pod 4 | Upstream support | Untested on this fork | Requires an adjustable base |
+| Pod 3 (with SD card) | Upstream support; uses the [SD card method](INSTALLATION.md#compatibility) | Untested on this fork; new sleep tracking experimental | Untested on this fork |
+| Pod 3 (no SD card) | Upstream support; FCC ID `2AYXT61100001` | Untested on this fork; new sleep tracking experimental | Untested on this fork |
+| Pod 4 | Upstream support | Untested on this fork; new sleep tracking experimental | Requires an adjustable base |
 | Pod 5 | Tested by maintainer | Experimental estimates | Requires an adjustable base; no separate test report |
-| Pod 6 | Unknown | Unknown | Unknown |
+| Pod 6 | Unknown | Unknown; new sleep tracking untested | Unknown |
 
 ## About this fork
 
@@ -121,8 +129,8 @@ In Settings:
   after 45 minutes with no one on it, outside its scheduled on-window.
 - **New sleep tracking (beta)** under Features: off by default, needs biometrics. Uses
   the bed's capacitance sensors to tell the two sides apart (see
-  [Biometrics](#biometrics)). On Pod 3 and Pod 4 it has no effect yet: it reads the
-  Pod 5's capacitance format and has only been checked on Pod 5 data.
+  [Biometrics](#biometrics)). It has only been checked on a Pod 5; on Pods that
+  write the older capacitance format it is experimental and the app says so.
 - **Rhythms (beta)** under Features: off by default. The first time you turn it
   on, it copies the weekly schedule into named rhythms and keeps the weekly
   schedule as it is. After that, turning it on brings back your saved rhythms.
@@ -177,6 +185,19 @@ night checked against both sleepers' own notes, it closely matched each
 person's bed times and caught two short trips out of bed, where the old live
 presence split the night into many pieces and the old nightly record gave
 both sides the same times. It has only been checked on one Pod 5 so far.
+
+On Pods that write the older capacitance format, the switch is experimental
+and does less. It changes the nightly sleep records: these start from 300
+counts, the entry level sleepypod uses for that format, and then follow each
+side's level as learned from the Pod's own nights. A side keeps the older
+reading for a night whenever its capacitance had gaps, found a much shorter
+night than the older rule, or came in two formats. Once both sides' levels are
+learned and vibration readings arrive once a second, capacitance also decides
+when heart rate and breathing are recorded, and the vibration sensor takes
+that back if capacitance places nobody in a bed it reads as in use. The in-bed
+indicator, presence auto-off and schedules that react to presence keep using
+the vibration sensor, as with the switch off. None of this has been checked on
+those Pods.
 
 <p align="center">
   <img src="docs/presence-before-after.png" width="720" alt="Before and after: vibration and capacitance readings for each side, and when each side read as occupied under the old and new tracking">

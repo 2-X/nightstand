@@ -32,9 +32,9 @@ credited below where they are described.
   steady weight. A very still sleeper can fall below the detection threshold,
   which leaves gaps in vitals.
 - **Pod models.** Pod 3 has two piezo sensors per side; Pod 4 and Pod 5 have
-  one. Newer Pods also write capacitance data in a different format. This fork
-  is developed on a Pod 5; its biometrics have not been checked on Pod 3 or
-  Pod 4.
+  one. Pod 5's newer cover writes capacitance data in a different format from
+  older covers. This fork is developed on a Pod 5; its biometrics have not
+  been checked on Pod 3 or Pod 4.
 - **Tuning.** Several thresholds were tuned on one or a few beds.
   [docs/CALIBRATION.md](../docs/CALIBRATION.md) lists which constants are
   fixed filters, bed-dependent tuning, rolling estimates or persisted
@@ -187,11 +187,16 @@ samples are packed 32-bit integers. The examples below show records after
 
 ### Capacitance sensor
 
-One reading a second, from 3 sensors per side. Pod 5 (and Pod 4, per
-[docs/EIGHT_SLEEP_PROTOCOL.md](../docs/EIGHT_SLEEP_PROTOCOL.md)) writes
-`capSense2` records with 8 values per side instead, which `load_raw_files.py`
-maps onto the `out`, `cen`, and `in` fields below. That mapping was worked out
-on a Pod 5.
+Three sensors per side. Older covers write `capSense` records with integer
+counts, shown below. Pod 5's newer cover writes `capSense2` records, about two
+a second, with 8 values per side in four pairs; `load_raw_files.py` maps the
+first three pair means onto the `out`, `cen`, and `in` fields, and the fourth
+pair is a reference. That mapping was worked out on a Pod 5. Which models
+write which is not fully known: sleepypod reports one Pod 5 on newer firmware
+writing `capSense` (see
+[docs/EIGHT_SLEEP_PROTOCOL.md](../docs/EIGHT_SLEEP_PROTOCOL.md#other-pod-generations)).
+The new sleep tracking reads both formats through `presence/sensors.py`, and
+has only been checked on `capSense2`.
 
 ```json
 {
