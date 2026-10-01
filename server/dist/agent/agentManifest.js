@@ -86,6 +86,11 @@ export const AGENT_MANIFEST = [
         mode: 'add',
         why: 'the reversibility claim: return the pod to plain upstream',
     },
+    {
+        path: 'app/src/pages/SettingsPage/VersionsPage/RhythmsLeaveNote.tsx',
+        mode: 'add',
+        why: 'tells a Rhythms user what a rollback or the switch to upstream does',
+    },
     // Pod-side machinery.
     { path: 'scripts/install.sh', mode: 'copy', why: 'installs this fork and wires the agent units' },
     { path: 'scripts/update.sh', mode: 'copy', why: 'download, back up, swap, health check, auto rollback' },
