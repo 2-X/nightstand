@@ -42,7 +42,7 @@ from load_raw_files import load_raw_files
 from piezo_data import load_piezo_df, detect_presence_piezo, identify_baseline_period, summarize_empty_floor, one_value_per_second
 from cap_data import load_cap_df, create_cap_baseline_from_cap_df, save_baseline, summed_delta_noise
 from features import biometrics_v2_enabled
-from presence.sensors import FORMATS
+from presence.sensors import majority_format
 from resource_usage import get_memory_usage_unix, get_available_memory_mb
 from biometrics_helpers import validate_datetime_utc
 from service_health import update_health, is_biometrics_enabled
@@ -100,9 +100,9 @@ def format_payload(cap_formats):
     """What a cap run row records about the Pod's capacitance records; None with the switch off."""
     if cap_formats is None:
         return None
-    known = [(count, name) for name, count in cap_formats.items() if name in FORMATS and count]
-    if known:
-        return {'format': max(known)[1]}
+    cap_format = majority_format(cap_formats)
+    if cap_format is not None:
+        return {'format': cap_format.name}
     return {'format': 'unknown' if cap_formats.get('unknown') else 'none'}
 
 

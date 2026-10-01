@@ -11,7 +11,7 @@ import numpy as np
 from .cap import CAP_HOLD_SECONDS, CapBaseline, cap_delta
 from .detector import SIDES, DetectorParams, PresenceDetector
 from .piezo import PiezoLayout, keep_layout, one_per_second_share
-from .sensors import FORMATS, CapFormat
+from .sensors import CapFormat, majority_format
 
 # (unix seconds, capacitance delta per side, piezo range per side)
 Frame = Tuple[int, Dict[str, Optional[float]], Dict[str, Optional[float]]]
@@ -127,8 +127,7 @@ class FrameCollector:
 
     def cap_format(self) -> Optional[CapFormat]:
         """The capacitance format most of the window's records came in, or None without any."""
-        known = [(self.cap_formats[name], -order, name) for order, name in enumerate(FORMATS) if self.cap_formats[name]]
-        return FORMATS[max(known)[2]] if known else None
+        return majority_format(self.cap_formats)
 
     def add_piezo(self, ts: int, left_range: Optional[float], right_range: Optional[float]) -> None:
         self._piezo_ts.append(int(ts))

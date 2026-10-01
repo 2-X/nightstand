@@ -83,6 +83,12 @@ def format_named(name) -> Optional[CapFormat]:
     return FORMATS.get(name) if isinstance(name, str) else None
 
 
+def majority_format(counts) -> Optional[CapFormat]:
+    """The known format with the most records; a tie goes to the one listed first in FORMATS."""
+    known = [(counts.get(name, 0), -order, name) for order, name in enumerate(FORMATS) if counts.get(name, 0)]
+    return FORMATS[max(known)[2]] if known else None
+
+
 def _read_side(reader, side) -> Optional[Channels]:
     try:
         return reader(side)

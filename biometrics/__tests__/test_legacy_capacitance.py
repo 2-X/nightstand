@@ -30,7 +30,9 @@ import calibration
 import cap_data
 import load_raw_files
 import presence_scenarios as scenarios
+from presence import sensors
 from presence.params import baselines_from_calibration
+from presence.replay import FrameCollector
 from presence_scenarios import Night
 from test_presence_calibration import SCHEMA
 
@@ -122,6 +124,18 @@ class FormatPayloadTest(unittest.TestCase):
         self.assertEqual(calibrator.format_payload(Counter(unknown=5)), {'format': 'unknown'})
         self.assertEqual(calibrator.format_payload(Counter(capSense=3, capSense2=9, unknown=50)),
                          {'format': 'capSense2'})
+
+    def test_a_tie_goes_to_the_format_the_analyzer_would_pick(self):
+        import calibrate_sensor_thresholds as calibrator
+        tie = Counter(capSense=3, capSense2=3)
+        self.assertEqual(calibrator.format_payload(tie), {'format': 'capSense2'})
+        # The order formats are listed in decides, not their names.
+        reordered = {name: sensors.FORMATS[name] for name in ('capSense', 'capSense2')}
+        with unittest.mock.patch.dict(sensors.FORMATS, reordered, clear=True):
+            self.assertEqual(calibrator.format_payload(tie), {'format': 'capSense'})
+            collector = FrameCollector(None)
+            collector.cap_formats.update(tie)
+            self.assertIs(collector.cap_format(), sensors.CAPSENSE)
 
 
 class NegativeCountTest(unittest.TestCase):
