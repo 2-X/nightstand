@@ -8,6 +8,7 @@ import { initWaterLevel } from './8sleep/waterLevel.js';
 import { startPresenceAutoOff, stopPresenceAutoOff } from './8sleep/presenceAutoOffMonitor.js';
 import './jobs/jobScheduler.js';
 import { abortAlarmWaits } from './jobs/alarmActivity.js';
+import { setRebuilding } from './jobs/rebuildState.js';
 
 
 // Setup code
@@ -65,6 +66,8 @@ async function gracefulShutdown(signal: string) {
   logger.debug('Stopping node-schedule');
   // A power-off waiting for an alarm goes out now; the shutdown waits for it.
   abortAlarmWaits();
+  // Cancelling every job leaves the list empty for the rest of the process.
+  setRebuilding(true);
   await schedule.gracefulShutdown();
   await disconnectPrisma();
 

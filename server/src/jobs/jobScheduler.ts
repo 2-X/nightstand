@@ -18,6 +18,7 @@ import { schedulePauseResume } from './pauseResume.js';
 import eventBus from '../events/eventBus.js';
 import { emitJobEvent } from './jobEvents.js';
 import { isScheduleDbChange } from './isScheduleDbChange.js';
+import { setRebuilding } from './rebuildState.js';
 import { loadRhythms, type RhythmsLoad } from '../db/rhythms.js';
 import type { Side } from '../db/schedulesSchema.js';
 import { activation, type Activation } from './rhythms/activation.js';
@@ -165,6 +166,7 @@ export function setupJobs(): Promise<void> {
   setupRequested = true;
   if (setupRun) return setupRun;
   setupRun = (async () => {
+    setRebuilding(true);
     try {
       do {
         setupRequested = false;
@@ -172,6 +174,7 @@ export function setupJobs(): Promise<void> {
       } while (setupRequested);
     } finally {
       setupRun = null;
+      setRebuilding(false);
     }
   })();
   return setupRun;
