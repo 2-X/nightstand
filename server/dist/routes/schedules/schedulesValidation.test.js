@@ -148,4 +148,23 @@ describe('temperature set point limit', () => {
         assert.equal((await postSchedules({ right: { monday: { temperatures: stored } } })).status, 400);
     });
 });
+describe('POST /schedules with a side or day of the wrong type', () => {
+    it('refuses them instead of answering 200 with nothing saved', async () => {
+        await schedulesDB.read();
+        const before = JSON.stringify(schedulesDB.data);
+        for (const body of [{ left: 5 }, { left: 'x' }, { left: [] }, { left: { monday: 'garbage' } }, { right: { sunday: 7 } }, [{}]]) {
+            assert.equal((await postSchedules(body)).status, 400, JSON.stringify(body));
+        }
+        await schedulesDB.read();
+        assert.equal(JSON.stringify(schedulesDB.data), before);
+    });
+    it('still saves a whole day the way the app sends it', async () => {
+        await schedulesDB.read();
+        const day = structuredClone(schedulesDB.data.left.friday);
+        const body = SchedulesUpdateSchema.parse({ left: { friday: { ...day, power: { ...day.power, on: '21:15' } } } });
+        assert.equal((await postSchedules(body)).status, 200);
+        await schedulesDB.read();
+        assert.equal(schedulesDB.data.left.friday.power.on, '21:15');
+    });
+});
 //# sourceMappingURL=schedulesValidation.test.js.map

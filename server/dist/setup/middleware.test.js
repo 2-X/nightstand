@@ -135,4 +135,69 @@ test('rejected origins are blocked before parsing malformed JSON', async (t) => 
     assert.equal(response.status, 403);
     assert.deepEqual(await response.json(), { error: 'Origin is not allowed' });
 });
+test('API bodies that are not JSON are refused with 415, bodiless requests pass', async (t) => {
+    const { default: express } = await import('express');
+    const { default: middleware } = await import('./middleware.js');
+    const app = express();
+    middleware(app);
+    app.post('/api/example', (req, res) => { res.json({ body: req.body ?? null }); });
+    app.put('/api/example', (req, res) => { res.json({ body: req.body ?? null }); });
+    const server = app.listen(0, '127.0.0.1');
+    t.after(() => new Promise(resolve => server.close(() => resolve())));
+    await new Promise(resolve => server.once('listening', resolve));
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+    const url = `http://127.0.0.1:${address.port}/api/example`;
+    const send = (method, headers, body) => fetch(url, { method, headers, body });
+    for (const type of ['text/plain', 'application/x-www-form-urlencoded', 'application/xml', 'multipart/form-data; boundary=x']) {
+        const response = await send('POST', { 'Content-Type': type }, '{"left":{}}');
+        assert.equal(response.status, 415, type);
+    }
+    assert.equal((await send('PUT', { 'Content-Type': 'text/plain' }, '{}')).status, 415);
+    for (const type of ['application/json', 'application/json; charset=utf-8']) {
+        const response = await send('POST', { 'Content-Type': type }, '{"left":{}}');
+        assert.equal(response.status, 200, type);
+        assert.deepEqual(await response.json(), { body: { left: {} } });
+    }
+    const bare = await send('POST', {});
+    assert.equal(bare.status, 200);
+    assert.equal((await send('POST', { 'Content-Type': 'text/plain' }, '')).status, 200);
+    const foreign = await send('POST', { Origin: 'https://attacker.example', 'Content-Type': 'text/plain' }, 'x');
+    assert.equal(foreign.status, 403);
+});
+test('settings, schedules and services refuse prototype keys at any depth', async (t) => {
+    const { default: express } = await import('express');
+    const { default: middleware, hasPrototypeKey } = await import('./middleware.js');
+    const app = express();
+    middleware(app);
+    for (const route of ['/api/settings', '/api/schedules', '/api/services', '/api/rhythms']) {
+        app.post(route, (req, res) => { res.json(req.body); });
+    }
+    const server = app.listen(0, '127.0.0.1');
+    t.after(() => new Promise(resolve => server.close(() => resolve())));
+    await new Promise(resolve => server.once('listening', resolve));
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+    const post = (route, body) => fetch(`http://127.0.0.1:${address.port}${route}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
+    });
+    const bodies = [
+        '{"__proto__":{"polluted":true}}',
+        '{"left":{"scheduleOverrides":{"__proto__":{"polluted":true}}}}',
+        '{"left":{"monday":{"constructor":{"prototype":{"polluted":true}}}}}',
+        '{"biometrics":{"jobs":{"prototype":1}}}',
+        '[{"a":[{"__proto__":1}]}]',
+    ];
+    for (const route of ['/api/settings', '/api/schedules', '/api/services']) {
+        for (const body of bodies)
+            assert.equal((await post(route, body)).status, 400, `${route} ${body}`);
+        assert.equal((await post(route, '{"left":{"monday":{"power":{"enabled":true}}}}')).status, 200, route);
+    }
+    // A rhythm named Constructor has the id "constructor".
+    const rhythm = '{"left":{"rhythms":{"constructor":{"id":"constructor","name":"Constructor"}}}}';
+    assert.equal((await post('/api/rhythms', rhythm)).status, 200);
+    const deep = JSON.parse(`${'['.repeat(20000)}{"__proto__":1}${']'.repeat(20000)}`);
+    assert.equal(hasPrototypeKey(deep), true);
+    assert.equal(hasPrototypeKey({ left: { monday: { temperatures: { '22:00': 70 } } } }), false);
+});
 //# sourceMappingURL=middleware.test.js.map

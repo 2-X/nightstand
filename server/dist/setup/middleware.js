@@ -74,6 +74,45 @@ export function isAllowedOrigin(origin) {
         return false;
     }
 }
+const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH']);
+// Every API route that takes a body reads JSON. A body of any other type was
+// left unparsed, so the route saw an empty update and answered 200 having
+// changed nothing. A request without a body, such as a bare POST to stop the
+// base, is still let through.
+export function requireJsonBody(req, res, next) {
+    if (!BODY_METHODS.has(req.method))
+        return next();
+    const hasBody = req.headers['transfer-encoding'] !== undefined || Number(req.headers['content-length']) > 0;
+    if (!hasBody || req.is('application/json'))
+        return next();
+    res.status(415).json({ error: 'Send the request body as application/json' });
+}
+const PROTOTYPE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+// Walks the parsed body without recursion, since it can be nested thousands
+// of levels deep.
+export function hasPrototypeKey(body) {
+    const pending = [body];
+    while (pending.length > 0) {
+        const value = pending.pop();
+        if (value === null || typeof value !== 'object')
+            continue;
+        for (const [key, child] of Object.entries(value)) {
+            if (PROTOTYPE_KEYS.has(key))
+                return true;
+            pending.push(child);
+        }
+    }
+    return false;
+}
+// Settings, schedules and services have no field by these names, and their
+// schemas silently dropped them, so a body carrying one answered 200. Other
+// routes are left out on purpose: a rhythm named Constructor gets the id
+// "constructor", which is a key in /rhythms bodies.
+function rejectPrototypeKeys(req, res, next) {
+    if (!BODY_METHODS.has(req.method) || !hasPrototypeKey(req.body))
+        return next();
+    res.status(400).json({ error: 'Invalid request data', details: 'Keys named __proto__, constructor or prototype are not allowed' });
+}
 export default function (app) {
     app.use((req, res, next) => {
         attachRequestCompletionLogging(req, res, logger);
@@ -87,7 +126,9 @@ export default function (app) {
         next();
     });
     app.use(cors({ origin: true }));
+    app.use('/api', requireJsonBody);
     app.use(express.json());
+    app.use(['/api/settings', '/api/schedules', '/api/services'], rejectPrototypeKeys);
     // Logging
     app.use((req, res, next) => {
         const clientIp = req.headers['x-forwarded-for'] || req.ip;
