@@ -83,6 +83,21 @@ router.get('/:filename', async (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
+  // Registered before the first await: a client that hangs up while the file
+  // is being found or read would otherwise miss the close event and leave
+  // the watcher below open until the server restarts.
+  let closed = false;
+  let logStream: fs.FSWatcher | undefined;
+  let chunkStream: fs.ReadStream | undefined;
+  let debounceTimer: NodeJS.Timeout | undefined;
+  res.on('close', () => {
+    closed = true;
+    clearTimeout(debounceTimer);
+    logStream?.close();
+    chunkStream?.destroy();
+  });
+  const gone = () => closed || res.destroyed || res.writableEnded;
+
   const filename = req.params.filename;
 
   if (!isSafeLogFilename(filename)) {
@@ -101,6 +116,7 @@ router.get('/:filename', async (req, res) => {
       continue;
     }
   }
+  if (gone()) return;
 
   if (!logFilePath) {
     res.write(`data: ${JSON.stringify({ message: 'Log file not found' })}\n\n`);
@@ -120,6 +136,7 @@ router.get('/:filename', async (req, res) => {
     // File may have rotated out from under us after access(); fs.watch below
     // will still pick up the replacement.
   }
+  if (gone()) return;
 
   res.write(`data: ${JSON.stringify({ message: logBuffer.join('\n') })}\n\n`);
 
@@ -129,11 +146,11 @@ router.get('/:filename', async (req, res) => {
   // and re-sent up to 1000 lines over SSE. Two fixes: debounce watch events,
   // and read only the bytes appended since the last read instead of the
   // whole file.
-  let debounceTimer: NodeJS.Timeout | undefined;
   let reading = false;
   let pendingReread = false;
 
   const readNewBytes = async () => {
+    if (gone()) return;
     if (reading) {
       pendingReread = true;
       return;
@@ -145,23 +162,25 @@ router.get('/:filename', async (req, res) => {
         // Log rotated (truncated or swapped), so reset to the new file's start.
         lastSize = 0;
       }
-      if (stat.size === lastSize) return;
+      if (stat.size === lastSize || gone()) return;
 
-      const chunkStream = fs.createReadStream(logFilePath as string, {
+      chunkStream = fs.createReadStream(logFilePath as string, {
         encoding: 'utf8',
         start: lastSize,
       });
       let appended = '';
       for await (const chunk of chunkStream) appended += chunk;
+      chunkStream = undefined;
       lastSize = stat.size;
 
       const newLines = linesFromAppendedChunk(appended);
-      if (newLines.length > 0) {
+      if (newLines.length > 0 && !gone()) {
         res.write(`data: ${JSON.stringify({ message: newLines.join('\n') })}\n\n`);
       }
     } catch (error) {
       logger.debug(`Log tail read failed for ${logFilePath}: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
+      chunkStream = undefined;
       reading = false;
       if (pendingReread) {
         pendingReread = false;
@@ -170,16 +189,17 @@ router.get('/:filename', async (req, res) => {
     }
   };
 
-  const logStream = fs.watch(logFilePath, () => {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => void readNewBytes(), 300);
-  });
-
-  req.on('close', () => {
-    clearTimeout(debounceTimer);
-    logStream.close();
-    res.end();
-  });
+  try {
+    logStream = fs.watch(logFilePath, () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => void readNewBytes(), 300);
+    });
+  } catch (error) {
+    logger.debug(`Log watch failed for ${logFilePath}: ${error instanceof Error ? error.message : String(error)}`);
+    return res.end();
+  }
+  // A watcher's own error would otherwise be thrown as an uncaught exception.
+  logStream.on('error', () => res.end());
 });
 
 export default router;

@@ -138,6 +138,9 @@ Rhythms with an optional Smart Schedule, pausing a side's schedule, a new beta s
 - Biometrics exceptions are logged with their full traceback. On Pods running
   Python 3.9, logging an exception raised an error of its own.
 
+- Leaving the log viewer while a log was still loading no longer keeps the
+  server watching that file until it restarts.
+
 ## [3.4.0] - 2026-09-29
 
 A redesigned app, sleep records that start at your real bedtime, and safer updates, rollbacks and reinstalls.
