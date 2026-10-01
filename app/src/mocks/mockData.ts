@@ -14,7 +14,9 @@ import type { Jobs } from '@api/jobs.ts';
 import type { SleepStage, StageEpoch, SleepStagesResponse } from '@api/sleepStages.ts';
 import type { SleepScore } from '@api/sleepScore.ts';
 import type { ChangelogEntry } from '@api/changelogSchema.ts';
-import { demoRhythmsDefault } from './demoPreferences';
+import { demoOffersUpdate, demoRhythmsDefault } from './demoPreferences';
+import serverInfo from '../../../server/src/serverInfo.json';
+import semver from 'semver';
 
 type Side = 'left' | 'right';
 
@@ -449,7 +451,7 @@ const createDeviceStatus = (): DeviceStatus => ({
   coverVersion: 'Pod 5',
   hubVersion: 'Pod 5',
   freeSleep: {
-    version: '2.1.5',
+    version: serverInfo.version,
     branch: 'main',
   },
   wifiStrength: 82,
@@ -842,11 +844,18 @@ export const handleJobs = (jobs: Jobs) => {
   });
 };
 
+// A sample release one minor version ahead, offered only when the demo is set to show an update.
+const demoNextVersion = semver.inc(serverInfo.version, 'minor')!;
+const sampleRelease = () => (demoOffersUpdate() ? [{
+  kind: 'bundle', version: demoNextVersion, channel: 'stable', date: '2026-10-01', upstreamBase: serverInfo.upstreamBase, features: [],
+}] : []);
+
 // Mock of the release manifest the app fetches raw from GitHub. Newest first,
 // matching ReleasesManifestSchema (bundle releases name their upstream base).
-export const releasesManifest = {
+export const getReleasesManifest = () => ({
   channels: ['stable', 'beta'],
   releases: [
+    ...sampleRelease(),
     {
       kind: 'bundle',
       version: '3.1.0',
@@ -864,17 +873,18 @@ export const releasesManifest = {
       features: ['presence-detection'],
     },
   ],
-};
+});
 
 // Mock of the newest published build, fetched raw from GitHub. The hook reads
 // version and branch only.
-export const remoteServerInfo = { version: '3.1.0', branch: 'main' };
+export const getRemoteServerInfo = () => ({ version: demoOffersUpdate() ? demoNextVersion : serverInfo.version, branch: 'main' });
 
 // Mock of CHANGELOG.md fetched raw from GitHub, in the "## [x.y.z] - date"
 // format parseChangelog expects.
-export const remoteChangelogMarkdown = [
+export const getRemoteChangelogMarkdown = () => [
   '# Changelog',
   '',
+  ...(demoOffersUpdate() ? [`## [${demoNextVersion}] - 2026-10-01`, 'Sample release offered by the demo.', ''] : []),
   '## [3.1.0] - 2026-07-15',
   'Beta build with presence detection and sleep score.',
   '',

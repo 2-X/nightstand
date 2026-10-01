@@ -29,9 +29,9 @@ import {
   getLogFiles,
   getChangelog,
   handleJobs,
-  releasesManifest,
-  remoteServerInfo,
-  remoteChangelogMarkdown,
+  getReleasesManifest,
+  getRemoteServerInfo,
+  getRemoteChangelogMarkdown,
   rollbackInfo,
   presence,
   mockCalibration,
@@ -313,9 +313,9 @@ export const handlers = [
   // The pod has no WAN, so these three files only ever resolve in the browser;
   // mocking them keeps the demo and the tests offline and deterministic.
   http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json', () =>
-    HttpResponse.json(releasesManifest)),
+    HttpResponse.json(getReleasesManifest())),
   http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/server/src/serverInfo.json', () =>
-    HttpResponse.json(remoteServerInfo)),
+    HttpResponse.json(getRemoteServerInfo())),
   http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/CHANGELOG.md', () =>
-    HttpResponse.text(remoteChangelogMarkdown)),
+    HttpResponse.text(getRemoteChangelogMarkdown())),
 ];
