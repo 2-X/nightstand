@@ -14,6 +14,7 @@ import type { Jobs } from '@api/jobs.ts';
 import type { SleepStage, StageEpoch, SleepStagesResponse } from '@api/sleepStages.ts';
 import type { SleepScore } from '@api/sleepScore.ts';
 import type { ChangelogEntry } from '@api/changelogSchema.ts';
+import { demoRhythmsDefault } from './demoPreferences';
 
 type Side = 'left' | 'right';
 
@@ -282,7 +283,7 @@ const createSettings = (): Settings => ({
   rebootDaily: true,
   rawArchiveRetentionDays: 14,
   updateChannel: 'stable',
-  features: { ...defaultFeatures },
+  features: { ...defaultFeatures, rhythms: demoRhythmsDefault() },
   left: {
     name: 'Alex',
     awayMode: false,

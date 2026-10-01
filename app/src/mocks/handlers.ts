@@ -38,7 +38,7 @@ import {
 } from './mockData';
 import type { RhythmsUpdate } from '@api/rhythms';
 import {
-  disableMockRhythms, enableMockRhythms, getMockRhythmsResponse, listMockSleeps, updateMockRhythms,
+  disableMockRhythms, enableMockRhythms, getMockRhythmsResponse, listMockSleeps, scheduledSecondsRemaining, updateMockRhythms,
 } from './rhythmsMock';
 
 type Side = 'left' | 'right';
@@ -126,7 +126,13 @@ export const handlers = [
   }),
   http.get('/api/deviceStatus', async () => {
     await delay(120);
-    return HttpResponse.json(deepClone(getDeviceStatus()));
+    const status = deepClone(getDeviceStatus());
+    // The demo's timers follow the schedule; unit tests keep a fixed status so refetches change nothing.
+    for (const side of import.meta.env.MODE === 'test' ? [] : ['left', 'right'] as const) {
+      const seconds = status[side].isOn ? scheduledSecondsRemaining(side) : undefined;
+      if (seconds !== undefined) status[side].secondsRemaining = seconds;
+    }
+    return HttpResponse.json(status);
   }),
   http.post('/api/deviceStatus', async ({ request }) => {
     const body = (await request.json()) as Partial<ReturnType<typeof getDeviceStatus>>;

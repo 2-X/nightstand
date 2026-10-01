@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test';
 
+// These specs cover the weekly schedule, so the demo starts with Rhythms off.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('nightstand-demo-rhythms', 'off'));
+});
+
 test('saving a schedule edit hides the save button', async ({ page }) => {
   await page.goto('/schedules');
   await expect(page.getByText('Turn on at', { exact: true })).toBeVisible();

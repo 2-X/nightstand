@@ -7,7 +7,8 @@ import { conversionName } from '@api/rhythmDays';
 import { wakeFromNight } from '@api/rhythmWake';
 import { buildCurve, isDaySleep } from '@api/smartCurve';
 import { levelToFahrenheit } from '@lib/temperatureConversions';
-import { getSchedules, getSettings, updateSettings } from './mockData';
+import { getDeviceStatus, getSchedules, getSettings, updateSettings } from './mockData';
+import { demoRhythmsDefault } from './demoPreferences';
 
 type Side = 'left' | 'right';
 const SIDES: Side[] = ['left', 'right'];
@@ -59,11 +60,11 @@ export function createDemoRhythms(now = new Date()): RhythmsDB {
   };
 }
 
-let rhythms: RhythmsDB | null = null;
+let rhythms: RhythmsDB | null = demoRhythmsDefault() ? createDemoRhythms() : null;
 
 export const getMockRhythms = () => rhythms;
 
-export function resetMockRhythms(db: RhythmsDB | null = null, enabled = false) {
+export function resetMockRhythms(db: RhythmsDB | null = demoRhythmsDefault() ? createDemoRhythms() : null, enabled = demoRhythmsDefault()) {
   rhythms = db;
   updateSettings({ features: { ...getSettings().features, rhythms: enabled } });
 }
@@ -209,6 +210,19 @@ function convertSide(schedule: Schedules['left']): SideRhythms {
   return { rhythms: byId, week, changes: [] };
 }
 
+// A running side's firmware timer: the time until its next scheduled turn-off.
+export function scheduledSecondsRemaining(side: Side, now = new Date()): number | undefined {
+  const { timeZone, features } = getSettings();
+  const schedules = getSchedules();
+  const db: RhythmsDB = features.rhythms && rhythms ? rhythms
+    : { version: RHYTHMS_FILE_VERSION, legacyFingerprint: FINGERPRINT, left: convertSide(schedules.left), right: convertSide(schedules.right) };
+  const off = resolveMockSleeps(db, side, timeZone, now, new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000))
+    .flatMap(sleep => sleep.events.flatMap(event => event.kind === 'power-off' ? [Date.parse(event.at)] : []))
+    .filter(at => at > now.getTime())
+    .sort((first, second) => first - second)[0];
+  return off === undefined ? undefined : Math.round((off - now.getTime()) / 1000);
+}
+
 export function enableMockRhythms() {
   const converted = !rhythms;
   if (!rhythms) {
@@ -222,9 +236,22 @@ export function enableMockRhythms() {
   return { converted };
 }
 
-export function disableMockRhythms(body: { powerOffNow?: boolean }): HandoffReport {
+export function disableMockRhythms(body: { powerOffNow?: boolean }, now = new Date()): HandoffReport {
+  const { timeZone } = getSettings();
+  const at = now.getTime();
+  const running = (db: RhythmsDB | null, side: Side) => db && resolveMockSleeps(db, side, timeZone, now, now)
+    .find(sleep => Date.parse(sleep.start) <= at && at < Date.parse(sleep.end));
+  const schedules = getSchedules();
+  const weekly: RhythmsDB | null = rhythms && { ...rhythms, left: convertSide(schedules.left), right: convertSide(schedules.right) };
+  const sides = SIDES.map((side): HandoffReport['sides'][number] => {
+    const sleep = getDeviceStatus()[side].isOn ? running(rhythms, side) : null;
+    if (!sleep) return { side, action: 'none', alarmOverrideSet: false };
+    if (body.powerOffNow) return { side, action: 'powered-off', alarmOverrideSet: false };
+    const legacy = running(weekly, side);
+    return legacy
+      ? { side, action: 'legacy-takes-over', until: legacy.end, alarmOverrideSet: false }
+      : { side, action: 'kept-on-until', until: sleep.end, alarmOverrideSet: false };
+  });
   updateSettings({ features: { ...getSettings().features, rhythms: false } });
-  return {
-    sides: SIDES.map(side => ({ side, action: body.powerOffNow ? 'powered-off' : 'legacy-takes-over', alarmOverrideSet: false })),
-  };
+  return { sides };
 }
