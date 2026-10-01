@@ -98,7 +98,11 @@ unless you set up [remote access with Tailscale](docs/REMOTE_ACCESS.md).
 - Temperature control in °F, °C, or the official app's -10 to +10 scale,
   with live updates
 - Schedules for power on and off, overnight temperature changes, daily
-  priming, and alarms with vibration patterns
+  priming, and alarms with vibration patterns, and a pause for one side
+  for tonight, until a set time or until you resume
+- Rhythms (beta, off by default): named sleep plans for each side, a week
+  that picks one for each day, and changes for single dates up to 60 days
+  ahead, with an optional Smart Schedule temperature curve
 - Sleep and health data: heart rate, HRV, breathing rate, movement, sleep
   stages, and a sleep score (see [Biometrics](#biometrics) for accuracy)
 - Adjustable-base controls on compatible hardware, with presets and manual
@@ -119,11 +123,40 @@ In Settings:
   the bed's capacitance sensors to tell the two sides apart (see
   [Biometrics](#biometrics)). On Pod 3 and Pod 4 it has no effect yet: it reads the
   Pod 5's capacitance format and has only been checked on Pod 5 data.
+- **Rhythms (beta)** under Features: off by default. The first time you turn it
+  on, it copies the weekly schedule into named rhythms and keeps the weekly
+  schedule as it is. After that, turning it on brings back your saved rhythms.
+  Turning it off brings the weekly schedule back exactly as it was.
 - **Level temperature display** and
   **one-time alarms** under Features: on by default.
 
 Next to daily priming, the restart an hour before priming is on by default and
 only runs while priming is on.
+
+### Rhythms and Smart Schedule
+
+With Rhythms on, the Schedule tab shows a Week, the coming dates and your
+rhythms. A rhythm is one night: bedtime, wake time, alarms, turn off and
+temperatures. The Week picks a rhythm, or no sleep, for each day, and any
+date up to 60 days ahead can use a different one. Week and date changes save
+at once and can be undone, and every date change is listed in one place. The
+Bed page follows the same sleeps.
+
+A rhythm sets its temperatures by hand or with Smart Schedule. Smart
+Schedule follows a common pattern from sleep and temperature research:
+comfortable when you lie down, a little cooler once you are asleep, and
+warming gently before your wake time. Changes are small and gradual and
+stay within a few steps of a base temperature you choose. With biometrics
+on, the cool-down waits until you have settled in bed, up to two hours
+after bedtime. A temperature you set by hand holds until the curve's next
+phase, at most three hours. The step sizes and timings are our own
+estimates: the studies listed in the app under "Based on sleep research"
+used other beds and did not test this curve. It is a general starting
+point, not a medical recommendation.
+
+Turning Rhythms off, rolling back or switching to upstream free-sleep
+leaves the weekly schedule as it was, and your rhythms are kept in their
+own file for next time.
 
 ### Biometrics
 
@@ -271,15 +304,20 @@ warranty.
 
 These screenshots use sample data and show the Bed, Schedule, Sleep and
 Settings layout. The hosted [demo](https://ltimothy.github.io/nightstand/)
-follows the published release and may differ from this checkout.
+follows the published release and may differ from this checkout. The
+Schedule screenshot shows Rhythms, which is off by default.
 
 <details>
 <summary>Adjustable base</summary>
 <img src="docs/elevation.png" width="360" alt="Bed elevation controls">
 </details>
 <details>
-<summary>Schedules and alarms</summary>
-<img src="docs/schedules.png" width="360" alt="Recurring night schedule">
+<summary>Schedule with Rhythms</summary>
+<img src="docs/schedules.png" width="360" alt="Rhythms week, coming dates and rhythm list">
+</details>
+<details>
+<summary>Rhythm editor with Smart Schedule</summary>
+<img src="docs/rhythm-editor.png" width="360" alt="Rhythm editor with times first and a Smart Schedule preview">
 </details>
 <details>
 <summary>Sleep stages, sleep score, and health metrics</summary>
