@@ -11,6 +11,7 @@ import { formatTemperature } from '@lib/temperatureConversions.ts';
 import { nextBedEvent } from './bedEvents';
 import AlarmNotification from './AlarmNotification';
 import PauseScheduleSheet from './PauseScheduleSheet';
+import { MAX_PAUSE_DAYS } from './pauseTimes';
 import SchedulePauseNotice from './SchedulePauseNotice';
 import SmartPhaseLine from './SmartPhaseLine';
 import { currentSleep, isEveningSleep, nextSleepEvent, sleepAt, warmStartBedtime, withArticle } from './sleepEvents';
@@ -124,7 +125,8 @@ export default function UpcomingNight({ isOn }: { isOn?: boolean }) {
             ? eventText
             : bed.state !== 'rhythms' ? 'No upcoming power or temperature changes.'
               : followsPartner ? <>Away mode is on, so this side follows <bdi>{ partner }</bdi>'s schedule.</>
-                : 'No sleep scheduled in the next 8 days.' }
+                // useBedSleeps loads this far ahead.
+                : `No sleep scheduled in the next ${MAX_PAUSE_DAYS} days.` }
         </Typography> }
         { smartSleep && <SmartPhaseLine sleep={ smartSleep } side={ side }/> }
         <AlarmNotification />

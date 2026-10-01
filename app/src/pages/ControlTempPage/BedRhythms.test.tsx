@@ -198,3 +198,9 @@ it('says an away side follows the present side\'s schedule under Rhythms', async
     && element.textContent === `Away mode is on, so this side follows ${settings.right.name}'s schedule.`)).toBeInTheDocument();
   expect(screen.queryByText(/No sleep scheduled/)).not.toBeInTheDocument();
 });
+
+it('says no sleep is scheduled across the whole loaded window', async () => {
+  bed.value = { state: 'rhythms', sleeps: [] };
+  renderWithProviders(<UpcomingNight isOn/>);
+  expect(await screen.findByText('No sleep scheduled in the next 14 days.')).toBeInTheDocument();
+});
