@@ -20,6 +20,8 @@ export type ResolvedSleep = {
   rhythmId: string | null;
   start: Date;
   end: Date;
+  // The rhythm's own off time, set only when the actual off moved `end`.
+  setOff?: Date;
   wake: Date;
   night: DailySchedule;
   mode: 'manual' | 'smart';
@@ -29,7 +31,8 @@ export type ResolvedSleep = {
 };
 
 type CoolStartFor = (side: Side, date: string) => Date | undefined;
-type Window = { side: Side; timeZone: string; from: Date; to: Date; coolStartFor?: CoolStartFor };
+export type PowerOffFor = (side: Side, date: string) => Date | undefined;
+type Window = { side: Side; timeZone: string; from: Date; to: Date; coolStartFor?: CoolStartFor; powerOffFor?: PowerOffFor };
 type Overlap = { first: string; second: string };
 // wake is left out for the weekly schedule, which takes it from the night.
 type NightSource = { rhythmId: string | null; night: DailySchedule; wake?: string; mode: 'manual' | 'smart'; smart?: SmartSchedule };
@@ -81,6 +84,18 @@ function resolveNight(side: Side, date: string, source: NightSource, timeZone: s
   return sleep;
 }
 
+// Ends a sleep at its actual off: later while kept on for someone in bed,
+// earlier once they got up. Anything due at or after an earlier end is dropped.
+export function withPowerOff(sleep: ResolvedSleep, at: Date | undefined): ResolvedSleep {
+  if (!at || at.getTime() === sleep.end.getTime() || at.getTime() <= sleep.start.getTime()) return sleep;
+  const events: RhythmEvent[] = sleep.events.filter(event => event.kind !== 'power-off' && event.at.getTime() < at.getTime());
+  events.push({ kind: 'power-off', at });
+  return { ...sleep, end: at, setOff: sleep.end, wake: new Date(Math.min(sleep.wake.getTime(), at.getTime())), events };
+}
+
+export const turnsOffWhenUp = (sleep: Pick<ResolvedSleep, 'mode' | 'smart'>): boolean =>
+  sleep.mode === 'smart' && sleep.smart?.offWhenUp === true;
+
 // A sleep starting the day before `from` can still be running at `from`.
 function resolveWindow(window: Window, sourceFor: (date: string) => NightSource | null): ResolvedSleep[] {
   const { side, timeZone, from, to } = window;
@@ -92,15 +107,16 @@ function resolveWindow(window: Window, sourceFor: (date: string) => NightSource 
   for (let date = addDays(moment.tz(from, timeZone).format(DATE_FORMAT), -1); date <= last; date = addDays(date, 1)) {
     const source = sourceFor(date);
     const night = source ? resolveNight(side, date, source, timeZone) : null;
+    const ended = night && withPowerOff(night, window.powerOffFor?.(side, date));
     // The pre-warm moves a Smart Schedule start earlier, so the curve goes on before the window check.
-    const sleep = night && applySmartCurve(night, timeZone, window.coolStartFor?.(side, date));
+    const sleep = ended && applySmartCurve(ended, timeZone, window.coolStartFor?.(side, date));
     if (sleep && sleep.start <= to && sleep.end >= from) sleeps.push(sleep);
   }
   return sleeps;
 }
 
 export function resolveSleeps(args: {
-  db: RhythmsDB; side: Side; timeZone: string; from: Date; to: Date; coolStartFor?: CoolStartFor;
+  db: RhythmsDB; side: Side; timeZone: string; from: Date; to: Date; coolStartFor?: CoolStartFor; powerOffFor?: PowerOffFor;
 }): ResolvedSleep[] {
   const plan = args.db[args.side];
   return resolveWindow(args, date => {
