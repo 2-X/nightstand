@@ -147,6 +147,16 @@ class FrameCollectorTest(unittest.TestCase):
         self.assertAlmostEqual(caps[0], 3.0, places=3)
         self.assertTrue(all(cap['right'] is None for _, cap, _ in collector.frames()))
 
+    def test_a_finite_rise_too_large_for_float32_is_no_reading(self):
+        collector = FrameCollector(BASELINES)
+        collector.add_cap(T0, (1e39, 12.0, 12.0), (-1e39, 12.0, 12.0))
+        collector.add_cap(T0 + 1, (float('inf'), 12.0, 12.0), (12.0, 12.0, 12.0))
+        collector.add_piezo(T0, 1e6, 1e6)
+        collector.add_piezo(T0 + 1, 1e6, 1e6)
+        (_, first, _), (_, second, _) = list(collector.frames())
+        self.assertEqual(first, {'left': None, 'right': None})
+        self.assertEqual(second['left'], float('inf'))
+
     def test_a_reading_with_no_channels_is_a_row_of_nothing(self):
         collector = FrameCollector(BASELINES)
         collector.add_cap(T0, None, None)
@@ -157,8 +167,8 @@ class FrameCollectorTest(unittest.TestCase):
     def test_a_timestamp_that_is_not_a_number_adds_nothing(self):
         collector = FrameCollector(BASELINES)
         channels = scenarios.channels([12.0] * 8)
-        for ts in ('soon', None, float('nan')):
-            with self.assertRaises((TypeError, ValueError)):
+        for ts in ('soon', None, float('nan'), float('inf')):
+            with self.assertRaises((TypeError, ValueError, OverflowError)):
                 collector.add_cap(ts, channels, channels)
         collector.add_cap(T0, channels, channels)
         collector.add_piezo(T0, 1e6, 1e6)

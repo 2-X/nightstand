@@ -106,11 +106,13 @@ class CapDeltaTest(unittest.TestCase):
         self.assertEqual(cap_delta([float('inf'), float('inf')] + [12.0] * 6, BASELINE), float('inf'))
 
     def test_no_nonsense_delta_comes_from_a_capsense_record(self):
-        for count in (float('inf'), float('-inf'), float('nan'), 10 ** 400, 1.7e308):
+        for count in (float('inf'), float('-inf'), float('nan'), 10 ** 400):
             with self.subTest(count=count):
                 record = {'type': 'capSense', 'left': {'out': count, 'cen': 381, 'in': count}}
                 delta = _cap_delta(read_cap(record).left, BASELINE)
                 self.assertTrue(delta is None or math.isfinite(delta))
+        record = {'type': 'capSense', 'left': {'out': 1.7e308, 'cen': 381, 'in': 1.7e308}}
+        self.assertIsNone(_cap_delta(read_cap(record).left, BASELINE))
 
 
 if __name__ == '__main__':

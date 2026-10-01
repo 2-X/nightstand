@@ -288,6 +288,9 @@ def _replay_side(collector: Optional[FrameCollector], params: Optional[DetectorP
     """This side's occupied intervals from the shared detector, or None to use the older rule."""
     if collector is None:
         return None
+    cap_format = collector.cap_format()
+    if cap_format is not None and not cap_format.validated:
+        return None
     coverage = collector.cap_coverage()
     if coverage < MIN_CAP_COVERAGE:
         logger.warning(f'Capacitance covers {coverage:.0%} of the window, reading the {side} side as before')

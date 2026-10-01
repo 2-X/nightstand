@@ -1,19 +1,24 @@
 """Run the presence detector over a stored night, and gather its inputs cheaply."""
 from __future__ import annotations
 
+import math
 from array import array
+from collections import Counter
 from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 import numpy as np
 
 from .cap import CAP_HOLD_SECONDS, CapBaseline, cap_delta
 from .detector import SIDES, DetectorParams, PresenceDetector
+from .sensors import FORMATS, CapFormat
 
 # (unix seconds, capacitance delta per side, piezo range per side)
 Frame = Tuple[int, Dict[str, Optional[float]], Dict[str, Optional[float]]]
 
 # Seconds read back at a time, so a night never needs a full-size temporary.
 CHUNK_SECONDS = 2048
+
+_FLOAT32_MAX = float(np.finfo(np.float32).max)
 
 
 def _in_time_order(frames: Iterable[Frame]) -> Iterator[Frame]:
@@ -93,6 +98,8 @@ class FrameCollector:
         self._cap = {side: array('f') for side in SIDES}
         self._piezo_ts = array('q')
         self._piezo = {side: array('f') for side in SIDES}
+        self.cap_formats: Counter = Counter()
+        self.unknown_cap: Counter = Counter()
 
     def add_cap(self, ts: int, left_channels, right_channels) -> None:
         """One capacitance record's channels per side, from presence.sensors.read_cap."""
@@ -102,7 +109,18 @@ class FrameCollector:
                   for side, channels in (('left', left_channels), ('right', right_channels))}
         self._cap_ts.append(epoch)
         for side, delta in deltas.items():
-            self._cap[side].append(float('nan') if delta is None else delta)
+            self._cap[side].append(float('nan') if _unstorable(delta) else delta)
+
+    def note_cap_format(self, name: str) -> None:
+        self.cap_formats[name] += 1
+
+    def note_unknown_cap(self, kind: str) -> None:
+        self.unknown_cap[kind] += 1
+
+    def cap_format(self) -> Optional[CapFormat]:
+        """The capacitance format most of the window's records came in, or None without any."""
+        known = [(self.cap_formats[name], -order, name) for order, name in enumerate(FORMATS) if self.cap_formats[name]]
+        return FORMATS[max(known)[2]] if known else None
 
     def add_piezo(self, ts: int, left_range: Optional[float], right_range: Optional[float]) -> None:
         self._piezo_ts.append(int(ts))
@@ -202,6 +220,11 @@ def _hold(seconds: np.ndarray, cap_ts: np.ndarray, values: np.ndarray) -> np.nda
     found[found] = seconds[found] - cap_seconds[position[found]] <= CAP_HOLD_SECONDS
     held[found] = means[position[found]]
     return held
+
+
+def _unstorable(delta: Optional[float]) -> bool:
+    """No reading, or a finite rise too large for float32, which would be stored as infinity."""
+    return delta is None or (math.isfinite(delta) and abs(delta) > _FLOAT32_MAX)
 
 
 def _optional(value: float) -> Optional[float]:

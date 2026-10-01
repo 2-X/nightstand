@@ -43,7 +43,7 @@ SENTINEL = -1.0
 CHANNEL_PAIRS = ((0, 1), (2, 3), (4, 5))
 LEGACY_CHANNELS = ('out', 'cen', 'in')
 # A type starting with one of these is capacitance, read here or not.
-CAP_TYPE_PREFIXES = ('capsense',)
+CAP_TYPE_PREFIXES = ('capsense', 'cap_', 'cap-', 'capacit')
 
 
 @dataclass(frozen=True)

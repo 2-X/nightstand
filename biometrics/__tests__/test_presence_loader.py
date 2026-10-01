@@ -24,6 +24,7 @@ import numpy as np
 from load_raw_files import _capture_presence, load_raw_files
 from presence.cap import CapBaseline
 from presence.replay import FrameCollector
+from presence.sensors import CAPSENSE, CAPSENSE2
 import presence_scenarios as scenarios
 from presence_scenarios import Night
 
@@ -40,7 +41,7 @@ class CapturePresenceTest(unittest.TestCase):
     def test_both_sides_are_captured_as_channels(self):
         side = {'values': [12.0] * 8}
         self.assertEqual(_capture_presence(self._record(side, side)),
-                         ('cap', (12.0, 12.0, 12.0), (12.0, 12.0, 12.0)))
+                         ('cap', (12.0, 12.0, 12.0), (12.0, 12.0, 12.0), 'capSense2'))
 
     def test_a_record_with_an_unreadable_side_is_not_captured(self):
         side = {'values': [12.0] * 8}
@@ -55,6 +56,70 @@ class CapturePresenceTest(unittest.TestCase):
         record = self._record(side, side)
         record['ts'] = 'soon'
         self.assertIsNotNone(_capture_presence(record))
+
+    def test_a_legacy_record_is_captured_with_its_format(self):
+        side = {'out': 387, 'cen': 381, 'in': 505, 'status': 'good'}
+        record = {'type': 'capSense', 'ts': scenarios.T0, 'seq': 1, 'left': side, 'right': side}
+        self.assertEqual(_capture_presence(record), ('cap', (387.0, 381.0, 505.0), (387.0, 381.0, 505.0), 'capSense'))
+
+    def test_an_unknown_capacitance_type_is_captured_by_name(self):
+        self.assertEqual(_capture_presence({'type': 'capSense3', 'ts': scenarios.T0}), ('unknown', 'capSense3'))
+        self.assertIsNone(_capture_presence({'type': 'bedTemp', 'ts': scenarios.T0}))
+
+
+def legacy(records):
+    """The same night in the capSense shape: integer counts, one channel per pair."""
+    out = []
+    for record in records:
+        if record['type'] != 'capSense2':
+            out.append(record)
+            continue
+        converted = {'type': 'capSense', 'ts': record['ts'], 'seq': 1}
+        for side in ('left', 'right'):
+            values = record[side]['values']
+            converted[side] = {'out': int(round(values[0] * 30)), 'cen': int(round(values[2] * 30)),
+                               'in': int(round(values[4] * 30)), 'status': 'good'}
+        out.append(converted)
+    return out
+
+
+class FormatTest(unittest.TestCase):
+    def _collect(self, records):
+        with tempfile.TemporaryDirectory() as folder:
+            scenarios.write_raw_file(os.path.join(folder, 'night.RAW'), records)
+            collector = FrameCollector(BASELINES)
+            loaded = load_raw_files(folder, START, END, 'left', sensor_count=1,
+                                    raw_data_types=['capSense', 'piezo-dual'], presence_collector=collector)
+        return collector, loaded
+
+    def test_capsense2_is_counted(self):
+        collector, _ = self._collect(scenarios.raw_records(NIGHT))
+        self.assertIs(collector.cap_format(), CAPSENSE2)
+        self.assertEqual(collector.cap_formats['capSense2'], 1200)
+
+    def test_legacy_capsense_reaches_the_collector(self):
+        collector, loaded = self._collect(legacy(scenarios.raw_records(NIGHT)))
+        self.assertIs(collector.cap_format(), CAPSENSE)
+        self.assertGreater(collector.cap_coverage(), 0.99)
+        self.assertEqual(len(loaded['cap_senses']), 1200)
+
+    def test_an_unknown_capacitance_type_is_named_and_not_read(self):
+        records = [dict(record, type='capSense3') if record['type'] == 'capSense2' else record
+                   for record in scenarios.raw_records(NIGHT)]
+        collector, _ = self._collect(records)
+        self.assertIsNone(collector.cap_format())
+        # Every record in the file, inside the window or not.
+        self.assertEqual(collector.unknown_cap['capSense3'], 1800)
+        self.assertEqual(collector.cap_coverage(), 0.0)
+
+    def test_the_common_format_wins_and_a_tie_goes_to_the_one_listed_first(self):
+        collector = FrameCollector(BASELINES)
+        collector.note_cap_format('capSense')
+        self.assertIs(collector.cap_format(), CAPSENSE)
+        collector.note_cap_format('capSense2')
+        self.assertIs(collector.cap_format(), CAPSENSE2)
+        collector.note_cap_format('capSense')
+        self.assertIs(collector.cap_format(), CAPSENSE)
 
 
 class PresenceCollectorLoadTest(unittest.TestCase):

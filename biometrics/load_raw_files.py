@@ -13,7 +13,7 @@ sys.path.append(os.getcwd())
 from data_types import *
 from get_logger import get_logger
 from presence.detector import piezo_range
-from presence.sensors import read_cap
+from presence.sensors import read_cap, unknown_cap_type
 
 logger = get_logger()
 
@@ -225,14 +225,15 @@ def _delete_other_side(decoded_data: dict, side: Side, sensor_count: int):
 
 def _capture_presence(record: dict):
     """Both sides' presence inputs, taken before normalization and _delete_other_side drop them."""
-    kind = record.get('type')
-    if kind == 'capSense2':
-        reading = read_cap(record)
-        if reading.left is not None and reading.right is not None:
-            return 'cap', reading.left, reading.right
-    elif kind == 'piezo-dual':
+    if record.get('type') == 'piezo-dual':
         return 'piezo', record.get('left1'), record.get('right1')
-    return None
+    reading = read_cap(record)
+    if reading is not None:
+        if reading.left is not None and reading.right is not None:
+            return 'cap', reading.left, reading.right, reading.cap_format.name
+        return None
+    kind = unknown_cap_type(record)
+    return None if kind is None else ('unknown', kind)
 
 
 def _record_range(raw):
@@ -246,10 +247,12 @@ def _record_range(raw):
 
 
 def _feed_presence(collector, capture, ts: int):
-    kind, left, right = capture
-    if kind == 'cap':
+    if capture[0] == 'cap':
+        _, left, right, name = capture
         collector.add_cap(ts, left, right)
+        collector.note_cap_format(name)
     else:
+        _, left, right = capture
         collector.add_piezo(ts, _record_range(left), _record_range(right))
 
 
@@ -269,6 +272,13 @@ def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Si
                     continue  # empty placeholder record
                 decoded_data = cbor2.loads(data_bytes)
                 presence_capture = _capture_presence(decoded_data) if presence_collector is not None else None
+                if presence_capture is not None and presence_capture[0] == 'unknown':
+                    # An unknown type never passes the type filter below.
+                    try:
+                        presence_collector.note_unknown_cap(presence_capture[1])
+                    except Exception as error:
+                        logger.error(error)
+                    presence_capture = None
                 # Pod 5 writes 'capSense2' records; normalize them to the
                 # legacy 'capSense' shape before the type filter so Pod 5
                 # capacitance data isn't silently dropped.
@@ -346,8 +356,9 @@ def load_raw_files(folder_path: str, start_time: datetime, end_time: datetime, s
                    presence_collector=None):
     """Decode the RAW records in [start_time, end_time] for one side.
 
-    presence_collector, when given, also receives both sides' capSense2
-    values and per-record piezo ranges (see presence.replay.FrameCollector).
+    presence_collector, when given, also receives both sides' capacitance
+    channels (any format presence.sensors reads) and per-record piezo ranges
+    (see presence.replay.FrameCollector).
     It sees only the types listed in raw_data_types, so a caller that feeds
     one lists both 'capSense' and 'piezo-dual'.
     """

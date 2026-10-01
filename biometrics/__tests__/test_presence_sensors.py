@@ -113,8 +113,13 @@ class OtherRecordsTest(unittest.TestCase):
         self.assertEqual(unknown_cap_type({'type': 'CAPSENSE3'}), 'CAPSENSE3')
         self.assertIsNone(read_cap({'type': 'capSense3'}))
 
+    def test_other_spellings_of_capacitance_are_named(self):
+        for kind in ('cap_sense', 'cap-sense2', 'Capacitance', 'capacitive', 'capsense4'):
+            with self.subTest(kind=kind):
+                self.assertEqual(unknown_cap_type({'type': kind}), kind)
+
     def test_types_that_only_contain_cap_are_not_capacitance(self):
-        for kind in ('escape', 'capture', 'capital', 'landscape', 'bedTemp2', 'log'):
+        for kind in ('escape', 'capture', 'capital', 'landscape', 'bedTemp2', 'log', 'cape', 'capped', 'cap'):
             with self.subTest(kind=kind):
                 self.assertIsNone(unknown_cap_type({'type': kind}))
 

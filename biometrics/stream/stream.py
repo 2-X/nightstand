@@ -49,18 +49,20 @@ logger = get_logger('free-sleep-stream')
 import calibration
 from features import biometrics_v2_enabled
 from presence.params import baselines_from_calibration, params_from_calibration
-from presence.sensors import read_cap
+from presence.sensors import read_cap, unknown_cap_type
 from stream_processor import LatestCap, StreamProcessor
 from load_raw_files import load_piezo_row, _read_raw_record
 from service_health import update_health, update_sensor_temps, update_pump_health
 
 # Global queue for processing decoded biometric data
 piezo_record_queue = queue.Queue()
-# Newest capSense2 reading, for capacitance presence.
+# Newest capacitance reading, for capacitance presence.
 latest_cap = LatestCap()
-# Capacitance presence runs only while capSense2 records keep arriving, so a
+# Capacitance presence runs only while capacitance records keep arriving, so a
 # Pod without them keeps piezo presence with the switch on.
 CAP_FRESH_SECONDS = 60
+# Capacitance types this version cannot read, each warned about once.
+_unknown_cap_logged = set()
 
 # How often the NATS consumer loop reports itself healthy. Matches the 60s
 # cadence of BiometricProcessor._presence_heartbeat_interval; frequent enough
@@ -131,10 +133,18 @@ def _queue_decoded_piezo_record(decoded_data) -> bool:
 
 
 def _store_decoded_cap_record(decoded_data) -> bool:
-    """Keep the newest capSense2 channels; True for every capSense2 record, stored or not."""
-    if not isinstance(decoded_data, dict) or decoded_data.get('type') != 'capSense2':
-        return False
-    ts = decoded_data.get('ts')
+    """Keep the newest capacitance channels; True for every capacitance record, stored or not."""
+    reading = read_cap(decoded_data)
+    if reading is None:
+        kind = unknown_cap_type(decoded_data)
+        if kind is None:
+            return False
+        if kind not in _unknown_cap_logged:
+            _unknown_cap_logged.add(kind)
+            logger.warning(f'Capacitance records of type {kind} are not a format this version reads, '
+                           'live presence stays on the vibration sensor')
+        return True
+    ts = reading.ts
     if not _is_number(ts):
         return True
     try:
@@ -143,7 +153,6 @@ def _store_decoded_cap_record(decoded_data) -> bool:
         return True
     if datetime.now() - recorded_at > RECENT_RECORD_WINDOW:
         return True
-    reading = read_cap(decoded_data)
     if reading.left is not None and reading.right is not None:
         latest_cap.update(ts, reading.left, reading.right, reading.cap_format)
     return True
@@ -158,6 +167,9 @@ def _presence_v2_inputs():
     if not biometrics_v2_enabled():
         return None
     if not latest_cap.is_fresh(time.time(), CAP_FRESH_SECONDS):
+        return None
+    cap_format = latest_cap.cap_format()
+    if cap_format is None or not cap_format.validated:
         return None
     profiles = calibration.load_presence_profiles()
     params = params_from_calibration(profiles)
@@ -186,7 +198,7 @@ def _switch_presence_mode(stream_processor, inputs) -> None:
 
 
 def _drop_stale_presence_v2(stream_processor) -> None:
-    """Hand presence back to piezo as soon as capSense2 stops, not at the next refresh."""
+    """Hand presence back to piezo as soon as capacitance stops, not at the next refresh."""
     if stream_processor.presence is not None and not latest_cap.is_fresh(time.time(), CAP_FRESH_SECONDS):
         _switch_presence_mode(stream_processor, None)
 

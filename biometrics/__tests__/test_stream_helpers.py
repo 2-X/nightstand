@@ -39,6 +39,7 @@ for _name in LOGGER_NAMES:
     get_logger(_name).folder_path = _tmp_folder
 
 import stream
+from presence.sensors import CAPSENSE
 
 
 def recent_piezo(seq=None, ts=None):
@@ -134,6 +135,7 @@ class CapPresenceTestCase(StreamHelpersTestCase):
     def setUp(self):
         super().setUp()
         self.latest = stream.LatestCap()
+        stream._unknown_cap_logged.clear()
         patcher = unittest.mock.patch.object(stream, 'latest_cap', self.latest)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -174,6 +176,32 @@ class TestStoreDecodedCapRecord(CapPresenceTestCase):
         self.assertIsNone(self.latest.read())
         self.assertIsNone(self.latest.cap_format())
 
+    def test_keeps_legacy_capsense_with_its_format(self):
+        record = {'type': 'capSense', 'ts': datetime.now().timestamp(), 'seq': 1,
+                  'left': {'out': 387, 'cen': 381, 'in': 505, 'status': 'good'},
+                  'right': {'out': 1076, 'cen': 1075, 'in': 1074, 'status': 'good'}}
+        self.assertTrue(stream._store_decoded_cap_record(record))
+        self.assertEqual(self.latest.read()[1], (387.0, 381.0, 505.0))
+        self.assertEqual(self.latest.cap_format().name, 'capSense')
+
+    def test_consumes_an_unknown_capacitance_type_and_says_so_once(self):
+        record = {'type': 'capSense3', 'ts': datetime.now().timestamp(), 'left': {'values': [1.0] * 18}}
+        with self.assertLogs(stream.logger, level='WARNING') as logs:
+            self.assertTrue(stream._store_decoded_cap_record(record))
+            self.assertTrue(stream._store_decoded_cap_record(record))
+            stream.logger.warning('end')
+        self.assertEqual(sum('capSense3' in line for line in logs.output), 1)
+        self.assertIsNone(self.latest.read())
+
+    def test_says_so_for_each_unknown_type_and_for_the_wider_names(self):
+        kinds = ('capsense4', 'cap_sense', 'cap-v2', 'capacitance')
+        with self.assertLogs(stream.logger, level='WARNING') as logs:
+            for kind in kinds * 2:
+                self.assertTrue(stream._store_decoded_cap_record({'type': kind, 'ts': datetime.now().timestamp()}))
+            stream.logger.warning('end')
+        for kind in kinds:
+            self.assertEqual(sum(kind in line for line in logs.output), 1, kind)
+
     def test_leaves_other_records_to_the_piezo_path(self):
         self.assertFalse(stream._store_decoded_cap_record(recent_piezo()))
         self.assertFalse(stream._store_decoded_cap_record(None))
@@ -194,6 +222,10 @@ class TestPresenceMode(CapPresenceTestCase):
     def test_off_until_capsense2_records_arrive(self):
         self.assertIsNone(self._inputs())
         self.latest.update(time.time() - 120, [12.0] * 8, [12.0] * 8)
+        self.assertIsNone(self._inputs())
+
+    def test_off_while_only_an_unchecked_format_arrives(self):
+        self.latest.update(time.time(), (500.0, 500.0, 500.0), (500.0, 500.0, 500.0), CAPSENSE)
         self.assertIsNone(self._inputs())
 
     def test_off_without_a_capacitance_baseline(self):

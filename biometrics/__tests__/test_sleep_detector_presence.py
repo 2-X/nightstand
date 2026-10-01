@@ -33,6 +33,7 @@ import calibration
 import load_raw_files
 import sleep_detector
 import presence_scenarios as scenarios
+from presence.sensors import CAPSENSE, CAPSENSE2
 from test_presence_calibration import SCHEMA
 
 T0 = scenarios.T0
@@ -290,8 +291,12 @@ class FallbackTest(unittest.TestCase):
 
 class CoverageBoundaryTest(unittest.TestCase):
     class Collector:
-        def __init__(self, coverage):
+        def __init__(self, coverage, cap_format=CAPSENSE2):
             self.coverage = coverage
+            self.format = cap_format
+
+        def cap_format(self):
+            return self.format
 
         def cap_coverage(self):
             return self.coverage
@@ -299,9 +304,13 @@ class CoverageBoundaryTest(unittest.TestCase):
         def frames(self):
             return iter([])
 
-    def replay_side(self, coverage):
+    def replay_side(self, coverage, cap_format=CAPSENSE2):
         params = sleep_detector.params_from_calibration(profiles())
-        return sleep_detector._replay_side(self.Collector(coverage), params, 'left')
+        return sleep_detector._replay_side(self.Collector(coverage, cap_format), params, 'left')
+
+    def test_an_unchecked_format_reads_the_night_as_before(self):
+        self.assertIsNone(self.replay_side(1.0, CAPSENSE))
+        self.assertEqual(self.replay_side(1.0, CAPSENSE2), [])
 
     def test_half_of_the_window_covered_is_enough(self):
         self.assertEqual(self.replay_side(sleep_detector.MIN_CAP_COVERAGE), [])
