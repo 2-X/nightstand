@@ -5,6 +5,8 @@ import { wakeFromNight } from '../../db/rhythmWake.js';
 import { SCHEDULE_DAYS } from '../../db/scheduleKeys.js';
 import { compareTimes, isValidTime, scheduleWrapsToNextDay } from '../utils.js';
 import { normalizeNight } from './night.js';
+import type { SmartCurveInfo } from '../../db/smartCurve.js';
+import { applySmartCurve } from './smartSleep.js';
 
 export type RhythmEvent =
   | { kind: 'power-on'; at: Date; temperatureF: number }
@@ -23,9 +25,11 @@ export type ResolvedSleep = {
   mode: 'manual' | 'smart';
   smart?: SmartSchedule;
   events: RhythmEvent[];
+  smartCurve?: SmartCurveInfo; // Smart Schedule sleeps only
 };
 
-type Window = { side: Side; timeZone: string; from: Date; to: Date };
+type CoolStartFor = (side: Side, date: string) => Date | undefined;
+type Window = { side: Side; timeZone: string; from: Date; to: Date; coolStartFor?: CoolStartFor };
 type Overlap = { first: string; second: string };
 // wake is left out for the weekly schedule, which takes it from the night.
 type NightSource = { rhythmId: string | null; night: DailySchedule; wake?: string; mode: 'manual' | 'smart'; smart?: SmartSchedule };
@@ -87,13 +91,17 @@ function resolveWindow(window: Window, sourceFor: (date: string) => NightSource 
   const sleeps: ResolvedSleep[] = [];
   for (let date = addDays(moment.tz(from, timeZone).format(DATE_FORMAT), -1); date <= last; date = addDays(date, 1)) {
     const source = sourceFor(date);
-    const sleep = source ? resolveNight(side, date, source, timeZone) : null;
+    const night = source ? resolveNight(side, date, source, timeZone) : null;
+    // The pre-warm moves a Smart Schedule start earlier, so the curve goes on before the window check.
+    const sleep = night && applySmartCurve(night, timeZone, window.coolStartFor?.(side, date));
     if (sleep && sleep.start <= to && sleep.end >= from) sleeps.push(sleep);
   }
   return sleeps;
 }
 
-export function resolveSleeps(args: { db: RhythmsDB; side: Side; timeZone: string; from: Date; to: Date }): ResolvedSleep[] {
+export function resolveSleeps(args: {
+  db: RhythmsDB; side: Side; timeZone: string; from: Date; to: Date; coolStartFor?: CoolStartFor;
+}): ResolvedSleep[] {
   const plan = args.db[args.side];
   return resolveWindow(args, date => {
     const change = plan.changes.find(entry => entry.date === date);
