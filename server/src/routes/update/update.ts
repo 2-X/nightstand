@@ -1,5 +1,6 @@
 import express from 'express';
 import fs from 'fs';
+import { z } from 'zod';
 import logger from '../../logger.js';
 import { triggerUpdateService } from '../../jobs/update.js';
 import { triggerRollbackService } from '../../jobs/rollback.js';
@@ -19,6 +20,7 @@ const PREV_SERVER_INFO_PATH = '/home/dac/free-sleep-prev/server/src/serverInfo.j
 // a stale file can never redirect a future plain update.
 const TARGET_FILE = '/persistent/free-sleep-data/update-target.json';
 
+const PrepareToStopSchema = z.object({ reason: z.enum(['downgrade', 'rollback', 'revert']) }).strict();
 export type LeaveReason = 'downgrade' | 'rollback' | 'revert';
 type LeaveHook = (reason: LeaveReason) => Promise<unknown>;
 let leaveHook: LeaveHook | undefined;
@@ -29,16 +31,33 @@ export function setLeaveHook(hook: LeaveHook): void {
   leaveHook = hook;
 }
 
-// The next version may not know Rhythms, so this server hands any sleep it
-// started back to the weekly schedule first. The firmware off time set at
-// power-on still covers a handoff that fails.
-async function handOffRhythms(reason: LeaveReason): Promise<void> {
+export function isLoopbackAddress(address: string | undefined): boolean {
+  return address !== undefined && /^(::ffff:)?127\.|^::1$/.test(address);
+}
+
+// The update, rollback and switch scripts call this just before they stop
+// the server, after every check that could still abort them. The next
+// version may not know Rhythms, so this server hands any sleep it started
+// back to the weekly schedule. A failure never stops the script; the
+// firmware off time set at power-on is the backstop.
+router.post('/prepare-to-stop', async (req, res) => {
+  if (!isLoopbackAddress(req.socket.remoteAddress)) {
+    res.status(403).json({ error: 'Only the Pod itself can prepare the server to stop' });
+    return;
+  }
+  const parsed = PrepareToStopSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid request data', details: parsed.error.errors });
+    return;
+  }
+  const { reason } = parsed.data;
   try {
     await leaveHook?.(reason);
   } catch (error) {
     logger.error(`Rhythms handoff before ${reason} failed, continuing`, error);
   }
-}
+  res.status(204).end();
+});
 
 router.post('/', async (req, res) => {
   const parsed = UpdateRequestSchema.safeParse(req.body);
@@ -53,7 +72,6 @@ router.post('/', async (req, res) => {
   try {
     await triggerUpdateService({
       beforeStart: async () => {
-        if (targetVersion && allowDowngrade) await handOffRhythms('downgrade');
         if (targetVersion) {
           ownsTarget = true;
           await fs.promises.writeFile(
@@ -91,7 +109,7 @@ router.get('/rollback-info', async (_req, res) => {
 
 router.post('/rollback', async (_req, res) => {
   try {
-    await triggerRollbackService({ beforeStart: () => handOffRhythms('rollback') });
+    await triggerRollbackService();
     res.status(204).end();
   } catch (error) {
     logger.error('Failed to start rollback', error);
@@ -106,7 +124,7 @@ router.post('/rollback', async (_req, res) => {
 // afterward. There's no in-app way back once upstream free-sleep is running.
 router.post('/revert-to-stock', async (_req, res) => {
   try {
-    await triggerRevertToStockService({ beforeStart: () => handOffRhythms('revert') });
+    await triggerRevertToStockService();
     res.status(204).end();
   } catch (error) {
     logger.error('Could not start switching to upstream free-sleep.', error);

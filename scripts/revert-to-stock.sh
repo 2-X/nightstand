@@ -154,6 +154,10 @@ ls -1dt "$BACKUPS"/*/ | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -rf
 
 # --- atomic swap -----------------------------------------------------------------
 say "Installing upstream free-sleep v$STAGED_VERSION (service stops now)"
+# The running server hands back what the next version may not continue.
+curl -fsS --max-time 60 -X POST -H 'content-type: application/json' -d '{"reason":"revert"}' \
+  http://127.0.0.1:3000/api/update/prepare-to-stop >/dev/null \
+  || say "WARNING: the server could not prepare to stop; continuing"
 STREAM_WAS_ACTIVE=$(systemctl is-active free-sleep-stream 2>/dev/null || true)
 systemctl stop free-sleep-stream 2>/dev/null || true
 systemctl stop free-sleep || fail "could not stop the server before converting settings"

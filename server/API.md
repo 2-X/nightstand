@@ -1192,7 +1192,7 @@ returns `400`. Presence has no WebSocket push; clients poll this endpoint.
 
 ## `/api/update`
 
-All three POST routes below, like `update` and `reboot` in `/api/jobs`, return 409 with a `message` when they are refused because another update, rollback, switch or a reboot is already under way, and 500 with a `message` when the operation could not be started.
+The update, rollback and switch POST routes below, like `update` and `reboot` in `/api/jobs`, return 409 with a `message` when they are refused because another update, rollback, switch or a reboot is already under way, and 500 with a `message` when the operation could not be started.
 
 ### POST `/api/update`
 
@@ -1232,6 +1232,17 @@ channels. Explicit version requests use the selected version instead.
 ### POST `/api/update/revert-to-stock`
 
 - Switches to upstream `throwaway31265/free-sleep`, retaining the data directory subject to upstream schema compatibility. This is not a firmware reset or a return to Eight Sleep software. The upstream app has no button to return to Nightstand; use the migration tool. Returns `204 No Content` after requesting the background operation, not after verified installation success.
+
+### POST `/api/update/prepare-to-stop`
+
+- Called by the update, rollback and switch scripts just before they stop the server, after every check that could still cancel the operation. The update script calls it only when it is installing an older version, and neither the update nor the rollback script calls it when the version it switches to has this route, since that version continues a Rhythms sleep itself. It answers only requests from the Pod itself (loopback); any other address gets `403`.
+- Body: `{ "reason": "downgrade" }`, where `reason` is `downgrade`, `rollback` or `revert`. Anything else is refused with `400`.
+- Always answers `204 No Content` once the work is done, including when the work failed (the failure is logged). On a stock install running only the updater, it does nothing.
+- On this fork it prepares the Pod for a version that may not know Rhythms or a schedule pause:
+  - A side running a Rhythms sleep is handed to the weekly schedule. When the weekly schedule also has a night in progress, the Pod is told to stop at that night's end instead; otherwise the side stays on until the firmware off time it was last given for that sleep, and that sleep's remaining alarms do not ring once the server stops.
+  - When that sleep's alarm already rang and the weekly night still has an alarm ahead, `scheduleOverrides.alarm` on that side is set to `{ "disabled": true, "timeOverride": "", "expiresAt": <the weekly night's end> }`.
+  - A paused side whose weekly night (in progress, or starting within a day) has its last alarm still paused when due gets the same override, expiring at that night's end, because older versions ignore a pause.
+  - A side that already has an unexpired alarm override is left alone. These overrides stay in `settingsDB.json` for the next version, which skips that side's weekly alarms until they expire.
 
 ---
 

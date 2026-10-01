@@ -480,3 +480,53 @@ systemctl() {
     }
   });
 }
+
+const prepareToStop = (reason: string) => 'curl -fsS --max-time 60 -X POST -H content-type: application/json '
+  + `-d {"reason":"${reason}"} http://127.0.0.1:3000/api/update/prepare-to-stop`;
+const recordCurl = (status: number) => `curl() { echo "curl $*" >> "$FIXTURE/services"; return ${status}; }`;
+
+for (const [file, from, to, reason, setup] of [
+  ['scripts/update.sh', '# --- atomic swap', 'rm -rf "$PREV"', 'downgrade', 'IS_DOWNGRADE=yes; STAGED_VERSION=3.0.0; STAGE="$FIXTURE/stage"'],
+  ['scripts/rollback_pod.sh', '# --- swap', 'rm -rf "$TMP"', 'rollback', ''],
+  ['scripts/revert-to-stock.sh', '# --- atomic swap', 'ARCHIVE_WAS_ACTIVE=', 'revert', 'STAGED_VERSION=1.0.0'],
+]) {
+  for (const status of [0, 7]) {
+    it(`${file} lets the server prepare just before it stops${status ? ', even when that fails' : ''}`, () => {
+      const result = run(section(file, from, to), `${setup}\n${recordCurl(status)}`);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const calls = result.services.trim().split('\n');
+      const prepared = calls.indexOf(prepareToStop(reason));
+      assert.ok(prepared >= 0, result.services);
+      assert.ok(prepared < calls.findIndex(line => line.startsWith('stop free-sleep ')), result.services);
+      assert.ok(calls.some(line => line.startsWith('stop free-sleep ')), result.services);
+      if (status) assert.match(result.stdout, /WARNING: the server could not prepare to stop; continuing/);
+    });
+  }
+}
+
+it('scripts/update.sh leaves the server alone before an upgrade', () => {
+  const result = run(section('scripts/update.sh', '# --- atomic swap', 'rm -rf "$PREV"'),
+    `IS_DOWNGRADE=no; STAGED_VERSION=3.2.0; STAGE="$FIXTURE/stage"\n${recordCurl(0)}`);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.doesNotMatch(result.services, /prepare-to-stop/);
+  assert.match(result.services, /^stop free-sleep /m);
+});
+
+// The target's own server continues what this one would hand back.
+const withRoute = (tree: string) => `mkdir -p "${tree}/server/dist/routes/update"
+echo "router.post('/prepare-to-stop', handler);" > "${tree}/server/dist/routes/update/update.js"`;
+
+for (const [file, from, to, setup] of [
+  [
+    'scripts/update.sh', '# --- atomic swap', 'rm -rf "$PREV"',
+    `IS_DOWNGRADE=yes; STAGED_VERSION=3.0.0; STAGE="$FIXTURE/stage"\n${withRoute('$STAGE')}`,
+  ],
+  ['scripts/rollback_pod.sh', '# --- swap', 'rm -rf "$TMP"', withRoute('$PREV')],
+]) {
+  it(`${file} leaves the server alone when the target has the same prepare-to-stop route`, () => {
+    const result = run(section(file, from, to), `${setup}\n${recordCurl(0)}`);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.doesNotMatch(result.services, /prepare-to-stop/);
+    assert.match(result.services, /^stop free-sleep /m);
+  });
+}

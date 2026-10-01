@@ -3,6 +3,9 @@
 import { z } from 'zod';
 import { DailyScheduleSchema, SideSchema, TimeSchema } from './schedulesSchema.js';
 
+// The update and rollback scripts skip the pre-stop handoff for a target that
+// has the prepare-to-stop route, assuming it can continue a rhythm sleep. A
+// new version here must keep that true or change that check.
 export const RHYTHMS_FILE_VERSION = 1;
 export const MAX_RHYTHMS_PER_SIDE = 12;
 export const RhythmIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/);

@@ -84,6 +84,13 @@ else
 fi
 
 # --- swap ----------------------------------------------------------------------
+# The running server hands back what the next version may not continue. A
+# target that has the same route continues it itself.
+if ! grep -qs prepare-to-stop "$PREV/server/dist/routes/update/update.js"; then
+  curl -fsS --max-time 60 -X POST -H 'content-type: application/json' -d '{"reason":"rollback"}' \
+    http://127.0.0.1:3000/api/update/prepare-to-stop >/dev/null \
+    || say "WARNING: the server could not prepare to stop; continuing"
+fi
 STREAM_WAS_ACTIVE=$(systemctl is-active free-sleep-stream 2>/dev/null || true)
 systemctl stop free-sleep-stream 2>/dev/null || true
 systemctl stop free-sleep
