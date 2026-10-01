@@ -1,5 +1,6 @@
-import { expect, it, vi } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
+import { screen, waitFor, within } from '@testing-library/react';
+import moment from 'moment-timezone';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { createDemoRhythms } from '../../../mocks/rhythmsMock';
 import MultiDateSheet from './MultiDateSheet';
@@ -14,6 +15,8 @@ function renderSheet() {
 
 const cell = (sheet: HTMLElement, name: string) => within(sheet).getByRole('button', { name });
 
+afterEach(() => { moment.tz.setDefault(); });
+
 it('disables dates before today and more than 60 days ahead', async () => {
   const { user, sheet } = renderSheet();
   expect(cell(sheet, 'Sun, Sep 27')).toBeDisabled();
@@ -26,6 +29,19 @@ it('disables dates before today and more than 60 days ahead', async () => {
   expect(screen.getByText('November 2026')).toBeInTheDocument();
   expect(cell(sheet, 'Fri, Nov 27')).toBeEnabled();
   expect(cell(sheet, 'Sat, Nov 28')).toBeDisabled();
+  expect(within(sheet).getByRole('button', { name: 'Next month' })).toBeDisabled();
+});
+
+// The settings load sets the default zone after the sheet has mounted, so the
+// shown month and the range limits can come from different zones.
+it('keeps the month limits when the default zone changes while open', async () => {
+  moment.tz.setDefault('Pacific/Kiritimati');
+  const { user, sheet } = renderSheet();
+  await waitFor(() => expect(moment().tz()).toBe('America/Los_Angeles'));
+  expect(within(sheet).getByRole('button', { name: 'Previous month' })).toBeDisabled();
+  await user.click(within(sheet).getByRole('button', { name: 'Next month' }));
+  await user.click(within(sheet).getByRole('button', { name: 'Next month' }));
+  expect(screen.getByText('November 2026')).toBeInTheDocument();
   expect(within(sheet).getByRole('button', { name: 'Next month' })).toBeDisabled();
 });
 

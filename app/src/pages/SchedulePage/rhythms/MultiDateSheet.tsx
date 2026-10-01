@@ -9,6 +9,7 @@ import { changeFor, formatDate, MAX_CHANGE_DAYS_AHEAD } from './rhythmsModel';
 import { BOTTOM_SHEET } from './sheetStyles';
 
 const DATE = 'YYYY-MM-DD';
+const MONTH = 'YYYY-MM';
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 type Props = { sideData: SideRhythms; today: string; onNext: (dates: string[]) => void; onClose: () => void };
@@ -30,8 +31,9 @@ export default function MultiDateSheet({ sideData, today, onNext, onClose }: Pro
     pendingFocus.current = undefined;
     grid.current?.querySelector<HTMLElement>(`[data-date="${date}"]`)?.focus();
   });
-  const firstMonth = moment(today, DATE).startOf('month');
-  const lastMonth = moment(last, DATE).startOf('month');
+  // Compare calendar months as text: the default zone can change after mount,
+  // so moments built on different renders may sit at different instants.
+  const shownMonth = month.format(MONTH);
   const cells = Array.from({ length: month.day() }, () => null as string | null)
     .concat(Array.from({ length: month.daysInMonth() }, (_, index) => month.clone().date(index + 1).format(DATE)));
   const inRange = (date: string) => date >= today && date <= last;
@@ -40,7 +42,7 @@ export default function MultiDateSheet({ sideData, today, onNext, onClose }: Pro
   const moveFocus = (date: string) => {
     if (!inRange(date)) return;
     const target = moment(date, DATE).startOf('month');
-    if (!target.isSame(month)) setMonth(target);
+    if (target.format(MONTH) !== shownMonth) setMonth(target);
     pendingFocus.current = date;
     setFocusDate(date);
   };
@@ -66,13 +68,13 @@ export default function MultiDateSheet({ sideData, today, onNext, onClose }: Pro
       <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } }>
         <IconButton
           aria-label="Previous month"
-          disabled={ !month.isAfter(firstMonth) }
+          disabled={ shownMonth <= today.slice(0, 7) }
           onClick={ () => setMonth(month.clone().subtract(1, 'month')) }
           sx={ { width: 44, height: 44 } }><ChevronLeft/></IconButton>
         <Typography id={ monthId } aria-live="polite" sx={ { fontWeight: 600 } }>{ month.format('MMMM YYYY') }</Typography>
         <IconButton
           aria-label="Next month"
-          disabled={ !month.isBefore(lastMonth) }
+          disabled={ shownMonth >= last.slice(0, 7) }
           onClick={ () => setMonth(month.clone().add(1, 'month')) }
           sx={ { width: 44, height: 44 } }><ChevronRight/></IconButton>
       </Box>
