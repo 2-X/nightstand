@@ -66,6 +66,11 @@ type ScheduleStore = {
   originalSchedules: Schedules | undefined;
   setOriginalSchedules: (originalSchedules: Schedules) => void;
 
+  // A rhythm's night, edited with the same controls as a weekday.
+  nightBaseline: DailySchedule | undefined;
+  editNight: (night: DailySchedule) => void;
+  endNightEdit: () => void;
+
   selectedDays: Record<DayOfWeek, boolean>;
   toggleSelectedDay: (day: DayOfWeek) => void;
 };
@@ -77,7 +82,17 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 
   reloadScheduleData: () => {
     const { side } = useAppStore.getState();
-    const { originalSchedules, selectedDay } = get();
+    const { originalSchedules, selectedDay, nightBaseline } = get();
+    if (nightBaseline) {
+      set({
+        selectedDays: { ...DEFAULT_DAYS_SELECTED },
+        accordionExpanded: undefined,
+        selectedSchedule: _.cloneDeep(nightBaseline),
+        selectedAlarmIndex: 0,
+        changesPresent: false,
+      });
+      return;
+    }
     if (!originalSchedules) return;
     const selectedSchedule = originalSchedules[side]?.[selectedDay];
 
@@ -105,15 +120,16 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
   },
 
   isValid: () => {
-    const { selectedSchedule, originalSchedules, selectedDay, selectedDays } = get();
+    const { selectedSchedule, originalSchedules, selectedDay, selectedDays, nightBaseline } = get();
+    if (nightBaseline) return scheduleIsValid(selectedSchedule, nightBaseline.alarms.length);
     const { side } = useAppStore.getState();
     const days = [selectedDay, ...LOWERCASE_DAYS.filter(day => selectedDays[day])];
     return days.every(day => scheduleIsValid(selectedSchedule, originalSchedules?.[side]?.[day]?.alarms?.length ?? 0));
   },
   changesPresent: false,
   checkForChanges: () => {
-    const { selectedDay, selectedSchedule, originalSchedules, selectedDays } = get();
-    if (!originalSchedules) return;
+    const { selectedDay, selectedSchedule, originalSchedules, selectedDays, nightBaseline } = get();
+    if (!originalSchedules && !nightBaseline) return;
     const { side } = useAppStore.getState();
     // Editing an alarm rewrites a legacy day's empty `alarms: []` into
     // `[alarm]`, so a raw comparison would flag a phantom change (and could
@@ -126,7 +142,7 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
       return { ...schedule, alarms, alarm: alarms[0] };
     };
     const changesPresent = !_.isEqual(
-      normalizeAlarms(originalSchedules[side]?.[selectedDay]),
+      normalizeAlarms(nightBaseline ?? originalSchedules?.[side]?.[selectedDay]),
       normalizeAlarms(selectedSchedule),
     ) || _.some(selectedDays, value => value === true);
 
@@ -237,6 +253,17 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
     const { selectedDay } = get();
     const selectedSchedule = _.cloneDeep(originalSchedules[side]?.[selectedDay]);
 
-    set({ originalSchedules, selectedSchedule });
+    set({ originalSchedules, selectedSchedule, nightBaseline: undefined });
   },
+
+  nightBaseline: undefined,
+  editNight: (night) => set({
+    nightBaseline: _.cloneDeep(night),
+    selectedSchedule: _.cloneDeep(night),
+    selectedDays: { ...DEFAULT_DAYS_SELECTED },
+    accordionExpanded: undefined,
+    selectedAlarmIndex: 0,
+    changesPresent: false,
+  }),
+  endNightEdit: () => set({ nightBaseline: undefined, selectedSchedule: undefined, selectedAlarmIndex: 0, changesPresent: false }),
 }));

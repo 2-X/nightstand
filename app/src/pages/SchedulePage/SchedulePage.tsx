@@ -11,6 +11,7 @@ import moment from 'moment-timezone';
 import OneOffAlarmSection from './OneOffAlarmSection.tsx';
 import ApplyToOtherDaysAccordion from './ApplyToOtherDaysAccordion.tsx';
 import DayTabs from './DayTabs.tsx';
+import DraftBar from './DraftBar.tsx';
 import EnabledSwitch from './EnabledSwitch.tsx';
 import PageContainer from '../PageContainer.tsx';
 import SaveButton from './SaveButton.tsx';
@@ -271,14 +272,7 @@ export default function SchedulePage() {
       { showSchemaError && schemaIssue && <Alert severity="error" sx={ { width: '100%' } }>
         { schemaField }: { schemaIssue.message }
       </Alert> }
-      { changesPresent && <Box
-        data-schedule-draft="true"
-        sx={ {
-          position: 'fixed', bottom: 72, left: '50%', transform: 'translateX(-50%)',
-          width: { xs: 'calc(100% - 32px)', sm: 'calc(100% - 48px)' }, maxWidth: 672,
-          height: 60, p: 1, bgcolor: 'background.paper', display: 'flex', alignItems: 'center', gap: 1,
-          border: 1, borderColor: 'divider', borderRadius: '24px', zIndex: 2,
-        } }>
+      { changesPresent && <DraftBar>
         { invalidTimes > 0 || schemaIssue ? <Button
           color="error"
           onClick={ showInvalidRow }
@@ -299,7 +293,7 @@ export default function SchedulePage() {
           disabled={ isUpdating }
           sx={ { flexShrink: 0, px: 1 } }>Discard</Button>
         <SaveButton onSave={ handleSave }/>
-      </Box> }
+      </DraftBar> }
 
       <Dialog open={ !!pendingChange } onClose={ () => setPendingChange(undefined) } aria-labelledby="discard-schedule-title">
         <DialogTitle id="discard-schedule-title">{ discardTitleText }</DialogTitle>
