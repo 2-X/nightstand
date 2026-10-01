@@ -23,6 +23,7 @@ from buffer import Buffer
 from data_types import *
 from presence.cap import CAP_HOLD_SECONDS, CapBaseline, cap_delta
 from presence.detector import FRAME_GAP_SECONDS, DetectorParams, PresenceDetector, piezo_range
+from presence.sensors import CAPSENSE2, CapFormat
 import numpy as np
 
 logger = get_logger()
@@ -38,17 +39,22 @@ PresenceInputs = Tuple[DetectorParams, Dict[str, CapBaseline]]
 
 
 class LatestCap:
-    """Newest capSense2 values for both sides, written by the reader thread."""
+    """Newest capacitance channels for both sides and their format, written by the reader thread."""
 
     def __init__(self):
         self._reading = None
 
-    def update(self, ts, left_values, right_values) -> None:
+    def update(self, ts, left, right, cap_format: CapFormat = CAPSENSE2) -> None:
         # One assignment, so the processing thread never sees half an update.
-        self._reading = (int(ts), left_values, right_values)
+        self._reading = (int(ts), left, right, cap_format)
 
     def read(self):
-        return self._reading
+        reading = self._reading
+        return None if reading is None else reading[:3]
+
+    def cap_format(self) -> Optional[CapFormat]:
+        reading = self._reading
+        return None if reading is None else reading[3]
 
     def is_fresh(self, now: float, max_age: float) -> bool:
         reading = self._reading

@@ -5,12 +5,6 @@ import math
 from dataclasses import dataclass
 from typing import Optional, Sequence, Tuple
 
-# capSense2 writes -1.0 for a value it has no reading for, on all eight of a
-# side or on only some of them.
-SENTINEL = -1.0
-# The eight values arrive as four near-identical pairs; the fourth pair is a
-# reference near zero, so the first three pairs are the channels.
-CHANNEL_PAIRS = ((0, 1), (2, 3), (4, 5))
 # A capacitance reading stands in for this many seconds of piezo frames.
 CAP_HOLD_SECONDS = 5
 
@@ -22,25 +16,30 @@ class CapBaseline:
     noise: float
 
 
-def cap_delta(values: Optional[Sequence[float]], baseline: CapBaseline) -> Optional[float]:
-    """Sum of the three channel rises over the baseline, or None with no reading.
+def cap_delta(channels: Optional[Sequence[Optional[float]]], baseline: CapBaseline) -> Optional[float]:
+    """Sum of the channel rises over the baseline, or None with no reading.
 
-    A sentinel, None or NaN value is missing: a pair falls back to its other
-    value, and a channel whose pair is all missing is left out and the
-    remaining ones are scaled up to three channels, so one dead channel does
-    not read as a drop in occupancy.
+    channels come from presence.sensors.read_cap. A channel without a
+    reading is left out and the others are scaled up to the full count, so
+    one dead channel does not read as a drop in occupancy. Finite channels
+    that overflow the sum give no reading rather than infinity.
     """
-    if values is None or len(values) < 6:
+    if channels is None:
         return None
     total = 0.0
     used = 0
-    for channel, (first, second) in enumerate(CHANNEL_PAIRS):
-        readings = [value for value in (values[first], values[second])
-                    if value is not None and value != SENTINEL and not math.isnan(value)]
-        if not readings:
+    for index, value in enumerate(channels):
+        if value is None:
             continue
-        total += sum(readings) / len(readings) - baseline.mean[channel]
+        total += value - baseline.mean[index]
         used += 1
     if used == 0:
         return None
-    return total * len(CHANNEL_PAIRS) / used
+    delta = total * len(channels) / used
+    if not math.isfinite(delta) and _all_finite(channels, baseline.mean):
+        return None
+    return delta
+
+
+def _all_finite(channels, mean) -> bool:
+    return all(value is None or math.isfinite(value) for value in channels) and all(math.isfinite(value) for value in mean)

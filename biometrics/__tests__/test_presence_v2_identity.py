@@ -32,6 +32,7 @@ import numpy as np
 import presence_scenarios as scenarios
 from presence.cap import CapBaseline, cap_delta
 from presence.params import baselines_from_calibration, params_from_calibration
+from presence.sensors import read_cap
 
 GOLDEN_PATH = os.path.join(HERE, 'fixtures', 'presence_v2_golden.json')
 # Occupied rises a Pod has learned: the left entry level lands just under the
@@ -123,7 +124,8 @@ def graded_records():
 
 def pod5_delta(values, baseline):
     """The capacitance delta of one side's raw capSense2 values."""
-    return cap_delta(values, baseline)
+    reading = read_cap({'type': 'capSense2', 'left': {'values': values}, 'right': {'values': values}})
+    return cap_delta(reading.left, baseline)
 
 
 def corpus():

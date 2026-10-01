@@ -143,7 +143,8 @@ class TestStoreDecodedCapRecord(CapPresenceTestCase):
     def test_keeps_the_newest_values(self):
         record = recent_cap()
         self.assertTrue(stream._store_decoded_cap_record(record))
-        self.assertEqual(self.latest.read(), (int(record['ts']), record['left']['values'], record['right']['values']))
+        self.assertEqual(self.latest.read(), (int(record['ts']), (12.0, 12.0, 12.0), (13.0, 13.0, 13.0)))
+        self.assertEqual(self.latest.cap_format().name, 'capSense2')
 
     def test_consumes_stale_and_malformed_records_without_storing(self):
         self.assertTrue(stream._store_decoded_cap_record(recent_cap(ts=(datetime.now() - timedelta(minutes=10)).timestamp())))
@@ -158,6 +159,20 @@ class TestStoreDecodedCapRecord(CapPresenceTestCase):
         record['left']['values'] = ['12.0'] * 8
         self.assertTrue(stream._store_decoded_cap_record(record))
         self.assertIsNone(self.latest.read())
+
+    def test_consumes_records_that_read_as_nothing_without_storing(self):
+        for ts in ('1790568000', None):
+            record = recent_cap()
+            record['ts'] = ts
+            self.assertTrue(stream._store_decoded_cap_record(record))
+        both_unreadable = recent_cap()
+        both_unreadable['left'] = both_unreadable['right'] = None
+        self.assertTrue(stream._store_decoded_cap_record(both_unreadable))
+        oversized = recent_cap()
+        oversized['right']['values'] = [10 ** 400] * 8
+        self.assertTrue(stream._store_decoded_cap_record(oversized))
+        self.assertIsNone(self.latest.read())
+        self.assertIsNone(self.latest.cap_format())
 
     def test_leaves_other_records_to_the_piezo_path(self):
         self.assertFalse(stream._store_decoded_cap_record(recent_piezo()))

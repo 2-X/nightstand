@@ -46,6 +46,7 @@ from biometric_processor import BiometricProcessor, _PresenceCoordinator
 from load_raw_files import load_piezo_row
 from presence.cap import CapBaseline
 from presence.detector import DetectorParams, SideParams
+from presence.sensors import read_cap
 from stream_processor import LatestCap, StreamProcessor, is_side_swap
 import presence_scenarios as scenarios
 from presence_scenarios import Night
@@ -84,8 +85,10 @@ def stream(night: Night, inputs=(PARAMS, BASELINES), switch_off_at=None, records
                                        side_effect=lambda row: inserts.append((row['side'], row['timestamp'] - T0, row['hrv']))):
         processor = None
         for record in records if records is not None else scenarios.raw_records(night):
-            if record['type'] == 'capSense2':
-                latest.update(record['ts'], record['left']['values'], record['right']['values'])
+            reading = read_cap(record)
+            if reading is not None:
+                if reading.left is not None and reading.right is not None:
+                    latest.update(record['ts'], reading.left, reading.right, reading.cap_format)
                 continue
             load_piezo_row(record, 'right')
             now[0] = record['ts']

@@ -79,7 +79,7 @@ def occupied_level(frames: Iterable[Frame], intervals: Sequence[Tuple[int, int]]
 class FrameCollector:
     """Per-record presence inputs for both sides, kept as compact arrays.
 
-    The analyzer feeds it every capSense2 and piezo-dual record while it
+    The analyzer feeds it every capacitance and piezo-dual record while it
     decodes RAW files, before the other side's data is dropped. A record costs
     16 bytes here, so a 25 hour window holds about 4 MB, and reading it back
     works in small pieces, so that adds well under 1 MB. Values are stored as
@@ -94,10 +94,14 @@ class FrameCollector:
         self._piezo_ts = array('q')
         self._piezo = {side: array('f') for side in SIDES}
 
-    def add_cap(self, ts: int, left_values: Sequence[float], right_values: Sequence[float]) -> None:
-        self._cap_ts.append(int(ts))
-        for side, values in (('left', left_values), ('right', right_values)):
-            delta = cap_delta(values, self._baselines[side])
+    def add_cap(self, ts: int, left_channels, right_channels) -> None:
+        """One capacitance record's channels per side, from presence.sensors.read_cap."""
+        # Convert everything first so a bad ts leaves the arrays in step.
+        epoch = int(ts)
+        deltas = {side: cap_delta(channels, self._baselines[side])
+                  for side, channels in (('left', left_channels), ('right', right_channels))}
+        self._cap_ts.append(epoch)
+        for side, delta in deltas.items():
             self._cap[side].append(float('nan') if delta is None else delta)
 
     def add_piezo(self, ts: int, left_range: Optional[float], right_range: Optional[float]) -> None:

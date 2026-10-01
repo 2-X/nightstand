@@ -1,13 +1,23 @@
 """Capacitance delta for one side of the bed, with the no-reading sentinel masked."""
+import math
 import os
 import sys
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from presence.cap import CapBaseline, cap_delta
+from presence.cap import CapBaseline, cap_delta as _cap_delta
+from presence.sensors import read_cap
 
 BASELINE = CapBaseline(mean=(11.0, 10.0, 15.0), noise=0.05)
+
+
+def cap_delta(values, baseline):
+    """The delta of raw capSense2 values, read the way the loader and the stream read them."""
+    if values is None:
+        return _cap_delta(None, baseline)
+    record = {'type': 'capSense2', 'left': {'values': values}, 'right': {'values': values}}
+    return _cap_delta(read_cap(record).left, baseline)
 
 
 class CapDeltaTest(unittest.TestCase):
@@ -80,6 +90,27 @@ class CapDeltaTest(unittest.TestCase):
     def test_a_drop_below_the_baseline_stays_negative(self):
         values = [9.0, 9.0, 8.0, 8.0, 13.0, 13.0, 1.2, 1.2]
         self.assertAlmostEqual(cap_delta(values, BASELINE), -6.0)
+
+    def test_channels_are_summed_and_a_missing_one_scaled_out(self):
+        self.assertAlmostEqual(_cap_delta((14.0, 12.0, 18.0), BASELINE), 8.0)
+        self.assertAlmostEqual(_cap_delta((13.0, None, 17.0), BASELINE), 6.0)
+        self.assertIsNone(_cap_delta((None, None, None), BASELINE))
+
+    def test_finite_channels_that_overflow_give_no_reading(self):
+        big = 1.5e308
+        self.assertIsNone(_cap_delta((big, big, big), BASELINE))
+        self.assertIsNone(_cap_delta((big, None, None), BASELINE))
+
+    def test_an_infinite_channel_passes_through_as_it_always_has(self):
+        self.assertEqual(_cap_delta((float('inf'), 12.0, 18.0), BASELINE), float('inf'))
+        self.assertEqual(cap_delta([float('inf'), float('inf')] + [12.0] * 6, BASELINE), float('inf'))
+
+    def test_no_nonsense_delta_comes_from_a_capsense_record(self):
+        for count in (float('inf'), float('-inf'), float('nan'), 10 ** 400, 1.7e308):
+            with self.subTest(count=count):
+                record = {'type': 'capSense', 'left': {'out': count, 'cen': 381, 'in': count}}
+                delta = _cap_delta(read_cap(record).left, BASELINE)
+                self.assertTrue(delta is None or math.isfinite(delta))
 
 
 if __name__ == '__main__':

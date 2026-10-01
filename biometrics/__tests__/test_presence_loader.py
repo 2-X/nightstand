@@ -21,7 +21,7 @@ for _name in LOGGER_NAMES:
 
 import numpy as np
 
-from load_raw_files import load_raw_files
+from load_raw_files import _capture_presence, load_raw_files
 from presence.cap import CapBaseline
 from presence.replay import FrameCollector
 import presence_scenarios as scenarios
@@ -31,6 +31,30 @@ NIGHT = Night(seconds=900, left=((300, 900),), right=((100, 900),))
 BASELINES = {side: CapBaseline(mean=scenarios.BASELINE_MEANS[side], noise=0.05) for side in ('left', 'right')}
 START = datetime.fromtimestamp(scenarios.T0, timezone.utc)
 END = START + timedelta(seconds=599)
+
+
+class CapturePresenceTest(unittest.TestCase):
+    def _record(self, left, right):
+        return {'type': 'capSense2', 'ts': scenarios.T0, 'left': left, 'right': right}
+
+    def test_both_sides_are_captured_as_channels(self):
+        side = {'values': [12.0] * 8}
+        self.assertEqual(_capture_presence(self._record(side, side)),
+                         ('cap', (12.0, 12.0, 12.0), (12.0, 12.0, 12.0)))
+
+    def test_a_record_with_an_unreadable_side_is_not_captured(self):
+        side = {'values': [12.0] * 8}
+        for bad in (None, {}, {'values': [10 ** 400] * 8}, {'values': ['12'] * 8}):
+            with self.subTest(bad=bad):
+                self.assertIsNone(_capture_presence(self._record(bad, side)))
+                self.assertIsNone(_capture_presence(self._record(side, bad)))
+        self.assertIsNone(_capture_presence(self._record(None, None)))
+
+    def test_a_timestamp_that_is_not_a_number_does_not_matter_here(self):
+        side = {'values': [12.0] * 8}
+        record = self._record(side, side)
+        record['ts'] = 'soon'
+        self.assertIsNotNone(_capture_presence(record))
 
 
 class PresenceCollectorLoadTest(unittest.TestCase):

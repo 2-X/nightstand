@@ -13,6 +13,7 @@ sys.path.append(os.getcwd())
 from data_types import *
 from get_logger import get_logger
 from presence.detector import piezo_range
+from presence.sensors import read_cap
 
 logger = get_logger()
 
@@ -226,12 +227,9 @@ def _capture_presence(record: dict):
     """Both sides' presence inputs, taken before normalization and _delete_other_side drop them."""
     kind = record.get('type')
     if kind == 'capSense2':
-        left = record.get('left')
-        right = record.get('right')
-        left_values = left.get('values') if isinstance(left, dict) else None
-        right_values = right.get('values') if isinstance(right, dict) else None
-        if isinstance(left_values, (list, tuple)) and isinstance(right_values, (list, tuple)):
-            return 'cap', left_values, right_values
+        reading = read_cap(record)
+        if reading.left is not None and reading.right is not None:
+            return 'cap', reading.left, reading.right
     elif kind == 'piezo-dual':
         return 'piezo', record.get('left1'), record.get('right1')
     return None

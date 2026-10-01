@@ -36,8 +36,8 @@ def synthetic_night(seconds: int) -> FrameCollector:
     left, right = ([mean for mean in scenarios.BASELINE_MEANS[side] for _ in (0, 1)] + [1.2, 1.2] for side in ('left', 'right'))
     for second in range(seconds):
         collector.add_piezo(T0 + second, 5e6, 5e6)
-        collector.add_cap(T0 + second, left, right)
-        collector.add_cap(T0 + second, [value + 1.0 for value in left], right)
+        collector.add_cap(T0 + second, scenarios.channels(left), scenarios.channels(right))
+        collector.add_cap(T0 + second, scenarios.channels([value + 1.0 for value in left]), scenarios.channels(right))
     return collector
 
 
@@ -69,7 +69,7 @@ def collect(night: Night, **kwargs) -> FrameCollector:
     collector = FrameCollector(BASELINES)
     for record in scenarios.raw_records(night, **kwargs):
         if record['type'] == 'capSense2':
-            collector.add_cap(record['ts'], record['left']['values'], record['right']['values'])
+            collector.add_cap(record['ts'], scenarios.channels(record['left']['values']), scenarios.channels(record['right']['values']))
         else:
             collector.add_piezo(
                 record['ts'],
@@ -139,13 +139,31 @@ class FrameCollectorTest(unittest.TestCase):
 
     def test_capacitance_is_held_for_a_few_seconds_then_dropped(self):
         collector = FrameCollector(BASELINES)
-        collector.add_cap(T0, [12.36] * 2 + [10.99] * 2 + [15.88] * 2 + [1.2] * 2, [-1.0] * 8)
+        collector.add_cap(T0, scenarios.channels([12.36] * 2 + [10.99] * 2 + [15.88] * 2 + [1.2] * 2), scenarios.channels([-1.0] * 8))
         for second in range(0, 10):
             collector.add_piezo(T0 + second, 1e6, 1e6)
         caps = [cap['left'] for _, cap, _ in collector.frames()]
         self.assertEqual([value is not None for value in caps], [True] * 6 + [False] * 4)
         self.assertAlmostEqual(caps[0], 3.0, places=3)
         self.assertTrue(all(cap['right'] is None for _, cap, _ in collector.frames()))
+
+    def test_a_reading_with_no_channels_is_a_row_of_nothing(self):
+        collector = FrameCollector(BASELINES)
+        collector.add_cap(T0, None, None)
+        collector.add_piezo(T0, 1e6, 1e6)
+        _, cap, _ = next(iter(collector.frames()))
+        self.assertEqual(cap, {'left': None, 'right': None})
+
+    def test_a_timestamp_that_is_not_a_number_adds_nothing(self):
+        collector = FrameCollector(BASELINES)
+        channels = scenarios.channels([12.0] * 8)
+        for ts in ('soon', None, float('nan')):
+            with self.assertRaises((TypeError, ValueError)):
+                collector.add_cap(ts, channels, channels)
+        collector.add_cap(T0, channels, channels)
+        collector.add_piezo(T0, 1e6, 1e6)
+        self.assertEqual(collector.nbytes(), 2 * 16)
+        self.assertEqual(len(list(collector.frames())), 1)
 
     def test_records_out_of_order_come_back_sorted_once_per_second(self):
         collector = FrameCollector(BASELINES)
@@ -163,7 +181,7 @@ class FrameCollectorTest(unittest.TestCase):
         collector = FrameCollector(BASELINES)
         for record in records:
             if record['type'] == 'capSense2':
-                collector.add_cap(record['ts'], record['left']['values'], record['right']['values'])
+                collector.add_cap(record['ts'], scenarios.channels(record['left']['values']), scenarios.channels(record['right']['values']))
             else:
                 collector.add_piezo(
                     record['ts'],
@@ -197,7 +215,7 @@ class FrameCollectorTest(unittest.TestCase):
         frames = collector.frames()
         next(frames)
         collector.add_piezo(T0 + 500, 1e6, 1e6)
-        collector.add_cap(T0 + 500, [1.0] * 8, [1.0] * 8)
+        collector.add_cap(T0 + 500, scenarios.channels([1.0] * 8), scenarios.channels([1.0] * 8))
         self.assertEqual(len(list(frames)), 49)
         self.assertEqual(len(list(collector.frames())), 51)
 

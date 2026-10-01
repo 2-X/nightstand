@@ -49,6 +49,7 @@ logger = get_logger('free-sleep-stream')
 import calibration
 from features import biometrics_v2_enabled
 from presence.params import baselines_from_calibration, params_from_calibration
+from presence.sensors import read_cap
 from stream_processor import LatestCap, StreamProcessor
 from load_raw_files import load_piezo_row, _read_raw_record
 from service_health import update_health, update_sensor_temps, update_pump_health
@@ -130,7 +131,7 @@ def _queue_decoded_piezo_record(decoded_data) -> bool:
 
 
 def _store_decoded_cap_record(decoded_data) -> bool:
-    """Keep the newest capSense2 values; True for every capSense2 record, stored or not."""
+    """Keep the newest capSense2 channels; True for every capSense2 record, stored or not."""
     if not isinstance(decoded_data, dict) or decoded_data.get('type') != 'capSense2':
         return False
     ts = decoded_data.get('ts')
@@ -142,22 +143,14 @@ def _store_decoded_cap_record(decoded_data) -> bool:
         return True
     if datetime.now() - recorded_at > RECENT_RECORD_WINDOW:
         return True
-    left_values = _cap_values(decoded_data.get('left'))
-    right_values = _cap_values(decoded_data.get('right'))
-    if left_values is not None and right_values is not None:
-        latest_cap.update(ts, left_values, right_values)
+    reading = read_cap(decoded_data)
+    if reading.left is not None and reading.right is not None:
+        latest_cap.update(ts, reading.left, reading.right, reading.cap_format)
     return True
 
 
 def _is_number(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
-
-
-def _cap_values(side):
-    values = side.get('values') if isinstance(side, dict) else None
-    if isinstance(values, (list, tuple)) and all(_is_number(value) for value in values):
-        return values
-    return None
 
 
 def _presence_v2_inputs():

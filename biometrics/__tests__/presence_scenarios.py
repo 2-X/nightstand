@@ -11,6 +11,8 @@ from typing import Dict, Iterator, List, Optional, Tuple
 import cbor2
 import numpy as np
 
+from presence.sensors import read_cap
+
 # 2026-09-28 04:00:00 UTC, 21:00 Pacific.
 T0 = 1790568000
 SIDES = ('left', 'right')
@@ -86,6 +88,11 @@ def cap_values(night: Night, side: str, second: int, record_index: int) -> List[
     for mean in BASELINE_MEANS[side]:
         values += [mean + rise, mean + rise]
     return values + [REFERENCE_VALUE, REFERENCE_VALUE]
+
+
+def channels(values):
+    """One side's channels from raw capSense2 values, as the loader and the stream read them."""
+    return read_cap({'type': 'capSense2', 'left': {'values': values}, 'right': {'values': values}}).left
 
 
 def piezo_samples(amplitude: float) -> bytes:
