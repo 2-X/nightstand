@@ -6,7 +6,9 @@ is a hard fork; for the history of the projects it descends from, see
 [jmew/free-sleep](https://github.com/jmew/free-sleep) and
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
 
-## [Unreleased]
+## [3.5.0] - 2026-10-01
+
+Rhythms with an optional Smart Schedule, pausing a side's schedule, a new beta sleep tracking option, and more reliable sleep analysis.
 
 - A new switch in Settings > Features, "Rhythms (beta)", is off by default.
   Rhythms are named sleep plans for each side: bedtime, wake time, alarms,

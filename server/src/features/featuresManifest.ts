@@ -272,7 +272,7 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     description: 'Tells the two sides apart with the bed\'s capacitance sensors, in live presence and the '
       + 'nightly analysis, and keeps vitals through short trips out of bed.',
     category: 'biometrics',
-    version: 'n/a',
+    version: '3.5.0',
     flag: 'biometricsV2',
     default: false,
     touchpoints: [
@@ -508,7 +508,7 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     description: 'Pause one side\'s schedule for tonight, until a set time or until resumed. '
       + 'The saved schedule and the one-time alarm are kept.',
     category: 'platform',
-    version: 'n/a',
+    version: '3.5.0',
     flag: null,
     default: true,
     touchpoints: [
