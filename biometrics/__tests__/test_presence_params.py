@@ -132,7 +132,6 @@ class FromCalibrationTest(unittest.TestCase):
         self.assertIsNone(params_from_calibration(profiles(left={'cap': cap_payload('left', (True, 10.0, 15.0))})))
 
 
-
 class FormatUnitsTest(unittest.TestCase):
     def test_capsense2_is_what_it_was(self):
         params = side_params(None, 0.05)

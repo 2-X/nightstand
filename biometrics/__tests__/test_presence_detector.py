@@ -232,6 +232,20 @@ class BaselineTrackingTest(unittest.TestCase):
         self.assertGreater(detector.offsets()['left'], 3.0)
         self.assertAlmostEqual(detector.offsets()['left'], 140.0, places=0)
 
+    def test_the_side_limit_clamps_both_directions(self):
+        t0 = 1790568000
+        side = SideParams(enter_delta=300.0, exit_delta=150.0, offset_limit=225.0)
+        params = DetectorParams(left=side, right=side, piezo_floor={'left': 40_000.0, 'right': 40_000.0})
+        detector = PresenceDetector(params)
+        second = 0
+        # Two plateaus, each within the exit level of the tracked baseline, so the
+        # second one pulls the offset past the limit if nothing holds it.
+        for level in (140.0, 280.0):
+            for _ in range(30_000):
+                detector.step(t0 + second, {'left': level, 'right': -level}, {'left': 0.0, 'right': 0.0})
+                second += 1
+        self.assertEqual(detector.offsets(), {'left': 225.0, 'right': -225.0})
+
 
 class FrameHandlingTest(unittest.TestCase):
     def _steps(self, detector, start, count, delta, piezo=1_000_000.0):
