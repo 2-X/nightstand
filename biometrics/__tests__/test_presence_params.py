@@ -7,10 +7,12 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from presence.cap import CapBaseline
-from presence.detector import SideParams
+from presence.detector import OFFSET_LIMIT, SideParams
 from presence.params import (
-    DEFAULT_PIEZO_FLOOR, baselines_from_calibration, params_from_calibration, piezo_floor, side_params,
+    DEFAULT_PIEZO_FLOOR, baselines_from_calibration, learned_levels, params_from_calibration, piezo_floor,
+    side_params,
 )
+from presence.sensors import CAPSENSE, CAPSENSE2
 
 
 def cap_payload(side, means=(11.0, 10.0, 15.0), **extra):
@@ -128,6 +130,41 @@ class FromCalibrationTest(unittest.TestCase):
 
     def test_bool_channel_means_are_not_numbers(self):
         self.assertIsNone(params_from_calibration(profiles(left={'cap': cap_payload('left', (True, 10.0, 15.0))})))
+
+
+
+class FormatUnitsTest(unittest.TestCase):
+    def test_capsense2_is_what_it_was(self):
+        params = side_params(None, 0.05)
+        self.assertEqual(params, SideParams(enter_delta=4.0, exit_delta=2.0))
+        self.assertEqual(params.offset_limit, OFFSET_LIMIT)
+        self.assertEqual(side_params(21.0, 0.05, unit=CAPSENSE2.unit), side_params(21.0, 0.05))
+
+    def test_capsense_starts_at_its_unit(self):
+        params = side_params(None, 2.0, unit=CAPSENSE.unit)
+        self.assertEqual((params.enter_delta, params.exit_delta, params.offset_limit), (300.0, 150.0, 225.0))
+
+    def test_capsense_follows_the_learned_level_within_its_bounds(self):
+        self.assertAlmostEqual(side_params(1000.0, 2.0, unit=CAPSENSE.unit).enter_delta, 400.0)
+        self.assertEqual(side_params(3000.0, 2.0, unit=CAPSENSE.unit).enter_delta, 750.0)
+        self.assertEqual(side_params(200.0, 2.0, unit=CAPSENSE.unit).enter_delta, 225.0)
+        self.assertEqual(side_params(1000.0, 80.0, unit=CAPSENSE.unit).enter_delta, 480.0)
+
+    def test_the_format_reaches_both_sides(self):
+        params = params_from_calibration(profiles(), CAPSENSE)
+        self.assertEqual(params.left.enter_delta, 300.0)
+        self.assertEqual(params.right.offset_limit, 225.0)
+        self.assertEqual(params_from_calibration(profiles()), params_from_calibration(profiles(), CAPSENSE2))
+
+    def test_learned_levels_need_both_sides(self):
+        self.assertFalse(learned_levels(profiles()))
+        learned = profiles(left={'cap_occupied': {'level': 900.0}})
+        self.assertFalse(learned_levels(learned))
+        learned['right']['cap_occupied'] = {'level': 450.0}
+        self.assertTrue(learned_levels(learned))
+        learned['right']['cap_occupied'] = {'level': -1}
+        self.assertFalse(learned_levels(learned))
+        self.assertFalse(learned_levels(None))
 
 
 if __name__ == '__main__':

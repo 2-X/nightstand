@@ -30,7 +30,8 @@ PIEZO_ALIVE_MARGIN = 2.0
 # in its enter window: someone getting into bed moves, one pump thump does not.
 ENTER_ALIVE_SECONDS = 5
 # Baseline tracking: fraction of the remaining error taken per quiet second
-# (a ten minute time constant) and the most it may drift from calibration.
+# (a ten minute time constant) and, in capSense2 units, the most it may drift
+# from calibration.
 TRACK_RATE = 1.0 / 600
 OFFSET_LIMIT = 3.0
 # A longer hole in the frames breaks every dwell count.
@@ -46,6 +47,8 @@ class SideParams:
     exit_delta: float
     enter_seconds: int = 20
     exit_seconds: int = 60
+    # How far the tracked empty baseline may drift from calibration, in the format's units.
+    offset_limit: float = OFFSET_LIMIT
 
 
 @dataclass(frozen=True)
@@ -217,4 +220,4 @@ def _track_baseline(state: _SideState, delta: float, params: SideParams) -> None
     error = delta - state.offset
     if abs(error) >= params.exit_delta:
         return
-    state.offset = max(-OFFSET_LIMIT, min(OFFSET_LIMIT, state.offset + TRACK_RATE * error))
+    state.offset = max(-params.offset_limit, min(params.offset_limit, state.offset + TRACK_RATE * error))

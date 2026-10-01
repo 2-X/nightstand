@@ -199,10 +199,23 @@ def run_stream():
     return out
 
 
+# SideParams fields added after the golden was written, with the value a
+# capSense2 side must keep. They are checked here, not in the golden.
+ADDED_SIDE_FIELDS = {'offset_limit': 3.0}
+
+
+def _detector_as_written(params):
+    detector = dataclasses.asdict(params)
+    for side in ('left', 'right'):
+        for name in ADDED_SIDE_FIELDS:
+            del detector[side][name]
+    return detector
+
+
 def run_params():
     return {
         label: {
-            'detector': _jsonable(dataclasses.asdict(params_from_calibration(presence))),
+            'detector': _jsonable(_detector_as_written(params_from_calibration(presence))),
             'baselines': _jsonable({side: dataclasses.asdict(b) for side, b in baselines_from_calibration(presence).items()}),
         }
         for label, presence in _profile_sets()
@@ -236,6 +249,14 @@ class Pod5IdentityTest(unittest.TestCase):
 
     def test_resolved_detector_parameters_are_the_same(self):
         self.assertEqual(run_params(), self.golden['params'])
+
+    def test_added_side_fields_keep_their_capsense2_values(self):
+        for label, presence in _profile_sets():
+            params = params_from_calibration(presence)
+            for side in ('left', 'right'):
+                with self.subTest(params=f'{label}/{side}'):
+                    side_params = params.for_side(side)
+                    self.assertEqual({name: getattr(side_params, name) for name in ADDED_SIDE_FIELDS}, ADDED_SIDE_FIELDS)
 
     def test_capacitance_deltas_are_bit_for_bit_the_same(self):
         self.assertEqual(run_cap_delta(), self.golden['cap_delta'])

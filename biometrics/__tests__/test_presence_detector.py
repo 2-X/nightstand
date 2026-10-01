@@ -221,6 +221,17 @@ class BaselineTrackingTest(unittest.TestCase):
         detector, _ = run(Night(seconds=4000, right=((0, 4000),), overrides=(('left', 0, 4000, 1.0),)))
         self.assertEqual(detector.offsets(), {'left': 0.0, 'right': 0.0})
 
+    def test_baseline_tracking_stops_at_the_side_limit(self):
+        t0 = 1790568000
+        side = SideParams(enter_delta=300.0, exit_delta=150.0, offset_limit=225.0)
+        params = DetectorParams(left=side, right=side, piezo_floor={'left': 40_000.0, 'right': 40_000.0})
+        detector = PresenceDetector(params)
+        # A quiet bed reading 140 above calibration for long enough to track all of it.
+        for second in range(30_000):
+            detector.step(t0 + second, {'left': 140.0, 'right': 0.0}, {'left': 0.0, 'right': 0.0})
+        self.assertGreater(detector.offsets()['left'], 3.0)
+        self.assertAlmostEqual(detector.offsets()['left'], 140.0, places=0)
+
 
 class FrameHandlingTest(unittest.TestCase):
     def _steps(self, detector, start, count, delta, piezo=1_000_000.0):
