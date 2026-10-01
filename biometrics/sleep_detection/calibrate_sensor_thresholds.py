@@ -21,6 +21,7 @@ import time
 import urllib.request
 from argparse import Namespace, ArgumentParser
 import traceback
+from collections import Counter
 from typing import Union
 from datetime import datetime, timezone, timedelta
 
@@ -41,6 +42,7 @@ from load_raw_files import load_raw_files
 from piezo_data import load_piezo_df, detect_presence_piezo, identify_baseline_period, summarize_empty_floor, one_value_per_second
 from cap_data import load_cap_df, create_cap_baseline_from_cap_df, save_baseline, summed_delta_noise
 from features import biometrics_v2_enabled
+from presence.sensors import FORMATS
 from resource_usage import get_memory_usage_unix, get_available_memory_mb
 from biometrics_helpers import validate_datetime_utc
 from service_health import update_health, is_biometrics_enabled
@@ -92,6 +94,16 @@ def _parse_args() -> Union[Namespace, None]:
         raise ValueError("--start_time must be earlier than --end_time")
 
     return args
+
+
+def format_payload(cap_formats):
+    """What a cap run row records about the Pod's capacitance records; None with the switch off."""
+    if cap_formats is None:
+        return None
+    known = [(count, name) for name, count in cap_formats.items() if name in FORMATS and count]
+    if known:
+        return {'format': max(known)[1]}
+    return {'format': 'unknown' if cap_formats.get('unknown') else 'none'}
 
 
 def _record_piezo_floor(side: Side, merged_df, window_start, window_end, window_seconds: float, trigger: str):
@@ -165,6 +177,7 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
     run_id = None
     # Off, the baseline and the legacy file stay exactly what they were.
     presence_v2 = biometrics_v2_enabled()
+    cap_formats = Counter() if presence_v2 else None
     try:
         data = load_raw_files(
             folder_path,
@@ -172,7 +185,8 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
             end_time,
             side,
             sensor_count=1,
-            raw_data_types=['capSense', 'piezo-dual']
+            raw_data_types=['capSense', 'piezo-dual'],
+            cap_formats=cap_formats,
         )
 
         # with_p2p=True adds the within-second p98-p2 range column. That is the
@@ -272,6 +286,7 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
         run_id = calibration.record_run(
             side, 'cap', calibration.STATUS_SUCCESS, trigger,
             started_at=started_at, duration_ms=_elapsed_ms(), quality=quality,
+            payload=format_payload(cap_formats),
         )
         calibration.save_profile(
             side, 'cap', cap_baseline, quality=quality,
@@ -292,6 +307,7 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
         calibration.record_run(
             side, 'cap', calibration.STATUS_INSUFFICIENT_DATA, trigger,
             started_at=started_at, duration_ms=_elapsed_ms(), message=str(error),
+            payload=format_payload(cap_formats),
         )
         raise
     except Exception as error:
@@ -305,6 +321,7 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
             calibration.record_run(
                 side, 'cap', calibration.STATUS_FAILED, trigger,
                 started_at=started_at, duration_ms=_elapsed_ms(), message=str(error),
+                payload=format_payload(cap_formats),
             )
         raise
 

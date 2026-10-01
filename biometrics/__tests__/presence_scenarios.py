@@ -17,6 +17,8 @@ from presence.sensors import read_cap
 T0 = 1790568000
 SIDES = ('left', 'right')
 BASELINE_MEANS = {'left': (11.36, 9.99, 14.88), 'right': (12.48, 9.87, 14.46)}
+# Counts shaped like the one published capSense sample (out, cen, in).
+LEGACY_COUNTS = {'left': (387, 381, 505), 'right': (1076, 1075, 1074)}
 REFERENCE_VALUE = 1.2
 SPIKE_PERIOD = 97
 SPIKE_SECONDS = 5
@@ -118,6 +120,39 @@ def raw_records(night: Night, t0: int = T0, start: int = 0, end: Optional[int] =
                 'right': {'values': cap_values(night, 'right', second, cap_index), 'status': 'good'},
             }
             cap_index += 1
+
+
+def legacy_cap_counts(night: Night, side: str, second: int, counts_per_unit: float) -> Dict[str, int]:
+    """One side's out, cen and in counts; counts_per_unit converts the night's capSense2 levels."""
+    rise = cap_level(night, side, second) * counts_per_unit / 3
+    return {name: int(round(mean + rise)) for name, mean in zip(('out', 'cen', 'in'), LEGACY_COUNTS[side])}
+
+
+def legacy_raw_records(night: Night, counts_per_unit: float, t0: int = T0, start: int = 0,
+                       end: Optional[int] = None, piezo_every: int = 1) -> Iterator[Dict]:
+    """Records in the older layout: two piezo sensors a side and two capSense records a second."""
+    end = night.seconds if end is None else end
+    for second in range(start, end):
+        if second % piezo_every == 0:
+            left = piezo_samples(piezo_level(night, 'left', second))
+            right = piezo_samples(piezo_level(night, 'right', second))
+            yield {
+                'type': 'piezo-dual', 'ts': t0 + second, 'freq': 500, 'adc': 1, 'gain': 400,
+                'left1': left, 'left2': left, 'right1': right, 'right2': right, 'seq': 3 * second,
+            }
+        for offset in (1, 2):
+            record = {'type': 'capSense', 'ts': t0 + second, 'seq': 3 * second + offset}
+            for side in SIDES:
+                record[side] = dict(legacy_cap_counts(night, side, second, counts_per_unit), status='good')
+            yield record
+
+
+def legacy_cap_payload(side: str, **extra) -> Dict:
+    """A calibrated capacitance baseline in counts, as the calibrator stores it."""
+    payload = {f'{side}_{name}': {'mean': float(mean), 'std': 1}
+               for name, mean in zip(('out', 'cen', 'in'), LEGACY_COUNTS[side])}
+    payload.update(extra)
+    return payload
 
 
 def write_raw_file(path: str, records) -> None:

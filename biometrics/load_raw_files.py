@@ -14,7 +14,7 @@ from data_types import *
 from get_logger import get_logger
 from presence.detector import piezo_range
 from presence.piezo import piezo_layout
-from presence.sensors import read_cap, unknown_cap_type
+from presence.sensors import FORMATS, read_cap, unknown_cap_type
 
 logger = get_logger()
 
@@ -237,6 +237,14 @@ def _capture_presence(record: dict):
     return None if kind is None else ('unknown', kind)
 
 
+def _count_cap_format(counts, record) -> None:
+    kind = record.get('type') if isinstance(record, dict) else None
+    if kind in FORMATS:
+        counts[kind] += 1
+    elif unknown_cap_type(record) is not None:
+        counts['unknown'] += 1
+
+
 def _record_range(raw):
     if raw is None:
         return None
@@ -258,7 +266,8 @@ def _feed_presence(collector, capture, ts: int):
         collector.note_piezo_layout(layout)
 
 
-def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Side, sensor_count: int, presence_collector=None):
+def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Side, sensor_count: int, presence_collector=None,
+                      cap_formats=None):
     # logger.debug(f'Loading cbor data from: {file_path}')
     load_raw_types = list(data.keys())
     checked_timespan = False
@@ -273,6 +282,8 @@ def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Si
                 if data_bytes is None:
                     continue  # empty placeholder record
                 decoded_data = cbor2.loads(data_bytes)
+                if cap_formats is not None:
+                    _count_cap_format(cap_formats, decoded_data)
                 presence_capture = _capture_presence(decoded_data) if presence_collector is not None else None
                 if presence_capture is not None and presence_capture[0] == 'unknown':
                     # An unknown type never passes the type filter below.
@@ -355,7 +366,7 @@ def _debug_data(data: dict):
 
 
 def load_raw_files(folder_path: str, start_time: datetime, end_time: datetime, side: Side, sensor_count=2, raw_data_types: List[RawDataTypes] = None,
-                   presence_collector=None):
+                   presence_collector=None, cap_formats=None):
     """Decode the RAW records in [start_time, end_time] for one side.
 
     presence_collector, when given, also receives both sides' capacitance
@@ -363,6 +374,8 @@ def load_raw_files(folder_path: str, start_time: datetime, end_time: datetime, s
     (see presence.replay.FrameCollector).
     It sees only the types listed in raw_data_types, so a caller that feeds
     one lists both 'capSense' and 'piezo-dual'.
+    cap_formats, when given, is a Counter that receives one count per decoded
+    capacitance record by format name, or 'unknown', before any conversion.
     """
     try:
         data = {}
@@ -381,7 +394,7 @@ def load_raw_files(folder_path: str, start_time: datetime, end_time: datetime, s
 
         for file_path in file_paths:
             if os.path.isfile(file_path):
-                _decode_cbor_file(file_path, data, start_time, end_time, side, sensor_count, presence_collector)
+                _decode_cbor_file(file_path, data, start_time, end_time, side, sensor_count, presence_collector, cap_formats)
             else:
                 logger.warning(f'File path deleted before parsed! {file_path}')
 

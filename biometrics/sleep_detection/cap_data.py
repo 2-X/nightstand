@@ -76,7 +76,7 @@ CAP_SENTINEL = -1.0
 
 
 def summed_delta_noise(window_df: pd.DataFrame, side: Side) -> float:
-    """Std of the summed out/cen/in reading over an empty window, sentinel rows left out.
+    """Std of the summed out/cen/in reading over an empty window, rows with a missing or negative value left out.
 
     The capacitance presence detector thresholds that sum, so this is the
     noise it sees on an empty bed. 0.0 when the window is too thin to say.
@@ -84,7 +84,8 @@ def summed_delta_noise(window_df: pd.DataFrame, side: Side) -> float:
     channel, so rows flagged {side}_no_reading by load_cap_df are left out too.
     """
     values = window_df[[f'{side}_out', f'{side}_cen', f'{side}_in']]
-    keep = ((values != CAP_SENTINEL) & values.notna()).all(axis=1)
+    # capSense2's -1.0 and any negative placeholder count are not readings.
+    keep = ((values >= 0) & values.notna()).all(axis=1)
     if f'{side}_no_reading' in window_df:
         keep &= ~window_df[f'{side}_no_reading'].astype(bool)
     values = values[keep]
