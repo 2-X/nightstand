@@ -61,6 +61,21 @@ class Capsense2Test(unittest.TestCase):
                 self.assertEqual(reading.right, (12.0, 12.0, 12.0))
 
 
+class HugeIntegerTest(unittest.TestCase):
+    def test_an_integer_too_large_for_a_float_makes_its_side_unreadable(self):
+        huge = 10 ** 400
+        record = capsense2([huge] + [12.0] * 7, [12.0] * 8)
+        self.assertIsNone(read_cap(record).left)
+        self.assertEqual(read_cap(record).right, (12.0, 12.0, 12.0))
+        record = capsense(counts(huge, 381, 505), counts(1, 2, 3))
+        self.assertIsNone(read_cap(record).left)
+        self.assertEqual(read_cap(record).right, (1.0, 2.0, 3.0))
+
+    def test_a_large_integer_that_fits_a_float_is_read(self):
+        self.assertEqual(read_cap(capsense2([10 ** 300] * 6)).left, (1e300, 1e300, 1e300))
+        self.assertEqual(read_cap(capsense(counts(10 ** 300, 1, 2))).left, (1e300, 1.0, 2.0))
+
+
 class CapsenseTest(unittest.TestCase):
     def test_out_cen_and_in_are_the_channels(self):
         reading = read_cap(capsense(counts(387, 381, 505), counts(1076, 1075, 1074)))
@@ -95,8 +110,13 @@ class OtherRecordsTest(unittest.TestCase):
 
     def test_capacitance_in_a_format_not_read_here_is_named(self):
         self.assertEqual(unknown_cap_type({'type': 'capSense3', 'left': {'values': [1.0] * 18}}), 'capSense3')
-        self.assertEqual(unknown_cap_type({'type': 'CapArray'}), 'CapArray')
+        self.assertEqual(unknown_cap_type({'type': 'CAPSENSE3'}), 'CAPSENSE3')
         self.assertIsNone(read_cap({'type': 'capSense3'}))
+
+    def test_types_that_only_contain_cap_are_not_capacitance(self):
+        for kind in ('escape', 'capture', 'capital', 'landscape', 'bedTemp2', 'log'):
+            with self.subTest(kind=kind):
+                self.assertIsNone(unknown_cap_type({'type': kind}))
 
     def test_known_formats_are_not_unknown(self):
         self.assertIsNone(unknown_cap_type(capsense2([12.0] * 8)))

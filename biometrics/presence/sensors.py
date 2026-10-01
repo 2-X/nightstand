@@ -42,6 +42,8 @@ SENTINEL = -1.0
 # reference near zero, so the first three pairs are the channels.
 CHANNEL_PAIRS = ((0, 1), (2, 3), (4, 5))
 LEGACY_CHANNELS = ('out', 'cen', 'in')
+# A type starting with one of these is capacitance, read here or not.
+CAP_TYPE_PREFIXES = ('capsense',)
 
 
 @dataclass(frozen=True)
@@ -55,8 +57,9 @@ class CapReading:
 def read_cap(record) -> Optional[CapReading]:
     """Both sides' channels from one capacitance record; None for any other record.
 
-    A side whose structure is not the format's is None. Otherwise each
-    channel without a reading is None.
+    A side whose structure is not the format's, or that holds a number too
+    large for a float, is None. Otherwise each channel without a reading is
+    None.
     """
     if not isinstance(record, dict):
         return None
@@ -64,19 +67,28 @@ def read_cap(record) -> Optional[CapReading]:
     if cap_format is None:
         return None
     reader = _capsense2_channels if cap_format is CAPSENSE2 else _capsense_channels
-    return CapReading(record.get('ts'), cap_format, reader(record.get('left')), reader(record.get('right')))
+    return CapReading(record.get('ts'), cap_format, _read_side(reader, record.get('left')),
+                      _read_side(reader, record.get('right')))
 
 
 def unknown_cap_type(record) -> Optional[str]:
     """The type of a record that looks like capacitance but is no format read here."""
     kind = record.get('type') if isinstance(record, dict) else None
-    if isinstance(kind, str) and 'cap' in kind.lower() and kind not in FORMATS:
+    if isinstance(kind, str) and kind.lower().startswith(CAP_TYPE_PREFIXES) and kind not in FORMATS:
         return kind
     return None
 
 
 def format_named(name) -> Optional[CapFormat]:
     return FORMATS.get(name) if isinstance(name, str) else None
+
+
+def _read_side(reader, side) -> Optional[Channels]:
+    try:
+        return reader(side)
+    except OverflowError:
+        # An integer too large for a float, such as a CBOR bignum.
+        return None
 
 
 def _is_number(value) -> bool:
