@@ -215,12 +215,12 @@ describe('POST /settings schedule pause', () => {
 });
 
 describe('POST /settings features.rhythms', () => {
-  it('starts off and accepts the flag, while other unknown feature keys still fail', async () => {
+  it('starts off and leaves turning it on or off to the Rhythms routes', async () => {
     const before = await fetch(`${baseUrl}/settings`).then(res => res.json());
     assert.equal(before.features.rhythms, false);
     const res = await postSettings({ features: { rhythms: true } });
-    assert.equal(res.status, 200, `expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
-    assert.equal(res.body.features.rhythms, true);
+    assert.equal(res.status, 409, `expected 409, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert.equal((await postSettings({ features: { rhythms: false } })).status, 200);
     assert.equal((await postSettings({ features: { futureFeature: true } })).status, 400);
     assert.equal((await postSettings({ features: { rhythms: 'yes' } })).status, 400);
   });

@@ -47,3 +47,10 @@ export function pauseRejection(
   }
   return null;
 }
+
+// Rhythms is turned on and off through its own routes, which hand a sleep in
+// progress over. A plain settings write would skip that.
+export function changesRhythmsFlag(current: Settings, update: { features?: { rhythms?: boolean } }): boolean {
+  const requested = update.features?.rhythms;
+  return requested !== undefined && requested !== current.features.rhythms;
+}

@@ -10,6 +10,10 @@ import { RhythmsResponse, RhythmsSleepsQuerySchema, RhythmsUpdateSchema } from '
 import { activation } from '../../jobs/rhythms/activation.js';
 import { applyAlarmsEnabled, findOverlaps, resolveLegacySleeps, resolveSleeps } from '../../jobs/rhythms/resolve.js';
 import { pruneChanges, sideIssues } from '../../jobs/rhythms/validate.js';
+import { z } from 'zod';
+import { enableRhythms } from '../../jobs/rhythms/enable.js';
+import { disableRhythms } from '../../jobs/rhythms/handoff.js';
+import { drivingSide } from '../../jobs/scheduleQueries.js';
 
 const router = express.Router();
 
@@ -97,11 +101,49 @@ router.get('/rhythms/sleeps', async (req: Request, res: Response) => {
   }
   const { side } = parsed.data;
   const { result } = await currentRhythms();
-  const window = { side, timeZone: settingsDB.data.timeZone, from, to };
+  // Under Rhythms an away side follows the present side, whose alarms ring only there.
+  const driver = result.active ? drivingSide(settingsDB.data, side) : side;
+  if (!driver) {
+    res.json([]);
+    return;
+  }
+  const window = { side: driver, timeZone: settingsDB.data.timeZone, from, to };
   const sleeps = result.active
     ? resolveSleeps({ db: result.db, ...window })
     : resolveLegacySleeps({ schedules: schedulesDB.data, ...window });
-  res.json(applyAlarmsEnabled(sleeps, settingsDB.data[side].alarmsEnabled));
+  res.json(applyAlarmsEnabled(sleeps, driver === side && settingsDB.data[side].alarmsEnabled));
+});
+
+// Loaded on use so importing this router does not start the scheduler.
+async function rebuildSchedule(): Promise<void> {
+  const { setupJobs } = await import('../../jobs/jobScheduler.js');
+  await setupJobs();
+}
+
+const EnableBodySchema = z.object({}).strict();
+const DisableBodySchema = z.object({ powerOffNow: z.boolean().optional() }).strict();
+
+router.post('/rhythms/enable', async (req, res) => {
+  const parsed = EnableBodySchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid request data', details: parsed.error.errors });
+    return;
+  }
+  const result = await enableRhythms(rebuildSchedule);
+  if ('error' in result) {
+    res.status(409).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+router.post('/rhythms/disable', async (req, res) => {
+  const parsed = DisableBodySchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid request data', details: parsed.error.errors });
+    return;
+  }
+  res.json(await disableRhythms({ powerOffNow: parsed.data.powerOffNow ?? false }, rebuildSchedule));
 });
 
 export default router;

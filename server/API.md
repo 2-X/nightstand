@@ -158,7 +158,7 @@ filter is not authentication or protection from non-browser clients.
 
 ### POST
 
-- Updates system settings; send only the fields you want to change. Returns the full updated settings object. Returns `409` if the update would disable `levelTemps` while `temperatureFormat` is still `"level"`. Returns `400` if a pause would end in the past or more than 14 days ahead, or is turned on while that side is in away mode.
+- Updates system settings; send only the fields you want to change. Returns the full updated settings object. Returns `409` if the update would disable `levelTemps` while `temperatureFormat` is still `"level"`, or if it would change `features.rhythms` (use `/api/rhythms/enable` or `/api/rhythms/disable`; sending the value it already has is fine). Returns `400` if a pause would end in the past or more than 14 days ahead, or is turned on while that side is in away mode.
 
 #### Request Body
 
@@ -287,7 +287,7 @@ filter is not authentication or protection from non-browser clients.
 
 ## `/api/rhythms`
 
-Rhythms are named sleep plans per side, a weekly plan that picks a rhythm for each weekday, and date changes that pick a different rhythm (or no sleep) for one date. They are stored in `rhythmsDB.json`, apart from the weekly schedule, and are off unless `features.rhythms` is on. These routes never create that file and never change `schedulesDB.json`. Nothing is scheduled from Rhythms yet.
+Rhythms are named sleep plans per side, a weekly plan that picks a rhythm for each weekday, and date changes that pick a different rhythm (or no sleep) for one date. They are stored in `rhythmsDB.json`, apart from the weekly schedule, and are off unless `features.rhythms` is on. Only `POST /api/rhythms/enable` creates that file, and none of these routes changes `schedulesDB.json`. While Rhythms are active, the Pod follows them instead of the weekly schedule.
 
 ### GET `/api/rhythms`
 
@@ -363,7 +363,7 @@ Rhythms are named sleep plans per side, a weekly plan that picks a rhythm for ea
 
 ### GET `/api/rhythms/sleeps`
 
-- Returns the sleeps of one side that overlap a window: from Rhythms when they are active, otherwise from the weekly schedule. Alarms are left out when the side's alarms are turned off. Away mode is not applied.
+- Returns the sleeps of one side that overlap a window: from Rhythms when they are active, otherwise from the weekly schedule. Alarms are left out when the side's alarms are turned off. While Rhythms are active, a side in away mode gets the present side's sleeps, with `side` naming the present side and no alarms, because alarms ring only on the present side; if both sides are away the answer is `[]`. The weekly schedule is returned as stored.
 - Query: `side` (`left` or `right`), `from` and `to` (ISO 8601 date times with an offset, `to` after `from`, at most 16 days apart). Any other query key is refused with `400`.
 - A sleep is named by the date it starts, in the Pod's time zone. `rhythmId` is `null` for sleeps from the weekly schedule. Events are sorted by time.
 
@@ -390,6 +390,30 @@ Rhythms are named sleep plans per side, a weekly plan that picks a rhythm for ea
   }
 ]
 ```
+
+### POST `/api/rhythms/enable`
+
+- Turns Rhythms on and rebuilds the Pod's jobs. The first time, it converts the weekly schedule into rhythms. Later times it keeps the saved rhythms and accepts the weekly schedule as it is now.
+- The body must be empty or `{}`; any key is refused with `400`.
+- `200 { "converted": true }`: `converted` is `true` when this call created the rhythms from the weekly schedule.
+- `409 { "error": "..." }`: the saved rhythms are from a newer version or cannot be read, or a night in the weekly schedule cannot become a rhythm. Nothing changes.
+
+### POST `/api/rhythms/disable`
+
+- Turns Rhythms off, hands a sleep in progress back to the weekly schedule and rebuilds the Pod's jobs. The weekly schedule is restored as it was, with nothing copied back from Rhythms.
+- Body: `{ "powerOffNow": true }` powers off a side that is running a Rhythms sleep instead of leaving it on. The key is optional and defaults to `false`; anything else is refused with `400`.
+- Returns `200` with one entry per side, even when a side's hardware write failed:
+
+```json
+{
+  "sides": [
+    { "side": "left", "action": "kept-on-until", "until": "2026-10-06T14:00:00.000Z", "alarmOverrideSet": false },
+    { "side": "right", "action": "none", "alarmOverrideSet": false, "deviceUpdateFailed": true }
+  ]
+}
+```
+
+- `action` is `none` (nothing was running), `legacy-takes-over` (the weekly schedule runs the rest of the night, until `until`), `kept-on-until` (the side stays on until `until`, with its alarms) or `powered-off`. `alarmOverrideSet` is `true` when the side's weekly alarms are switched off until `until` because that night's alarm already rang. `deviceUpdateFailed` is present and `true` when the Pod could not be told to change that side; the settings change was still made.
 
 ---
 

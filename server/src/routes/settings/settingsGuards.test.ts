@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { pauseRejection, wouldOrphanLevelFormat } from './settingsGuards.js';
+import { changesRhythmsFlag, pauseRejection, wouldOrphanLevelFormat } from './settingsGuards.js';
 import { Settings } from '../../db/settingsSchema.js';
 
 const levelSettings = { temperatureFormat: 'level' } as Settings;
@@ -95,5 +95,15 @@ describe('pauseRejection', () => {
   it('lets the partner pause while one side is away', () => {
     const update = { right: { scheduleOverrides: { pause: { active: true, expiresAt: '' } } } };
     assert.equal(pauseRejection(current(true), update, now), null);
+  });
+});
+
+describe('changesRhythmsFlag', () => {
+  it('flags only a body that would turn Rhythms on or off', () => {
+    const off = { features: { rhythms: false } } as Settings;
+    assert.equal(changesRhythmsFlag(off, { features: { rhythms: true } }), true);
+    assert.equal(changesRhythmsFlag(off, { features: { rhythms: false } }), false);
+    assert.equal(changesRhythmsFlag(off, { features: {} }), false);
+    assert.equal(changesRhythmsFlag(off, {}), false);
   });
 });

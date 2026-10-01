@@ -121,6 +121,21 @@ describe('with Rhythms turned on', () => {
     assert.equal(res.body[0].events.some((event: { kind: string }) => event.kind === 'alarm'), false);
   });
 
+  it('GET /rhythms/sleeps answers an away side with the sleep that drives it', async () => {
+    await updateSettings(draft => { draft.right.awayMode = true; });
+    const right = await get(sleepsUrl('2026-10-05T00:00:00-07:00', '2026-10-07T00:00:00-07:00', 'right'));
+    await updateSettings(draft => {
+      draft.right.awayMode = false;
+      draft.left.awayMode = true;
+    });
+    const left = await get(MONDAY);
+    await updateSettings(draft => { draft.left.awayMode = false; });
+    assert.equal(right.body[0].side, 'left');
+    assert.equal(right.body[0].rhythmId, 'monday');
+    assert.equal(right.body[0].events.some((event: { kind: string }) => event.kind === 'alarm'), false);
+    assert.deepEqual(left.body, []);
+  });
+
   it('GET /rhythms/sleeps accepts a 16 day window and nothing longer or malformed', async () => {
     assert.equal((await get(sleepsUrl('2026-10-01T00:00:00Z', '2026-10-17T00:00:00Z'))).status, 200);
     for (const url of [
@@ -330,7 +345,8 @@ describe('with an unreadable rhythms file', () => {
 describe('the weekly schedule file', () => {
   it('is byte for byte what the loader wrote, after every Rhythms call above', () => {
     assert.deepEqual(readFileSync(schedulesFile), schedulesBytes);
-    assert.deepEqual(readdirSync(lowdb).sort(), ['rhythmsDB.json', 'schedulesDB.json', 'settingsDB.json']);
+    // servicesDB.json appears when the router imports the hardware modules, not from a Rhythms call.
+    assert.deepEqual(readdirSync(lowdb).sort(), ['rhythmsDB.json', 'schedulesDB.json', 'servicesDB.json', 'settingsDB.json']);
   });
 });
 
