@@ -11,12 +11,12 @@ is a hard fork; for the history of the projects it descends from, see
 - A new switch in Settings > Features, "New sleep tracking (beta)", is off by
   default and still being tested. When it is on, the Pod 5's capacitance
   sensors are used to estimate which side of the bed has someone in it, both
-  live and in the nightly analysis, and heart rate and breathing readings are
-  kept through short trips out of bed. It is an estimate from bed sensors and
-  may be wrong. With the switch off, presence, sleep records and everything
-  stored behave exactly as before. On Pod 3 and Pod 4 the switch has no effect
-  yet: the new tracking reads the Pod 5's capacitance format and has only been
-  checked on Pod 5 data.
+  live and in the nightly analysis, and heart rate and breathing tracking
+  carries on through short trips out of bed instead of starting over. It is an
+  estimate from bed sensors and may be wrong. With the switch off, presence,
+  sleep records and everything stored behave exactly as before. On Pod 3 and
+  Pod 4 the switch has no effect yet: the new tracking reads the Pod 5's
+  capacitance format and has only been checked on Pod 5 data.
 
   On one night checked against both sleepers' own notes, the old live
   presence split the two sleepers' nights into 20 and 31 pieces, and the old

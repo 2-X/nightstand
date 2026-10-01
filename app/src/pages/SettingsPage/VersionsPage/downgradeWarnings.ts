@@ -14,7 +14,7 @@ export function downgradeWarnings(release: Release, runningVersion: string | und
     warnings.push(`Version ${release.version} keeps sensor recordings for at most 14 days and does not check free space.`);
   }
   if (semver.gte(runningVersion, '3.5.0') && semver.lt(release.version, '3.5.0')) {
-    warnings.push('Rhythms and pause are not honoured by this target. Its regular schedules may run even if a newer version paused them.');
+    warnings.push('Rhythms and pause are not honored by this target. Its regular schedules may run even if a newer version paused them.');
   }
   if (release.kind === 'bundle') {
     const features = [
