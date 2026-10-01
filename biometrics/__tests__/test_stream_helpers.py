@@ -136,6 +136,7 @@ class CapPresenceTestCase(StreamHelpersTestCase):
         super().setUp()
         self.latest = stream.LatestCap()
         stream._unknown_cap_logged.clear()
+        stream._experimental_logged.clear()
         overflow = unittest.mock.patch.object(stream, '_unknown_cap_overflow_logged', False)
         overflow.start()
         self.addCleanup(overflow.stop)
@@ -254,10 +255,6 @@ class TestPresenceMode(CapPresenceTestCase):
         self.latest.update(time.time() - 120, [12.0] * 8, [12.0] * 8)
         self.assertIsNone(self._inputs())
 
-    def test_off_while_only_an_unchecked_format_arrives(self):
-        self.latest.update(time.time(), (500.0, 500.0, 500.0), (500.0, 500.0, 500.0), CAPSENSE)
-        self.assertIsNone(self._inputs())
-
     def test_off_without_a_capacitance_baseline(self):
         self.latest.update(time.time(), [12.0] * 8, [12.0] * 8)
         profiles = cap_profiles()
@@ -269,6 +266,43 @@ class TestPresenceMode(CapPresenceTestCase):
         params, baselines = self._inputs()
         self.assertEqual(params.left.enter_delta, 4.0)
         self.assertEqual(baselines['left'].mean, (11.0, 11.0, 11.0))
+
+    def _legacy_inputs(self, profiles, cadence_ok=True):
+        self.latest.update(time.time(), (500.0, 500.0, 500.0), (500.0, 500.0, 500.0), CAPSENSE)
+        processor = unittest.mock.Mock()
+        processor.cadence.ok.return_value = cadence_ok
+        with unittest.mock.patch.object(stream, 'biometrics_v2_enabled', return_value=True), \
+                unittest.mock.patch.object(stream.calibration, 'load_presence_profiles', return_value=profiles):
+            return stream._presence_v2_inputs(processor)
+
+    def test_an_unchecked_format_waits_for_learned_levels(self):
+        with self.assertLogs(stream.logger, level='INFO') as logs:
+            self.assertIsNone(self._legacy_inputs(cap_profiles()))
+            self.assertIsNone(self._legacy_inputs(cap_profiles()))
+        self.assertEqual(len(logs.output), 1)
+        self.assertIn('learned', logs.output[0])
+
+    def test_an_unchecked_format_waits_for_records_once_a_second(self):
+        profiles = cap_profiles()
+        for side in ('left', 'right'):
+            profiles[side]['cap_occupied'] = {'level': 900.0}
+        self.assertIsNone(self._legacy_inputs(profiles, cadence_ok=None))
+        self.assertIsNone(self._legacy_inputs(profiles, cadence_ok=False))
+
+    def test_an_unchecked_format_runs_with_its_units_once_ready(self):
+        profiles = cap_profiles()
+        for side in ('left', 'right'):
+            profiles[side]['cap_occupied'] = {'level': 900.0}
+        params, baselines, cap_format = self._legacy_inputs(profiles)
+        self.assertIs(cap_format, CAPSENSE)
+        self.assertAlmostEqual(params.left.enter_delta, 360.0)
+        self.assertEqual(params.left.offset_limit, 225.0)
+
+    def test_the_refresh_passes_the_processor(self):
+        processor = unittest.mock.Mock()
+        with unittest.mock.patch.object(stream, '_presence_v2_inputs', return_value=None) as inputs:
+            stream._refresh_presence_mode(processor)
+        inputs.assert_called_once_with(processor)
 
     def test_a_failed_read_keeps_the_current_mode(self):
         processor = unittest.mock.Mock()

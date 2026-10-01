@@ -16,13 +16,14 @@ Instantiate `StreamProcessor` with an initial piezo record and call `process_pie
 with new sensor data to continuously track and analyze biometric trends.
 """
 import sys
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 from get_logger import get_logger
 from biometric_processor import BiometricProcessor
 from buffer import Buffer
 from data_types import *
 from presence.cap import CAP_HOLD_SECONDS, CapBaseline, cap_delta
 from presence.detector import FRAME_GAP_SECONDS, DetectorParams, PresenceDetector, piezo_range
+from presence.guard import UnexplainedUseGuard
 from presence.piezo import CadenceCheck, keep_layout, piezo_layout
 from presence.sensors import CAPSENSE2, CapFormat
 import numpy as np
@@ -36,7 +37,22 @@ SIDE_SWAP_SECONDS = 120
 # How far ahead of the clock a reading may be stamped and still count as current.
 CAP_FUTURE_TOLERANCE_SECONDS = 5
 
-PresenceInputs = Tuple[DetectorParams, Dict[str, CapBaseline]]
+# (params, baselines) for a checked format, (params, baselines, format) for one that is not.
+PresenceInputs = Union[
+    Tuple[DetectorParams, Dict[str, CapBaseline]],
+    Tuple[DetectorParams, Dict[str, CapBaseline], CapFormat],
+]
+
+
+def _inputs_format(inputs) -> CapFormat:
+    return inputs[2] if len(inputs) > 2 else CAPSENSE2
+
+
+class _QuietProcessor(BiometricProcessor):
+    """Vitals for a side whose presence the server keeps hearing from the piezo detector."""
+
+    def _update_presence_api(self, is_present: bool):
+        pass
 
 
 class LatestCap:
@@ -95,34 +111,65 @@ class StreamProcessor:
             self.right_processor.hrv_window_seconds,
         )
         self.iteration_count = 0
+        self.debug = debug
         self.cap_source = cap_source
         # Set through use_presence_v2. None leaves presence to the piezo detector.
         self.presence: Optional[PresenceDetector] = None
         self._presence_inputs: Optional[PresenceInputs] = None
         self._presence_epoch: Optional[int] = None
+        self._guard: Optional[UnexplainedUseGuard] = None
+        # Inputs whose levels did not fit this bed; tried again once calibration changes them.
+        self._declined_inputs: Optional[PresenceInputs] = None
+        # On an unchecked format, the piezo detector's processors, which go on
+        # telling the server who is in bed while capacitance gates the vitals.
+        self._piezo_presence: Optional[Tuple[BiometricProcessor, BiometricProcessor]] = None
 
     def use_presence_v2(self, inputs: Optional[PresenceInputs]) -> None:
         """Hand presence to the capacitance detector (inputs) or back to piezo (None).
 
         A change of detector ends any current session, so the new one starts
         from an empty bed. New calibration for a running detector waits until
-        nobody is in the bed.
+        nobody is in the bed. Inputs handed back for not fitting the bed are
+        refused until calibration changes them. On an unchecked format the
+        server keeps hearing the piezo detector, unbroken, and capacitance
+        decides only when vitals are taken.
         """
         if inputs is None:
             if self.presence is not None:
                 logger.info('Presence switching to the piezo detector')
-                self._end_sessions()
+                if self._piezo_presence is not None:
+                    self.left_processor, self.right_processor = self._piezo_presence
+                    self._piezo_presence = None
+                    self.left_processor.reset()
+                    self.right_processor.reset()
+                else:
+                    self._end_sessions()
                 self.presence = None
                 self._presence_inputs = None
+                self._guard = None
             return
+        if inputs == self._declined_inputs:
+            return
+        if self.presence is not None and _inputs_format(inputs) != _inputs_format(self._presence_inputs):
+            self.use_presence_v2(None)
+        validated = _inputs_format(inputs).validated
         if self.presence is None:
             logger.info('Presence switching to the capacitance detector')
-            self._end_sessions()
+            if validated:
+                self._end_sessions()
+            else:
+                self._piezo_presence = (self.left_processor, self.right_processor)
+                self.left_processor = self._quiet_processor('left')
+                self.right_processor = self._quiet_processor('right')
         elif inputs == self._presence_inputs or any(self.presence.state().values()):
             return
         self.presence = PresenceDetector(inputs[0])
         self._presence_inputs = inputs
         self._presence_epoch = None
+        self._guard = None if validated else UnexplainedUseGuard(inputs[0])
+
+    def _quiet_processor(self, side: str) -> BiometricProcessor:
+        return _QuietProcessor(side=side, sensor_count=self.sensor_count, insertion_frequency=60, debug=self.debug)
 
     def _end_sessions(self) -> None:
         self.left_processor.end_presence_session()
@@ -148,6 +195,13 @@ class StreamProcessor:
             'right': piezo_range(piezo_record.get('right1')),
         }
         states = self.presence.step(epoch, cap, piezo)
+        if self._guard is not None and self._guard.step(states, piezo):
+            logger.warning('Capacitance placed nobody in the bed for 10 of the last 15 minutes while it was in use, '
+                           'presence is back on the vibration sensor until calibration changes')
+            declined = self._presence_inputs
+            self.use_presence_v2(None)
+            self._declined_inputs = declined
+            return
         left, right = self.left_processor, self.right_processor
         left_swap = states['left'] and not left.present and is_side_swap(left, right, epoch)
         right_swap = states['right'] and not right.present and is_side_swap(right, left, epoch)
@@ -170,8 +224,9 @@ class StreamProcessor:
         # head + foot piezo, improves coverage when a person isn't centred
         # over a single sensor and gives the coordinator more signal to
         # distinguish real occupancy from asymmetric transmission.
-        self.left_processor.detect_presence(left1_signal, left2_signal)
-        self.right_processor.detect_presence(right1_signal, right2_signal)
+        left, right = self._piezo_presence or (self.left_processor, self.right_processor)
+        left.detect_presence(left1_signal, left2_signal)
+        right.detect_presence(right1_signal, right2_signal)
 
     def can_calculate_breath_rate(self):
         return (
@@ -214,7 +269,7 @@ class StreamProcessor:
             if log:
                 logger.debug(f'Process check - Processing piezo record @ {time.isoformat()}')
 
-            if self.presence is None:
+            if self.presence is None or self._piezo_presence is not None:
                 self.check_presence(left1_signal, right1_signal, left2_signal, right2_signal)
 
             # Process left side

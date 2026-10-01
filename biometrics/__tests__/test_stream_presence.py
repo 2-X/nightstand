@@ -1,10 +1,12 @@
 """The live stream with the capacitance detector in charge: presence per
 side follows each person, vitals are written only while that side is
-occupied, and vitals state survives a short trip out of bed."""
+occupied, and vitals state survives a short trip out of bed. On a format
+not yet checked, the server keeps hearing the piezo detector."""
 import logging
 import os
 import sys
 import types
+from types import SimpleNamespace
 import unittest
 import unittest.mock
 
@@ -42,11 +44,13 @@ for _name in LOGGER_NAMES:
     get_logger(_name)
 
 import biometric_processor
+import stream_processor as stream_processor_module
 from biometric_processor import BiometricProcessor, _PresenceCoordinator
 from load_raw_files import load_piezo_row
 from presence.cap import CapBaseline
 from presence.detector import DetectorParams, SideParams
-from presence.sensors import read_cap
+from presence.params import baselines_from_calibration, params_from_calibration
+from presence.sensors import CAPSENSE, read_cap
 from stream_processor import LatestCap, StreamProcessor, is_side_swap
 import presence_scenarios as scenarios
 from presence_scenarios import Night
@@ -69,10 +73,16 @@ def fake_vitals(self, signal, epoch, update_breathing=False, update_hrv=False):
             'hrv': self.hrv, 'breathing_rate': self.breathing_rate}
 
 
-def stream(night: Night, inputs=(PARAMS, BASELINES), switch_off_at=None, records=None):
-    """Feed a night through StreamProcessor as the stream does; returns (transitions, inserts)."""
+def run_live(records, inputs=(PARAMS, BASELINES), switch_on_at=None, switch_off_at=None):
+    """Feed records through StreamProcessor as the stream does.
+
+    Returns every post to the server (second, side, present), every vitals
+    insert (side, second, hrv), each second's presence as the vitals see it
+    (second, side, present), and the processor. inputs reach the processor
+    with the first piezo record, or at second switch_on_at.
+    """
     _PresenceCoordinator._latest = {'left': 0.0, 'right': 0.0}
-    posts, inserts = [], []
+    posts, inserts, held = [], [], []
     now = [T0]
 
     def capture_post(processor, present):
@@ -84,7 +94,7 @@ def stream(night: Night, inputs=(PARAMS, BASELINES), switch_off_at=None, records
             unittest.mock.patch.object(biometric_processor, 'insert_vitals',
                                        side_effect=lambda row: inserts.append((row['side'], row['timestamp'] - T0, row['hrv']))):
         processor = None
-        for record in records if records is not None else scenarios.raw_records(night):
+        for record in records:
             reading = read_cap(record)
             if reading is not None:
                 if reading.left is not None and reading.right is not None:
@@ -92,14 +102,26 @@ def stream(night: Night, inputs=(PARAMS, BASELINES), switch_off_at=None, records
                 continue
             load_piezo_row(record, 'right')
             now[0] = record['ts']
+            second = record['ts'] - T0
             if processor is None:
                 processor = StreamProcessor(record, cap_source=latest)
-                processor.use_presence_v2(inputs)
+                if switch_on_at is None:
+                    processor.use_presence_v2(inputs)
                 continue
-            if switch_off_at is not None and record['ts'] - T0 == switch_off_at:
+            if switch_on_at is not None and second == switch_on_at:
+                processor.use_presence_v2(inputs)
+            if switch_off_at is not None and second == switch_off_at:
                 processor.use_presence_v2(None)
             processor.process_piezo_record(record)
-    return transitions(posts), inserts
+            held.append((second, 'left', processor.left_processor.present))
+            held.append((second, 'right', processor.right_processor.present))
+    return SimpleNamespace(posts=posts, inserts=inserts, held=transitions(held), processor=processor)
+
+
+def stream(night: Night, inputs=(PARAMS, BASELINES), switch_off_at=None, records=None):
+    """Feed a night through StreamProcessor as the stream does; returns (transitions, inserts)."""
+    run = run_live(records if records is not None else scenarios.raw_records(night), inputs, switch_off_at=switch_off_at)
+    return transitions(run.posts), run.inserts
 
 
 def transitions(posts):
@@ -254,6 +276,101 @@ class OutOfOrderRecordTest(unittest.TestCase):
                    for record in scenarios.raw_records(night)]
         changes, _ = stream(night, records=records)
         self.assertEqual([change[1:] for change in changes], [('right', True), ('right', False)])
+
+
+LEGACY_PROFILES = {
+    side: {'cap': scenarios.legacy_cap_payload(side, delta_noise=2.0), 'cap_occupied': {'level': level},
+           'piezo_floors': [40_000.0]}
+    for side, level in (('left', 1000.0), ('right', 500.0))
+}
+LEGACY_INPUTS = (params_from_calibration(LEGACY_PROFILES, CAPSENSE), baselines_from_calibration(LEGACY_PROFILES), CAPSENSE)
+# Counts far too small for the learned levels: the bed is in use and capacitance places nobody in it.
+MISFIT = Night(seconds=1500, left=((0, 1500),), right=((0, 1500),))
+
+
+def legacy_records(night: Night, counts_per_unit: float = 50.0):
+    return list(scenarios.legacy_raw_records(night, counts_per_unit))
+
+
+class LegacyLiveTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        records = legacy_records(scenarios.STAGGERED)
+        cls.staggered = run_live(records, LEGACY_INPUTS)
+        cls.staggered_off = run_live(records, None)
+
+    def test_each_side_follows_its_own_person_on_capsense(self):
+        self.assertEqual([change[1:] for change in self.staggered.held],
+                         [('right', True), ('left', True), ('left', False), ('right', False)])
+        self.assertIsNotNone(self.staggered.processor.presence)
+
+    def test_vitals_follow_the_capacitance_sessions(self):
+        entered = {side: second for second, side, present in self.staggered.held if present}
+        left_at = {side: second for second, side, present in self.staggered.held if not present}
+        for side in ('left', 'right'):
+            seconds = inserted_seconds(self.staggered.inserts, side)
+            self.assertTrue(seconds, side)
+            self.assertTrue(all(entered[side] <= second < left_at[side] for second in seconds), side)
+
+    def test_the_server_hears_exactly_what_it_hears_with_the_switch_off(self):
+        # Presence auto-off reads only these posts.
+        self.assertTrue(any(present for _, _, present in self.staggered_off.posts))
+        self.assertEqual(self.staggered.posts, self.staggered_off.posts)
+
+    def test_turning_on_and_off_mid_night_leaves_the_server_on_piezo(self):
+        night = Night(seconds=4000, left=((300, 3500),), right=((600, 3800),))
+        records = legacy_records(night)
+        switched = run_live(records, LEGACY_INPUTS, switch_on_at=1000, switch_off_at=2500)
+        self.assertEqual(switched.posts, run_live(records, None).posts)
+        self.assertIsNone(switched.processor.presence)
+        self.assertIsNone(switched.processor._piezo_presence)
+
+    def test_capacitance_that_misses_the_bed_hands_back_to_piezo_and_stays_there(self):
+        with self.assertLogs(stream_processor_module.logger, level='WARNING') as logs:
+            run = run_live(legacy_records(MISFIT, 1.0), LEGACY_INPUTS)
+        processor = run.processor
+        self.assertIsNone(processor.presence)
+        self.assertIsNone(processor._piezo_presence)
+        self.assertTrue(any('back on the vibration sensor' in line for line in logs.output))
+        processor.use_presence_v2(LEGACY_INPUTS)
+        self.assertIsNone(processor.presence)
+        changed = dict(LEGACY_PROFILES, left=dict(LEGACY_PROFILES['left'], cap_occupied={'level': 900.0}))
+        processor.use_presence_v2((params_from_calibration(changed, CAPSENSE), LEGACY_INPUTS[1], CAPSENSE))
+        self.assertIsNotNone(processor.presence)
+
+    def test_the_hand_back_keeps_the_server_on_piezo(self):
+        records = legacy_records(MISFIT, 1.0)
+        with self.assertLogs(stream_processor_module.logger, level='WARNING'):
+            run = run_live(records, LEGACY_INPUTS)
+        self.assertEqual(run.posts, run_live(records, None).posts)
+
+    def test_new_calibration_keeps_the_piezo_detector_running(self):
+        processor = StreamProcessor(legacy_records(Night(seconds=1))[0], cap_source=LatestCap())
+        processor.use_presence_v2(LEGACY_INPUTS)
+        piezo, detector = processor._piezo_presence, processor.presence
+        changed = dict(LEGACY_PROFILES, right=dict(LEGACY_PROFILES['right'], cap_occupied={'level': 600.0}))
+        processor.use_presence_v2((params_from_calibration(changed, CAPSENSE), LEGACY_INPUTS[1], CAPSENSE))
+        self.assertIsNot(processor.presence, detector)
+        self.assertIs(processor._piezo_presence, piezo)
+        self.assertIsNotNone(processor._guard)
+
+    def test_capsense2_never_gets_a_guard(self):
+        processor = StreamProcessor(next(iter(scenarios.raw_records(Night(seconds=1)))), cap_source=LatestCap())
+        processor.use_presence_v2((PARAMS, BASELINES))
+        self.assertIsNotNone(processor.presence)
+        self.assertIsNone(processor._guard)
+        self.assertIsNone(processor._piezo_presence)
+
+    def test_a_change_of_format_starts_over(self):
+        processor = StreamProcessor(next(iter(scenarios.raw_records(Night(seconds=1)))), cap_source=LatestCap())
+        with unittest.mock.patch.object(BiometricProcessor, '_update_presence_api', lambda *args: None):
+            processor.use_presence_v2((PARAMS, BASELINES))
+            processor.use_presence_v2(LEGACY_INPUTS)
+            self.assertIsNotNone(processor._guard)
+            self.assertIsNotNone(processor._piezo_presence)
+            processor.use_presence_v2((PARAMS, BASELINES))
+        self.assertIsNone(processor._guard)
+        self.assertIsNone(processor._piezo_presence)
 
 
 class LatestCapFreshnessTest(unittest.TestCase):

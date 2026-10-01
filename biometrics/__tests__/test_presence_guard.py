@@ -44,6 +44,32 @@ class UnexplainedUseGuardTest(unittest.TestCase):
         self.run_steps(guard, UNEXPLAINED_WINDOW_SECONDS, {'left': True, 'right': True}, ALIVE)
         self.assertFalse(guard.step(EMPTY, ALIVE))
 
+    def test_a_right_side_in_bed_explains_the_use(self):
+        guard = UnexplainedUseGuard(PARAMS)
+        self.assertFalse(any(self.run_steps(guard, 2000, {'left': False, 'right': True}, ALIVE)))
+
+    def test_each_side_is_held_to_its_own_gate(self):
+        # Over the left gate (80k) but under the right one (140k), read on the right.
+        guard = UnexplainedUseGuard(PARAMS)
+        self.assertFalse(any(self.run_steps(guard, 2000, EMPTY, {'left': 30_000.0, 'right': 100_000.0})))
+
+    def test_seconds_need_not_be_consecutive(self):
+        guard = UnexplainedUseGuard(PARAMS)
+        trips = []
+        for _ in range(UNEXPLAINED_WINDOW_SECONDS // 3):
+            trips += self.run_steps(guard, 2, EMPTY, ALIVE)
+            trips += self.run_steps(guard, 1, EMPTY, QUIET)
+        # The 600th unexplained second is the second to last.
+        self.assertFalse(any(trips[:-2]))
+        self.assertTrue(trips[-2])
+
+    def test_the_count_falls_back_after_a_trip(self):
+        guard = UnexplainedUseGuard(PARAMS)
+        self.assertTrue(self.run_steps(guard, UNEXPLAINED_SECONDS, EMPTY, ALIVE)[-1])
+        explained = UNEXPLAINED_WINDOW_SECONDS - UNEXPLAINED_SECONDS
+        self.assertTrue(all(self.run_steps(guard, explained, {'left': True, 'right': False}, ALIVE)))
+        self.assertFalse(guard.step({'left': True, 'right': False}, ALIVE))
+
     def test_missing_or_nan_piezo_is_not_use(self):
         guard = UnexplainedUseGuard(PARAMS)
         self.assertFalse(any(self.run_steps(guard, 2000, EMPTY, {'left': float('nan'), 'right': None})))

@@ -48,7 +48,7 @@ logger = get_logger('free-sleep-stream')
 
 import calibration
 from features import biometrics_v2_enabled
-from presence.params import baselines_from_calibration, params_from_calibration
+from presence.params import baselines_from_calibration, learned_levels, params_from_calibration
 from presence.sensors import TYPE_NAME_LENGTH, printable_type, read_cap, unknown_cap_type
 from stream_processor import LatestCap, StreamProcessor
 from load_raw_files import load_piezo_row, _read_raw_record
@@ -66,6 +66,8 @@ _unknown_cap_logged = set()
 _unknown_cap_overflow_logged = False
 UNKNOWN_CAP_LOG_LIMIT = 16
 UNKNOWN_CAP_NAME_LENGTH = TYPE_NAME_LENGTH
+# Reasons live presence waits on an unchecked format, each logged once.
+_experimental_logged = set()
 
 # How often the NATS consumer loop reports itself healthy. Matches the 60s
 # cadence of BiometricProcessor._presence_heartbeat_interval; frequent enough
@@ -175,27 +177,49 @@ def _is_number(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
-def _presence_v2_inputs():
-    """Capacitance detector parameters and baselines when it should run, else None."""
+def _presence_v2_inputs(stream_processor=None):
+    """Capacitance detector inputs when it should run, else None.
+
+    (params, baselines) for a checked format; (params, baselines, format) for
+    one that is not, which runs only once both sides have a learned level and
+    piezo records are seen to come once a second.
+    """
     if not biometrics_v2_enabled():
         return None
     if not latest_cap.is_fresh(time.time(), CAP_FRESH_SECONDS):
         return None
     cap_format = latest_cap.cap_format()
-    if cap_format is None or not cap_format.validated:
+    if cap_format is None:
         return None
     profiles = calibration.load_presence_profiles()
-    params = params_from_calibration(profiles)
+    params = params_from_calibration(profiles, cap_format)
     baselines = baselines_from_calibration(profiles)
     if params is None or baselines is None:
         return None
-    return params, baselines
+    if cap_format.validated:
+        return params, baselines
+    if not _experimental_ready(stream_processor, profiles, cap_format):
+        return None
+    return params, baselines, cap_format
+
+
+def _experimental_ready(stream_processor, profiles, cap_format) -> bool:
+    if not learned_levels(profiles):
+        reason = "until the nightly analysis has learned both sides' occupied levels"
+    elif stream_processor is None or stream_processor.cadence.ok() is not True:
+        reason = 'until piezo records are seen to come once a second'
+    else:
+        return True
+    if (cap_format.name, reason) not in _experimental_logged:
+        _experimental_logged.add((cap_format.name, reason))
+        logger.info(f'Live presence stays on the vibration sensor with {cap_format.name} capacitance {reason}')
+    return False
 
 
 def _refresh_presence_mode(stream_processor) -> None:
     # A failed read is not an answer: only the definite conditions in _presence_v2_inputs hand presence back.
     try:
-        inputs = _presence_v2_inputs()
+        inputs = _presence_v2_inputs(stream_processor)
     except Exception as error:
         logger.warning(f'Could not work out the presence mode, keeping the current one: {error}')
         return
