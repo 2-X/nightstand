@@ -21,7 +21,8 @@ import { isScheduleDbChange } from './isScheduleDbChange.js';
 import { loadRhythms, type RhythmsLoad } from '../db/rhythms.js';
 import type { Side } from '../db/schedulesSchema.js';
 import { activation, type Activation } from './rhythms/activation.js';
-import { scheduleRhythms, type RhythmsPlan } from './rhythms/scheduleRhythms.js';
+import { dropKeptAlarms, keptAlarmsGeneration } from './rhythms/keptAlarms.js';
+import { scheduleKeptAlarms, scheduleRhythms, type RhythmsPlan } from './rhythms/scheduleRhythms.js';
 import { reportRhythmsStatus } from './rhythms/rhythmsStatus.js';
 import { setEngineActivation, sleepAround } from './scheduleQueries.js';
 
@@ -41,6 +42,8 @@ async function rebuildJobs() {
     });
     await schedule.gracefulShutdown();
 
+    // A turn off that saved after this read keeps its alarms for the next pass.
+    const keptUpTo = keptAlarmsGeneration();
     await settingsDB.read();
     await schedulesDB.read();
 
@@ -100,6 +103,10 @@ async function rebuildJobs() {
         });
       });
     }
+    // A sleep left running when Rhythms was turned off keeps its alarms until
+    // a rhythm engine is active again; that engine plans them itself.
+    if (engine.active) dropKeptAlarms(keptUpTo);
+    else scheduleKeptAlarms(new Date());
     schedulePrimingRebootAndCalibration(settingsData);
     reportRhythmsStatus(engine, plan, settingsData.timeZone);
 

@@ -5,10 +5,14 @@ import type { Settings } from '../../db/settingsSchema.js';
 import type { Side } from '../../db/schedulesSchema.js';
 import type { RhythmsDB } from '../../db/rhythmsSchema.js';
 import { SCHEDULE_SIDES } from '../../db/scheduleKeys.js';
+import { getDeviceStatusCoalesced, isFrankenConnected } from '../../8sleep/frankenServer.js';
 import { effectiveSides } from '../scheduleQueries.js';
 import { resolveSleeps, type ResolvedSleep, type RhythmEvent } from './resolve.js';
-import { ANALYSIS_DELAY_MS, ANALYSIS_MAX_WINDOW_MS, REANALYSIS_DELAY_MS, runRhythmEvent, runSleepAnalysis } from './runEvent.js';
+import {
+  ANALYSIS_DELAY_MS, ANALYSIS_MAX_WINDOW_MS, REANALYSIS_DELAY_MS, armedEnd, rearmRhythmSleep, runRhythmEvent, runSleepAnalysis,
+} from './runEvent.js';
 import { trackAlarm } from '../alarmActivity.js';
+import { forgetKeptAlarms, keptSleeps, rememberKeptAlarms, type KeptAlarm } from './keptAlarms.js';
 import { scheduleSleepAnalysis } from '../powerScheduler.js';
 import { SLEEP_ANALYSIS_HOUR, SLEEP_ANALYSIS_MINUTE } from '../../sleepAnalysisSchedule.js';
 
@@ -68,6 +72,67 @@ function scheduleSleep(settings: Settings, side: Side, sleep: ResolvedSleep, now
   const reanalysisName = rhythmJobName(side, sleep.date, 'analysis', reanalysisAt, timeZone, 1);
   const reanalyse = () => runSleepAnalysis(side, sleep, REANALYSIS_DELAY_MS, ANALYSIS_MAX_WINDOW_MS);
   if (scheduleOnce(reanalysisName, reanalysisAt, now, reanalyse)) count += 1;
+  return count;
+}
+
+const REARM_DELAY_MS = 1000;
+
+// The power-on tells the firmware when to turn the side off. A sleep in
+// progress that now ends at another time, or that this process never armed,
+// has its end sent again, so a later end does not lose its alarm.
+function scheduleRearm(side: Side, sleeps: ResolvedSleep[], now: Date): number {
+  const t = now.getTime();
+  const current = sleeps.filter(sleep => sleep.start.getTime() <= t && t < sleep.end.getTime()).pop();
+  if (!current || armedEnd(side) === current.end.getTime()) return 0;
+  const name = `rhythm-${side}-${current.date}-rearm`;
+  return scheduleOnce(name, new Date(t + REARM_DELAY_MS), now, () => rearmRhythmSleep(side, current)) ? 1 : 0;
+}
+
+// The side may have been turned off by means no job sees (the Pod's own
+// controls, the firmware timer), so look before ringing. A Pod that is not
+// connected is left to the alarm itself, which waits a bounded time, checks
+// the side is on and drops a late alarm.
+async function ringKeptAlarm(side: Side, sleep: ResolvedSleep, event: Extract<RhythmEvent, { kind: 'alarm' }>): Promise<number> {
+  if (!isFrankenConnected()) return runRhythmEvent(side, sleep, event);
+  try {
+    const status = await getDeviceStatusCoalesced();
+    if (!status[side].isOn) {
+      logger.info(`Skipping the kept alarm for ${side}: the side is off`);
+      forgetKeptAlarms(side);
+      return 0;
+    }
+  } catch (error: unknown) {
+    logger.warn(`Could not read the Pod, ringing the kept alarm for ${side} anyway: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return runRhythmEvent(side, sleep, event);
+}
+
+// Turning Rhythms off ends its jobs, so a sleep left running keeps its
+// remaining alarms in memory and scheduleKeptAlarms plans them again on every
+// rebuild.
+export function keepSleepAlarms(side: Side, sleep: ResolvedSleep, now: Date, timeZone: string): void {
+  const alarms: KeptAlarm[] = [];
+  let n = 0;
+  for (const event of sleep.events) {
+    if (event.kind !== 'alarm') continue;
+    if (event.at.getTime() > now.getTime()) alarms.push({ name: rhythmJobName(side, sleep.date, 'alarm', event.at, timeZone, n), event });
+    n += 1;
+  }
+  rememberKeptAlarms(side, { sleep, alarms });
+}
+
+export function scheduleKeptAlarms(now: Date): number {
+  let count = 0;
+  for (const [side, { sleep, alarms }] of keptSleeps()) {
+    const ahead = alarms.filter(({ event }) => event.at.getTime() > now.getTime());
+    if (ahead.length === 0) {
+      forgetKeptAlarms(side);
+      continue;
+    }
+    for (const { name, event } of ahead) {
+      if (scheduleOnce(name, event.at, now, () => trackAlarm(side, name, () => ringKeptAlarm(side, sleep, event)))) count += 1;
+    }
+  }
   return count;
 }
 
@@ -132,9 +197,11 @@ export function scheduleRhythms(settings: Settings, db: RhythmsDB, now: Date): R
     }
     let keepNoon = true;
     try {
-      for (const sleep of resolveSleeps({ db, side, timeZone, from, to })) {
+      const sleeps = resolveSleeps({ db, side, timeZone, from, to });
+      for (const sleep of sleeps) {
         jobCount += scheduleSleep(settings, side, sleep, now, timeZone);
       }
+      jobCount += scheduleRearm(side, sleeps, now);
       keepNoon = !sleptWithin(db, side, timeZone, nextNoon(now, timeZone));
     } catch (error: unknown) {
       failedSides.push(side);

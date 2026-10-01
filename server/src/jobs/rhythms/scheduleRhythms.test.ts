@@ -21,6 +21,7 @@ mock.module(new URL('../../8sleep/deviceApi.js', import.meta.url).href, {
 mock.module(new URL('../../8sleep/frankenServer.js', import.meta.url).href, {
   namedExports: {
     connectFrankenWithin: async () => ({ getDeviceStatus: async () => ({ left: { isOn: true }, right: { isOn: true } }) }),
+    isFrankenConnected: () => true,
     getDeviceStatusCoalesced: async () => ({ left: { isOn: true }, right: { isOn: true } }),
   },
 });
@@ -38,6 +39,8 @@ const { everyNight, testNight, testRhythmsDB } = await import('./testSupport.js'
 const { scheduleRhythms } = await import('./scheduleRhythms.js');
 const { abortAlarmWaits, resetAlarmActivity } = await import('../alarmActivity.js');
 const { resetPowerOnTimes } = await import('../powerScheduler.js');
+const { resetOffTimes } = await import('./runEvent.js');
+const { setEngineActivation } = await import('../scheduleQueries.js');
 
 const NIGHT = testNight('22:00', '06:00', { temperatures: { '02:00': 72 }, alarms: ['05:45'] });
 const at = (iso: string) => new Date(iso);
@@ -80,6 +83,8 @@ afterEach(() => {
   Object.keys(schedule.scheduledJobs).forEach(name => schedule.cancelJob(name));
   resetAlarmActivity();
   resetPowerOnTimes();
+  resetOffTimes();
+  setEngineActivation({ active: false, reason: 'flag-off' });
   mock.timers.reset();
 });
 after(() => rmSync(folder, { recursive: true, force: true }));
@@ -105,12 +110,62 @@ it('extends the horizon every hour without duplicating jobs', async () => {
   assert.equal(rhythmNames().filter(name => name.includes('2026-09-28')).length, 6);
 });
 
-it('plans only what is still ahead for a sleep in progress', () => {
+it('plans only what is still ahead for a sleep in progress, and arms its off time once after a restart', () => {
   setNow('2026-09-29T01:00:00Z');
   const { jobCount } = scheduleRhythms(settingsDB.data, testRhythmsDB(schedulesDB.data, everyNight(NIGHT)), at('2026-09-29T01:00:00Z'));
-  assert.equal(jobCount, 17);
-  assert.deepEqual(rhythmNames().filter(name => name.includes('2026-09-28')), sleepJobs('2026-09-28')
-    .filter(name => !name.includes('power-on')));
+  assert.equal(jobCount, 18);
+  assert.deepEqual(rhythmNames().filter(name => name.includes('2026-09-28')), [
+    ...sleepJobs('2026-09-28').filter(name => !name.includes('power-on')), 'rhythm-left-2026-09-28-rearm',
+  ].sort());
+});
+
+const replan = (db: ReturnType<typeof testRhythmsDB>, iso: string) => {
+  Object.keys(schedule.scheduledJobs).forEach(name => schedule.cancelJob(name));
+  setNow(iso);
+  setEngineActivation({ active: true, db });
+  return scheduleRhythms(settingsDB.data, db, at(iso));
+};
+const LATE = testNight('22:00', '09:00', { alarms: ['08:45'] });
+const tonightUses = (night: typeof LATE | null) => {
+  const db = testRhythmsDB(schedulesDB.data, everyNight(NIGHT));
+  if (night) Object.assign(db.left.rhythms, everyNight(night, 'tonight').rhythms);
+  db.left.changes = [{ date: '2026-09-28', rhythmId: night ? 'tonight' : null }];
+  return db;
+};
+const powerOnTonight = async () => {
+  scheduleRhythms(settingsDB.data, testRhythmsDB(schedulesDB.data, everyNight(NIGHT)), at('2026-09-28T12:00:00Z'));
+  setNow('2026-09-28T22:00:00Z');
+  await schedule.scheduledJobs['rhythm-left-2026-09-28-power-on-2200-0'].invoke();
+  assert.deepEqual(updates, [{ left: { isOn: true, targetTemperatureF: 80, secondsRemaining: 8 * 3600 + 300 } }]);
+  updates.length = 0;
+};
+
+it('moves the off time of a sleep in progress whose end moves later, so its later alarm still rings', async () => {
+  await powerOnTonight();
+  replan(tonightUses(LATE), '2026-09-28T23:00:00Z');
+  assert.ok(rhythmNames().includes('rhythm-left-2026-09-28-alarm-0845-0'));
+  await schedule.scheduledJobs['rhythm-left-2026-09-28-rearm'].invoke();
+  assert.deepEqual(updates, [{ left: { secondsRemaining: 10 * 3600 + 300 } }]);
+  updates.length = 0;
+  replan(tonightUses(LATE), '2026-09-28T23:30:00Z');
+  assert.equal(schedule.scheduledJobs['rhythm-left-2026-09-28-rearm'], undefined, 'an unchanged end was sent again');
+});
+
+it('turns a sleep in progress off at its new end when the end moves earlier', async () => {
+  await powerOnTonight();
+  replan(tonightUses(testNight('22:00', '04:00')), '2026-09-28T23:00:00Z');
+  await schedule.scheduledJobs['rhythm-left-2026-09-28-rearm'].invoke();
+  assert.deepEqual(updates, [{ left: { secondsRemaining: 5 * 3600 + 300 } }]);
+  setNow('2026-09-29T04:00:00Z');
+  await schedule.scheduledJobs['rhythm-left-2026-09-28-power-off-0400-0'].invoke();
+  assert.deepEqual(updates.at(-1), { left: { isOn: false } });
+});
+
+it("leaves the off time already sent when tonight's sleep is removed while it runs", async () => {
+  await powerOnTonight();
+  replan(tonightUses(null), '2026-09-28T23:00:00Z');
+  assert.deepEqual(rhythmNames().filter(name => name.includes('2026-09-28')), []);
+  assert.deepEqual(updates, []);
 });
 
 it('keeps both end-of-sleep analyses for a sleep that just ended', () => {

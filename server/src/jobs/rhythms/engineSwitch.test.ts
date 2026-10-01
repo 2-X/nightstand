@@ -28,6 +28,7 @@ mock.module(new URL('../../8sleep/deviceApi.js', import.meta.url).href, {
 mock.module(new URL('../../8sleep/frankenServer.js', import.meta.url).href, {
   namedExports: {
     connectFrankenWithin: async () => ({ getDeviceStatus: async () => ({ left: { isOn: true }, right: { isOn: true } }) }),
+    isFrankenConnected: () => true,
     getDeviceStatusCoalesced: async () => ({ left: { isOn: true }, right: { isOn: true } }),
   },
 });

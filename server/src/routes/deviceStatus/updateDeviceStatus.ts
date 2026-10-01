@@ -10,6 +10,7 @@ import logger from '../../logger.js';
 import settingsDB from '../../db/settings.js';
 import memoryDB from '../../db/memoryDB.js';
 import { INVERTED_SETTINGS_KEY_MAPPING } from '../../8sleep/loadDeviceStatus.js';
+import { forgetKeptAlarms } from '../../jobs/rhythms/keptAlarms.js';
 
 // Inverse of loadDeviceStatus.ts's calculateTempInF. Same fixed firmware
 // level scale, so the two files must be changed together.
@@ -47,6 +48,11 @@ const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideSt
     const onDuration = isOn ? String(MAX_ON_DURATION_SECONDS) : '0';
     if (updateLeft) await executeFunction('LEFT_TEMP_DURATION', onDuration, stateOptions);
     if (updateRight) await executeFunction('RIGHT_TEMP_DURATION', onDuration, stateOptions);
+    // A side turned off ends the sleep it was kept on for.
+    if (!isOn) {
+      if (updateLeft) forgetKeptAlarms('left');
+      if (updateRight) forgetKeptAlarms('right');
+    }
   }
 
   if (targetTemperatureF !== undefined) {

@@ -3,6 +3,9 @@ import { describe, it, mock } from 'node:test';
 import { mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import schedule from 'node-schedule';
+import type { KeptAlarm } from '../../jobs/rhythms/keptAlarms.js';
+import type { ResolvedSleep } from '../../jobs/rhythms/resolve.js';
 
 // config.ts throws if these aren't set, and reading it is what settingsDB.ts
 // needs to resolve its lowdb path, must run before the dynamic imports
@@ -25,6 +28,7 @@ mock.module('../../8sleep/deviceApi.js', {
 const { updateDeviceStatus } = await import('./updateDeviceStatus.js');
 const { default: settingsDB } = await import('../../db/settings.js');
 const { FrankenSupersededError } = await import('../../8sleep/frankenErrors.js');
+const { keptSleeps, rememberKeptAlarms } = await import('../../jobs/rhythms/keptAlarms.js');
 
 describe('updateDeviceStatus', () => {
   it('applies an explicit targetTemperatureF of 0 instead of silently dropping it', async () => {
@@ -89,5 +93,31 @@ describe('updateDeviceStatus', () => {
       ['TEMP_LEVEL_LEFT', '-9'], ['TEMP_LEVEL_RIGHT', '-9'],
       ['LEFT_TEMP_DURATION', '29100'], ['RIGHT_TEMP_DURATION', '29100'],
     ]);
+  });
+
+  it('forgets the kept alarms of a side that is turned off', async () => {
+    const name = 'rhythm-left-2026-09-28-alarm-0600-0';
+    schedule.scheduleJob(name, new Date(Date.now() + 60_000), () => {});
+    rememberKeptAlarms('left', { sleep: {} as ResolvedSleep, alarms: [{ name, event: {} as KeptAlarm['event'] }] });
+    await updateDeviceStatus({ left: { isOn: false } });
+    assert.equal(schedule.scheduledJobs[name], undefined);
+    assert.deepEqual(keptSleeps(), []);
+  });
+
+  it('forgets the kept alarms of both sides when one is away, since both turn off', async () => {
+    const names = ['rhythm-left-2026-09-28-alarm-0600-0', 'rhythm-right-2026-09-28-alarm-0600-0'] as const;
+    names.forEach(name => schedule.scheduleJob(name, new Date(Date.now() + 60_000), () => {}));
+    rememberKeptAlarms('left', { sleep: {} as ResolvedSleep, alarms: [{ name: names[0], event: {} as KeptAlarm['event'] }] });
+    rememberKeptAlarms('right', { sleep: {} as ResolvedSleep, alarms: [{ name: names[1], event: {} as KeptAlarm['event'] }] });
+    settingsDB.data.right.awayMode = true;
+    await settingsDB.write();
+    try {
+      await updateDeviceStatus({ left: { isOn: false } });
+    } finally {
+      settingsDB.data.right.awayMode = false;
+      await settingsDB.write();
+    }
+    names.forEach(name => assert.equal(schedule.scheduledJobs[name], undefined));
+    assert.deepEqual(keptSleeps(), []);
   });
 });
