@@ -94,3 +94,21 @@ export type RhythmsStatus = z.infer<typeof RhythmsStatusSchema>;
 export type RhythmsResponse = z.infer<typeof RhythmsResponseSchema>;
 
 export const DEFAULT_SMART: SmartSchedule = { baseLevel: 0, intensity: 'standard', warmStart: true, warmUp: true, upEarly: false };
+
+// GET /rhythms/live: the running Smart Schedule night, read from memory.
+export const CURVE_PHASES = ['prewarm', 'bedtime', 'cooldown', 'hold', 'warmup', 'wake', 'after'] as const;
+const InstantSchema = z.string().datetime({ offset: true });
+
+export const RhythmsLiveSchema = z.object({
+  side: SideSchema,
+  date: IsoDateSchema,
+  phase: z.enum(CURVE_PHASES).nullable(),
+  waiting: z.boolean(),
+  coolStart: InstantSchema,
+  hold: z.object({ until: InstantSchema }).strict().nullable(),
+  baseSince: InstantSchema.nullable(),
+  nextChange: z.object({ at: InstantSchema, level: z.number().int(), phase: z.enum(CURVE_PHASES) }).strict().nullable(),
+}).strict();
+export const RhythmsLiveResponseSchema = RhythmsLiveSchema.nullable();
+export const RhythmsLiveQuerySchema = z.object({ side: SideSchema }).strict();
+export type RhythmsLive = z.infer<typeof RhythmsLiveSchema>;

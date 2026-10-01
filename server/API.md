@@ -366,6 +366,7 @@ Rhythms are named sleep plans per side, a weekly plan that picks a rhythm for ea
 - Returns the sleeps of one side that overlap a window: from Rhythms when they are active, otherwise from the weekly schedule. Alarms are left out when the side's alarms are turned off. While Rhythms are active, a side in away mode gets the present side's sleeps, with `side` naming the present side and no alarms, because alarms ring only on the present side; if both sides are away the answer is `[]`. The weekly schedule is returned as stored.
 - Query: `side` (`left` or `right`), `from` and `to` (ISO 8601 date times with an offset, `to` after `from`, at most 16 days apart). Any other query key is refused with `400`.
 - A sleep is named by the date it starts, in the Pod's time zone. `rhythmId` is `null` for sleeps from the weekly schedule. Events are sorted by time.
+- For a Smart Schedule sleep, `start` is when the bed turns on (20 or 30 minutes before bedtime) and `smartCurve` gives `bedtime`, `coolStart`, `wake`, `daySleep` and the curve `points` (ISO times). The temperature events follow the curve.
 
 #### Response
 
@@ -390,6 +391,36 @@ Rhythms are named sleep plans per side, a weekly plan that picks a rhythm for ea
   }
 ]
 ```
+
+### GET `/api/rhythms/live`
+
+- Returns the Smart Schedule night that is running for a side, read from memory. It writes nothing. The answer is `null` when Rhythms are not active, when the side has no Smart Schedule sleep being followed, or when both sides are in away mode. A side in away mode gets the present side's night, with `side` naming the present side.
+- Query: `side` (`left` or `right`). A missing or unknown side, or any other query key, is refused with `400`.
+- A manual temperature change on a Smart Schedule night holds the current level until the curve's next phase starts, at most 3 hours. A change made before the cool-down holds until the cool-down starts. `hold.until` is that end. Holds are kept in memory only, so a server restart drops them.
+
+#### Response
+
+```json
+{
+  "side": "left",
+  "date": "2026-10-05",
+  "phase": "cooldown",
+  "waiting": false,
+  "coolStart": "2026-10-06T05:20:00.000Z",
+  "hold": { "until": "2026-10-06T06:10:00.000Z" },
+  "baseSince": null,
+  "nextChange": { "at": "2026-10-06T06:10:00.000Z", "level": -4, "phase": "hold" }
+}
+```
+
+- `date` is the date the sleep starts, in the Pod's time zone.
+- `phase` is the curve phase now: `prewarm`, `bedtime`, `cooldown`, `hold`, `warmup`, `wake` or `after`. It is `null` when none applies. Later versions may add phases.
+- `waiting` is `true` while the cool-down waits for the person to get into bed.
+- `coolStart` is when the cool-down starts or started. It is the bedtime before the night's start is decided, and when presence is stale or unknown. While `waiting` is `true` it is the latest the cool-down can start, 2 hours after the bedtime, and once the start is decided it is that start. It is rounded up to the minute, like the curve.
+- `hold` is `null` when no manual change is holding the curve. A hold never runs past the power off.
+- `baseSince` is when the curve was released to the base level, or `null` while it has not been. That happens when the person gets up early, if that setting is on, or leaves the bed between the wake time and 30 minutes after it.
+- `nextChange` is the next change of the curve and the phase it starts, or `null` when none is left. `level` is a level on the same -10 to +10 scale as `baseLevel`, not a temperature. Points that a hold or a release to the base level suppresses are skipped, so `nextChange.at` is never before `hold.until`.
+- Instants are ISO 8601 strings with an offset.
 
 ### POST `/api/rhythms/enable`
 

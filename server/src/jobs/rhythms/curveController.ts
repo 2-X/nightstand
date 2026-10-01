@@ -5,7 +5,7 @@ import type { Side } from '../../db/schedulesSchema.js';
 import {
   effectiveCoolStart, levelAt, phaseAt, type CurvePhase, type CurvePoint, type SmartCurveInfo,
 } from '../../db/smartCurve.js';
-import type { SmartSchedule } from '../../db/rhythmsSchema.js';
+import type { RhythmsLive, SmartSchedule } from '../../db/rhythmsSchema.js';
 import { PRESENCE_STALE_MS } from '../../8sleep/presenceStale.js';
 import logger from '../../logger.js';
 import type { ResolvedSleep } from './resolve.js';
@@ -396,4 +396,23 @@ export function smartManualChange(side: Side, now: Date = new Date()): ManualCha
 
 export function smartCurveStatus(side: Side, now: Date = new Date()): CurveStatus | null {
   return active?.status(side, now) ?? null;
+}
+
+// The live night for the app. Holds stay in memory, so this is the only way
+// the app can see one.
+export function liveCurveState(side: Side, now: Date = new Date()): RhythmsLive | null {
+  const status = active?.status(side, now);
+  if (!status) return null;
+  return {
+    side: status.side,
+    date: status.date,
+    phase: status.phase,
+    waiting: status.start.status === 'waiting',
+    coolStart: effectiveCoolStart(status.coolStart, status.coolStart).toISOString(),
+    hold: status.holdUntil ? { until: status.holdUntil.toISOString() } : null,
+    baseSince: status.baseSince?.toISOString() ?? null,
+    nextChange: status.nextChange
+      ? { at: status.nextChange.at.toISOString(), level: status.nextChange.level, phase: status.nextChange.phase }
+      : null,
+  };
 }

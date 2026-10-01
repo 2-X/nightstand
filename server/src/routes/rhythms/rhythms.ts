@@ -6,7 +6,7 @@ import schedulesDB from '../../db/schedules.js';
 import { SCHEDULE_SIDES } from '../../db/scheduleKeys.js';
 import { Side } from '../../db/schedulesSchema.js';
 import { loadRhythms, RhythmsLoad, RhythmsStateError, updateRhythms } from '../../db/rhythms.js';
-import { RhythmsResponse, RhythmsSleepsQuerySchema, RhythmsUpdateSchema } from '../../db/rhythmsSchema.js';
+import { RhythmsLiveQuerySchema, RhythmsResponse, RhythmsSleepsQuerySchema, RhythmsUpdateSchema } from '../../db/rhythmsSchema.js';
 import { activation } from '../../jobs/rhythms/activation.js';
 import { applyAlarmsEnabled, findOverlaps, resolveLegacySleeps, resolveSleeps } from '../../jobs/rhythms/resolve.js';
 import { pruneChanges, sideIssues } from '../../jobs/rhythms/validate.js';
@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { enableRhythms } from '../../jobs/rhythms/enable.js';
 import { disableRhythms } from '../../jobs/rhythms/handoff.js';
 import { drivingSide } from '../../jobs/scheduleQueries.js';
-import { smartCoolStartFor } from '../../jobs/rhythms/curveController.js';
+import { liveCurveState, smartCoolStartFor } from '../../jobs/rhythms/curveController.js';
 
 const router = express.Router();
 
@@ -145,6 +145,18 @@ router.post('/rhythms/disable', async (req, res) => {
     return;
   }
   res.json(await disableRhythms({ powerOffNow: parsed.data.powerOffNow ?? false }, rebuildSchedule));
+});
+
+// The live Smart Schedule night for a side; an away side reads the present side's.
+router.get('/rhythms/live', async (req: Request, res: Response) => {
+  const parsed = RhythmsLiveQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Pass side' });
+    return;
+  }
+  await settingsDB.read();
+  const driver = drivingSide(settingsDB.data, parsed.data.side);
+  res.json(driver ? liveCurveState(driver) : null);
 });
 
 export default router;
