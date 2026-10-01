@@ -26,6 +26,8 @@ export const useResolvedSleeps = (side: 'left' | 'right', from: string, to: stri
   queryFn: async ({ signal }) =>
     (await axios.get<ResolvedSleepResponse[]>('/rhythms/sleeps', { params: { side, from, to }, signal })).data,
   enabled,
+  // While a moved window loads, the same side's last answer stands in; another side's never does.
+  placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[1] === side ? previous : undefined),
 });
 
 // The running Smart Schedule night; a manual hold lives only here.

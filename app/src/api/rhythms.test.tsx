@@ -1,12 +1,16 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import moment from 'moment-timezone';
-import { screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { act, renderHook, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import api, { HARDWARE_REQUEST_TIMEOUT_MS } from './api';
 import { validateResponse } from './responseValidation';
-import { disableRhythms, enableRhythms, postRhythms, rhythmsSaveMessage, RhythmsUpdateSchema, useRhythmsState } from './rhythms';
+import {
+  disableRhythms, enableRhythms, postRhythms, rhythmsSaveMessage, RhythmsUpdateSchema, useResolvedSleeps, useRhythmsState,
+} from './rhythms';
 import type { ResolvedSleepResponse } from './rhythmsResponse';
 import { MAX_TEMPERATURES_PER_DAY } from './schedulesSchema';
 import { createDemoRhythms, listMockSleeps, resetMockRhythms, updateMockRhythms } from '../mocks/rhythmsMock';
@@ -151,4 +155,31 @@ it('reports an error when Rhythms runs but its file cannot be read', async () =>
   server.use(http.get('*/rhythms', () => HttpResponse.json({ status: { enabled: true, active: true }, data: { version: 'unreadable' } })));
   renderWithProviders(<StateProbe/>);
   expect(await screen.findByText('error')).toBeInTheDocument();
+});
+
+const alarm = { time: '06:00', enabled: true, vibrationIntensity: 30, vibrationPattern: 'rise', duration: 30, alarmTemperature: 83 };
+
+it('keeps a side\'s sleeps while its window moves, never another side\'s', async () => {
+  let release = () => {};
+  let hold = false;
+  server.use(http.get('*/rhythms/sleeps', async ({ request }) => {
+    const side = new URL(request.url).searchParams.get('side');
+    if (hold) await new Promise<void>(resolve => { release = resolve; });
+    return HttpResponse.json([{
+      side, date: '2026-09-28', rhythmId: null, start: '2026-09-28T22:00:00.000Z', end: '2026-09-29T06:00:00.000Z', mode: 'manual',
+      night: { power: { on: '22:00', off: '06:00', onTemperature: 83, enabled: true }, temperatures: {}, alarm, alarms: [alarm] }, events: [],
+    }]);
+  }));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={ client }>{ children }</QueryClientProvider>;
+  const to = '2026-09-30T00:00:00.000Z';
+  const view = renderHook(({ side, from }: { side: 'left' | 'right'; from: string }) => useResolvedSleeps(side, from, to),
+    { wrapper, initialProps: { side: 'left', from: '2026-09-28T00:00:00.000Z' } });
+  await waitFor(() => expect(view.result.current.data?.[0]?.side).toBe('left'));
+  hold = true;
+  view.rerender({ side: 'left', from: '2026-09-28T01:00:00.000Z' });
+  expect(view.result.current.data?.[0]?.side).toBe('left');
+  view.rerender({ side: 'right', from: '2026-09-28T01:00:00.000Z' });
+  expect(view.result.current.data).toBeUndefined();
+  await act(async () => release());
 });
