@@ -115,6 +115,9 @@ In Settings:
 - **Sleep score and stages** under Features: needs biometrics.
 - **Presence auto-off** under Features: on by default, and needs biometrics. Turns a side off
   after 45 minutes with no one on it, outside its scheduled on-window.
+- **New sleep tracking (beta)** under Features: off by default, needs biometrics, Pod 5
+  only. Uses the bed's capacitance sensors to tell the two sides apart (see
+  [Biometrics](#biometrics)).
 - **Level temperature display** and
   **one-time alarms** under Features: on by default.
 
@@ -130,6 +133,20 @@ rate, sleep stages and sleep score have not been validated here and may be
 inaccurate. This fork is developed on a Pod 5; its biometrics have not been
 checked on Pod 3 or Pod 4. The [biometrics reference](biometrics/BIOMETRICS.md#upstream-heart-rate-comparison)
 has the original comparison and its source.
+
+On a Pod 5, the **New sleep tracking (beta)** switch changes how the Pod
+decides who is in which side of the bed. The old method relied on the
+vibration sensor, which picks up both sleepers at once, so a shared bed often
+looked like one person coming and going. The new method uses the capacitance
+sensor under each side, which only rises for the person lying on it. On one
+night checked against both sleepers' own notes, it closely matched each
+person's bed times and caught two short trips out of bed, where the old live
+presence split the night into many pieces and the old nightly record gave
+both sides the same times. It has only been checked on one Pod 5 so far.
+
+<p align="center">
+  <img src="docs/presence-before-after.png" width="720" alt="Before and after: vibration and capacitance readings for each side, and when each side read as occupied under the old and new tracking">
+</p>
 
 Biometrics is off by default and requires a one-time install. On the Pod
 over SSH:

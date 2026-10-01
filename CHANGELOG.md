@@ -16,6 +16,13 @@ is a hard fork; for the history of the projects it descends from, see
   may be wrong. With the switch off, presence, sleep records and everything
   stored behave exactly as before. Pod 3 and Pod 4 are unaffected either way.
 
+  On one night checked against both sleepers' own notes, the old live
+  presence split the two sleepers' nights into 20 and 31 pieces, and the old
+  nightly record gave both sides the same bed times. The new tracking closely
+  matched each person's notes, including two short trips out of bed. See the
+  [before and after](https://github.com/LTimothy/nightstand/blob/main/docs/presence-before-after.png).
+  So far this has been checked on one Pod 5 over a handful of nights.
+
 - Running sleep analysis again for the same night now replaces that night's
   movement as well as its sleep records, instead of keeping the movement from
   an earlier run. Repeated runs over the same data agree, and the movement for
