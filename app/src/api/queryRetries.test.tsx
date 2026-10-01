@@ -7,6 +7,7 @@ import api from './api';
 import { useSleepScore } from './sleepScore';
 import { useSleepStages } from './sleepStages';
 import { useBaseConfigured } from './baseControl';
+import { useResolvedSleeps, useRhythms, useRhythmsLive } from './rhythms';
 import { createQueryClient } from '@lib/queryClient';
 
 afterEach(() => vi.restoreAllMocks());
@@ -21,6 +22,9 @@ const hooks: Record<string, () => unknown> = {
   'sleep score': () => useSleepScore(args),
   'sleep stages': () => useSleepStages(args),
   'base control': () => useBaseConfigured(),
+  'rhythms': () => useRhythms(),
+  'resolved sleeps': () => useResolvedSleeps('left', args.startTime, args.endTime),
+  'rhythms live': () => useRhythmsLive('left'),
 };
 
 const wrapperFor = (client: QueryClient) => function Wrapper({ children }: { children: ReactNode }) {

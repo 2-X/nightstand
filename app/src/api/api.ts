@@ -32,9 +32,13 @@ const axiosInstance = axios.create({
   transitional: { silentJSONParsing: false },
 });
 
+// GET routes whose answer can be null on purpose.
+const NULL_ALLOWED = new Set(['/rhythms/live']);
+
 axiosInstance.interceptors.response.use(response => {
   if (response.config.method === 'get') {
-    if (response.data === '' || response.data == null) throw new Error('The server returned an empty response.');
+    const path = (response.config.url ?? '').split('?')[0];
+    if (response.data === '' || (response.data == null && !NULL_ALLOWED.has(path))) throw new Error('The server returned an empty response.');
     response.data = validateResponse(response.config.url ?? '', response.data);
   }
   return response;

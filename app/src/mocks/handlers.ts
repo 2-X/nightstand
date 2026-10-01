@@ -36,6 +36,10 @@ import {
   presence,
   mockCalibration,
 } from './mockData';
+import type { RhythmsUpdate } from '@api/rhythms';
+import {
+  disableMockRhythms, enableMockRhythms, getMockRhythmsResponse, listMockSleeps, updateMockRhythms,
+} from './rhythmsMock';
 
 type Side = 'left' | 'right';
 
@@ -78,6 +82,37 @@ export const handlers = [
     const updated = updateSchedules(body);
     await delay(120);
     return HttpResponse.json(deepClone(updated));
+  }),
+  http.get('/api/rhythms', async () => {
+    await delay(120);
+    return HttpResponse.json(deepClone(getMockRhythmsResponse()));
+  }),
+  http.post('/api/rhythms', async ({ request }) => {
+    const result = updateMockRhythms((await request.json()) as RhythmsUpdate);
+    await delay(120);
+    return result.ok ? HttpResponse.json(deepClone(result.body)) : HttpResponse.json(result.body, { status: result.status });
+  }),
+  http.get('/api/rhythms/sleeps', async ({ request }) => {
+    const url = new URL(request.url);
+    const side = url.searchParams.get('side') === 'right' ? 'right' : 'left';
+    const from = new Date(url.searchParams.get('from') ?? Date.now());
+    const to = new Date(url.searchParams.get('to') ?? Date.now());
+    await delay(120);
+    return HttpResponse.json(listMockSleeps(side, from, to));
+  }),
+  http.post('/api/rhythms/enable', async () => {
+    await delay(120);
+    return HttpResponse.json(enableMockRhythms());
+  }),
+  http.post('/api/rhythms/disable', async ({ request }) => {
+    const body = (await request.json()) as { powerOffNow?: boolean };
+    await delay(120);
+    return HttpResponse.json(disableMockRhythms(body));
+  }),
+  // The demo has no Smart Schedule controller, so no night is live.
+  http.get('/api/rhythms/live', async () => {
+    await delay(120);
+    return HttpResponse.json(null);
   }),
   http.get('/api/settings', async () => {
     await delay(120);
