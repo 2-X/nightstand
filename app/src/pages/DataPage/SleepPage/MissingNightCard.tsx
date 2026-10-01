@@ -16,16 +16,20 @@ const COPY: Record<MissingNightState, { title: string; description: string }> = 
   zero: { title: 'No sleep detected', description: 'Someone was in bed, but no sleep was found.' },
 };
 
-type Props = { state: MissingNightState; canAnalyze: boolean; onAnalyze: () => void };
-export default function MissingNightCard({ state, canAnalyze, onAnalyze }: Props) {
+export const RHYTHMS_PENDING_DESCRIPTION = 'A Rhythms sleep is analyzed about 15 minutes after it ends, '
+  + 'and again 2 hours later; other nights are analyzed at noon.';
+
+type Props = { state: MissingNightState; canAnalyze: boolean; onAnalyze: () => void; pendingDescription?: string };
+export default function MissingNightCard({ state, canAnalyze, onAnalyze, pendingDescription }: Props) {
   const copy = COPY[state];
+  const description = state === 'pending' && pendingDescription ? pendingDescription : copy.description;
   return (
     <GlassCard role="status" sx={ { mb: 2 } }>
       <Box sx={ { display: 'flex', alignItems: 'center', gap: 1 } }>
         { state === 'analyzing' && <CircularProgress size={ 20 } aria-label="Analysis running"/> }
         <SectionHeading>{ copy.title }</SectionHeading>
       </Box>
-      <Typography color="text.secondary" variant="body2" sx={ { mt: 0.5 } }>{ copy.description }</Typography>
+      <Typography color="text.secondary" variant="body2" sx={ { mt: 0.5 } }>{ description }</Typography>
       { (state === 'pending' || state === 'failed') && (
         <Button disabled={ !canAnalyze } onClick={ onAnalyze } sx={ { mt: 1 } }>{ state === 'failed' ? 'Try again' : 'Analyze now' }</Button>
       ) }

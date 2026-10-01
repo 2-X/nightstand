@@ -8,3 +8,13 @@ it('gives a missing-night section the same heading hierarchy as a recorded night
   expect(screen.getByRole('heading', { level: 2, name: 'Nothing recorded' }))
     .toHaveStyle({ fontSize: '1.125rem', fontWeight: 600 });
 });
+
+it('describes the analysis timing of the running schedule for a pending night', () => {
+  renderWithProviders(<MissingNightCard
+    state="pending"
+    canAnalyze={ false }
+    onAnalyze={ () => {} }
+    pendingDescription="Analyzed soon after it ends."/>);
+  expect(screen.getByText('Analyzed soon after it ends.')).toBeInTheDocument();
+  expect(screen.queryByText(/Last night is analyzed at/)).not.toBeInTheDocument();
+});

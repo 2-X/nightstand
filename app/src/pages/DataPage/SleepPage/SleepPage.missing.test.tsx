@@ -5,8 +5,10 @@ import moment from 'moment-timezone';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import { getSettings, getServices } from '../../../mocks/mockData';
+import { createDemoRhythms, resetMockRhythms } from '../../../mocks/rhythmsMock';
 import { useAppStore } from '@state/appStore';
 import SleepPage from './SleepPage';
+import { RHYTHMS_PENDING_DESCRIPTION } from './MissingNightCard';
 
 let services: ReturnType<typeof getServices>;
 let settings: ReturnType<typeof getSettings>;
@@ -31,7 +33,10 @@ beforeEach(() => {
     http.post('*/jobs', async ({ request }) => { jobs.push(await request.json()); return HttpResponse.json({}); }),
   );
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  resetMockRhythms();
+});
 it('runs the existing analysis job once and presents progress', async () => {
   const { user } = renderWithProviders(<SleepPage/>);
   expect(await screen.findByText('Not ready yet')).toBeInTheDocument();
@@ -256,4 +261,15 @@ it('shows failed stage data as an error while preserving the summary and vitals 
   expect(screen.getByLabelText('Night summary')).toBeInTheDocument();
   expect(screen.getByText('Estimates from bed sensors, not a medical measurement.')).toBeInTheDocument();
   expect(screen.queryByText('No sleep stages data available for this period')).not.toBeInTheDocument();
+});
+it('describes the Rhythms analysis timing only while Rhythms is active', async () => {
+  settings.features.rhythms = true;
+  resetMockRhythms(createDemoRhythms(), true);
+  const active = renderWithProviders(<SleepPage/>);
+  expect(await screen.findByText(RHYTHMS_PENDING_DESCRIPTION)).toBeInTheDocument();
+  active.unmount();
+  resetMockRhythms(null, true);
+  renderWithProviders(<SleepPage/>);
+  expect(await screen.findByText(/Last night is analyzed at/)).toBeInTheDocument();
+  expect(screen.queryByText(RHYTHMS_PENDING_DESCRIPTION)).not.toBeInTheDocument();
 });
