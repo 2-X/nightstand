@@ -91,9 +91,9 @@ export default function ScheduleTimeline({ format, risePattern = false, hideTemp
   const isNightTime = (time: string) => !isWakeTime(time) && !isAfterWake(time);
   const timeHint = `Pick a time between ${moment(schedule.power.on, 'HH:mm').format('h:mm A')}`
     + ` and ${moment(schedule.power.off, 'HH:mm').format('h:mm A')}.`;
-  const alarmHint = (time: string) => {
+  const alarmHint = (time: string, subject = 'this alarm') => {
     const afterOff = minutesSincePowerOn(time, schedule.power.off) <= minutesSincePowerOn(schedule.power.on, time);
-    return afterOff ? `Turn off is at ${moment(schedule.power.off, 'HH:mm').format('h:mm A')}, before this alarm.`
+    return afterOff ? `Turn off is at ${moment(schedule.power.off, 'HH:mm').format('h:mm A')}, before ${subject}.`
       + ' Move Turn off later or pick an earlier time.' : timeHint;
   };
   const rowGrid = { display: 'grid', gridTemplateColumns: '145px 1fr 44px',
@@ -308,7 +308,7 @@ export default function ScheduleTimeline({ format, risePattern = false, hideTemp
               refollowLastAlarm(time);
             } }/>
         </Box>
-        { wakeInvalid && <Typography color="error" variant="caption">{ alarmHint(wake.time) }</Typography> }
+        { wakeInvalid && <Typography color="error" variant="caption">{ alarmHint(wake.time, 'this wake time') }</Typography> }
         <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mt: 0.5 } }>
           The warm-up and turn off follow this time, with or without an alarm.
         </Typography>

@@ -37,3 +37,18 @@ it('needs Biometrics for up early and explains day sleep', () => {
   expect(screen.getByRole('switch', { name: 'Warm start' })).toBeDisabled();
   expect(screen.queryByText("Starts cooling once you've settled in bed")).not.toBeInTheDocument();
 });
+
+it('explains a short sleep and locks Warm start', () => {
+  renderWithProviders(<SmartScheduleControls
+    value={ DEFAULT_SMART }
+    onChange={ () => {} }
+    format="level"
+    trackingOn
+    daySleep={ false }
+    shortSleep
+    disabled={ false }/>);
+  expect(screen.getByRole('note')).toHaveTextContent('This sleep is shorter than 3 hours, so there is no warm start.');
+  expect(screen.getByRole('switch', { name: 'Warm start' })).toBeDisabled();
+  expect(screen.getByRole('switch', { name: 'Warm start' })).not.toBeChecked();
+  expect(screen.getByText('Off for this rhythm, because its sleep is shorter than 3 hours.')).toBeInTheDocument();
+});

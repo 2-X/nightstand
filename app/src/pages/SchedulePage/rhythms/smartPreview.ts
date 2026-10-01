@@ -15,7 +15,8 @@ export function nightAnchors(night: DailySchedule, wake: string, date: string, t
   const bedtime = at(night.power.on);
   const powerOff = at(night.power.off);
   if (night.power.off === night.power.on) powerOff.add(1, 'day');
-  const wakeAt = moment.min(at(wake), powerOff);
+  // Waking at the turn off means the end, even when off equals on.
+  const wakeAt = wake === night.power.off ? powerOff.clone() : moment.min(at(wake), powerOff);
   return { bedtime: bedtime.toDate(), wake: wakeAt.toDate(), powerOff: powerOff.toDate() };
 }
 

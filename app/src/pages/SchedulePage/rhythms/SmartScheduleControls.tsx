@@ -9,12 +9,13 @@ type Props = {
   format: TemperatureFormat;
   trackingOn: boolean;
   daySleep: boolean;
+  shortSleep?: boolean;
   disabled: boolean;
 };
 
 type SwitchKey = 'warmStart' | 'warmUp' | 'upEarly';
 
-export default function SmartScheduleControls({ value, onChange, format, trackingOn, daySleep, disabled }: Props) {
+export default function SmartScheduleControls({ value, onChange, format, trackingOn, daySleep, shortSleep = false, disabled }: Props) {
   const toggle = (key: SwitchKey, label: string, description: string, blocked = false) => <Box key={ key }>
     <FormControlLabel
       label={ label }
@@ -34,6 +35,9 @@ export default function SmartScheduleControls({ value, onChange, format, trackin
   return <Stack spacing={ 2 } sx={ { width: '100%' } }>
     { daySleep && <Typography variant="body2" role="note">
       This sleep is mostly during the day, so there is no warm start and the cool-down is a little quicker.
+    </Typography> }
+    { !daySleep && shortSleep && <Typography variant="body2" role="note">
+      This sleep is shorter than 3 hours, so there is no warm start.
     </Typography> }
     <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 } }>
       <Box sx={ { minWidth: 0, flex: '1 1 140px' } }>
@@ -60,9 +64,10 @@ export default function SmartScheduleControls({ value, onChange, format, trackin
         <ToggleButton value="standard">Standard</ToggleButton>
       </ToggleButtonGroup>
     </Box>
-    { toggle('warmStart', 'Warm start', daySleep
-      ? 'Off for this rhythm, because its sleep is mostly during the day.'
-      : 'A little warmer when you get into bed. Off for a sleep that is mostly during the day or shorter than 3 hours.', daySleep) }
+    { toggle('warmStart', 'Warm start', daySleep ? 'Off for this rhythm, because its sleep is mostly during the day.'
+      : shortSleep ? 'Off for this rhythm, because its sleep is shorter than 3 hours.'
+        : 'A little warmer when you get into bed. Off for a sleep that is mostly during the day or shorter than 3 hours.',
+    daySleep || shortSleep) }
     { toggle('warmUp', 'Warm-up before wake', 'Warms gently before your wake time, so you wake to a comfortable bed.') }
     { toggle('upEarly', 'Skip the warm-up if I get up early', trackingOn
       ? 'If you are out of bed for 30 minutes in the last 90 before your wake time, the bed goes back to your base.'

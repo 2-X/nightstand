@@ -20,6 +20,15 @@ it('holds a wake time past the turn off at the turn off, with or without an alar
   expect(anchors.wake.toISOString()).toBe(anchors.powerOff.toISOString());
 });
 
+it('places a wake at the turn off at the end of a 24 hour night, as the Pod does', () => {
+  const night = workday();
+  night.power = { ...night.power, on: '22:00', off: '22:00' };
+  const anchors = nightAnchors(night, '22:00', '2026-09-28', TZ);
+  expect(anchors.bedtime.toISOString()).toBe('2026-09-29T05:00:00.000Z');
+  expect(anchors.wake.toISOString()).toBe('2026-09-30T05:00:00.000Z');
+  expect(anchors.wake.toISOString()).toBe(anchors.powerOff.toISOString());
+});
+
 it('shades how far the cool-down can move only with sleep tracking', () => {
   const night = workday();
   const clockOnly = previewCurves({ night, wake: '06:30', smart: DEFAULT_SMART, date: '2026-09-28', timeZone: TZ, trackingOn: false });
