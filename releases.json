@@ -58,7 +58,10 @@
         "one-off-alarms",
         "design-system",
         "logs-viewer",
-        "base-control"
+        "base-control",
+        "raw-archive-retention",
+        "water-tank-status",
+        "service-memory-limits"
       ]
     },
     {
@@ -80,7 +83,10 @@
         "one-off-alarms",
         "design-system",
         "logs-viewer",
-        "base-control"
+        "base-control",
+        "raw-archive-retention",
+        "water-tank-status",
+        "service-memory-limits"
       ]
     },
     {
@@ -102,7 +108,10 @@
         "one-off-alarms",
         "design-system",
         "logs-viewer",
-        "base-control"
+        "base-control",
+        "raw-archive-retention",
+        "water-tank-status",
+        "service-memory-limits"
       ]
     },
     {
