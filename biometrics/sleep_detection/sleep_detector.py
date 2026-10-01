@@ -30,7 +30,7 @@ from presence.detector import DetectorParams
 from presence.params import baselines_from_calibration, params_from_calibration
 from presence.piezo import ONE_PER_SECOND_SHARE
 from presence.replay import FrameCollector, occupied_level, replay
-from presence.sensors import CapFormat
+from presence.sensors import CapFormat, printable_type
 
 logger = get_logger()
 
@@ -41,9 +41,8 @@ MIN_CAP_COVERAGE = 0.5
 # reading for this share of every night the older rule finds, or that side
 # keeps the older reading.
 MIN_NIGHT_CAP_COVERAGE = 0.9
-# Unknown capacitance types named in the log, and how much of each name.
+# Unknown capacitance types named in the log.
 UNKNOWN_CAP_SHOWN = 5
-UNKNOWN_CAP_NAME_LENGTH = 40
 
 # (epoch seconds of a 2-minute bin start, largest per-second movement in it)
 MovementRow = Tuple[int, float]
@@ -330,7 +329,7 @@ def _presence_v2_params(collector: Optional[FrameCollector], profiles) -> Option
 
 def _unknown_cap_summary(counts) -> str:
     """'type: count' for the most common unknown capacitance types, or '' when there were none."""
-    shown = ', '.join(f'{kind[:UNKNOWN_CAP_NAME_LENGTH]}: {count:,}' for kind, count in counts.most_common(UNKNOWN_CAP_SHOWN))
+    shown = ', '.join(f'{printable_type(kind)}: {count:,}' for kind, count in counts.most_common(UNKNOWN_CAP_SHOWN))
     more = len(counts) - UNKNOWN_CAP_SHOWN
     return shown + (f' and {more} more' if more > 0 else '')
 

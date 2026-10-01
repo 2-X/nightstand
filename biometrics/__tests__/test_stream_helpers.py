@@ -224,6 +224,14 @@ class TestStoreDecodedCapRecord(CapPresenceTestCase):
         self.assertLess(len(logs.output[0]), 250)
         self.assertNotIn('x' * (stream.UNKNOWN_CAP_NAME_LENGTH + 1), logs.output[0])
 
+    def test_logs_an_unknown_type_name_on_one_line(self):
+        record = {'type': 'capSense\n3\x1b[0m', 'ts': datetime.now().timestamp()}
+        with self.assertLogs(stream.logger, level='WARNING') as logs:
+            self.assertTrue(stream._store_decoded_cap_record(record))
+        self.assertIn('capSense3[0m', logs.output[0])
+        self.assertNotIn('\n', logs.output[0])
+        self.assertNotIn('\x1b', logs.output[0])
+
     def test_leaves_other_records_to_the_piezo_path(self):
         self.assertFalse(stream._store_decoded_cap_record(recent_piezo()))
         self.assertFalse(stream._store_decoded_cap_record(None))

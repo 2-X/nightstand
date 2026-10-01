@@ -44,6 +44,8 @@ CHANNEL_PAIRS = ((0, 1), (2, 3), (4, 5))
 LEGACY_CHANNELS = ('out', 'cen', 'in')
 # A type starting with one of these is capacitance, read here or not.
 CAP_TYPE_PREFIXES = ('capsense', 'cap_', 'cap-', 'capacit')
+# The most of an unknown type's name that goes into a log line.
+TYPE_NAME_LENGTH = 40
 
 
 @dataclass(frozen=True)
@@ -77,6 +79,11 @@ def unknown_cap_type(record) -> Optional[str]:
     if isinstance(kind, str) and kind.lower().startswith(CAP_TYPE_PREFIXES) and kind not in FORMATS:
         return kind
     return None
+
+
+def printable_type(kind: str) -> str:
+    """A record type as it may appear in a log line: printable characters only, cut short."""
+    return ''.join(character for character in kind if character.isprintable())[:TYPE_NAME_LENGTH]
 
 
 def format_named(name) -> Optional[CapFormat]:

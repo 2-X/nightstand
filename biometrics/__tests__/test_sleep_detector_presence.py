@@ -481,6 +481,13 @@ class PresenceParamsTest(unittest.TestCase):
         self.assertIn('capSense' + 'x' * 32 + ': 4', logs.output[0])
         self.assertNotIn('x' * 33, logs.output[0])
 
+    def test_unknown_type_names_are_logged_without_control_characters(self):
+        with self.assertLogs(sleep_detector.logger, level='WARNING') as logs:
+            sleep_detector._presence_v2_params(self.collector(unknown=[('capSense\n3\x1b[0m', 2)]), profiles())
+        self.assertIn('capSense3[0m: 2', logs.output[0])
+        self.assertNotIn('\n', logs.output[0])
+        self.assertNotIn('\x1b', logs.output[0])
+
     def test_no_readable_capacitance_says_so(self):
         with self.assertLogs(sleep_detector.logger, level='WARNING') as logs:
             self.assertIsNone(sleep_detector._presence_v2_params(self.collector(), profiles()))

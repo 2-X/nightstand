@@ -49,7 +49,7 @@ logger = get_logger('free-sleep-stream')
 import calibration
 from features import biometrics_v2_enabled
 from presence.params import baselines_from_calibration, params_from_calibration
-from presence.sensors import read_cap, unknown_cap_type
+from presence.sensors import TYPE_NAME_LENGTH, printable_type, read_cap, unknown_cap_type
 from stream_processor import LatestCap, StreamProcessor
 from load_raw_files import load_piezo_row, _read_raw_record
 from service_health import update_health, update_sensor_temps, update_pump_health
@@ -65,7 +65,7 @@ CAP_FRESH_SECONDS = 60
 _unknown_cap_logged = set()
 _unknown_cap_overflow_logged = False
 UNKNOWN_CAP_LOG_LIMIT = 16
-UNKNOWN_CAP_NAME_LENGTH = 40
+UNKNOWN_CAP_NAME_LENGTH = TYPE_NAME_LENGTH
 
 # How often the NATS consumer loop reports itself healthy. Matches the 60s
 # cadence of BiometricProcessor._presence_heartbeat_interval; frequent enough
@@ -155,7 +155,7 @@ def _store_decoded_cap_record(decoded_data) -> bool:
         kind = unknown_cap_type(decoded_data)
         if kind is None:
             return False
-        _warn_unknown_cap(kind[:UNKNOWN_CAP_NAME_LENGTH])
+        _warn_unknown_cap(printable_type(kind))
         return True
     ts = reading.ts
     if not _is_number(ts):

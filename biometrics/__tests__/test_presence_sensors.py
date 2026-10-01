@@ -6,7 +6,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from presence.sensors import CAPSENSE, CAPSENSE2, format_named, read_cap, unknown_cap_type
+from presence.sensors import CAPSENSE, CAPSENSE2, format_named, printable_type, read_cap, unknown_cap_type
 
 
 def capsense2(left, right=None):
@@ -122,6 +122,11 @@ class OtherRecordsTest(unittest.TestCase):
         for kind in ('escape', 'capture', 'capital', 'landscape', 'bedTemp2', 'log', 'cape', 'capped', 'cap'):
             with self.subTest(kind=kind):
                 self.assertIsNone(unknown_cap_type({'type': kind}))
+
+    def test_a_type_name_is_made_safe_to_log(self):
+        self.assertEqual(printable_type('capSense3'), 'capSense3')
+        self.assertEqual(printable_type('cap\nSense\x1b[31m\t3'), 'capSense[31m3')
+        self.assertEqual(printable_type('capSense' + 'x' * 100), 'capSense' + 'x' * 32)
 
     def test_known_formats_are_not_unknown(self):
         self.assertIsNone(unknown_cap_type(capsense2([12.0] * 8)))
