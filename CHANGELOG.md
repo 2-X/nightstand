@@ -6,6 +6,31 @@ is a hard fork; for the history of the projects it descends from, see
 [jmew/free-sleep](https://github.com/jmew/free-sleep) and
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
 
+## [3.5.1] - 2026-10-01
+
+Keeps biometrics RAW files from filling the disk on a Pod 3 with internet access blocked.
+
+- On a Pod 3 with internet access blocked, the firmware never deletes its
+  biometrics RAW files, so the small (about 1 GB) /persistent partition
+  filled up in about a day and the server kept restarting. The RAW archive
+  now applies its retention to the firmware's own RAW files too. When space
+  runs low it removes the oldest file from both places, never the file being
+  written, and its free-space floor scales with the partition, so a small
+  disk no longer has its archive emptied every minute. Pod 4 and Pod 5 work
+  as before. Thanks to @sim- for the report
+  (https://github.com/LTimothy/nightstand/issues/1).
+
+  A Pod 3 whose /persistent is already full may not have room for the
+  update. Removing some of the oldest RAW files first frees space; this
+  removes the oldest 40 (about 270 MB) and never touches SEQNO.RAW:
+
+  ```
+  cd /persistent && ls -1tr *.RAW | grep -v '^SEQNO.RAW$' | head -n 40 | xargs -r rm -f --
+  ```
+
+  On a Pod 3 the free-space floor, not the retention setting, decides how
+  much RAW history is kept, which is less than a day.
+
 ## [3.5.0] - 2026-10-01
 
 Rhythms with an optional Smart Schedule, pausing a side's schedule, a new beta sleep tracking option, and more reliable sleep analysis.
