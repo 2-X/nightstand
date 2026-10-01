@@ -175,11 +175,12 @@ export class CurveController {
 
   // The power-off job asks at the set off, once an alarm due then has rung,
   // and again at the latest off. 'keep' leaves the side on.
-  decideOff(side: Side, sleep: ResolvedSleep, now: Date): 'off' | 'keep' {
+  decideOff(side: Side, sleep: ResolvedSleep, now: Date, dueAt: Date = now): 'off' | 'keep' {
     const key = keyOf(side, sleep.date);
     const record = this.offs.get(key);
     if (record?.status === 'extended') {
-      if (now.getTime() < record.latest.getTime()) return 'keep';
+      // A job that fires a moment early still turns the side off at the latest.
+      if (Math.max(now.getTime(), dueAt.getTime()) < record.latest.getTime()) return 'keep';
       this.endOff(key, record, record.latest, 'cap', { write: false, retime: false });
       return 'off';
     }
@@ -680,8 +681,8 @@ export function smartOffExtends(side: Side, date: string): boolean {
 }
 
 // Without a running controller a sleep turns off at its set time, as before.
-export function smartOffDecision(side: Side, sleep: ResolvedSleep, now: Date = new Date()): 'off' | 'keep' {
-  return active ? active.decideOff(side, sleep, now) : 'off';
+export function smartOffDecision(side: Side, sleep: ResolvedSleep, now: Date = new Date(), dueAt: Date = now): 'off' | 'keep' {
+  return active ? active.decideOff(side, sleep, now, dueAt) : 'off';
 }
 
 // Every resolver call except overlap checks passes these, so the jobs, the

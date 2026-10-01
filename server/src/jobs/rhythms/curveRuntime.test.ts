@@ -161,3 +161,31 @@ describe('startCurveRuntime', () => {
     assert.equal(smartManualChange('left'), 'not-smart');
   });
 });
+
+const { dbOf, rhythmOf, sideOf, WORKDAY } = await import('./rhythmsTestData.js');
+const { resolveSleeps } = await import('./resolve.js');
+
+describe('ringableAlarms', () => {
+  // Monday 2026-09-28, 22:00 to 07:00 UTC with a 06:30 alarm.
+  const sleeps = resolveSleeps({
+    db: dbOf(sideOf([rhythmOf('workday', WORKDAY)], { monday: 'workday' })),
+    side: 'left', timeZone: 'UTC', from: new Date('2026-09-28T12:00:00Z'), to: new Date('2026-09-29T12:00:00Z'),
+  }).filter(sleep => sleep.date === '2026-09-28');
+  const settingsWith = (alarmsEnabled: boolean, expiresAt: string) => ({
+    left: { alarmsEnabled, scheduleOverrides: { alarm: { disabled: true, timeOverride: '', expiresAt } } },
+  }) as unknown as import('../../db/settingsSchema.js').Settings;
+  const alarms = (settings: ReturnType<typeof settingsWith>) => runtime
+    .ringableAlarms(sleeps, settings, 'left', new Date('2026-09-29T05:00:00Z'))
+    .flatMap(sleep => sleep.events.filter(event => event.kind === 'alarm').map(event => event.at.toISOString()));
+
+  it('keeps an alarm that will ring', () => {
+    assert.deepEqual(alarms(settingsWith(true, '')), ['2026-09-29T06:30:00.000Z']);
+    // An override that ended before this sleep began skips nothing in it.
+    assert.deepEqual(alarms(settingsWith(true, '2026-09-28T12:00:00Z')), ['2026-09-29T06:30:00.000Z']);
+  });
+
+  it('leaves out alarms that will not ring: off for the side, or skipped by an override', () => {
+    assert.deepEqual(alarms(settingsWith(false, '')), []);
+    assert.deepEqual(alarms(settingsWith(true, '2026-09-29T07:00:00Z')), []);
+  });
+});

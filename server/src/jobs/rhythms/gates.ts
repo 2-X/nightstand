@@ -9,7 +9,7 @@ export type SkipReason = 'away' | 'paused' | 'alarms-off' | 'alarm-override';
 
 // Same rule as the weekly alarm job: an unexpired override, or one that
 // expired inside this sleep, skips the sleep's own alarms.
-export function isAlarmOverridden(settings: Settings, side: Side, sleep: ResolvedSleep, now: Date): boolean {
+export function isAlarmOverridden(settings: Settings, side: Side, sleep: Pick<ResolvedSleep, 'start' | 'end'>, now: Date): boolean {
   const { expiresAt } = settings[side].scheduleOverrides.alarm;
   if (!expiresAt) return false;
   const expires = moment(expiresAt);

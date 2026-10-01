@@ -15,8 +15,8 @@ import { notePowerOn, poweredOnSince } from '../powerScheduler.js';
 import { isTempScheduleOverridden } from '../scheduleOverride.js';
 import { effectiveSides, engineActivation } from '../scheduleQueries.js';
 import { rhythmSkipReason } from './gates.js';
-import { smartTemperatureGate } from './curveController.js';
-import type { ResolvedSleep, RhythmEvent } from './resolve.js';
+import { smartOffDecision, smartPowerOffFor, smartTemperatureGate } from './curveController.js';
+import { turnsOffWhenUp, type ResolvedSleep, type RhythmEvent } from './resolve.js';
 
 export const FIRMWARE_MARGIN_SECONDS = 300;
 export const FIRMWARE_MAX_SECONDS = 43200;
@@ -32,9 +32,14 @@ const DUPLICATE_ANALYSIS_MS = 10 * 60 * 1000;
 
 // Every Rhythms power-on hands the firmware its own off time, so the side
 // still turns off at the sleep's end if this server stops or is replaced.
-export function firmwareSeconds(sleepEnd: Date, now: Date): number {
-  return Math.min(Math.ceil((sleepEnd.getTime() - now.getTime()) / 1000) + FIRMWARE_MARGIN_SECONDS, FIRMWARE_MAX_SECONDS);
+export function firmwareSeconds(sleepEnd: Date, now: Date, marginSeconds = FIRMWARE_MARGIN_SECONDS): number {
+  return Math.min(Math.ceil((sleepEnd.getTime() - now.getTime()) / 1000) + marginSeconds, FIRMWARE_MAX_SECONDS);
 }
+
+// A "When I get up" sleep decides at its set off, after an alarm due then
+// has rung, so its timer leaves room for that wait.
+export const OFF_WHEN_UP_MARGIN_SECONDS = 900;
+const marginFor = (sleep: ResolvedSleep): number => (turnsOffWhenUp(sleep) ? OFF_WHEN_UP_MARGIN_SECONDS : FIRMWARE_MARGIN_SECONDS);
 
 // The sleep end each side's firmware was last told. Memory only, so after a
 // restart a sleep in progress is told again.
@@ -56,7 +61,7 @@ export function holdForHandBack(now: Date): void {
   handedBackUntil = now.getTime() + HANDED_BACK_HOLD_MS;
 }
 
-const handedBack = () => Date.now() < handedBackUntil;
+export const handedBack = (): boolean => Date.now() < handedBackUntil;
 
 // Test isolation only.
 export function resetOffTimes(): void {
@@ -92,6 +97,16 @@ function markStatus(key: 'powerSchedule' | 'temperatureSchedule', error?: unknow
 // or set point command per setting reaches the Pod.
 const SCHEDULED = { background: true };
 
+// A controller that cannot decide leaves the set off in place.
+function keepsOn(side: Side, sleep: ResolvedSleep, now: Date, dueAt: Date): boolean {
+  try {
+    return smartOffDecision(side, sleep, now, dueAt) === 'keep';
+  } catch (error: unknown) {
+    logger.warn(`smart schedule ${side} ${sleep.date}: could not decide the turn off: ${errorMessage(error)}`);
+    return false;
+  }
+}
+
 // Resolves to how long an alarm rings in milliseconds, 0 for anything else.
 export async function runRhythmEvent(side: Side, sleep: ResolvedSleep, event: RhythmEvent): Promise<number> {
   const label = `rhythm ${event.kind} for ${side} (${sleep.date})`;
@@ -121,6 +136,14 @@ export async function runRhythmEvent(side: Side, sleep: ResolvedSleep, event: Rh
     logger.info(`Skipping ${label}: the sleep was handed back before this version stops`);
     return 0;
   }
+  if (event.kind === 'power-off' && keepsOn(side, sleep, now, event.at)) {
+    // The firmware keeps its timer from the power-on until the controller's
+    // first step; a re-arm to the latest off would outlast those steps.
+    const latest = smartPowerOffFor(side, sleep.date);
+    if (latest) noteArmed(settings, side, latest);
+    logger.info(`Skipping ${label}: in bed at the turn off, it turns off when they get up`);
+    return 0;
+  }
   if (event.kind === 'power-on' && now.getTime() >= sleep.end.getTime()) {
     logger.warn(`Skipping ${label}: the sleep already ended`);
     return 0;
@@ -128,7 +151,7 @@ export async function runRhythmEvent(side: Side, sleep: ResolvedSleep, event: Rh
   logger.info(`Executing ${label}`);
   try {
     if (event.kind === 'power-on') {
-      const secondsRemaining = firmwareSeconds(sleep.end, now);
+      const secondsRemaining = firmwareSeconds(sleep.end, now, marginFor(sleep));
       // Smart Schedule nights use the curve's own hold instead of the 12 hour one.
       const held = sleep.mode === 'smart'
         ? smartTemperatureGate(side, sleep.date, event.at) !== 'run'
@@ -205,12 +228,24 @@ export async function rearmRhythmSleep(side: Side, sleep: ResolvedSleep): Promis
   }
   logger.info(`Executing ${label}`);
   try {
-    await updateDeviceStatus({ [side]: { secondsRemaining: firmwareSeconds(sleep.end, new Date()) } }, SCHEDULED);
+    await updateDeviceStatus({ [side]: { secondsRemaining: firmwareSeconds(sleep.end, new Date(), marginFor(sleep)) } }, SCHEDULED);
     noteArmed(settings, side, sleep.end);
     markStatus('powerSchedule');
   } catch (error: unknown) {
     markStatus('powerSchedule', error);
   }
+}
+
+// A sleep kept on past its set off gets its timer in short steps, so a
+// stopped server still turns the side off soon. The plan treats the latest
+// off as armed and leaves the steps alone. A step that cannot reach the Pod
+// now is dropped rather than delivered late; the next tick tries again.
+export function armExtensionStep(side: Side, until: Date, latest: Date, now: Date = new Date()): void {
+  if (handedBack()) return;
+  noteArmed(settingsDB.data, side, latest);
+  void updateDeviceStatus({ [side]: { secondsRemaining: firmwareSeconds(until, now) } }, {}).catch((error: unknown) => {
+    logger.warn(`Could not move the ${side} timer: ${errorMessage(error)}`);
+  });
 }
 
 // Analyses from an hour before the sleep's start, or lookbackMs before the
