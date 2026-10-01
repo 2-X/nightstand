@@ -1,11 +1,13 @@
 import express, { Request, Response, Router } from 'express';
 import { prisma } from '../../db/prisma.js';
 import logger from '../../logger.js';
-import { buildCalibrationView } from './calibrationView.js';
+import { buildCalibrationView, newestFormatRun } from './calibrationView.js';
 
 const router: Router = express.Router();
 
 const SIDES = ['left', 'right'] as const;
+// Runs look back this far for one that names a format.
+const FORMAT_LOOKBACK_RUNS = 50;
 
 router.get('/', async (_req: Request, res: Response) => {
   try {
@@ -24,7 +26,13 @@ router.get('/', async (_req: Request, res: Response) => {
         where: { side, sensor_type: 'cap' },
         orderBy: [{ started_at: 'desc' }, { id: 'desc' }],
       });
-      result[side] = buildCalibrationView(profile, originatingRun, lastRun);
+      const formatRuns = await prisma.calibration_runs.findMany({
+        where: { side, sensor_type: 'cap', payload: { not: null } },
+        orderBy: [{ started_at: 'desc' }, { id: 'desc' }],
+        take: FORMAT_LOOKBACK_RUNS,
+        select: { payload: true },
+      });
+      result[side] = buildCalibrationView(profile, originatingRun, lastRun, newestFormatRun(formatRuns));
     }
     res.json(result);
   } catch (error) {

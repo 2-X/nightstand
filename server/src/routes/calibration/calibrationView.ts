@@ -10,18 +10,45 @@ export type CalibrationRunRow = {
   trigger: string;
 };
 
+export type CalibrationFormatRow = {
+  payload: string | null;
+};
+
+// With the new sleep tracking on, each capacitance calibration run records
+// the record format the Pod writes, such as capSense2 or capSense. A run that
+// saw no usable records records 'none' or 'unknown', which name no format.
+export function capFormatOf(run: CalibrationFormatRow | null): string | null {
+  if (!run?.payload) return null;
+  try {
+    const parsed: unknown = JSON.parse(run.payload);
+    const format = typeof parsed === 'object' && parsed !== null ? (parsed as { format?: unknown }).format : undefined;
+    if (typeof format !== 'string' || format.length === 0 || format.length > 64) return null;
+    return format === 'none' || format === 'unknown' ? null : format;
+  } catch {
+    return null;
+  }
+}
+
+// The newest run that names a format, so a later empty-window run does not
+// erase a good label. Runs come newest first.
+export function newestFormatRun(runs: CalibrationFormatRow[]): CalibrationFormatRow | null {
+  return runs.find((run) => capFormatOf(run) !== null) ?? null;
+}
+
 export type CalibrationView = {
   state: 'none' | 'imported' | 'calibrated';
   summary: string;
   quality: number | null;
   calibratedAt: number | null;
   lastRunStatus: string | null;
+  capFormat: string | null;
 };
 
 export function buildCalibrationView(
   profile: CalibrationProfileRow | null,
   originatingRun: CalibrationRunRow | null,
   lastRun: CalibrationRunRow | null,
+  formatRun: CalibrationFormatRow | null = null,
 ): CalibrationView {
   if (profile === null) {
     return {
@@ -30,6 +57,7 @@ export function buildCalibrationView(
       quality: null,
       calibratedAt: null,
       lastRunStatus: lastRun?.status ?? null,
+      capFormat: capFormatOf(formatRun),
     };
   }
 
@@ -45,6 +73,7 @@ export function buildCalibrationView(
       quality: null,
       calibratedAt: profile.created_at,
       lastRunStatus: lastRun?.status ?? null,
+      capFormat: capFormatOf(formatRun),
     };
   }
 
@@ -55,5 +84,6 @@ export function buildCalibrationView(
     quality: profile.quality,
     calibratedAt: profile.created_at,
     lastRunStatus: lastRun?.status ?? null,
+    capFormat: capFormatOf(formatRun),
   };
 }

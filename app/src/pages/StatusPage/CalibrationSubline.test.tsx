@@ -9,6 +9,7 @@ const calibrated = {
   quality: 0.8,
   calibratedAt: 1_700_001_400,
   lastRunStatus: 'success',
+  capFormat: null,
 };
 
 describe('CalibrationSubline', () => {
@@ -22,7 +23,7 @@ describe('CalibrationSubline', () => {
       <CalibrationSubline
         view={ {
           state: 'none', summary: 'Not calibrated yet. This happens automatically once the sensors record a stretch of empty bed.',
-          quality: null, calibratedAt: null, lastRunStatus: null,
+          quality: null, calibratedAt: null, lastRunStatus: null, capFormat: null,
         } }/>,
     );
     expect(await screen.findByText(/Not calibrated yet/)).toBeInTheDocument();
@@ -44,7 +45,7 @@ describe('CalibrationSubline', () => {
           // wording. Do not "fix" this back to null, that would silently
           // remove the regression protection this test exists for.
           state: 'imported', summary: 'Carried over from an earlier version, confidence unknown.',
-          quality: 0, calibratedAt: 1_700_001_400, lastRunStatus: 'success',
+          quality: 0, calibratedAt: 1_700_001_400, lastRunStatus: 'success', capFormat: null,
         } }/>,
     );
     expect(await screen.findByText(/confidence unknown/)).toBeInTheDocument();
@@ -59,7 +60,7 @@ describe('CalibrationSubline', () => {
       <CalibrationSubline
         view={ {
           state: 'imported', summary: 'Carried over from an earlier version, confidence unknown.',
-          quality: null, calibratedAt: 1_700_001_400, lastRunStatus: 'success',
+          quality: null, calibratedAt: 1_700_001_400, lastRunStatus: 'success', capFormat: null,
         } }/>,
     );
     expect(await screen.findByText(/confidence unknown/)).toBeInTheDocument();

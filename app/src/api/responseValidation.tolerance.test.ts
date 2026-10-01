@@ -186,3 +186,18 @@ describe('schedules', () => {
     expect(() => validateResponse('/schedules', value)).toThrow();
   });
 });
+
+describe('calibration', () => {
+  const side = { state: 'calibrated', summary: 'Learned.', quality: 0.5, calibratedAt: 1, lastRunStatus: 'success' };
+
+  it('reads the capacitance format when the server sends one', () => {
+    const result = validateResponse('/calibration', { left: { ...side, capFormat: 'capSense' }, right: side }) as Loose;
+    expect(result.left.capFormat).toBe('capSense');
+    expect(result.right.capFormat).toBeNull();
+  });
+
+  it('reads an unusable format as unknown', () => {
+    const result = validateResponse('/calibration', { left: { ...side, capFormat: 7 }, right: side }) as Loose;
+    expect(result.left.capFormat).toBeNull();
+  });
+});

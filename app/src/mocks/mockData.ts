@@ -911,6 +911,7 @@ export const mockCalibration = {
     quality: 0.8,
     calibratedAt: 1_700_001_400,
     lastRunStatus: 'success',
+    capFormat: null,
   },
   right: {
     state: 'none' as const,
@@ -918,5 +919,6 @@ export const mockCalibration = {
     quality: null,
     calibratedAt: null,
     lastRunStatus: null,
+    capFormat: null,
   },
 };

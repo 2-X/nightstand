@@ -145,6 +145,7 @@ const calibrationSide = z.object({
   quality: z.number().nullable(),
   calibratedAt: z.number().nullable(),
   lastRunStatus: z.string().nullable(),
+  capFormat: soft(z.string().nullable(), null),
 });
 
 // HTTP and WebSocket status reads share the same compatibility boundary. The

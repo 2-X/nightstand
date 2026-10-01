@@ -1187,19 +1187,23 @@ returns `400`. Presence has no WebSocket push; clients poll this endpoint.
     "summary": "Learned from a 45 min empty-bed window.",
     "quality": 0.92,
     "calibratedAt": 1745704351,
-    "lastRunStatus": "ok"
+    "lastRunStatus": "ok",
+    "capFormat": "capSense2"
   },
   "right": {
     "state": "none",
     "summary": "Not calibrated yet. This happens automatically once the sensors record a stretch of empty bed.",
     "quality": null,
     "calibratedAt": null,
-    "lastRunStatus": null
+    "lastRunStatus": null,
+    "capFormat": null
   }
 }
 ```
 
 `state` is `none` (no profile yet), `imported` (carried over from an earlier version by the migration tool, confidence unknown), or `calibrated` (produced by an actual empty-bed run on this install).
+
+`capFormat` is the capacitance record format the Pod writes, such as `capSense2` or `capSense`, taken from the newest calibration run that recorded one; `null` means none has been recorded yet.
 
 ---
 
