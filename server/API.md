@@ -14,6 +14,10 @@ non-internal server interface. `ALLOWED_ORIGIN` can add one configured origin;
 query or fragment. Requests without an Origin header are allowed, so this
 filter is not authentication or protection from non-browser clients.
 
+Request bodies are JSON. A POST, PUT or PATCH whose body has any other
+content type returns 415. A request that takes no body, such as
+`POST /api/base-control/stop`, can be sent without one.
+
 ---
 
 ## `/api/deviceStatus`

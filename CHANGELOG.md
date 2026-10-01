@@ -146,6 +146,9 @@ Rhythms with an optional Smart Schedule, pausing a side's schedule, a new beta s
   than 7 days. Without a range, vitals took several seconds on a Pod and
   more than doubled the server's memory use.
 
+- API requests that send a body other than JSON now get a 415 error instead
+  of being handled as if they had no body.
+
 ## [3.4.0] - 2026-09-29
 
 A redesigned app, sleep records that start at your real bedtime, and safer updates, rollbacks and reinstalls.

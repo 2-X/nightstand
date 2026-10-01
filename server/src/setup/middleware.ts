@@ -1,4 +1,4 @@
-import express, { Express } from 'express';
+import express, { Express, NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import logger from '../logger.js';
 import { attachRequestCompletionLogging } from './requestLogging.js';
@@ -72,6 +72,19 @@ export function isAllowedOrigin(origin: string | undefined): boolean {
   }
 }
 
+const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH']);
+
+// Every API route that takes a body reads JSON. A body of any other type was
+// left unparsed, so the route saw an empty update and answered 200 having
+// changed nothing. A request without a body, such as a bare POST to stop the
+// base, is still let through.
+export function requireJsonBody(req: Request, res: Response, next: NextFunction) {
+  if (!BODY_METHODS.has(req.method)) return next();
+  const hasBody = req.headers['transfer-encoding'] !== undefined || Number(req.headers['content-length']) > 0;
+  if (!hasBody || req.is('application/json')) return next();
+  res.status(415).json({ error: 'Send the request body as application/json' });
+}
+
 export default function (app: Express) {
   app.use((req, res, next) => {
     attachRequestCompletionLogging(req, res, logger);
@@ -87,6 +100,7 @@ export default function (app: Express) {
   });
 
   app.use(cors({ origin: true }));
+  app.use('/api', requireJsonBody);
   app.use(express.json());
 
   // Logging
