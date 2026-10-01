@@ -15,9 +15,11 @@ import WakeVibrationSheet from './AlarmSection/WakeVibrationSheet';
 
 // A rhythm passes `wake`: its own wake time, kept whether or not an alarm rings, which anchors the warm-up and the turn-off.
 // `bedtimeNote` is set for Smart Schedule, where power.on is the bedtime and the bed turns on before it.
-export default function ScheduleTimeline({ format, risePattern = false, hideTemperatures = false, bedtimeNote, wake }: {
+// `getUp` is set for Smart Schedule too: "When I get up" keeps power.off as the usual turn-off.
+export default function ScheduleTimeline({ format, risePattern = false, hideTemperatures = false, bedtimeNote, wake, getUp }: {
   format: TemperatureFormat; risePattern?: boolean; hideTemperatures?: boolean; bedtimeNote?: string;
   wake?: { time: string; onChange: (time: string) => void };
+  getUp?: { on: boolean; tracking: boolean; onChange: (on: boolean) => void };
 }) {
   const store = useScheduleStore();
   const schedule = store.selectedSchedule;
@@ -103,6 +105,12 @@ export default function ScheduleTimeline({ format, risePattern = false, hideTemp
   const delay = offAt ? relativeOffDelay(offAt, schedule.power.off) : undefined;
   const wakeInvalid = !!wake && schedule.power.enabled && !timeInPowerWindow(wake.time, schedule.power);
   const followDelay = rejectedDelay ?? delay;
+  const upMode = !!getUp?.on;
+  const offClock = moment(schedule.power.off, 'HH:mm').format('h:mm A');
+  const upNote = getUp?.tracking
+    ? "After your wake time, it turns off once you've been out of bed for 10 minutes and your alarms are done."
+      + ` Still in bed at ${offClock}? It stays on at your wake temperature until you get up, for up to 3 more hours.`
+    : `Needs Biometrics. Until it is on, the bed turns off at ${offClock}.`;
 
   const freezeRows = () => setEditing(previous => {
     if (previous) {
@@ -126,7 +134,7 @@ export default function ScheduleTimeline({ format, risePattern = false, hideTemp
   };
   // Alarm changes move the last alarm; a following turn-off moves with it.
   const refollowLastAlarm = (wakeTime = wake?.time) => {
-    if (customOff || followDelay === undefined) return;
+    if (customOff || upMode || followDelay === undefined) return;
     const anchor = offAnchor(store.getEditedAlarms(), schedule.power.on, wakeTime);
     if (anchor) followWake(anchor, followDelay);
   };
@@ -242,7 +250,7 @@ export default function ScheduleTimeline({ format, risePattern = false, hideTemp
               const on = event.target.value;
               if (!on) return;
               store.updateSelectedSchedule({ power: { on } });
-              if (rejectedDelay !== undefined && !customOff) {
+              if (rejectedDelay !== undefined && !customOff && !upMode) {
                 const anchor = offAnchor(alarms, on);
                 if (anchor) followWake(anchor, rejectedDelay, { ...schedule.power, on });
               }
@@ -406,23 +414,25 @@ export default function ScheduleTimeline({ format, risePattern = false, hideTemp
             label="Turn off"
             size="small"
             disabled={ disabled }
-            value={ customOff || followDelay === undefined ? 'custom' : followDelay }
+            value={ upMode ? 'up' : customOff || followDelay === undefined ? 'custom' : followDelay }
             sx={ { width: manyAlarms ? 215 : 145 } }
             onChange={ event => {
               const value = event.target.value;
+              getUp?.onChange(value === 'up');
               setCustomOff(value === 'custom');
               clearOffWarning();
-              if (value !== 'custom') followWake(offAt, Number(value));
+              if (value !== 'custom' && value !== 'up') followWake(offAt, Number(value));
             } }>
             <MenuItem value={ 0 }>{ manyAlarms ? 'At last alarm' : 'At wake time' }</MenuItem>
             <MenuItem value={ 15 }>15 min after{ afterLabel }</MenuItem>
             <MenuItem value={ 30 }>30 min after{ afterLabel }</MenuItem>
             <MenuItem value={ 60 }>1 hour after{ afterLabel }</MenuItem>
             <MenuItem value="custom">At a set time</MenuItem>
+            { getUp && <MenuItem value="up" disabled={ !getUp.tracking && !upMode }>When I get up</MenuItem> }
           </TextField> }
-          { (!offAt || customOff || followDelay === undefined) && <TextField
-            label={ offAt ? undefined : 'Turn off at' }
-            inputProps={ { 'aria-label': 'Turn off at' } }
+          { (!offAt || customOff || followDelay === undefined || upMode) && <TextField
+            label={ upMode ? 'Usually off at' : offAt ? undefined : 'Turn off at' }
+            inputProps={ { 'aria-label': upMode ? 'Usually off at' : 'Turn off at' } }
             type="time"
             size="small"
             value={ schedule.power.off }
@@ -434,13 +444,16 @@ export default function ScheduleTimeline({ format, risePattern = false, hideTemp
               clearOffWarning();
               store.updateSelectedSchedule({ power: { off: event.target.value } });
             } }/> }
-          { offAt && !customOff && followDelay !== undefined && <Typography
+          { offAt && !customOff && !upMode && followDelay !== undefined && <Typography
             variant="caption"
             color="text.secondary"
           >Turns off at { moment(schedule.power.off, 'HH:mm').format('h:mm A') }</Typography> }
         </Box>
         { offWarning && <Typography variant="caption" color="error" sx={ { display: 'block', mt: 1 } }>
           Wake time is before bedtime, so turn off was not moved.
+        </Typography> }
+        { upMode && <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mt: 1 } }>
+          { upNote }
         </Typography> }
         { customOff && delay !== undefined && <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mt: 1 } }>
           Matches { delay === 0 ? 'wake time' : `${delay} min after wake` }, so it will move with your wake time.
@@ -461,7 +474,7 @@ export default function ScheduleTimeline({ format, risePattern = false, hideTemp
           store.addAlarm();
           const added = store.getEditedAlarms().slice(-1)[0];
           if (added && wake) refollowLastAlarm();
-          else if (added && !customOff && followDelay !== undefined) followWake(added.time, followDelay);
+          else if (added && !customOff && !upMode && followDelay !== undefined) followWake(added.time, followDelay);
         } }
         disabled={ disabled || alarms.length >= MAX_ALARMS_PER_DAY }
         sx={ { alignSelf: 'flex-start', px: 0 } }>Add alarm</Button>

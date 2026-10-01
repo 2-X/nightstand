@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { RhythmSchema, type Rhythm } from '@api/rhythmsSchema';
+import { DEFAULT_SMART, RhythmSchema, type Rhythm } from '@api/rhythmsSchema';
 import type { ResolvedSleepResponse } from '@api/rhythmsResponse';
 import { createDemoRhythms } from '../../../mocks/rhythmsMock';
 import { LOWERCASE_DAYS } from '../days';
@@ -9,7 +9,7 @@ import {
   newRhythmId, rhythmDetail, rhythmOptions, rhythmsNotice, rhythmTimes, rhythmUsage, setDateChange, setWeekDays,
   MAX_CHANGE_DAYS_AHEAD, MAX_NAME_LENGTH, MAX_RHYTHMS_PER_SIDE, conversionDifference, datePickMessage, datesPickMessage,
   deleteMessage, restoreDates, restoreDeleted, restoreWeekDays, rhythmName, setDateChanges, upcomingChanges, usageSubject,
-  weekLabel, weekPickMessage, weekRuns,
+  weekLabel, weekPickMessage, weekRuns, withOffWhenUp,
 } from './rhythmsModel';
 
 const left = createDemoRhythms(new Date('2026-09-28T19:00:00Z')).left;
@@ -217,4 +217,12 @@ it('keeps the limits the server enforces', () => {
   expect(RhythmSchema.safeParse({ ...rhythm, name: 'a'.repeat(MAX_NAME_LENGTH + 1) }).success).toBe(false);
   const validate = readFileSync('../server/src/jobs/rhythms/validate.ts', 'utf8');
   expect(validate).toContain(`export const MAX_CHANGE_DAYS_AHEAD = ${MAX_CHANGE_DAYS_AHEAD};`);
+});
+
+it('stores "When I get up" only when on', () => {
+  const on = withOffWhenUp(DEFAULT_SMART, true);
+  expect(on).toEqual({ ...DEFAULT_SMART, offWhenUp: true });
+  const off = withOffWhenUp(on, false);
+  expect(off).toEqual(DEFAULT_SMART);
+  expect('offWhenUp' in off).toBe(false);
 });

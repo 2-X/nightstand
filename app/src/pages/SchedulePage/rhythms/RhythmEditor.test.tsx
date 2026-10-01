@@ -27,7 +27,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-function renderEditor(rhythmId: string | null, saveError = '', sideData = createDemoRhythms(NOW).left) {
+function renderEditor(rhythmId: string | null, saveError = '', sideData = createDemoRhythms(NOW).left, trackingOn = false) {
   const onSave = vi.fn<(next: SideRhythms) => Promise<boolean>>().mockResolvedValue(true);
   const onDelete = vi.fn<(id: string, replacement: string | null) => Promise<boolean>>().mockResolvedValue(true);
   const onClose = vi.fn();
@@ -38,7 +38,7 @@ function renderEditor(rhythmId: string | null, saveError = '', sideData = create
     format="level"
     timeZone="America/Los_Angeles"
     today="2026-09-28"
-    trackingOn={ false }
+    trackingOn={ trackingOn }
     saveError={ saveError }
     onSave={ onSave }
     onDelete={ onDelete }
@@ -212,4 +212,42 @@ it('does not save a new rhythm once the side has 12', async () => {
   expect(await screen.findByText('This side already has 12 rhythms, the most it can have. Delete one to add another.')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   expect(onSave).not.toHaveBeenCalled();
+});
+
+it('saves "When I get up" on a Smart Schedule rhythm with its usual turn off', async () => {
+  const { user, onSave, onClose } = renderEditor('workday', '', createDemoRhythms(NOW).left, true);
+  fireEvent.mouseDown(await screen.findByLabelText('Turn off'));
+  fireEvent.click(screen.getByRole('option', { name: 'When I get up' }));
+  expect(screen.getByLabelText('Usually off at')).toHaveValue('06:45');
+  await user.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(onClose).toHaveBeenCalledWith('workday'));
+  const saved = onSave.mock.calls[0][0].rhythms.workday;
+  expect(saved.smart.offWhenUp).toBe(true);
+  expect(saved.night.power.off).toBe('06:45');
+});
+
+it('drops "When I get up" when the rhythm switches to Set by hand', async () => {
+  const sideData = createDemoRhythms(NOW).left;
+  sideData.rhythms.workday.smart = { ...sideData.rhythms.workday.smart, offWhenUp: true };
+  const { user, onSave, onClose } = renderEditor('workday', '', sideData, true);
+  await user.click(await screen.findByRole('button', { name: 'Set by hand' }));
+  await user.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(onClose).toHaveBeenCalledWith('workday'));
+  const saved = onSave.mock.calls[0][0].rhythms.workday;
+  expect(saved.temperatureMode).toBe('manual');
+  expect('offWhenUp' in saved.smart).toBe(false);
+});
+
+it('drops "When I get up" from a rhythm switched back to a time', async () => {
+  const sideData = createDemoRhythms(NOW).left;
+  sideData.rhythms.workday.smart = { ...sideData.rhythms.workday.smart, offWhenUp: true };
+  const { user, onSave, onClose } = renderEditor('workday', '', sideData, true);
+  expect(await screen.findByLabelText('Turn off')).toHaveTextContent('When I get up');
+  fireEvent.mouseDown(screen.getByLabelText('Turn off'));
+  fireEvent.click(screen.getByRole('option', { name: '30 min after' }));
+  await user.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(onClose).toHaveBeenCalledWith('workday'));
+  const saved = onSave.mock.calls[0][0].rhythms.workday;
+  expect('offWhenUp' in saved.smart).toBe(false);
+  expect(saved.night.power.off).toBe('07:00');
 });

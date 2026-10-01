@@ -1,6 +1,6 @@
 import moment from 'moment-timezone';
 import type { DailySchedule, DayOfWeek } from '@api/schedulesSchema';
-import { MAX_RHYTHMS_PER_SIDE, type DateChange, type Rhythm, type SideRhythms } from '@api/rhythmsSchema';
+import { MAX_RHYTHMS_PER_SIDE, type DateChange, type Rhythm, type SideRhythms, type SmartSchedule } from '@api/rhythmsSchema';
 import { describeDays, fullDayName } from '@api/rhythmDays';
 import type { ResolvedSleepResponse } from '@api/rhythmsResponse';
 import { LOWERCASE_DAYS } from '../days';
@@ -12,6 +12,13 @@ export const NO_SLEEP = 'No sleep scheduled';
 export type DateChoice = { kind: 'rhythm'; id: string } | { kind: 'none' } | { kind: 'weekly' };
 export type PickerOption = { choice: DateChoice; label: string; detail?: string };
 export type RhythmUsage = { days: DayOfWeek[]; dates: string[] };
+
+// Stored only when on, so a rhythm without it saves exactly as before.
+export function withOffWhenUp(smart: SmartSchedule, on: boolean): SmartSchedule {
+  const next: SmartSchedule = { ...smart };
+  delete next.offWhenUp;
+  return on ? { ...next, offWhenUp: true } : next;
+}
 
 const DATE = 'YYYY-MM-DD';
 // The app's TypeScript lib predates Object.hasOwn.

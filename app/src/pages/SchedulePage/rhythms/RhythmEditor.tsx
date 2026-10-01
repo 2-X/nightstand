@@ -25,6 +25,7 @@ import SmartScheduleControls from './SmartScheduleControls';
 import { bedtimeNote, nightAnchors, previewCurves } from './smartPreview';
 import {
   DEFAULT_WAKE, defaultNight, isRhythmInUse, MAX_NAME_LENGTH, MAX_RHYTHMS_PER_SIDE, newRhythmId, NO_SLEEP, rhythmUsage, usageSubject,
+  withOffWhenUp,
 } from './rhythmsModel';
 
 type Props = {
@@ -196,7 +197,10 @@ export default function RhythmEditor({
       risePattern={ risePattern }
       hideTemperatures={ mode === 'smart' }
       bedtimeNote={ note }
-      wake={ { time: wake, onChange: setWake } }/>
+      wake={ { time: wake, onChange: setWake } }
+      getUp={ mode === 'smart'
+        ? { on: smart.offWhenUp === true, tracking: trackingOn, onChange: on => setSmart(withOffWhenUp(smart, on)) }
+        : undefined }/>
     <Box component="section" aria-labelledby="temperature-heading" sx={ { width: '100%', display: 'flex', flexDirection: 'column', gap: 1.5 } }>
       <SectionHeading id="temperature-heading">Temperature</SectionHeading>
       <ToggleButtonGroup
@@ -206,7 +210,12 @@ export default function RhythmEditor({
         value={ mode }
         disabled={ isUpdating }
         sx={ { flexWrap: 'wrap' } }
-        onChange={ (_event, next: Rhythm['temperatureMode'] | null) => { if (next) setMode(next); } }>
+        onChange={ (_event, next: Rhythm['temperatureMode'] | null) => {
+          if (!next) return;
+          setMode(next);
+          // A rhythm set by hand has no "When I get up", so the choice is not kept hidden for later.
+          if (next === 'manual') setSmart(withOffWhenUp(smart, false));
+        } }>
         <ToggleButton value="smart">Smart Schedule</ToggleButton>
         <ToggleButton value="manual">Set by hand</ToggleButton>
       </ToggleButtonGroup>
