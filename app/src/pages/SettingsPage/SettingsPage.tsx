@@ -46,7 +46,8 @@ export default function SettingsPage() {
   const biometricsInstalled = services?.biometrics?.jobs?.installation?.status === 'healthy';
   const featureSwitches = [biometricsEnabled && settings?.features?.sleepScore, biometricsEnabled && settings?.features?.presenceAutoOff,
     biometricsEnabled && settings?.features?.biometricsV2,
-    settings?.features?.levelTemps, settings?.features?.oneOffAlarms, biometricsInstalled && biometricsEnabled];
+    settings?.features?.levelTemps, settings?.features?.oneOffAlarms, biometricsInstalled && biometricsEnabled,
+    settings?.features?.rhythms];
   const enabledFeatures = featureSwitches.filter(Boolean).length;
   const zone = settings?.timeZone ? friendlyTimeZone(settings.timeZone) : 'Time zone not set';
   const issueCount = attention.length;

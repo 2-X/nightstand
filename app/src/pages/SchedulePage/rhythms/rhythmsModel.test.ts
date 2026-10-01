@@ -172,6 +172,11 @@ it('names what sets a converted rhythm apart', () => {
   expect(conversionDifference(vibrating, [base], temperature)).toBe('Alarm Double pulse, strength 3, 10 s');
 
   expect(conversionDifference({ ...base, id: 'copy' }, [base], temperature)).toBe('Other alarm settings');
+
+  const builds = { ...pulse, vibrationPattern: 'rise' as const };
+  const rising: Rhythm = { ...base, id: 'rise', night: { ...base.night, alarm: builds, alarms: [builds] } };
+  expect(conversionDifference(rising, [base], temperature, true)).toBe('Alarm Builds up, strength 3, 10 s');
+  expect(conversionDifference(rising, [base], temperature)).toBe('Alarm Double pulse, strength 3, 10 s');
 });
 
 it('does not resolve ids that only exist on the prototype', () => {

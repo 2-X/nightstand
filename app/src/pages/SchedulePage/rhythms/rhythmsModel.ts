@@ -54,11 +54,13 @@ export function rhythmTimes(night: DailySchedule): string {
 
 // What sets a converted rhythm apart from the most similar other one on its side, for the rename step:
 // "Alarm at 6:45 AM", "Alarm Double pulse, strength 3, 10 s".
-export function conversionDifference(rhythm: Rhythm, others: Rhythm[], temperature: (fahrenheit: number) => string): string {
+export function conversionDifference(
+  rhythm: Rhythm, others: Rhythm[], temperature: (fahrenheit: number) => string, risePattern = false,
+): string {
   const facets = (item: Rhythm): Array<{ key: string; text: string }> => {
     const alarms = (item.night.alarms.length ? item.night.alarms : [item.night.alarm]).filter(alarm => alarm.enabled);
     const changes = Object.keys(item.night.temperatures).length;
-    const vibration = alarms.map(alarm => `${alarm.vibrationPattern === 'rise' ? 'Builds up' : 'Double pulse'}, `
+    const vibration = alarms.map(alarm => `${alarm.vibrationPattern === 'rise' && risePattern ? 'Builds up' : 'Double pulse'}, `
       + `strength ${alarm.vibrationIntensity}, ${alarm.duration} s`).join('; ');
     return [
       { key: rhythmTimes(item.night), text: rhythmTimes(item.night) },

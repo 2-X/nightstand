@@ -4,6 +4,8 @@ import { Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, Circ
 import Section from '../Section.tsx';
 import RawArchiveRetention from '../DeviceSettingsSection/RawArchiveRetention';
 import FeatureToggleRow from './FeatureToggleRow.tsx';
+import DisableRhythmsDialog from './DisableRhythmsDialog.tsx';
+import EnableRhythmsDialog from './EnableRhythmsDialog.tsx';
 import { Services, useServices, postServices } from '@api/services.ts';
 import { useSettings, postSettings } from '@api/settings.ts';
 import { Settings } from '@api/settingsSchema.ts';
@@ -17,6 +19,8 @@ export default function FeaturesSection() {
   const { data: settings, refetch: refetchSettings, isLoading: settingsLoading, isError: settingsError } = useSettings();
   const setIsUpdating = useAppStore((state) => state.setIsUpdating);
   const isUpdating = useAppStore((state) => state.isUpdating);
+  const [rhythmsDialog, setRhythmsDialog] = useState<'enable' | 'disable'>();
+  const [rhythmsMessage, setRhythmsMessage] = useState<{ text: string; severity: 'success' | 'warning' }>();
 
   const updateServices = (services: DeepPartial<Services>) => {
     setError(null);
@@ -156,6 +160,27 @@ export default function FeaturesSection() {
         onChange={ (next) => updateFeature({ oneOffAlarms: next }) }
         description="Adds a one-time alarm to Schedule, separate from the daily wake-up."
       />
+      <FeatureToggleRow
+        label="Rhythms (beta)"
+        ariaLabel="Rhythms"
+        disabled={ isUpdating || !features }
+        checked={ features?.rhythms ?? false }
+        onChange={ (next) => {
+          setRhythmsMessage(undefined);
+          setRhythmsDialog(next ? 'enable' : 'disable');
+        } }
+        description={ 'Plan sleep by day and date, with an optional smart temperature curve. '
+          + 'Your weekly schedule is kept and comes back if you turn this off.' }
+      />
+      { rhythmsMessage && <Alert severity={ rhythmsMessage.severity } onClose={ () => setRhythmsMessage(undefined) }>
+        { rhythmsMessage.text }
+      </Alert> }
+      { rhythmsDialog === 'enable' && <EnableRhythmsDialog
+        onClose={ () => setRhythmsDialog(undefined) }
+        onDone={ text => setRhythmsMessage({ text, severity: 'success' }) }/> }
+      { rhythmsDialog === 'disable' && <DisableRhythmsDialog
+        onClose={ () => setRhythmsDialog(undefined) }
+        onDone={ (text, severity) => setRhythmsMessage({ text, severity }) }/> }
     </Section>
   );
 }
