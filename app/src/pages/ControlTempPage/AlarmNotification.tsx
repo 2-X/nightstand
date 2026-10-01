@@ -7,11 +7,14 @@ import { useEffect, useState } from 'react';
 import AlarmOverride from './AlarmOverride.tsx';
 import AlarmDisabledDialog from './AlarmDisabledDialog.tsx';
 import { nextAlarmNight } from './AlarmNight';
+import { alarmNightFromSleeps } from './sleepEvents';
+import { useBedSleeps } from './useBedSleeps';
 
 export default function AlarmNotification() {
   const { side } = useAppStore();
   const { data: schedules } = useSchedules();
   const { data: settings } = useSettings();
+  const bed = useBedSleeps(side);
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [disabledOpen, setDisabledOpen] = useState(false);
   const [alarmTimeLocalOverride, setAlarmTimeLocalOverride] = useState('');
@@ -26,9 +29,11 @@ export default function AlarmNotification() {
     setDisabledOpen(false);
   }, [side]);
 
-  if (!settings || !schedules || settings[side].alarmsEnabled === false || settings[side].awayMode) return null;
+  if (!settings || settings[side].alarmsEnabled === false || settings[side].awayMode) return null;
   const override = settings[side].scheduleOverrides.alarm;
-  const night = nextAlarmNight(schedules[side], settings.timeZone, moment.tz(settings.timeZone), override);
+  const searchFrom = moment.tz(settings.timeZone);
+  const night = bed.state === 'rhythms' ? alarmNightFromSleeps(bed.sleeps, settings.timeZone, searchFrom, override)
+    : bed.state === 'legacy' && schedules ? nextAlarmNight(schedules[side], settings.timeZone, searchFrom, override) : undefined;
   if (!night) return null;
   const expires = moment(override.expiresAt);
   const hasOverride = !!override.expiresAt && expires.isBetween(night.start, night.end, undefined, '(]');

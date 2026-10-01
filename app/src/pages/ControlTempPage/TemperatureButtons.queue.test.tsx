@@ -1,5 +1,7 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { act, fireEvent, render as baseRender, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TemperatureButtons from './TemperatureButtons';
 import { useAppStore } from '@state/appStore';
 import { useControlTempStore } from './controlTempStore';
@@ -12,7 +14,11 @@ vi.mock('@api/deviceStatus.ts', () => ({ postDeviceStatus: api.post }));
 vi.mock('@api/settings.ts', () => ({
   useSettings: () => ({ data: { temperatureFormat: preferences.format, left: { awayMode: false }, right: { awayMode: false } } }),
 }));
+let queryClient: QueryClient;
+const render = (ui: ReactNode) =>
+  baseRender(ui, { wrapper: ({ children }) => <QueryClientProvider client={ queryClient }>{ children }</QueryClientProvider> });
 beforeEach(() => {
+  queryClient = new QueryClient();
   vi.useFakeTimers();
   preferences.format = 'fahrenheit';
   api.post.mockReset().mockResolvedValue({});
@@ -153,4 +159,11 @@ it('does not flush a pending change on unmount once the side is off', async () =
   view.unmount();
   await act(async () => vi.advanceTimersByTimeAsync(2000));
   expect(api.post).not.toHaveBeenCalled();
+});
+it('reads the live Smart Schedule state again after a set point', async () => {
+  const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+  render(<TemperatureButtons currentTargetTemp={ 80 } refetch={ vi.fn() }/>);
+  fireEvent.click(screen.getByRole('button', { name: 'Increase temperature' }));
+  await act(async () => vi.advanceTimersByTimeAsync(400));
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['useRhythmsLive'] });
 });

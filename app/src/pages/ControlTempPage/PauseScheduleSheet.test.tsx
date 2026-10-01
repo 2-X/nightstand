@@ -14,16 +14,23 @@ vi.mock('@api/settings.ts', () => ({
   } }),
   postSettings: fixture.postSettings,
 }));
-const night = (on: string) => ({ power: { enabled: true, on, off: '07:00', onTemperature: 82 }, temperatures: {} });
+const alarm = { time: '06:30', enabled: true, vibrationIntensity: 30, vibrationPattern: 'rise', duration: 30, alarmTemperature: 83 };
+const night = (on: string) => ({ power: { enabled: true, on, off: '07:00', onTemperature: 82 }, temperatures: {}, alarm, alarms: [alarm] });
 vi.mock('@api/schedules.ts', () => ({ useSchedules: () => ({ data: { left: {
   monday: night('21:00'), tuesday: night('22:00'),
 } } }) }));
+const bed = vi.hoisted(() => ({ value: { state: 'legacy' } as { state: string; sleeps?: unknown[] } }));
+vi.mock('./useBedSleeps', () => ({ useBedSleeps: () => bed.value }));
+const device = vi.hoisted(() => ({ status: undefined as unknown }));
+vi.mock('@api/deviceStatus.ts', () => ({ useDeviceStatus: () => ({ data: device.status }) }));
 
 type PausePost = { left: { scheduleOverrides: { pause: { active: boolean; expiresAt: string } } } };
 const onClose = vi.fn();
 const postedPause = () => (fixture.postSettings.mock.calls[0][0] as PausePost).left.scheduleOverrides.pause;
 
 beforeEach(() => {
+  bed.value = { state: 'legacy' };
+  device.status = undefined;
   // Monday 8:00 PM in the Pod timezone.
   vi.spyOn(moment, 'now').mockReturnValue(Date.parse('2026-09-28T20:00:00Z'));
   fixture.postSettings.mockReset().mockResolvedValue({});
@@ -60,7 +67,7 @@ it('pauses until tonight\'s power off', async () => {
 
 it('pauses until resumed', async () => {
   render(<PauseScheduleSheet open onClose={ onClose }/>);
-  fireEvent.click(screen.getByRole('radio', { name: 'Until I resume' }));
+  fireEvent.click(screen.getByRole('radio', { name: /^Until I resume/ }));
   fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
   await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
   expect(postedPause()).toEqual({ active: true, expiresAt: '' });
@@ -191,4 +198,37 @@ it('closes on Escape when nothing is saving', () => {
   render(<PauseScheduleSheet open onClose={ onClose }/>);
   fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
   expect(onClose).toHaveBeenCalledOnce();
+});
+
+const rhythmSleep = {
+  start: '2026-09-28T23:00:00.000Z', end: '2026-09-29T09:15:00.000Z', events: [
+    { kind: 'power-on', at: '2026-09-28T23:00:00.000Z', temperatureF: 82 },
+    { kind: 'temperature', at: '2026-09-29T02:00:00.000Z', temperatureF: 77 },
+    { kind: 'alarm', at: '2026-09-29T09:00:00.000Z', alarm, index: 0 },
+    { kind: 'power-off', at: '2026-09-29T09:15:00.000Z' },
+  ],
+};
+
+it('ends tonight only at the resolved sleep while Rhythms runs', () => {
+  bed.value = { state: 'rhythms', sleeps: [rhythmSleep] };
+  render(<PauseScheduleSheet open onClose={ onClose }/>);
+  expect(screen.getByText('until 9:15 AM tomorrow')).toBeInTheDocument();
+});
+
+it('lists what tonight only skips from the weekly schedule', () => {
+  render(<PauseScheduleSheet open onClose={ onClose }/>);
+  expect(screen.getByText('Skips: 9:00 PM start, 6:30 AM alarm')).toBeInTheDocument();
+});
+
+it('lists what tonight only skips from the resolved sleep while Rhythms runs', () => {
+  bed.value = { state: 'rhythms', sleeps: [rhythmSleep] };
+  render(<PauseScheduleSheet open onClose={ onClose }/>);
+  expect(screen.getByText('Skips: 11:00 PM start, temperature changes, 9:00 AM alarm')).toBeInTheDocument();
+});
+
+it('says a running side stays on until its own timer turns it off', () => {
+  device.status = { left: { isOn: true, secondsRemaining: 5400 } };
+  render(<PauseScheduleSheet open onClose={ onClose }/>);
+  expect(screen.getByText('Alex\'s side is on now and stays as it is. It turns off at 9:30 PM today, or when you turn it off.'))
+    .toBeInTheDocument();
 });

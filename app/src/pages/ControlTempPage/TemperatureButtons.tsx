@@ -1,4 +1,5 @@
 import { useRef, useCallback, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { palette } from '@design/tokens';
 import { Button, Box } from '@mui/material';
 import { Add, Remove } from '@mui/icons-material';
@@ -18,6 +19,7 @@ type TemperatureButtonsProps = {
 
 const DEBOUNCE_MS = 400;
 export default function TemperatureButtons({ refetch, currentTargetTemp, statusUnavailable = false }: TemperatureButtonsProps) {
+  const queryClient = useQueryClient();
   const { side, setIsUpdating: setStoreUpdating } = useAppStore();
   // Only clear the flag this component raised; the power save shares it.
   const holdsUpdating = useRef(false);
@@ -84,6 +86,8 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
     try {
       await postDeviceStatus({ [side]: { targetTemperatureF: target } });
       setCommandError(undefined);
+      // On a Smart Schedule night the Pod now holds this level; show it at once.
+      void queryClient.invalidateQueries({ queryKey: ['useRhythmsLive'] });
       if (target !== undefined) savedTarget.current = target;
       await new Promise(resolve => setTimeout(resolve, 1500));
     } catch (error) {
@@ -107,7 +111,7 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
         setIsUpdating(false);
       }
     }
-  }, [side, refetch, setIsUpdating, endEdit, setDeviceStatus, setCommandError, sendLatest, sideIsOff]);
+  }, [side, refetch, setIsUpdating, endEdit, setDeviceStatus, setCommandError, sendLatest, sideIsOff, queryClient]);
 
   const scheduleUpdate = useCallback(() => {
     ready.current = false;

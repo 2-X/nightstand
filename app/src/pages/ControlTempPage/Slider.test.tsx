@@ -2,9 +2,10 @@ import { expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import Slider from './Slider';
 const post = vi.hoisted(() => vi.fn());
-vi.mock('@api/deviceStatus.ts', () => ({ postDeviceStatus: post }));
+vi.mock('@api/deviceStatus.ts', () => ({ postDeviceStatus: post, useDeviceStatus: () => ({ data: undefined }) }));
 vi.mock('@api/settings.ts', () => ({ useSettings: () => ({ data: { timeZone: 'UTC', left: { awayMode: false } } }) }));
 vi.mock('@api/schedules', () => ({ useSchedules: () => ({ data: undefined }) }));
+vi.mock('./useBedSleeps', () => ({ useBedSleeps: () => ({ state: 'legacy' }) }));
 vi.mock('@state/appStore', () => ({ useAppStore: () => ({ side: 'left', setIsUpdating: vi.fn() }) }));
 vi.mock('./TemperatureButtons', () => ({ default: () => <button>Temperature stepper</button> }));
 

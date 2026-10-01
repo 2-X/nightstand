@@ -7,8 +7,9 @@ import { serverMessage } from '@lib/requestError';
 import { useAppStore } from '@state/appStore.tsx';
 import { formatPauseEnd } from './pauseTimes';
 
-export default function SchedulePauseNotice({ note, framed = false, onResumed }: {
-  note?: string; framed?: boolean; onResumed?: () => void;
+// `detail` says what comes back when the pause ends, for example "Back on schedule tomorrow at 10:00 PM (Workday)".
+export default function SchedulePauseNotice({ note, detail, framed = false, onResumed }: {
+  note?: string; detail?: string; framed?: boolean; onResumed?: () => void;
 }) {
   const { side } = useAppStore();
   const { data: settings, refetch } = useSettings();
@@ -52,6 +53,7 @@ export default function SchedulePauseNotice({ note, framed = false, onResumed }:
         ...(framed ? { p: 2, border: 1, borderColor: 'divider', borderRadius: 1 } : {}),
       } }>
       <Typography variant="body2" fontWeight={ 600 }>{ title }</Typography>
+      { detail && <Typography variant="body2" color="text.secondary">{ detail }</Typography> }
       { note && <Typography variant="caption" color="text.secondary">{ note }</Typography> }
       { error && <Alert severity="error" sx={ { width: '100%' } }>{ error }</Alert> }
       { /* aria-disabled, not disabled, so keyboard focus stays on the button */ }

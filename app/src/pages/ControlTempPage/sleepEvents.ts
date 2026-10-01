@@ -71,6 +71,7 @@ export function warmStartBedtime(sleep: ResolvedSleepResponse | undefined, timeZ
   const curve = sleep?.smartCurve;
   // A first point from a newer phase list is not known to be a pre-warm.
   if (!sleep?.smart || !curve?.points[0]?.phase) return undefined;
+  // Only the first point is read; dropping later unknown phases just narrows the type.
   const points = curve.points.flatMap(({ at, level, phase }) => phase ? [{ at: new Date(at), level, phase }] : []);
   return warmsBeforeBedtime(points) ? moment.tz(curve.bedtime, timeZone) : undefined;
 }

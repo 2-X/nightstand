@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import moment from 'moment-timezone';
-import { formatPauseEnd, pauseEndError, setTimeDefault, tonightOnlyEnd } from './pauseTimes';
+import { formatPauseEnd, pauseEndError, setTimeDefault, setTimeDefaultWith, tonightOnlyEnd, tonightOnlyEndWith } from './pauseTimes';
 
 const night = (on: string, off: string) => ({ power: { on, off, enabled: true, onTemperature: 82 }, temperatures: {} });
 // 2026-09-28 is a Monday.
@@ -147,5 +147,16 @@ describe('pauseEndError', () => {
   it('rejects the past and anything past 14 days', () => {
     expect(pauseEndError(moment.utc('2026-09-28T20:00:00Z'), MONDAY_8PM)).toBe('Pick a time in the future');
     expect(pauseEndError(moment.utc('2026-10-12T20:01:00Z'), MONDAY_8PM)).toBe('Pick a time within 14 days');
+  });
+});
+
+describe('pause times from any source of bed times', () => {
+  it('uses the next power off and power on the source reports', () => {
+    const off = moment.utc('2026-09-29T14:00:00Z');
+    const on = moment.utc('2026-09-29T23:30:00Z');
+    const next = (after: moment.Moment, kind: 'on' | 'off') => (kind === 'off' ? off : on).isAfter(after)
+      ? (kind === 'off' ? off : on) : undefined;
+    expect(tonightOnlyEndWith(next, 'UTC', MONDAY_8PM).toISOString()).toBe('2026-09-29T14:00:00.000Z');
+    expect(setTimeDefaultWith(next, 'UTC', MONDAY_8PM).toISOString()).toBe('2026-09-29T23:30:00.000Z');
   });
 });

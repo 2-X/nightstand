@@ -17,6 +17,7 @@ vi.mock('@api/schedules.ts', () => ({ useSchedules: () => ({ data: { left: { mon
   power: { enabled: true, on: fixture.on, off: '09:00', onTemperature: 82 }, temperatures: { '22:00': 70 },
 } } } }) }));
 vi.mock('./AlarmNotification', () => ({ default: () => null }));
+vi.mock('./useBedSleeps', () => ({ useBedSleeps: () => ({ state: 'legacy' }) }));
 afterEach(() => vi.restoreAllMocks());
 
 it('does not label future events as paused after an override expires', () => {

@@ -50,8 +50,12 @@ it('shows a manual hold until the next phase starts', () => {
   expect(held('2026-09-28', '23:30', at('2026-09-29', '00:10'))).toBe('Holding +1 until 12:10 AM, then -2 for the night');
   expect(held('2026-09-29', '05:30', at('2026-09-29', '05:45'))).toBe('Holding +1 until the warm-up at 5:45 AM');
   expect(held('2026-09-29', '06:00', at('2026-09-29', '06:30'))).toBe('Holding +1 until your 6:30 AM wake-up');
+  // The bedtime point belongs to the pre-warm stretch, so its hold also ends at the cool-down.
+  expect(held('2026-09-28', '22:50', at('2026-09-28', '23:25'))).toBe('Holding +1 until the cool-down at 11:25 PM');
   // Three hours come first.
   expect(held('2026-09-29', '01:00', at('2026-09-29', '04:00'))).toBe('Holding +1 until 4:00 AM');
+  // So does the power off.
+  expect(held('2026-09-29', '06:35', at('2026-09-29', '06:45'))).toBe('Holding +1 until 6:45 AM');
 });
 
 it('says when the curve went back to the base', () => {
