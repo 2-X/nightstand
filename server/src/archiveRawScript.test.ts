@@ -1,7 +1,9 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import {
+  existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, utimesSync, writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -225,6 +227,52 @@ echo 'fake 1.0G 0.7G 300000 70% /persistent'
     run({ ARCHIVE_RAW_MIN_FREE_KB: '999999999999' });
     assert.equal(readFileSync(path.join(persist, 'victim'), 'utf8'), 'keep');
     assert.equal(existsSync(path.join(persist, 'new.RAW')), true);
+  });
+
+  it('never removes a non-RAW /persistent file through a hardlink and a newline name', () => {
+    mkdirSync(archive);
+    const victim = path.join(persist, 'victim');
+    writeFileSync(victim, 'keep');
+    linkSync(victim, path.join(archive, 'victim'));
+    addLive('new.RAW', 0);
+    addArchived('victim\nzzz.RAW', 50);
+    run({ ARCHIVE_RAW_MIN_FREE_KB: '999999999999' });
+    assert.equal(readFileSync(victim, 'utf8'), 'keep');
+    assert.equal(existsSync(path.join(persist, 'new.RAW')), true);
+  });
+
+  it('removes the oldest archived file first, whether or not the firmware still holds it', () => {
+    mkdirSync(archive);
+    // The names run against the ages: z.RAW is the oldest, and the firmware
+    // has already deleted its copy.
+    addArchived('z.RAW', 10);
+    addArchived('b.RAW', 5);
+    addArchived('c.RAW', 5);
+    addArchived('d.RAW', 1);
+    for (const name of ['b.RAW', 'c.RAW', 'd.RAW']) {
+      linkSync(path.join(archive, name), path.join(persist, name));
+    }
+    // Free space grows by 100 KB for every archived file removed.
+    const bin = path.join(root, 'bin');
+    mkdirSync(bin);
+    writeFileSync(path.join(bin, 'df'), `#!/bin/sh
+n=$(ls "$2" | wc -l)
+echo 'Filesystem 1024-blocks Used Available Capacity Mounted on'
+echo "fake 1000 0 $((1000 - n * 100)) 50% /persistent"
+`, { mode: 0o755 });
+    const env = { PATH: `${bin}:${process.env.PATH}` };
+
+    // Four files archived: 600 KB free. One removal reaches 700.
+    let out = run({ ...env, ARCHIVE_RAW_MIN_FREE_KB: '700' });
+    assert.deepEqual(archived(), ['b.RAW', 'c.RAW', 'd.RAW']);
+    assert.deepEqual(live(), ['b.RAW', 'c.RAW', 'd.RAW']);
+    assert.match(out, /floor_pruned=1/);
+
+    // Two more go, both of the equal-age pair and with their firmware links.
+    out = run({ ...env, ARCHIVE_RAW_MIN_FREE_KB: '900' });
+    assert.deepEqual(archived(), ['d.RAW']);
+    assert.deepEqual(live(), ['d.RAW']);
+    assert.match(out, /floor_pruned=2/);
   });
 
   it('refuses to delete through a symlinked archive', () => {

@@ -98,26 +98,33 @@ free_kb() {
 floor_pruned=0
 avail=$(free_kb)
 while [ -n "$avail" ] && [ "$avail" -lt "$MIN_FREE_KB" ]; do
-  oldest=$(ls -1tr "$ARCHIVE"/*.RAW 2>/dev/null | head -1)
+  # A glob loop, not ls output: a name with a newline in it stays one name.
+  oldest=
+  for f in "$ARCHIVE"/*.RAW; do
+    [ -f "$f" ] && [ ! -L "$f" ] || continue
+    if [ -z "$oldest" ] || [ "$f" -ot "$oldest" ]; then
+      oldest=$f
+    fi
+  done
   if [ -z "$oldest" ]; then
     echo "archive-raw: WARNING free space ${avail}KB is below ${MIN_FREE_KB}KB with the archive empty; something else is filling the disk"
-    break
-  fi
-  # ls prints a name with a newline in it as two lines. Stop rather than
-  # loop on a path that is not there.
-  if [ ! -f "$oldest" ] || [ -L "$oldest" ]; then
-    echo "archive-raw: WARNING cannot free space, $oldest is not a regular file"
     break
   fi
   if [ -n "$newest" ] && [ "$oldest" -ef "$newest" ]; then
     echo "archive-raw: WARNING free space ${avail}KB is below ${MIN_FREE_KB}KB with only the newest RAW file left; something else is filling the disk"
     break
   fi
-  base=$(basename "$oldest")
+  base=${oldest##*/}
   livefile="$PERSIST/$base"
-  if [ "$base" != "SEQNO.RAW" ] && [ "$oldest" -ef "$livefile" ]; then
-    rm -f -- "$livefile"
-  fi
+  # Root deletes in /persistent here, so only ever a firmware RAW file.
+  case $base in
+    SEQNO.RAW) ;;
+    *.RAW)
+      if [ "$oldest" -ef "$livefile" ]; then
+        rm -f -- "$livefile"
+      fi
+      ;;
+  esac
   rm -f -- "$oldest"
   floor_pruned=$((floor_pruned + 1))
   avail=$(free_kb)
