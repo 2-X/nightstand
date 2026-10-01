@@ -296,6 +296,12 @@ def _presence_v2_params(collector: Optional[FrameCollector], profiles) -> Option
                 logger.warning(f'Capacitance records of type {kind} are not a format this version reads, '
                                'reading the night as before')
             return None
+        formats = sorted(name for name, count in collector.cap_formats.items() if count)
+        if len(formats) > 1:
+            # One format's counts read against another's baseline would look like a rise.
+            counts = ', '.join(f'{name}: {collector.cap_formats[name]:,}' for name in formats)
+            logger.warning(f'Capacitance records came in more than one format ({counts}), reading the night as before')
+            return None
         if not cap_format.validated:
             share = collector.one_per_second_share()
             if share < ONE_PER_SECOND_SHARE:

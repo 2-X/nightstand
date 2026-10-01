@@ -34,6 +34,8 @@ import load_raw_files
 import sleep_detector
 import presence_scenarios as scenarios
 from insufficient_data import InsufficientDataError
+from presence.params import baselines_from_calibration
+from presence.replay import FrameCollector
 from presence.sensors import CAPSENSE, CAPSENSE2
 from test_presence_calibration import SCHEMA
 
@@ -268,6 +270,17 @@ class FallbackTest(unittest.TestCase):
         self.assertEqual(on, off)
         self.assertEqual(on[2], [])
 
+    def test_two_capacitance_formats_in_one_window_read_the_night_as_before(self):
+        # A cover change during the night: capSense2 first, then capSense counts.
+        records = (list(scenarios.raw_records(scenarios.STAGGERED, end=9000))
+                   + list(scenarios.legacy_raw_records(scenarios.STAGGERED, 50.0, start=9000)))
+        with self.assertLogs(sleep_detector.logger, level='WARNING') as logs:
+            on = analyze('left', records, True, profiles())
+        off = analyze('left', records, False, profiles())
+        self.assertEqual(on, off)
+        self.assertEqual(on[2], [])
+        self.assertTrue(any('more than one format' in line for line in logs.output))
+
     def test_legacy_capsense_without_a_baseline_reads_the_night_as_before(self):
         legacy = list(scenarios.legacy_raw_records(scenarios.STAGGERED, 50.0))
         no_baseline = {side: {'cap': None, 'cap_occupied': None, 'piezo_floors': []} for side in ('left', 'right')}
@@ -369,6 +382,33 @@ class LosesANightTest(unittest.TestCase):
 
     def test_touching_is_not_overlapping(self):
         self.assertTrue(sleep_detector._loses_a_night([self.record(0, 100)], [self.record(100, 200)]))
+
+
+class PresenceParamsTest(unittest.TestCase):
+    """Which format's levels a run uses."""
+
+    def collector(self, formats=(), unknown=()):
+        collector = FrameCollector(baselines_from_calibration(profiles()))
+        collector.cap_formats.update(dict(formats))
+        collector.unknown_cap.update(dict(unknown))
+        for second in range(200):
+            collector.add_piezo(T0 + second, 1.0, 1.0)
+        return collector
+
+    def test_the_window_format_sets_the_levels(self):
+        params, cap_format = sleep_detector._presence_v2_params(self.collector([('capSense', 10)]), legacy_profiles())
+        self.assertIs(cap_format, CAPSENSE)
+        self.assertEqual((params.left.enter_delta, params.left.exit_delta), (300.0, 150.0))
+        params, cap_format = sleep_detector._presence_v2_params(self.collector([('capSense2', 10)]), profiles())
+        self.assertIs(cap_format, CAPSENSE2)
+        self.assertEqual(params, sleep_detector.params_from_calibration(profiles()))
+
+    def test_two_formats_in_one_window_read_the_night_as_before(self):
+        with self.assertLogs(sleep_detector.logger, level='WARNING') as logs:
+            self.assertIsNone(sleep_detector._presence_v2_params(
+                self.collector([('capSense2', 900), ('capSense', 300)]), profiles()))
+        self.assertEqual(len(logs.output), 1)
+        self.assertIn('(capSense: 300, capSense2: 900)', logs.output[0])
 
 
 class CoverageBoundaryTest(unittest.TestCase):
