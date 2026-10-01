@@ -9,7 +9,7 @@ import { useSettings } from '@api/settings';
 import { formatTemperature, TemperatureFormat } from '@lib/temperatureConversions.ts';
 import { typography } from '@design/tokens';
 import { nextBedEvent } from './bedEvents';
-import { nextSleepEvent, sleepAt, warmStartBedtime } from './sleepEvents';
+import { currentSleep, nextSleepEvent, sleepAt, warmStartBedtime } from './sleepEvents';
 import { useBedSleeps } from './useBedSleeps';
 
 type TemperatureLabelProps = {
@@ -47,10 +47,22 @@ export default function TemperatureLabel({
   // The firmware timer still turns a running side off during a pause.
   const timer = deviceStatus?.[side]?.secondsRemaining;
   const timerOff = paused && isOn && timer && timer > 0 ? now.clone().add(timer, 'seconds') : undefined;
+  // Between nights the firmware timer turns a running side off: after a sleep kept on when Rhythms was turned off,
+  // after tonight's running sleep is removed, or after a manual start.
+  const running = isOn && !paused && !!settings && !settings[side].awayMode;
+  const nextStart = !running ? undefined
+    : bed.state === 'rhythms' ? nextSleepEvent(bed.sleeps, settings.timeZone, now, 'on')
+      : bed.state === 'legacy' && schedules ? nextBedEvent(schedules[side], settings.timeZone, now, 'on') : undefined;
+  const timerEnd = running && (bed.state === 'rhythms' || (bed.state === 'legacy' && !!schedules)) && timer && timer > 0
+    ? now.clone().add(timer, 'seconds') : undefined;
+  const betweenNights = bed.state === 'rhythms' ? !currentSleep(bed.sleeps, now.toDate())
+    : !event || (!!nextStart && nextStart.at.isBefore(event.at));
+  const turnsOff = timerEnd && betweenNights && (!nextStart || timerEnd.isBefore(nextStart.at)) ? timerEnd : event?.at;
   const warming = !isOn && !!event && bed.state === 'rhythms' && !!settings
     && !!warmStartBedtime(sleepAt(bed.sleeps, event.at.toDate()), settings.timeZone);
-  const eventDay = event && (event.at.isSame(now, 'day') ? event.at.hour() >= 17 ? ' tonight' : ' today'
-    : event.at.isSame(now.clone().add(1, 'day'), 'day') ? ' tomorrow' : ` ${event.at.format('ddd')}`);
+  const shownAt = isOn ? turnsOff : event?.at;
+  const eventDay = shownAt && (shownAt.isSame(now, 'day') ? shownAt.hour() >= 17 ? ' tonight' : ' today'
+    : shownAt.isSame(now.clone().add(1, 'day'), 'day') ? ' tomorrow' : ` ${shownAt.format('ddd')}`);
   return <Box
     sx={ {
       position: 'absolute', inset: '18% 5% 15%', textAlign: 'center', display: 'flex', flexDirection: 'column',
@@ -66,8 +78,8 @@ export default function TemperatureLabel({
         } }>{ formatTemperature(sliderTemp, format) }</Typography>
       <Typography variant="body2" color="text.secondary">Currently at { formatTemperature(currentTemperatureF, format) }</Typography>
     </> : <Typography sx={ typography.hero } color="text.secondary">Off</Typography> }
-    { event && <Typography variant="caption" color="text.secondary" sx={ { mt: 1 } }>
-      { isOn ? 'Turns off' : warming ? 'Starts warming' : 'Turns on' }{ eventDay } at { event.at.format('h:mm A') }
+    { shownAt && <Typography variant="caption" color="text.secondary" sx={ { mt: 1 } }>
+      { isOn ? 'Turns off' : warming ? 'Starts warming' : 'Turns on' }{ eventDay } at { shownAt.format('h:mm A') }
     </Typography> }
     { paused && isOn && <Typography variant="caption" color="text.secondary" sx={ { mt: 1 } }>
       { timerOff ? `Turns off at ${timerOff.format('h:mm A')}` : 'Stays on until you turn it off' }
