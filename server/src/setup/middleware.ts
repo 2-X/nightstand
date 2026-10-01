@@ -85,6 +85,32 @@ export function requireJsonBody(req: Request, res: Response, next: NextFunction)
   res.status(415).json({ error: 'Send the request body as application/json' });
 }
 
+const PROTOTYPE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+// Walks the parsed body without recursion, since it can be nested thousands
+// of levels deep.
+export function hasPrototypeKey(body: unknown): boolean {
+  const pending = [body];
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (value === null || typeof value !== 'object') continue;
+    for (const [key, child] of Object.entries(value)) {
+      if (PROTOTYPE_KEYS.has(key)) return true;
+      pending.push(child);
+    }
+  }
+  return false;
+}
+
+// Settings, schedules and services have no field by these names, and their
+// schemas silently dropped them, so a body carrying one answered 200. Other
+// routes are left out on purpose: a rhythm named Constructor gets the id
+// "constructor", which is a key in /rhythms bodies.
+function rejectPrototypeKeys(req: Request, res: Response, next: NextFunction) {
+  if (!BODY_METHODS.has(req.method) || !hasPrototypeKey(req.body)) return next();
+  res.status(400).json({ error: 'Invalid request data', details: 'Keys named __proto__, constructor or prototype are not allowed' });
+}
+
 export default function (app: Express) {
   app.use((req, res, next) => {
     attachRequestCompletionLogging(req, res, logger);
@@ -102,6 +128,7 @@ export default function (app: Express) {
   app.use(cors({ origin: true }));
   app.use('/api', requireJsonBody);
   app.use(express.json());
+  app.use(['/api/settings', '/api/schedules', '/api/services'], rejectPrototypeKeys);
 
   // Logging
   app.use((req, res, next) => {
