@@ -41,6 +41,10 @@ MIN_CAP_COVERAGE = 0.5
 # reading for this share of every night the older rule finds, or that side
 # keeps the older reading.
 MIN_NIGHT_CAP_COVERAGE = 0.9
+# ... and its nights must span this share of every night the older rule finds.
+# Capacitance rightly trims a partner's time off the older nights (to about
+# 84% of them on a staggered night); far less is a sleeper it partly missed.
+MIN_NIGHT_SPAN_SHARE = 0.6
 # Unknown capacitance types named in the log.
 UNKNOWN_CAP_SHOWN = 5
 
@@ -415,6 +419,20 @@ def _night_cap_coverage(collector: FrameCollector, side: Side, nights: List[Slee
     return min((part / whole if whole else 0.0) for part, whole in zip(covered, seconds)) if spans else 1.0
 
 
+def _night_span_share(nights: List[SleepRecord], records: List[SleepRecord]) -> float:
+    """The lowest share of a night's span that these records cover; 1.0 without nights."""
+    shares = []
+    for night in nights:
+        span = (night['left_bed_at'] - night['entered_bed_at']).total_seconds()
+        covered = sum(
+            max(0.0, (min(night['left_bed_at'], record['left_bed_at'])
+                      - max(night['entered_bed_at'], record['entered_bed_at'])).total_seconds())
+            for record in records
+        )
+        shares.append(covered / span if span > 0 else 1.0)
+    return min(shares, default=1.0)
+
+
 def _older_reading_reason(merged_df: pd.DataFrame, side: Side, cap_baseline, collector: FrameCollector,
                           records: List[SleepRecord]) -> Optional[str]:
     """Why this side keeps the older rule's records instead of these, or None to keep these."""
@@ -425,6 +443,9 @@ def _older_reading_reason(merged_df: pd.DataFrame, side: Side, cap_baseline, col
         coverage = _night_cap_coverage(collector, side, earlier)
         if coverage < MIN_NIGHT_CAP_COVERAGE:
             return f'Capacitance had readings for only {coverage:.0%} of a night the older reading found'
+        share = _night_span_share(earlier, records)
+        if share < MIN_NIGHT_SPAN_SHARE:
+            return f'Capacitance placed someone in bed for only {share:.0%} of a night the older reading found'
         return None
     except Exception as error:
         return f'Could not compare capacitance with the older reading ({error})'

@@ -401,6 +401,19 @@ class PartialCapacitanceTest(unittest.TestCase):
         self.assertEqual(right_on[2][0][0], 'right')
         self.assertAlmostEqual(right_on[2][0][1], 500.0, delta=5.0)
 
+    def test_a_night_capacitance_reads_as_mostly_empty_keeps_the_older_reading(self):
+        # Readings keep arriving all night but rise only while SEEN, as for a
+        # sleeper whose rise mostly sits under the starting level.
+        flat = ('left', LONG.left[0][0], SEEN[0], 0.0), ('left', SEEN[1], LONG.left[0][1], 0.0)
+        night = dataclasses.replace(LONG, overrides=flat)
+        records = list(scenarios.legacy_raw_records(night, 50.0))
+        with self.assertLogs(sleep_detector.logger, level='WARNING') as logs:
+            on = analyze_legacy('left', 50.0, records=records, night=night)
+        off = analyze_legacy('left', 50.0, enabled=False, records=records, night=night)
+        self.assertEqual(on, off)
+        self.assertEqual(on[2], [])
+        self.assertEqual(len([line for line in logs.output if 'keeping the older reading' in line]), 1)
+
     def test_a_failure_comparing_with_the_older_reading_keeps_it(self):
         with unittest.mock.patch.object(sleep_detector, '_earlier_records', side_effect=RuntimeError('boom')), \
                 self.assertLogs(sleep_detector.logger, level='WARNING') as logs:
@@ -416,7 +429,19 @@ class PartialCapacitanceTest(unittest.TestCase):
         on = analyze_legacy('left', 50.0)
         off = analyze_legacy('left', 50.0, enabled=False)
         self.assertLess(length(on[0]), 0.9 * length(off[0]))
+        self.assertGreater(length(on[0]), sleep_detector.MIN_NIGHT_SPAN_SHARE * length(off[0]))
         self.assertEqual(len(on[2]), 1)
+
+
+class QuietOccupancyTest(unittest.TestCase):
+    def test_quiet_leaves_out_the_missing_baseline_warning(self):
+        index = pd.to_datetime([utc(0), utc(1)])
+        for quiet, warnings in ((True, 0), (False, 1)):
+            with self.subTest(quiet=quiet), unittest.mock.patch.object(sleep_detector.logger, 'warning') as warning:
+                frame = pd.DataFrame({'piezo_left1_presence': [1, 0]}, index=index)
+                sleep_detector._set_final_occupancy(frame, 'left', None, quiet=quiet)
+                self.assertEqual(frame['final_left_occupied'].tolist(), [1, 0])
+                self.assertEqual(warning.call_count, warnings)
 
 
 class LosesANightTest(unittest.TestCase):
@@ -435,6 +460,11 @@ class LosesANightTest(unittest.TestCase):
 
     def test_touching_is_not_overlapping(self):
         self.assertTrue(sleep_detector._loses_a_night([self.record(0, 100)], [self.record(100, 200)]))
+
+    def test_the_share_of_the_older_night_covered(self):
+        nights = [self.record(0, 100), self.record(200, 300)]
+        self.assertAlmostEqual(sleep_detector._night_span_share(nights, [self.record(-50, 50), self.record(80, 250)]), 0.5)
+        self.assertEqual(sleep_detector._night_span_share([], []), 1.0)
 
 
 class PresenceParamsTest(unittest.TestCase):
