@@ -66,8 +66,8 @@ class LatestCap:
         self._reading = (int(ts), left, right, cap_format)
 
     def read(self):
-        reading = self._reading
-        return None if reading is None else reading[:3]
+        """(ts, left, right, format), or None before the first reading."""
+        return self._reading
 
     def cap_format(self) -> Optional[CapFormat]:
         reading = self._reading
@@ -188,7 +188,9 @@ class StreamProcessor:
         baselines = self._presence_inputs[1]
         cap = {'left': None, 'right': None}
         reading = self.cap_source.read() if self.cap_source is not None else None
-        if reading is not None and abs(epoch - reading[0]) <= CAP_HOLD_SECONDS:
+        # A reading in another format would be read against the wrong baselines.
+        if (reading is not None and abs(epoch - reading[0]) <= CAP_HOLD_SECONDS
+                and reading[3].name == _inputs_format(self._presence_inputs).name):
             cap = {
                 'left': cap_delta(reading[1], baselines['left']),
                 'right': cap_delta(reading[2], baselines['right']),

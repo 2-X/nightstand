@@ -39,7 +39,7 @@ for _name in LOGGER_NAMES:
     get_logger(_name).folder_path = _tmp_folder
 
 import stream
-from presence.sensors import CAPSENSE
+from presence.sensors import CAPSENSE, CAPSENSE2
 
 
 def recent_piezo(seq=None, ts=None):
@@ -149,7 +149,7 @@ class TestStoreDecodedCapRecord(CapPresenceTestCase):
     def test_keeps_the_newest_values(self):
         record = recent_cap()
         self.assertTrue(stream._store_decoded_cap_record(record))
-        self.assertEqual(self.latest.read(), (int(record['ts']), (12.0, 12.0, 12.0), (13.0, 13.0, 13.0)))
+        self.assertEqual(self.latest.read(), (int(record['ts']), (12.0, 12.0, 12.0), (13.0, 13.0, 13.0), CAPSENSE2))
         self.assertEqual(self.latest.cap_format().name, 'capSense2')
 
     def test_consumes_stale_and_malformed_records_without_storing(self):

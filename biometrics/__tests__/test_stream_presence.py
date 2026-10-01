@@ -406,6 +406,41 @@ class LegacyLiveTest(unittest.TestCase):
         self.assertIsNone(processor._piezo_presence)
 
 
+def with_stray_records(records, seconds):
+    """records with a reading in the other format after each capacitance record in these seconds."""
+    for record in records:
+        yield record
+        if record['type'] in ('capSense', 'capSense2') and seconds[0] <= record['ts'] - T0 < seconds[1]:
+            yield stray_record(record['type'], record['ts'])
+
+
+def stray_record(cap_type, ts):
+    if cap_type == 'capSense2':
+        return {'type': 'capSense', 'ts': ts, 'seq': 0,
+                **{side: dict(zip(('out', 'cen', 'in'), scenarios.LEGACY_COUNTS[side]), status='good')
+                   for side in ('left', 'right')}}
+    return {'type': 'capSense2', 'ts': ts, 'version': 1,
+            **{side: {'values': list(scenarios.BASELINE_MEANS[side]) * 2 + [scenarios.REFERENCE_VALUE] * 2,
+                      'status': 'good'} for side in ('left', 'right')}}
+
+
+class OtherFormatReadingTest(unittest.TestCase):
+    """A reading in another format than the running baselines' counts as no reading."""
+
+    def test_older_format_readings_on_capsense2_put_nobody_in_bed(self):
+        # The partner's movement reaches the empty left side's piezo.
+        records = list(scenarios.raw_records(Night(seconds=900, right=((60, 900),))))
+        run = run_live(list(with_stray_records(records, (300, 600))))
+        self.assertEqual(run.held, run_live(records).held)
+        self.assertEqual([change[1:] for change in run.held], [('right', True)])
+
+    def test_capsense2_readings_on_the_older_format_take_nobody_out_of_bed(self):
+        records = legacy_records(Night(seconds=1500, left=((60, 1500),), right=((60, 1500),)))
+        run = run_live(list(with_stray_records(records, (400, 900))), LEGACY_INPUTS)
+        self.assertEqual(run.held, run_live(records, LEGACY_INPUTS).held)
+        self.assertEqual([change[2] for change in run.held], [True, True])
+
+
 class LatestCapFreshnessTest(unittest.TestCase):
     def test_recent_readings_are_fresh(self):
         cap = LatestCap()
