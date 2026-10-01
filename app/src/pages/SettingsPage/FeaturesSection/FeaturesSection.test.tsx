@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { http, HttpResponse } from 'msw';
-import { screen } from '@testing-library/react';
+import { delay, http, HttpResponse } from 'msw';
+import { QueryClient } from '@tanstack/react-query';
+import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
+import { getDeviceStatus, getSettings, mockCalibration } from '../../../mocks/mockData';
+import { EXPERIMENTAL_ON_THIS_POD } from '@api/sleepTrackingValidation.ts';
 import FeaturesSection from './FeaturesSection';
 
 describe('FeaturesSection', () => {
@@ -59,6 +62,88 @@ describe('FeaturesSection', () => {
     await user.click(toggle);
 
     expect(posted).toEqual({ features: { biometricsV2: true } });
+  });
+});
+
+describe('FeaturesSection experimental label', () => {
+  const switchedOn = () => {
+    const settings = getSettings();
+    return { ...settings, features: { ...settings.features, biometricsV2: true } };
+  };
+  const formats = (left: string | null, right: string | null) => http.get('*/calibration', () => HttpResponse.json({
+    left: { ...mockCalibration.left, capFormat: left },
+    right: { ...mockCalibration.right, capFormat: right },
+  }));
+  const pod = (model: string) => http.get('*/deviceStatus', () => HttpResponse.json({
+    ...getDeviceStatus(), coverVersion: model, hubVersion: model,
+  }));
+
+  const settled = (queryClient: QueryClient, status: 'success' | 'error' = 'success') => waitFor(() => {
+    expect(queryClient.getQueryState(['useDeviceStatus'])?.status).toBe(status);
+    expect(queryClient.getQueryState(['useCalibration'])?.status).toBe('success');
+  });
+
+  it('says nothing on a Pod 5 writing capSense2', async () => {
+    server.use(http.get('*/api/settings', () => HttpResponse.json(switchedOn())), formats('capSense2', 'capSense2'));
+    const { queryClient } = renderWithProviders(<FeaturesSection />);
+    expect(await screen.findByRole('switch', { name: 'New sleep tracking (beta)' })).toBeChecked();
+    await settled(queryClient);
+    expect(screen.queryByText(EXPERIMENTAL_ON_THIS_POD)).not.toBeInTheDocument();
+  });
+
+  it('labels a Pod 4 as experimental', async () => {
+    server.use(http.get('*/api/settings', () => HttpResponse.json(switchedOn())), pod('Pod 4'));
+    renderWithProviders(<FeaturesSection />);
+    expect(await screen.findByText(EXPERIMENTAL_ON_THIS_POD)).toBeVisible();
+  });
+
+  it('labels a Pod 5 writing the older format as experimental', async () => {
+    server.use(http.get('*/api/settings', () => HttpResponse.json(switchedOn())), formats('capSense', null));
+    renderWithProviders(<FeaturesSection />);
+    expect(await screen.findByText(EXPERIMENTAL_ON_THIS_POD)).toBeVisible();
+  });
+
+  it('labels an unchecked format while the switch is off', async () => {
+    server.use(pod('Pod 3'));
+    renderWithProviders(<FeaturesSection />);
+    expect(await screen.findByRole('switch', { name: 'New sleep tracking (beta)' })).not.toBeChecked();
+    expect(await screen.findByText(EXPERIMENTAL_ON_THIS_POD)).toBeVisible();
+  });
+
+  it('says nothing on a Pod 5 while the switch is off', async () => {
+    const { queryClient } = renderWithProviders(<FeaturesSection />);
+    expect(await screen.findByRole('switch', { name: 'New sleep tracking (beta)' })).not.toBeChecked();
+    await settled(queryClient);
+    expect(screen.queryByText(EXPERIMENTAL_ON_THIS_POD)).not.toBeInTheDocument();
+  });
+
+  it('says nothing while device status is loading, even on an older format', async () => {
+    server.use(
+      http.get('*/deviceStatus', async () => { await delay('infinite'); return HttpResponse.json(getDeviceStatus()); }),
+      formats('capSense', 'capSense'),
+    );
+    const { queryClient } = renderWithProviders(<FeaturesSection />);
+    expect(await screen.findByRole('switch', { name: 'New sleep tracking (beta)' })).not.toBeChecked();
+    await waitFor(() => expect(queryClient.getQueryState(['useCalibration'])?.status).toBe('success'));
+    expect(queryClient.getQueryState(['useDeviceStatus'])?.status).toBe('pending');
+    expect(screen.queryByText(EXPERIMENTAL_ON_THIS_POD)).not.toBeInTheDocument();
+  });
+
+  it('says nothing when device status fails, even on an older format', async () => {
+    server.use(
+      http.get('*/deviceStatus', () => new HttpResponse(null, { status: 500 })),
+      formats('capSense', 'capSense'),
+    );
+    const { queryClient } = renderWithProviders(<FeaturesSection />);
+    expect(await screen.findByRole('switch', { name: 'New sleep tracking (beta)' })).not.toBeChecked();
+    await settled(queryClient, 'error');
+    expect(screen.queryByText(EXPERIMENTAL_ON_THIS_POD)).not.toBeInTheDocument();
+  });
+
+  it('does not claim a change to the in-bed indicator or presence auto-off', () => {
+    expect(EXPERIMENTAL_ON_THIS_POD).toBe('Experimental on this Pod: only checked on a Pod 5 so far. '
+      + 'It changes the nightly sleep records, not the in-bed indicator or auto-off.');
+    expect(EXPERIMENTAL_ON_THIS_POD).not.toMatch(/accura|verified|reliab/i);
   });
 });
 

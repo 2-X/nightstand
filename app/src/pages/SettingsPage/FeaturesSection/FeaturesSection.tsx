@@ -8,6 +8,9 @@ import DisableRhythmsDialog from './DisableRhythmsDialog.tsx';
 import EnableRhythmsDialog from './EnableRhythmsDialog.tsx';
 import { Services, useServices, postServices } from '@api/services.ts';
 import { useSettings, postSettings } from '@api/settings.ts';
+import { useDeviceStatus } from '@api/deviceStatus.ts';
+import { useCalibration } from '@api/calibration.ts';
+import { EXPERIMENTAL_ON_THIS_POD, sleepTrackingExperimental } from '@api/sleepTrackingValidation.ts';
 import { Settings } from '@api/settingsSchema.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { DeepPartial } from 'ts-essentials';
@@ -17,6 +20,8 @@ export default function FeaturesSection() {
   const [error, setError] = useState<string | null>(null);
   const { data: services, refetch: refetchServices, isLoading: servicesLoading, isError: servicesError } = useServices();
   const { data: settings, refetch: refetchSettings, isLoading: settingsLoading, isError: settingsError } = useSettings();
+  const { data: deviceStatus } = useDeviceStatus();
+  const { data: calibrationState } = useCalibration();
   const setIsUpdating = useAppStore((state) => state.setIsUpdating);
   const isUpdating = useAppStore((state) => state.isUpdating);
   const [rhythmsDialog, setRhythmsDialog] = useState<'enable' | 'disable'>();
@@ -63,6 +68,10 @@ export default function FeaturesSection() {
   const features = settings.features;
   const biometricsEnabled = services.biometrics?.enabled ?? false;
   const biometricsInstalled = services.biometrics?.jobs?.installation?.status === 'healthy';
+  const experimental = deviceStatus !== undefined && sleepTrackingExperimental(
+    deviceStatus.coverVersion, deviceStatus.hubVersion,
+    [calibrationState?.left?.capFormat, calibrationState?.right?.capFormat],
+  );
 
   return (
     <Section>
@@ -142,7 +151,10 @@ export default function FeaturesSection() {
           description={
             !biometricsEnabled
               ? <Link href="#biometrics" sx={ { display: 'inline-flex', minHeight: 44, alignItems: 'center' } }>Needs Biometrics</Link>
-              : 'Tells the two sides apart with the bed\'s capacitance sensors. Still being tested.'
+              : <>
+                Tells the two sides apart with the bed's capacitance sensors. Still being tested.
+                { experimental && <Box component="span" sx={ { display: 'block', mt: 0.5 } }>{ EXPERIMENTAL_ON_THIS_POD }</Box> }
+              </>
           }
         />
       </Box>
