@@ -11,9 +11,10 @@ import { resolveSleeps, type ResolvedSleep, type RhythmEvent } from './resolve.j
 import {
   ANALYSIS_DELAY_MS, ANALYSIS_MAX_WINDOW_MS, REANALYSIS_DELAY_MS, armedEnd, rearmRhythmSleep, runRhythmEvent, runSleepAnalysis,
 } from './runEvent.js';
+import { smartCoolStartFor } from './curveController.js';
 import { trackAlarm } from '../alarmActivity.js';
 import { forgetKeptAlarms, keptSleeps, rememberKeptAlarms, type KeptAlarm } from './keptAlarms.js';
-import { scheduleSleepAnalysis } from '../powerScheduler.js';
+import { poweredOnSince, scheduleSleepAnalysis } from '../powerScheduler.js';
 import { SLEEP_ANALYSIS_HOUR, SLEEP_ANALYSIS_MINUTE } from '../../sleepAnalysisSchedule.js';
 
 export const RHYTHMS_HORIZON_MS = 48 * 60 * 60 * 1000;
@@ -86,6 +87,25 @@ function scheduleRearm(side: Side, sleeps: ResolvedSleep[], now: Date): number {
   if (!current || armedEnd(side) === current.end.getTime()) return 0;
   const name = `rhythm-${side}-${current.date}-rearm`;
   return scheduleOnce(name, new Date(t + REARM_DELAY_MS), now, () => rearmRhythmSleep(side, current)) ? 1 : 0;
+}
+
+// A Smart Schedule sleep turns on before its bedtime. One whose turn-on time
+// had passed before it was planned (tonight switched to it during that time)
+// turns on now, up to its bedtime.
+function scheduleMissedPrewarm(side: Side, sleeps: ResolvedSleep[], now: Date): number {
+  const t = now.getTime();
+  let count = 0;
+  for (const sleep of sleeps) {
+    const bedtime = sleep.smartCurve?.bedtime.getTime();
+    if (bedtime === undefined || sleep.start.getTime() > t || t >= bedtime || poweredOnSince(side, sleep.start)) continue;
+    const powerOn = sleep.events.find(event => event.kind === 'power-on');
+    if (!powerOn) continue;
+    const at = new Date(t + REARM_DELAY_MS);
+    const name = `rhythm-${side}-${sleep.date}-power-on-late`;
+    const run = async () => (poweredOnSince(side, sleep.start) ? 0 : runRhythmEvent(side, sleep, { ...powerOn, at }));
+    if (scheduleOnce(name, at, now, run)) count += 1;
+  }
+  return count;
 }
 
 // The side may have been turned off by means no job sees (the Pod's own
@@ -197,11 +217,12 @@ export function scheduleRhythms(settings: Settings, db: RhythmsDB, now: Date): R
     }
     let keepNoon = true;
     try {
-      const sleeps = resolveSleeps({ db, side, timeZone, from, to });
+      const sleeps = resolveSleeps({ db, side, timeZone, from, to, coolStartFor: smartCoolStartFor });
       for (const sleep of sleeps) {
         jobCount += scheduleSleep(settings, side, sleep, now, timeZone);
       }
       jobCount += scheduleRearm(side, sleeps, now);
+      jobCount += scheduleMissedPrewarm(side, sleeps, now);
       keepNoon = !sleptWithin(db, side, timeZone, nextNoon(now, timeZone));
     } catch (error: unknown) {
       failedSides.push(side);

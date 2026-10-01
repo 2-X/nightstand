@@ -49,7 +49,14 @@ export function planHandoff(input: {
     const sleep = sleepAt(resolveSleeps({ db, side: driver, timeZone, from: now, to: now }), now);
     if (!sleep) return { side, action: 'none' };
     if (powerOffNow) return { side, action: 'powered-off' };
-    const legacy = sleepAt(resolveLegacySleeps({ schedules, side: driver, timeZone, from: now, to: now }), now);
+    let legacy = sleepAt(resolveLegacySleeps({ schedules, side: driver, timeZone, from: now, to: now }), now);
+    // A Smart Schedule sleep turns on before its bedtime; during that time the
+    // weekly night that starts by the bedtime takes over.
+    const bedtime = sleep.smartCurve?.bedtime;
+    if (!legacy && bedtime && now < bedtime) {
+      legacy = resolveLegacySleeps({ schedules, side: driver, timeZone, from: now, to: bedtime })
+        .find(night => night.start <= bedtime && night.end > now);
+    }
     // Alarms ring only on the present side.
     if (!legacy) return { side, action: 'kept-on-until', until: sleep.end, ...(side === driver ? { keptSleep: sleep } : {}) };
     const plan: HandoffPlan = { side, action: 'legacy-takes-over', until: legacy.end };

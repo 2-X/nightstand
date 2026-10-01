@@ -205,6 +205,99 @@ describe('CurveController start', () => {
   });
 });
 
+describe('CurveController presence dropouts', () => {
+  const inBedExcept = (from: string, gaps: Array<[string, string]>): Stream => now => ({
+    left: now >= local(`${DATE} ${from}`) && !gaps.some(([a, b]) => between(now, `${DATE} ${a}`, `${DATE} ${b}`)),
+  });
+
+  it('keeps the run through short false absences', async () => {
+    const h = harness();
+    await h.runUntil('2026-09-30 07:31', inBedExcept('22:34', [['22:39', '22:41'], ['22:49', '22:50'], ['23:00', '23:02']]));
+    assert.equal(h.history[0].startReason, 'confirmed');
+    assert.equal(h.history[0].confirmedAt, local(`${DATE} 22:54`).toISOString());
+    assert.equal(h.history[0].coolStart, local(`${DATE} 22:54`).toISOString());
+  });
+
+  it('merges an absence of exactly 3 minutes', async () => {
+    const h = harness();
+    await h.runUntil('2026-09-30 07:31', inBedExcept('22:40', [['22:49', '22:52']]));
+    assert.equal(h.history[0].confirmedAt, local(`${DATE} 23:00`).toISOString());
+  });
+
+  it('restarts the run after an absence longer than 3 minutes', async () => {
+    const h = harness();
+    await h.runUntil('2026-09-30 07:31', inBedExcept('22:40', [['22:49', '22:53']]));
+    assert.equal(h.history[0].confirmedAt, local(`${DATE} 23:13`).toISOString());
+    assert.equal(h.history[0].coolStart, local(`${DATE} 23:13`).toISOString());
+  });
+
+  it('never starts a merged run before bedtime or counts it before the window opens', async () => {
+    const early = harness();
+    await early.runUntil('2026-09-30 07:31', inBedExcept('21:00', [['21:50', '21:52']]));
+    assert.equal(early.history[0].confirmedAt, local(`${DATE} 22:05`).toISOString());
+    assert.equal(early.history[0].coolStart, local(`${DATE} 22:45`).toISOString());
+    const h = harness();
+    await h.runUntil('2026-09-30 07:31', inBedExcept('22:00', [['22:10', '22:12'], ['22:25', '22:27']]));
+    assert.equal(h.history[0].confirmedAt, local(`${DATE} 22:20`).toISOString());
+    assert.equal(h.history[0].coolStart, local(`${DATE} 22:45`).toISOString());
+    assert.equal(h.retimes(), 0);
+  });
+});
+
+describe('CurveController dropping a sleep', () => {
+  const waiting: Stream = now => ({ left: now >= local(`${DATE} 22:40`) });
+
+  it('replans when a sleep with a moved cool-down start stops being smart', async () => {
+    const options = { manualSleep: false };
+    const h = harness(options);
+    await h.runUntil(`${DATE} 22:46`, waiting);
+    assert.equal(h.retimes(), 1);
+    options.manualSleep = true;
+    await h.runUntil(`${DATE} 22:47`, waiting);
+    assert.equal(h.controller.coolStartFor('left', DATE), undefined);
+    assert.equal(h.retimes(), 2);
+  });
+
+  it('replans when its side goes away', async () => {
+    const options = { away: { left: false, right: false } };
+    const h = harness(options);
+    await h.runUntil(`${DATE} 22:46`, waiting);
+    options.away = { left: true, right: false };
+    await h.runUntil(`${DATE} 22:47`, waiting);
+    assert.equal(h.retimes(), 2);
+  });
+
+  it('replans when an edit moves its bedtime out of the window', async () => {
+    const options = { bedtime: '22:45' };
+    const h = harness(options);
+    await h.runUntil(`${DATE} 22:46`, waiting);
+    assert.equal(h.retimes(), 1);
+    options.bedtime = '23:50';
+    await h.runUntil(`${DATE} 22:47`, waiting);
+    assert.equal(h.controller.coolStartFor('left', DATE), undefined);
+    assert.equal(h.retimes(), 2);
+  });
+
+  it('does not replan for a start that stayed at bedtime', async () => {
+    const options = { manualSleep: false };
+    const h = harness(options);
+    await h.runUntil(`${DATE} 23:00`, () => ({ left: true }));
+    assert.equal(h.controller.coolStartFor('left', DATE)?.getTime(), local(`${DATE} 22:45`).getTime());
+    options.manualSleep = true;
+    await h.runUntil(`${DATE} 23:01`, () => ({ left: true }));
+    assert.equal(h.retimes(), 0);
+  });
+
+  it('does not replan for a sleep still on the clock', async () => {
+    const options = { manualSleep: false };
+    const h = harness(options);
+    await h.runUntil(`${DATE} 22:00`);
+    options.manualSleep = true;
+    await h.runUntil(`${DATE} 22:01`);
+    assert.equal(h.retimes(), 0);
+  });
+});
+
 describe('CurveController manual hold', () => {
   it('holds until the warm-up or at most 3 hours, then resumes the curve', async () => {
     const h = harness();

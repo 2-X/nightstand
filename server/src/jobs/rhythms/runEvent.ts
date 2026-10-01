@@ -15,6 +15,7 @@ import { notePowerOn, poweredOnSince } from '../powerScheduler.js';
 import { isTempScheduleOverridden } from '../scheduleOverride.js';
 import { effectiveSides, engineActivation } from '../scheduleQueries.js';
 import { rhythmSkipReason } from './gates.js';
+import { smartTemperatureGate } from './curveController.js';
 import type { ResolvedSleep, RhythmEvent } from './resolve.js';
 
 export const FIRMWARE_MARGIN_SECONDS = 300;
@@ -128,7 +129,10 @@ export async function runRhythmEvent(side: Side, sleep: ResolvedSleep, event: Rh
   try {
     if (event.kind === 'power-on') {
       const secondsRemaining = firmwareSeconds(sleep.end, now);
-      const held = isTempScheduleOverridden(side);
+      // Smart Schedule nights use the curve's own hold instead of the 12 hour one.
+      const held = sleep.mode === 'smart'
+        ? smartTemperatureGate(side, sleep.date, event.at) !== 'run'
+        : isTempScheduleOverridden(side);
       if (held) logger.info(`Temperature held by a manual change, powering ${side} on without setting it`);
       await updateDeviceStatus({
         [side]: held ? { isOn: true, secondsRemaining } : { isOn: true, targetTemperatureF: event.temperatureF, secondsRemaining },
@@ -136,7 +140,12 @@ export async function runRhythmEvent(side: Side, sleep: ResolvedSleep, event: Rh
       noteArmed(settings, side, sleep.end);
       markStatus('powerSchedule');
     } else if (event.kind === 'temperature') {
-      if (isTempScheduleOverridden(side)) {
+      const smartGate = sleep.mode === 'smart' ? smartTemperatureGate(side, sleep.date, event.at) : 'run';
+      if (smartGate !== 'run') {
+        logger.info(`Skipping ${label}: smart schedule ${smartGate}`);
+        return 0;
+      }
+      if (sleep.mode !== 'smart' && isTempScheduleOverridden(side)) {
         logger.info(`Skipping ${label}: held by a manual change`);
         return 0;
       }

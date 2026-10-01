@@ -1,0 +1,124 @@
+// Wires the Smart Schedule controller to the live server: presence, device
+// writes, pause, the resolver and the history file. Started and stopped with
+// the Rhythms engine.
+import type { DeepPartial } from 'ts-essentials';
+import type { Settings } from '../../db/settingsSchema.js';
+import type { Side } from '../../db/schedulesSchema.js';
+import type { RhythmsDB } from '../../db/rhythmsSchema.js';
+import type { DeviceStatus } from '../../routes/deviceStatus/deviceStatusSchema.js';
+import logger from '../../logger.js';
+import { levelToF } from '../../db/smartCurve.js';
+import { getPresenceData } from '../../routes/metrics/presence.js';
+import { updateDeviceStatus } from '../../routes/deviceStatus/updateDeviceStatus.js';
+import { isSchedulePaused } from '../schedulePause.js';
+import { resolveSleeps } from './resolve.js';
+import { appendHistory } from './history.js';
+import { estimateOnset, ONSET_BASELINE_DAYS, type HeartRateRow } from './onsetEstimate.js';
+import {
+  smartCoolStartFor, startCurveController, stopCurveController,
+  type CurveControllerDeps, type SleepSummary,
+} from './curveController.js';
+
+const MINUTE = 60_000;
+const DAY = 24 * 60 * MINUTE;
+export const CURVE_TICK_MS = MINUTE;
+
+export type HeartRateLoader = (side: Side, from: Date, to: Date) => Promise<HeartRateRow[]>;
+
+let plan: { settings: Settings; db: RhythmsDB } | null = null;
+let timer: ReturnType<typeof setInterval> | null = null;
+let retimeJobs: () => void = () => {};
+
+async function loadHeartRatesFromDb(side: Side, from: Date, to: Date): Promise<HeartRateRow[]> {
+  const { prisma } = await import('../../db/prisma.js');
+  const rows = await prisma.vitals.findMany({
+    where: { side, timestamp: { gte: Math.floor(from.getTime() / 1000), lte: Math.floor(to.getTime() / 1000) } },
+    orderBy: { timestamp: 'asc' },
+    select: { timestamp: true, heart_rate: true },
+  });
+  return rows.map(row => ({ at: row.timestamp * 1000, hr: row.heart_rate }));
+}
+
+// Adds the onset estimate, then appends. Never throws.
+export async function recordSleepHistory(
+  summary: SleepSummary,
+  loadHeartRates: HeartRateLoader = loadHeartRatesFromDb,
+  historyFile?: string,
+): Promise<void> {
+  let onsetEstimate: string | null = null;
+  let onsetNote = 'no-vitals';
+  try {
+    const bedtime = Date.parse(summary.plannedBedtime);
+    const nightFrom = new Date(bedtime - 60 * MINUTE);
+    const night = await loadHeartRates(summary.side, nightFrom, new Date(summary.plannedWake));
+    const baseline = await loadHeartRates(summary.side, new Date(bedtime - ONSET_BASELINE_DAYS * DAY), nightFrom);
+    const result = estimateOnset(night, baseline);
+    onsetEstimate = result.at === null ? null : new Date(result.at).toISOString();
+    onsetNote = result.note;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`smart schedule: onset estimate skipped: ${message}`);
+    onsetNote = 'vitals-error';
+  }
+  await appendHistory({ ...summary, onsetEstimate, onsetNote }, historyFile ? { path: historyFile } : {});
+}
+
+export function curveDeps(retime: () => void): CurveControllerDeps {
+  return {
+    now: () => new Date(),
+    presence: () => getPresenceData(),
+    awayMode: () => ({ left: !!plan?.settings.left.awayMode, right: !!plan?.settings.right.awayMode }),
+    isPaused: (side, now) => (plan ? isSchedulePaused(plan.settings, side, now) : false),
+    sleeps: (side, from, to) => {
+      if (!plan?.settings.timeZone) return [];
+      return resolveSleeps({ db: plan.db, side, timeZone: plan.settings.timeZone, from, to, coolStartFor: smartCoolStartFor });
+    },
+    // Scheduled work: waits out a reconnect, where a newer set point for the
+    // side replaces it. Not awaited, so a waiting write never stalls the tick.
+    applyLevel: async (side, level) => {
+      const update = { [side]: { targetTemperatureF: levelToF(level) } } as DeepPartial<DeviceStatus>;
+      void updateDeviceStatus(update, { background: true }).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn(`smart schedule: could not set the ${side} level: ${message}`);
+      });
+    },
+    retime,
+    recordHistory: summary => recordSleepHistory(summary),
+  };
+}
+
+// The job scheduler registers its rebuild here once at load.
+export function setCurveRetime(retime: () => void): void {
+  retimeJobs = retime;
+}
+
+export function syncCurvePlan(settings: Settings, db: RhythmsDB): void {
+  plan = { settings, db };
+}
+
+export function startCurveRuntime(): void {
+  if (timer) return;
+  const controller = startCurveController(curveDeps(() => retimeJobs()));
+  // A slow tick (the history append at power off) must not overlap the next.
+  let ticking = false;
+  timer = setInterval(() => {
+    if (ticking) return;
+    ticking = true;
+    controller.tick().catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`smart schedule: tick failed: ${message}`);
+    }).finally(() => { ticking = false; });
+  }, CURVE_TICK_MS);
+  // The server stays up for its own reasons; this timer must not keep a process alive.
+  timer.unref();
+  logger.info('smart schedule: controller started');
+}
+
+export function stopCurveRuntime(): void {
+  if (!timer) return;
+  clearInterval(timer);
+  timer = null;
+  plan = null;
+  stopCurveController();
+  logger.info('smart schedule: controller stopped');
+}

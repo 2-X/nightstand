@@ -18,11 +18,13 @@ mock.module(new URL('../../routes/deviceStatus/updateDeviceStatus.js', import.me
 mock.module(new URL('../../8sleep/deviceApi.js', import.meta.url).href, {
   namedExports: { executeFunction: async (...args: unknown[]) => { commands.push(args); } },
 });
+// What the Pod reports; every side is on unless a test says otherwise.
+const pod = { left: { isOn: true }, right: { isOn: true } };
 mock.module(new URL('../../8sleep/frankenServer.js', import.meta.url).href, {
   namedExports: {
-    connectFrankenWithin: async () => ({ getDeviceStatus: async () => ({ left: { isOn: true }, right: { isOn: true } }) }),
+    connectFrankenWithin: async () => ({ getDeviceStatus: async () => pod }),
     isFrankenConnected: () => true,
-    getDeviceStatusCoalesced: async () => ({ left: { isOn: true }, right: { isOn: true } }),
+    getDeviceStatusCoalesced: async () => pod,
   },
 });
 const analyses: string[][] = [];
@@ -61,6 +63,8 @@ beforeEach(async () => {
   updates.length = 0;
   commands.length = 0;
   analyses.length = 0;
+  pod.left.isOn = true;
+  pod.right.isOn = true;
   servicesDB.data.biometrics.enabled = true;
   await servicesDB.write();
   memoryDB.data.left = { isAlarmVibrating: false, analyzeSleep: {} };
@@ -393,4 +397,64 @@ it('ends the wait for a ringing alarm at shutdown so the side turns off at once'
   abortAlarmWaits();
   await powerOff;
   assert.deepEqual(updates, [{ left: { isOn: false } }]);
+});
+
+// NIGHT's bedtime is 22:00, so as a Smart Schedule sleep it turns on at 21:30.
+const smartNight = () => {
+  const left = everyNight(NIGHT);
+  left.rhythms['every-night'].temperatureMode = 'smart';
+  return testRhythmsDB(schedulesDB.data, left);
+};
+const LATE_ON = 'rhythm-left-2026-09-28-power-on-late';
+
+it('turns on a Smart Schedule sleep first planned after its turn-on time, so its alarm still rings', async t => {
+  captureTimers(t);
+  pod.left.isOn = false;
+  replan(smartNight(), '2026-09-28T21:40:00Z');
+  assert.equal(fireTime(LATE_ON), '2026-09-28T21:40:01.000Z');
+  await schedule.scheduledJobs[LATE_ON].invoke();
+  assert.deepEqual(updates, [{ left: { isOn: true, targetTemperatureF: 88, secondsRemaining: 8 * 3600 + 20 * 60 + 300 } }]);
+  pod.left.isOn = true;
+  setNow('2026-09-29T05:45:00Z');
+  await schedule.scheduledJobs['rhythm-left-2026-09-28-alarm-0545-0'].invoke();
+  assert.equal(commands.filter(([command]) => command === 'ALARM_LEFT').length, 1);
+});
+
+it('leaves the side off and skips the alarm without that late turn-on', async t => {
+  captureTimers(t);
+  pod.left.isOn = false;
+  replan(smartNight(), '2026-09-28T21:40:00Z');
+  schedule.cancelJob(LATE_ON);
+  setNow('2026-09-29T05:45:00Z');
+  await schedule.scheduledJobs['rhythm-left-2026-09-28-alarm-0545-0'].invoke();
+  assert.equal(commands.filter(([command]) => command === 'ALARM_LEFT').length, 0);
+});
+
+it('turns a sleep on late only once, only before its bedtime and only for Smart Schedule', async () => {
+  replan(smartNight(), '2026-09-28T21:40:00Z');
+  await schedule.scheduledJobs[LATE_ON].invoke();
+  replan(smartNight(), '2026-09-28T21:50:00Z');
+  assert.equal(schedule.scheduledJobs[LATE_ON], undefined, 'turned on twice');
+  resetPowerOnTimes();
+  replan(smartNight(), '2026-09-28T22:00:00Z');
+  assert.equal(schedule.scheduledJobs[LATE_ON], undefined, 'turned on after bedtime');
+  replan(testRhythmsDB(schedulesDB.data, everyNight(NIGHT)), '2026-09-28T21:40:00Z');
+  assert.equal(schedule.scheduledJobs[LATE_ON], undefined, 'a manual sleep starts on its own clock');
+});
+
+it('keeps the late turn-on behind the pause gate', async () => {
+  settingsDB.data.left.scheduleOverrides.pause = { active: true, expiresAt: '' };
+  await settingsDB.write();
+  replan(smartNight(), '2026-09-28T21:40:00Z');
+  await schedule.scheduledJobs[LATE_ON].invoke();
+  assert.deepEqual(updates, []);
+  replan(smartNight(), '2026-09-28T21:45:00Z');
+  assert.equal(schedule.scheduledJobs[LATE_ON], undefined, 'a paused turn-on is not tried again');
+});
+
+it('does not turn a sleep on late again once it turned on', async () => {
+  replan(smartNight(), '2026-09-28T21:40:00Z');
+  await schedule.scheduledJobs[LATE_ON].invoke();
+  await schedule.scheduledJobs[LATE_ON].invoke();
+  assert.equal(updates.length, 1);
 });

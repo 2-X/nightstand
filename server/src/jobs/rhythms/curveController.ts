@@ -10,8 +10,8 @@ import { PRESENCE_STALE_MS } from '../../8sleep/presenceStale.js';
 import logger from '../../logger.js';
 import type { ResolvedSleep } from './resolve.js';
 import {
-  CAP_MS, coolStartOverride, presenceRun, stepStart, upEarlyDue, WINDOW_BEFORE_MS,
-  type PresenceSnapshot, type SidePresence, type StartReason, type StartState,
+  bridgeDropouts, CAP_MS, coolStartOverride, presenceRun, stepStart, upEarlyDue, WINDOW_BEFORE_MS,
+  type KeptRun, type PresenceSnapshot, type SidePresence, type StartReason, type StartState,
 } from './confirmation.js';
 
 const MINUTE = 60_000;
@@ -97,6 +97,7 @@ type SleepState = {
   points: CurvePoint[];
   start: StartState;
   firstSight: boolean;
+  presence: KeptRun | null;
   hold: { from: Date; until: Date } | null;
   upEarlyAt: Date | null;
   outOfBedAt: Date | null;
@@ -204,6 +205,9 @@ export class CurveController {
         await this.finish(state);
       } else if (!seen.has(key)) {
         this.states.delete(key);
+        // Jobs planned before this tick still use its moved start.
+        const override = coolStartOverride(state.start, state.bedtime);
+        if (override && override.getTime() !== state.bedtime.getTime()) this.deps.retime();
       }
     }
   }
@@ -235,6 +239,7 @@ export class CurveController {
       points: curve.points,
       start: { status: 'watching' },
       firstSight: true,
+      presence: null,
       hold: null,
       upEarlyAt: null,
       outOfBedAt: null,
@@ -269,11 +274,13 @@ export class CurveController {
     const time = now.getTime();
     const sides = this.sidesFor(state.side);
     const run = presenceRun(snapshot, sides, time, PRESENCE_STALE_MS);
+    const bridged = bridgeDropouts(state.presence, run, time);
+    state.presence = bridged.kept;
     let moved = false;
 
     if (state.start.status !== 'decided') {
       const before = coolStartOverride(state.start, state.bedtime) ?? state.bedtime;
-      state.start = stepStart(state.start, { run, bedtime: state.bedtime, now: time, firstSight: state.firstSight });
+      state.start = stepStart(state.start, { run: bridged.run, bedtime: state.bedtime, now: time, firstSight: state.firstSight });
       const after = coolStartOverride(state.start, state.bedtime) ?? state.bedtime;
       if (state.start.status === 'decided') {
         logger.info(`smart schedule ${state.side} ${state.date}: cool-down from ${after.toISOString()} (${state.start.reason})`);

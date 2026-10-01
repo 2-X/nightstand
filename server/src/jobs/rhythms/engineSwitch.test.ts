@@ -51,6 +51,7 @@ const { default: schedulesDB } = await import('../../db/schedules.js');
 const { default: serverStatus } = await import('../../serverStatus.js');
 const { SCHEDULE_DAYS } = await import('../../db/scheduleKeys.js');
 const { everyNight, testNight, testRhythmsDB } = await import('./testSupport.js');
+const { smartManualChange } = await import('./curveController.js');
 
 const LEGACY_PER_DAY = /^(left|right)-(sunday|monday|tuesday|wednesday|thursday|friday|saturday)-/;
 const RHYTHM_NIGHT = testNight('22:00', '06:00', { temperatures: { '02:00': 72 }, alarms: ['05:45'], alarmIntensity: 35 });
@@ -287,6 +288,35 @@ describe('choosing the engine on every rebuild', () => {
       settingsDB.data.timeZone = 'UTC';
       settingsDB.data.features.rhythms = false;
       await settingsDB.write();
+    }
+  });
+
+  it('runs Smart Schedule only while Rhythms is active, even when a rebuild fails', async () => {
+    const left = everyNight(testNight('11:30', '18:00'));
+    left.rhythms['every-night'].temperatureMode = 'smart';
+    writeRhythms(testRhythmsDB(schedulesDB.data, left));
+    await setFlag(true);
+    await setupJobs();
+    assert.equal(smartManualChange('left'), 'held');
+    await setFlag(false);
+    await setupJobs();
+    assert.equal(smartManualChange('left'), 'not-smart');
+
+    await setFlag(true);
+    await setupJobs();
+    settingsDB.data.features.rhythms = false;
+    settingsDB.data.left.scheduleOverrides.alarm = { disabled: false, timeOverride: '13:00', expiresAt: '2026-09-29T13:00:00+00:00' };
+    await settingsDB.write();
+    const failing = mock.method(schedule, 'scheduleJob', () => { throw new Error('cannot schedule'); });
+    try {
+      await setupJobs();
+      assert.equal(serverStatus.status.jobs.status, 'failed');
+      assert.equal(smartManualChange('left'), 'not-smart');
+    } finally {
+      failing.mock.restore();
+      settingsDB.data.left.scheduleOverrides.alarm = { disabled: false, timeOverride: '', expiresAt: '' };
+      await settingsDB.write();
+      await setupJobs();
     }
   });
 });

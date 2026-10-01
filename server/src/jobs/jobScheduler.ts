@@ -24,6 +24,7 @@ import { activation, type Activation } from './rhythms/activation.js';
 import { dropKeptAlarms, keptAlarmsGeneration } from './rhythms/keptAlarms.js';
 import { scheduleKeptAlarms, scheduleRhythms, type RhythmsPlan } from './rhythms/scheduleRhythms.js';
 import { reportRhythmsStatus } from './rhythms/rhythmsStatus.js';
+import { setCurveRetime, startCurveRuntime, stopCurveRuntime, syncCurvePlan } from './rhythms/curveRuntime.js';
 import { setEngineActivation, sleepAround } from './scheduleQueries.js';
 
 
@@ -56,6 +57,13 @@ async function rebuildJobs() {
       : null;
     const engine: Activation = load ? activation(settingsData, load, schedulesData) : { active: false, reason: 'flag-off' };
     setEngineActivation(engine);
+    // Before anything below can throw, so Smart Schedule follows the engine.
+    if (engine.active) {
+      startCurveRuntime();
+      syncCurvePlan(settingsData, engine.db);
+    } else {
+      stopCurveRuntime();
+    }
 
     logger.info('Scheduling jobs...');
     // Clearing a pause that ended while the server was down writes settings,
@@ -221,6 +229,9 @@ chokidar.watch(config.lowDbFolder).on('change', (changedPath) => {
     waitForValidDateAndSetupJobs();
   }
 });
+
+// A Smart Schedule start that moves rebuilds the in-memory jobs, never a file.
+setCurveRetime(() => { void setupJobs(); });
 
 // Initial job setup
 waitForValidDateAndSetupJobs();
