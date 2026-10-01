@@ -37,6 +37,9 @@ logger = get_logger()
 # Below this share of seconds with a capacitance reading, a night is read the
 # way it was before capacitance presence.
 MIN_CAP_COVERAGE = 0.5
+# Unknown capacitance types named in the log, and how much of each name.
+UNKNOWN_CAP_SHOWN = 5
+UNKNOWN_CAP_NAME_LENGTH = 40
 
 # (epoch seconds of a 2-minute bin start, largest per-second movement in it)
 MovementRow = Tuple[int, float]
@@ -290,12 +293,17 @@ def _presence_v2_params(collector: Optional[FrameCollector], profiles) -> Option
     if collector is None:
         return None
     try:
+        unknown = _unknown_cap_summary(collector.unknown_cap)
         cap_format = collector.cap_format()
         if cap_format is None:
-            for kind in sorted(collector.unknown_cap):
-                logger.warning(f'Capacitance records of type {kind} are not a format this version reads, '
+            if unknown:
+                logger.warning(f'Capacitance records of a type this version does not read ({unknown}), '
                                'reading the night as before')
+            else:
+                logger.warning('No readable capacitance record in the window, reading the night as before')
             return None
+        if unknown:
+            logger.warning(f'Left out capacitance records of a type this version does not read ({unknown})')
         formats = sorted(name for name, count in collector.cap_formats.items() if count)
         if len(formats) > 1:
             # One format's counts read against another's baseline would look like a rise.
@@ -314,6 +322,13 @@ def _presence_v2_params(collector: Optional[FrameCollector], profiles) -> Option
     except Exception as error:
         logger.warning(f'Could not set up capacitance presence, reading the night as before: {error}')
         return None
+
+
+def _unknown_cap_summary(counts) -> str:
+    """'type: count' for the most common unknown capacitance types, or '' when there were none."""
+    shown = ', '.join(f'{kind[:UNKNOWN_CAP_NAME_LENGTH]}: {count:,}' for kind, count in counts.most_common(UNKNOWN_CAP_SHOWN))
+    more = len(counts) - UNKNOWN_CAP_SHOWN
+    return shown + (f' and {more} more' if more > 0 else '')
 
 
 def _replay_side(collector: Optional[FrameCollector], params: Optional[DetectorParams], side: Side) -> Optional[List[Tuple[int, int]]]:

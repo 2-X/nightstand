@@ -385,7 +385,7 @@ class LosesANightTest(unittest.TestCase):
 
 
 class PresenceParamsTest(unittest.TestCase):
-    """Which format's levels a run uses."""
+    """Which format's levels a run uses, and what it says when it uses none."""
 
     def collector(self, formats=(), unknown=()):
         collector = FrameCollector(baselines_from_calibration(profiles()))
@@ -409,6 +409,29 @@ class PresenceParamsTest(unittest.TestCase):
                 self.collector([('capSense2', 900), ('capSense', 300)]), profiles()))
         self.assertEqual(len(logs.output), 1)
         self.assertIn('(capSense: 300, capSense2: 900)', logs.output[0])
+
+    def test_unknown_types_are_named_with_their_counts_in_one_line(self):
+        unknown = [(f'capSense{number}', 10 + number) for number in range(3, 10)] + [('capSense' + 'x' * 100, 1)]
+        with self.assertLogs(sleep_detector.logger, level='WARNING') as logs:
+            self.assertIsNone(sleep_detector._presence_v2_params(self.collector(unknown=unknown), profiles()))
+        self.assertEqual(len(logs.output), 1)
+        self.assertIn('capSense9: 19, capSense8: 18', logs.output[0])
+        self.assertIn('and 3 more', logs.output[0])
+        self.assertNotIn('capSense3', logs.output[0])
+
+    def test_unknown_types_beside_a_known_format_are_named_and_left_out(self):
+        with self.assertLogs(sleep_detector.logger, level='WARNING') as logs:
+            result = sleep_detector._presence_v2_params(
+                self.collector([('capSense2', 10)], unknown=[('capSense' + 'x' * 100, 4)]), profiles())
+        self.assertIsNotNone(result)
+        self.assertEqual(len(logs.output), 1)
+        self.assertIn('capSense' + 'x' * 32 + ': 4', logs.output[0])
+        self.assertNotIn('x' * 33, logs.output[0])
+
+    def test_no_readable_capacitance_says_so(self):
+        with self.assertLogs(sleep_detector.logger, level='WARNING') as logs:
+            self.assertIsNone(sleep_detector._presence_v2_params(self.collector(), profiles()))
+        self.assertIn('No readable capacitance', logs.output[0])
 
 
 class CoverageBoundaryTest(unittest.TestCase):
