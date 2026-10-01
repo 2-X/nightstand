@@ -23,11 +23,11 @@ import {
 import { temperatureColor } from '@lib/temperatureColor';
 import { minutesSincePowerOn, temperatureInPowerWindow, timeInPowerWindow } from './scheduleValidation';
 
-type Point = { x: Date; y: number; temperature: number; rowId: string };
+export type Point = { x: Date; y: number; temperature: number; rowId: string };
 
 const AREA_ALPHA = 0.20;
 const LINE_ALPHA = 1.0;
-const CHART_END_PADDING_MS = 30 * 60 * 1000;
+export const CHART_END_PADDING_MS = 30 * 60 * 1000;
 
 // ---------------- buildSeriesData (same as before) ----------------
 const todayAt = (hhmm: Time, timeZone: string, dayOffset = 0) => {
@@ -99,7 +99,7 @@ function buildSeriesData(selectedSchedule: DailySchedule, yMin: number, yMax: nu
 }
 
 // ---------------- Horizontal gradient by time ----------------
-function HorizontalTempGradient({
+export function HorizontalTempGradient({
   idArea,
   idLine,
   points,

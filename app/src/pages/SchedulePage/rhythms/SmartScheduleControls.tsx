@@ -1,0 +1,71 @@
+import { Box, FormControlLabel, Stack, Switch, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import type { SmartSchedule } from '@api/rhythmsSchema';
+import type { TemperatureFormat } from '@lib/temperatureConversions';
+import LevelStepper from './LevelStepper';
+
+type Props = {
+  value: SmartSchedule;
+  onChange: (next: SmartSchedule) => void;
+  format: TemperatureFormat;
+  trackingOn: boolean;
+  daySleep: boolean;
+  disabled: boolean;
+};
+
+type SwitchKey = 'warmStart' | 'warmUp' | 'upEarly';
+
+export default function SmartScheduleControls({ value, onChange, format, trackingOn, daySleep, disabled }: Props) {
+  const toggle = (key: SwitchKey, label: string, description: string, blocked = false) => <Box key={ key }>
+    <FormControlLabel
+      label={ label }
+      labelPlacement="start"
+      sx={ { m: 0, width: '100%', justifyContent: 'space-between', gap: 2 } }
+      control={ <Switch
+        // A locked switch shows what the curve does, not the saved choice underneath.
+        checked={ value[key] && !blocked }
+        disabled={ disabled || blocked }
+        onChange={ event => {
+          const next: SmartSchedule = { ...value };
+          next[key] = event.target.checked;
+          onChange(next);
+        } }/> }/>
+    <Typography variant="body2" color="text.secondary">{ description }</Typography>
+  </Box>;
+  return <Stack spacing={ 2 } sx={ { width: '100%' } }>
+    { daySleep && <Typography variant="body2" role="note">
+      This sleep is mostly during the day, so there is no warm start and the cool-down is a little quicker.
+    </Typography> }
+    <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 } }>
+      <Box sx={ { minWidth: 0, flex: '1 1 140px' } }>
+        <Typography>Base temperature</Typography>
+        <Typography variant="body2" color="text.secondary">Where you are comfortable. The curve stays within a few steps of it.</Typography>
+      </Box>
+      <LevelStepper
+        level={ value.baseLevel }
+        format={ format }
+        label="Base temperature"
+        disabled={ disabled }
+        onChange={ baseLevel => onChange({ ...value, baseLevel }) }/>
+    </Box>
+    <Box>
+      <Typography id="smart-intensity-label" sx={ { mb: 1 } }>Size of changes</Typography>
+      <ToggleButtonGroup
+        exclusive
+        color="primary"
+        aria-labelledby="smart-intensity-label"
+        value={ value.intensity }
+        disabled={ disabled }
+        onChange={ (_event, next: SmartSchedule['intensity'] | null) => { if (next) onChange({ ...value, intensity: next }); } }>
+        <ToggleButton value="gentle">Gentle</ToggleButton>
+        <ToggleButton value="standard">Standard</ToggleButton>
+      </ToggleButtonGroup>
+    </Box>
+    { toggle('warmStart', 'Warm start', daySleep
+      ? 'Off for this rhythm, because its sleep is mostly during the day.'
+      : 'A little warmer when you get into bed. Off for a sleep that is mostly during the day or shorter than 3 hours.', daySleep) }
+    { toggle('warmUp', 'Warm-up before wake', 'Warms gently before your wake time, so you wake to a comfortable bed.') }
+    { toggle('upEarly', 'Skip the warm-up if I get up early', trackingOn
+      ? 'If you are out of bed for 30 minutes in the last 90 before your wake time, the bed goes back to your base.'
+      : 'Needs Biometrics.', !trackingOn || !value.warmUp) }
+  </Stack>;
+}
