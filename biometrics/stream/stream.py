@@ -63,6 +63,7 @@ latest_cap = LatestCap()
 CAP_FRESH_SECONDS = 60
 # Capacitance types this version cannot read, each warned about once, up to a cap.
 _unknown_cap_logged = set()
+_unknown_cap_overflow_logged = False
 UNKNOWN_CAP_LOG_LIMIT = 16
 UNKNOWN_CAP_NAME_LENGTH = 40
 
@@ -134,6 +135,19 @@ def _queue_decoded_piezo_record(decoded_data) -> bool:
     return True
 
 
+def _warn_unknown_cap(kind: str) -> None:
+    global _unknown_cap_overflow_logged
+    if kind in _unknown_cap_logged:
+        return
+    if len(_unknown_cap_logged) < UNKNOWN_CAP_LOG_LIMIT:
+        _unknown_cap_logged.add(kind)
+        logger.warning(f'Capacitance records of type {kind} are not a format this version reads, '
+                       'live presence stays on the vibration sensor')
+    elif not _unknown_cap_overflow_logged:
+        _unknown_cap_overflow_logged = True
+        logger.warning('More unknown capacitance types not shown')
+
+
 def _store_decoded_cap_record(decoded_data) -> bool:
     """Keep the newest capacitance channels; True for every capacitance record, stored or not."""
     reading = read_cap(decoded_data)
@@ -141,11 +155,7 @@ def _store_decoded_cap_record(decoded_data) -> bool:
         kind = unknown_cap_type(decoded_data)
         if kind is None:
             return False
-        kind = kind[:UNKNOWN_CAP_NAME_LENGTH]
-        if kind not in _unknown_cap_logged and len(_unknown_cap_logged) < UNKNOWN_CAP_LOG_LIMIT:
-            _unknown_cap_logged.add(kind)
-            logger.warning(f'Capacitance records of type {kind} are not a format this version reads, '
-                           'live presence stays on the vibration sensor')
+        _warn_unknown_cap(kind[:UNKNOWN_CAP_NAME_LENGTH])
         return True
     ts = reading.ts
     if not _is_number(ts):

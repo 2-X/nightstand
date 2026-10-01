@@ -136,6 +136,9 @@ class CapPresenceTestCase(StreamHelpersTestCase):
         super().setUp()
         self.latest = stream.LatestCap()
         stream._unknown_cap_logged.clear()
+        overflow = unittest.mock.patch.object(stream, '_unknown_cap_overflow_logged', False)
+        overflow.start()
+        self.addCleanup(overflow.stop)
         patcher = unittest.mock.patch.object(stream, 'latest_cap', self.latest)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -210,7 +213,9 @@ class TestStoreDecodedCapRecord(CapPresenceTestCase):
             self.assertTrue(stream._store_decoded_cap_record({'type': 'capSense' + 'x' * 500, 'ts': now}))
             stream.logger.warning('end')
         self.assertEqual(len(stream._unknown_cap_logged), stream.UNKNOWN_CAP_LOG_LIMIT)
-        self.assertEqual(len(logs.output), stream.UNKNOWN_CAP_LOG_LIMIT + 1)
+        # One line per remembered type, one saying more were not shown, and 'end'.
+        self.assertEqual(len(logs.output), stream.UNKNOWN_CAP_LOG_LIMIT + 2)
+        self.assertEqual(sum('not shown' in line for line in logs.output), 1)
 
     def test_logs_a_long_unknown_type_name_truncated(self):
         record = {'type': 'capSense' + 'x' * 500, 'ts': datetime.now().timestamp()}
