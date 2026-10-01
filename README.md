@@ -35,20 +35,21 @@ The maintainer tests Nightstand on a Pod 5. Pod 3 and Pod 4 support comes
 from upstream free-sleep; this fork's biometrics and base controls have not
 been tested on those models.
 
-New sleep tracking (beta) goes by the capacitance format a Pod writes, not its
-model name. It has been checked against sleepers' own notes only on a Pod 5
-whose cover writes `capSense2` records. On Pods that write the older `capSense`
-records (Pod 3, and possibly Pod 4 and some Pod 5 covers) it is experimental,
-has not been checked against anyone's sleep, and Settings > Features says
-"Experimental on this Pod". On a Pod whose capacitance format it does not
-recognize, the switch leaves sleep tracking as it was and notes this in the log.
+New sleep tracking (beta) has been checked against sleepers' own notes only on
+a Pod 5 whose cover writes `capSense2` capacitance records. On any other model,
+whatever format it writes, and on a Pod 5 whose cover writes the older
+`capSense` records, it is experimental, has not been checked against anyone's
+sleep, and Settings > Features says "Experimental on this Pod". A Pod 5 whose
+cover writes the older format shows the label only after its first calibration
+with the switch on. On a Pod whose capacitance format it does not recognize,
+the switch leaves sleep tracking as it was and notes this in the log.
 
 | Pod | Temperature and schedules | Biometrics | Adjustable base |
 | --- | --- | --- | --- |
 | Pod 1, Pod 2 | Not supported | Not supported | Not supported |
 | Pod 3 (with SD card) | Upstream support; uses the [SD card method](INSTALLATION.md#compatibility) | Untested on this fork; new sleep tracking experimental | Untested on this fork |
 | Pod 3 (no SD card) | Upstream support; FCC ID `2AYXT61100001` | Untested on this fork; new sleep tracking experimental | Untested on this fork |
-| Pod 4 | Upstream support | Untested on this fork; new sleep tracking experimental | Requires an adjustable base |
+| Pod 4 | Upstream support | Untested on this fork; new sleep tracking experimental whatever capacitance format it writes | Requires an adjustable base |
 | Pod 5 | Tested by maintainer | Experimental estimates | Requires an adjustable base; no separate test report |
 | Pod 6 | Unknown | Unknown; new sleep tracking untested | Unknown |
 
@@ -129,8 +130,8 @@ In Settings:
   after 45 minutes with no one on it, outside its scheduled on-window.
 - **New sleep tracking (beta)** under Features: off by default, needs biometrics. Uses
   the bed's capacitance sensors to tell the two sides apart (see
-  [Biometrics](#biometrics)). It has only been checked on a Pod 5; on Pods that
-  write the older capacitance format it is experimental and the app says so.
+  [Biometrics](#biometrics)). It has only been checked on a Pod 5 writing the newer
+  capacitance format; anywhere else it is experimental and the app says so.
 - **Rhythms (beta)** under Features: off by default. The first time you turn it
   on, it copies the weekly schedule into named rhythms and keeps the weekly
   schedule as it is. After that, turning it on brings back your saved rhythms.
@@ -186,9 +187,10 @@ person's bed times and caught two short trips out of bed, where the old live
 presence split the night into many pieces and the old nightly record gave
 both sides the same times. It has only been checked on one Pod 5 so far.
 
-On Pods that write the older capacitance format, the switch is experimental
-and does less. It changes the nightly sleep records: these start from 300
-counts, the entry level sleepypod uses for that format, and then follow each
+On any other model, and on a Pod 5 that writes the older capacitance format,
+the switch is experimental and does less. It changes the nightly sleep
+records: these start from the Pod 5's entry level, or from 300 counts on the
+older format (the entry level sleepypod uses for it), and then follow each
 side's level as learned from the Pod's own nights. A side keeps the older
 reading for a night whenever its capacitance had gaps, found a much shorter
 night than the older rule, or came in two formats. Once both sides' levels are

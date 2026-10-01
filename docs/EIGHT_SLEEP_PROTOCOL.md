@@ -93,7 +93,7 @@ buffer truncates it. See `biometrics/load_raw_files.py` and
 | `type` | Contents | Consumed by free-sleep? |
 |---|---|---|
 | `piezo-dual` | Raw piezo sensor waveform, both sides | ✅ yes: core presence/vitals signal |
-| `capSense` (Pod 3, some Pod 5) / `capSense2` (Pod 5 newer cover; Pod 4 not confirmed) | Capacitance sensor readings; Pod 5's `capSense2` shape is normalized to the legacy `capSense` fields (`out`/`cen`/`in`) | ✅ yes |
+| `capSense` (Pod 3, possibly some Pod 5) / `capSense2` (Pod 5 newer cover; Pod 4 not confirmed) | Capacitance sensor readings; Pod 5's `capSense2` shape is normalized to the legacy `capSense` fields (`out`/`cen`/`in`) | ✅ yes |
 | `bedTemp` (Pod 3, v1 integer centidegrees) / `bedTemp2` (Pod 4/5, float °C, `temps[]` array) | Bed-surface temperature sensors | `bedTemp` yes, `bedTemp2` intentionally not consumed yet (Pod 5 writes `bedTemp2`, kept for a future project) |
 | `frzTemp` | `{amb, hs, left, right}`: ambient, heatsink, and per-side hub sensor temps in centidegrees C | ✅ yes: feeds the Settings page sensor-temp display |
 | `frzHealth` | `{left, right, fan}`, each side `{tec: {current}, pump: {mode, rpm, water}, temps: {flowrate}}`: see [pump/thermal telemetry](#pumpthermal-telemetry-frzhealth) below | ✅ yes, as of v3.0.0: pump-stall detection only |
@@ -211,9 +211,9 @@ other projects, and none of them has been checked on our hardware.
   ([sleepypod sensor profiles](https://github.com/sleepypod/core/blob/main/docs/hardware/sensor-profiles.md),
   [NATS frame notes](https://github.com/sleepypod/core/blob/main/docs/nats-frame-readers.md)).
   We have not found a published Pod 4 capture of either. Nightstand
-  therefore reads the format from the records, not from the model name, and
-  treats `capSense` as experimental: its new sleep tracking starts from
-  sleepypod's `capSense` entry level of 300 counts
+  therefore reads the format from the records and treats anything but
+  `capSense2` on a Pod 5 as experimental. On `capSense` its new sleep tracking
+  starts from sleepypod's `capSense` entry level of 300 counts
   ([sleepypod sleep detector](https://github.com/sleepypod/core/blob/main/docs/sleep-detector.md))
   and then learns each side's own level.
 - 📖 **Files the firmware keeps in `/persistent`.** Pod 3 firmware reads

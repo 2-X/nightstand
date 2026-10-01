@@ -196,7 +196,9 @@ write which is not fully known: sleepypod reports one Pod 5 on newer firmware
 writing `capSense` (see
 [docs/EIGHT_SLEEP_PROTOCOL.md](../docs/EIGHT_SLEEP_PROTOCOL.md#other-pod-generations)).
 The new sleep tracking reads both formats through `presence/sensors.py`, and
-has only been checked on `capSense2`.
+has only been checked on a Pod 5 writing `capSense2`. It reads the model from
+the hub's device label, as the server does, and treats `capSense2` on any
+other model as unchecked; if the label cannot be read, it runs as on a Pod 5.
 
 ```json
 {

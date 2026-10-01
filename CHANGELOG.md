@@ -9,19 +9,22 @@ is a hard fork; for the history of the projects it descends from, see
 ## [Unreleased]
 
 - A new switch in Settings > Features, "New sleep tracking (beta)", is off by
-  default and still being tested. When it is on, the Pod 5's capacitance
-  sensors are used to estimate which side of the bed has someone in it, both
-  live and in the nightly analysis, and heart rate and breathing tracking
-  carries on through short trips out of bed instead of starting over. It is an
-  estimate from bed sensors and may be wrong. With the switch off, presence,
-  sleep records and everything stored behave exactly as before. It has been
-  checked only on a Pod 5 whose cover writes the newer capacitance records. On
-  Pods that write the older records (Pod 3, and possibly Pod 4 and some Pod 5
-  covers) it is experimental, has not been checked against anyone's sleep, and
-  Settings > Features says "Experimental on this Pod". There it changes the
-  nightly sleep records, starting from 300 counts (the entry level sleepypod
-  uses for that format) and then following each side's level as learned from
-  the Pod's own nights. A side keeps the older reading for a night whenever
+  default and still being tested. When it is on, the bed's capacitance
+  sensors are used to estimate which side of the bed has someone in it in the
+  nightly analysis. On a Pod 5 whose cover writes the newer capacitance records
+  they are used live too, and heart rate and breathing tracking carries on
+  through short trips out of bed instead of starting over. It is an estimate
+  from bed sensors and may be wrong. With the switch off, presence, sleep
+  records and everything stored behave exactly as before. It has been checked
+  only on a Pod 5 whose cover writes the newer capacitance records. On any
+  other model, whatever records it writes, and on a Pod 5 whose cover writes
+  the older records, it is experimental, has not been checked against anyone's
+  sleep, and Settings > Features says "Experimental on this Pod" (on such a
+  Pod 5, from its first calibration with the switch on). There it changes the
+  nightly sleep records, starting from the Pod 5's entry level, or from 300
+  counts on the older records (the entry level sleepypod uses for that
+  format), and then following each side's level as learned from the Pod's own
+  nights. A side keeps the older reading for a night whenever
   its capacitance had gaps, found a much shorter night or came in two formats.
   Once both sides' levels are learned and vibration readings arrive once a
   second, capacitance also decides when heart rate and breathing are recorded.
