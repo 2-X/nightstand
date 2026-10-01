@@ -3,6 +3,7 @@ import { wakeFromNight } from '../../db/rhythmWake.js';
 import { SCHEDULE_DAYS } from '../../db/scheduleKeys.js';
 import { compareTimes, isValidTime, scheduleWrapsToNextDay } from '../utils.js';
 import { normalizeNight } from './night.js';
+import { applySmartCurve } from './smartSleep.js';
 // Longer than any caller needs, so a mistaken window cannot resolve years of sleeps.
 export const MAX_RESOLVE_WINDOW_MS = 70 * 24 * 60 * 60 * 1000;
 const KIND_ORDER = { 'power-on': 0, temperature: 1, alarm: 2, 'power-off': 3 };
@@ -61,7 +62,9 @@ function resolveWindow(window, sourceFor) {
     const sleeps = [];
     for (let date = addDays(moment.tz(from, timeZone).format(DATE_FORMAT), -1); date <= last; date = addDays(date, 1)) {
         const source = sourceFor(date);
-        const sleep = source ? resolveNight(side, date, source, timeZone) : null;
+        const night = source ? resolveNight(side, date, source, timeZone) : null;
+        // The pre-warm moves a Smart Schedule start earlier, so the curve goes on before the window check.
+        const sleep = night && applySmartCurve(night, timeZone, window.coolStartFor?.(side, date));
         if (sleep && sleep.start <= to && sleep.end >= from)
             sleeps.push(sleep);
     }

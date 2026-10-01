@@ -25,15 +25,12 @@ import { getDeviceStatusCoalesced } from './frankenServer.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import { isInScheduledSleep } from '../jobs/scheduleQueries.js';
 import { isSchedulePaused } from '../jobs/schedulePause.js';
+import { PRESENCE_STALE_MS } from './presenceStale.js';
 export const PRESENCE_AUTO_OFF_MS = 45 * 60 * 1000;
 // Matches the presence stream's own ~once-a-minute heartbeat cadence, so a
 // tighter poll wouldn't see any new information between checks.
 const CHECK_INTERVAL_MS = 60 * 1000;
-// The presence stream heartbeats about once a minute. If its last report is
-// older than this we cannot tell "the bed is empty" from "nothing is
-// reporting" (biometrics turned off, stream crashed, service restarting), so
-// presence is UNKNOWN and auto-off must hold rather than guess.
-export const PRESENCE_STALE_MS = 5 * 60 * 1000;
+export { PRESENCE_STALE_MS };
 // The pod can boot with a wrong clock and NTP-step it later. A gap between
 // ticks far larger than the interval means the wall clock jumped, not that
 // time passed, so elapsed idle times computed against it are meaningless.

@@ -48,6 +48,12 @@ const RHYTHM = testNight('22:00', '06:30', { alarms: ['06:00'] });
 const LEGACY = testNight('23:00', '07:30', { alarms: ['07:15'] });
 const OFF = testNight('23:00', '07:30', { enabled: false });
 const LEGACY_END = new Date('2026-09-29T07:30:00Z');
+function rhythmsFor(schedules, options) {
+    const left = everyNight(options.rhythm ?? RHYTHM);
+    if (options.smart)
+        left.rhythms['every-night'].temperatureMode = 'smart';
+    return testRhythmsDB(schedules, left);
+}
 function plan(options = {}) {
     const settings = structuredClone(settingsDB.data);
     settings.timeZone = 'UTC';
@@ -64,8 +70,8 @@ function plan(options = {}) {
     return planHandoff({
         settings,
         schedules,
-        db: testRhythmsDB(schedules, everyNight(options.rhythm ?? RHYTHM)),
-        now: NOW,
+        db: rhythmsFor(schedules, options),
+        now: options.now ?? NOW,
         powerOffNow: options.powerOffNow ?? false,
         isOn: () => options.on ?? true,
         alarmRang: (side, id) => (options.rang ?? false) && side === 'left' && id === 'rhythm:left:2026-09-28:06:00',
@@ -110,6 +116,19 @@ describe('planHandoff', () => {
     });
     it('does nothing outside a rhythm sleep', () => {
         assert.deepEqual(plan({ rhythm: testNight('08:00', '16:00') })[0], { side: 'left', action: 'none' });
+    });
+    // RHYTHM's bedtime is 22:00; as a Smart Schedule sleep it turns on at 21:30.
+    const PREWARM = new Date('2026-09-28T21:45:00Z');
+    it('lets the weekly night starting at bedtime take over a Smart Schedule pre-warm, so its alarm rings once', () => {
+        const weekly = testNight('22:00', '06:30', { alarms: ['06:00'] });
+        assert.deepEqual(plan({ smart: true, now: PREWARM, legacy: weekly })[0], { side: 'left', action: 'legacy-takes-over', until: new Date('2026-09-29T06:30:00Z') });
+    });
+    it('keeps a Smart Schedule pre-warm on when no weekly night starts by its bedtime', () => {
+        for (const legacy of [OFF, LEGACY]) {
+            const { keptSleep, ...rest } = plan({ smart: true, now: PREWARM, legacy })[0];
+            assert.deepEqual(rest, { side: 'left', action: 'kept-on-until', until: new Date('2026-09-29T06:30:00Z') });
+            assert.equal(keptSleep?.events.filter(event => event.kind === 'alarm').length, 1);
+        }
     });
     it('hands the whole bed over from the present side in away mode', () => {
         const configure = (settings) => { settings.right.awayMode = true; };

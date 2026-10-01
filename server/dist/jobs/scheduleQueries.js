@@ -6,6 +6,7 @@ import schedulesDB from '../db/schedules.js';
 import { SCHEDULE_DAYS } from '../db/scheduleKeys.js';
 import { compareTimes, isValidTime, scheduleWrapsToNextDay } from './utils.js';
 import { resolveLegacySleeps, resolveSleeps } from './rhythms/resolve.js';
+import { smartCoolStartFor } from './rhythms/curveController.js';
 const HOUR_MS = 60 * 60 * 1000;
 const CHANGE_LOOKAHEAD_MS = 48 * HOUR_MS;
 const TEMPERATURE_LOOKAHEAD_MS = 7 * 24 * HOUR_MS;
@@ -87,7 +88,7 @@ function rhythmSleeps(side, from, to) {
     const driver = drivingSide(settingsDB.data, side);
     if (!driver)
         return [];
-    return resolveSleeps({ db: engine.db, side: driver, timeZone: podTimeZone(), from, to });
+    return resolveSleeps({ db: engine.db, side: driver, timeZone: podTimeZone(), from, to, coolStartFor: smartCoolStartFor });
 }
 function scheduledSleeps(side, from, to) {
     return rhythmSleeps(side, from, to)

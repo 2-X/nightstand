@@ -120,4 +120,55 @@ describe('power-on temperature override', () => {
         assert.equal(settingsDB.data.left.scheduleOverrides.temperatureSchedules.expiresAt, '2026-09-29T08:30:00Z');
     });
 });
+describe('markManualTempChange on a Smart Schedule night', () => {
+    it('holds the curve instead of pausing the schedule for 12 hours', async () => {
+        const { startCurveController, stopCurveController, smartCurveStatus } = await import('./rhythms/curveController.js');
+        const { applySmartCurve } = await import('./rhythms/smartSleep.js');
+        await setNextScheduledChange(1);
+        const minute = 60_000;
+        const bedtime = new Date(Math.floor(Date.now() / minute) * minute - 60 * minute);
+        const end = new Date(bedtime.getTime() + 9 * 60 * minute);
+        const alarm = {
+            time: '06:30', enabled: true, alarmTemperature: 82, vibrationIntensity: 50, vibrationPattern: 'rise', duration: 60,
+        };
+        const sleep = applySmartCurve({
+            side: 'left',
+            date: '2026-09-29',
+            rhythmId: 'workday',
+            start: bedtime,
+            end,
+            wake: new Date(end.getTime() - 60 * minute),
+            night: { temperatures: {}, alarm, alarms: [], power: { on: '22:45', off: '07:45', onTemperature: 80, enabled: true } },
+            mode: 'smart',
+            smart: { baseLevel: 0, intensity: 'standard', warmStart: true, warmUp: true, upEarly: false },
+            events: [
+                { kind: 'power-on', at: bedtime, temperatureF: 80 },
+                { kind: 'alarm', at: new Date(end.getTime() - 60 * minute), alarm, index: 0 },
+                { kind: 'power-off', at: end },
+            ],
+        }, 'UTC');
+        startCurveController({
+            now: () => new Date(),
+            presence: () => ({ left: { present: false }, right: { present: false } }),
+            awayMode: () => ({ left: false, right: false }),
+            isPaused: () => false,
+            sleeps: side => (side === 'left' ? [sleep] : []),
+            applyLevel: async () => { },
+            retime: () => { },
+            recordHistory: async () => { },
+        });
+        try {
+            await markManualTempChange('left');
+            await settingsDB.read();
+            assert.equal(settingsDB.data.left.scheduleOverrides.temperatureSchedules.disabled, false);
+            assert.notEqual(smartCurveStatus('left')?.holdUntil ?? null, null);
+        }
+        finally {
+            stopCurveController();
+        }
+        await markManualTempChange('left');
+        await settingsDB.read();
+        assert.equal(settingsDB.data.left.scheduleOverrides.temperatureSchedules.disabled, true);
+    });
+});
 //# sourceMappingURL=scheduleOverride.test.js.map

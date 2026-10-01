@@ -9,6 +9,7 @@ import settingsDB, { updateSettings } from '../db/settings.js';
 import schedulesDB from '../db/schedules.js';
 import logger from '../logger.js';
 import { nextScheduledChange } from './scheduleQueries.js';
+import { smartManualChange } from './rhythms/curveController.js';
 export const OVERRIDE_WINDOW_HOURS = 3;
 export const OVERRIDE_DURATION_HOURS = 12;
 export const isTempScheduleOverridden = (side) => {
@@ -20,6 +21,9 @@ export const isTempScheduleOverridden = (side) => {
     return moment(override.expiresAt).isAfter(moment());
 };
 export const markManualTempChange = async (side) => {
+    // Smart Schedule nights hold the curve until its next phase instead.
+    if (smartManualChange(side) !== 'not-smart')
+        return;
     await schedulesDB.read();
     await updateSettings(draft => {
         const timeZone = draft.timeZone || 'UTC';

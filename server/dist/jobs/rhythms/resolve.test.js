@@ -132,14 +132,16 @@ describe('resolveSleeps', () => {
         assert.deepEqual(quiet[0].events.map(event => event.kind), ['power-on', 'temperature', 'temperature', 'power-off']);
         assert.equal(sleeps[0].events.length, 5, 'the input is not changed');
     });
-    it('resolves Smart Schedule rhythms like manual ones until the curve exists', () => {
+    it('resolves Smart Schedule rhythms through the curve, from the pre-warm, and keeps their alarms', () => {
         const smart = { ...DEFAULT_SMART, baseLevel: -2 };
         const db = dbOf(sideOf([rhythmOf('smart', WORKDAY, { temperatureMode: 'smart', smart })], { monday: 'smart' }));
         const [sleep] = left(db, 'UTC', '2026-10-05T00:00:00Z', '2026-10-07T00:00:00Z');
         const [manual] = left(workdayDb, 'UTC', '2026-10-05T00:00:00Z', '2026-10-07T00:00:00Z');
         assert.equal(sleep.mode, 'smart');
         assert.deepEqual(sleep.smart, smart);
-        assert.deepEqual(sleep.events, manual.events);
+        assert.equal(sleep.start.toISOString(), '2026-10-05T21:30:00.000Z');
+        assert.equal(sleep.smartCurve?.bedtime.toISOString(), manual.start.toISOString());
+        assert.deepEqual(sleep.events.filter(event => event.kind === 'alarm'), manual.events.filter(event => event.kind === 'alarm'));
     });
 });
 describe('resolveSleeps across daylight saving changes', () => {

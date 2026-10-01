@@ -5,7 +5,7 @@ import settingsDB from '../../db/settings.js';
 import schedulesDB from '../../db/schedules.js';
 import { SCHEDULE_SIDES } from '../../db/scheduleKeys.js';
 import { loadRhythms, RhythmsStateError, updateRhythms } from '../../db/rhythms.js';
-import { RhythmsSleepsQuerySchema, RhythmsUpdateSchema } from '../../db/rhythmsSchema.js';
+import { RhythmsLiveQuerySchema, RhythmsSleepsQuerySchema, RhythmsUpdateSchema } from '../../db/rhythmsSchema.js';
 import { activation } from '../../jobs/rhythms/activation.js';
 import { applyAlarmsEnabled, findOverlaps, resolveLegacySleeps, resolveSleeps } from '../../jobs/rhythms/resolve.js';
 import { pruneChanges, sideIssues } from '../../jobs/rhythms/validate.js';
@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { enableRhythms } from '../../jobs/rhythms/enable.js';
 import { disableRhythms } from '../../jobs/rhythms/handoff.js';
 import { drivingSide } from '../../jobs/scheduleQueries.js';
+import { liveCurveState, smartCoolStartFor } from '../../jobs/rhythms/curveController.js';
 const router = express.Router();
 export const MAX_SLEEPS_WINDOW_MS = 16 * 24 * 60 * 60 * 1000;
 // Changes reach 60 days ahead. Days 61 to 68 have none, so they hold every pair of consecutive weekdays.
@@ -108,7 +109,7 @@ router.get('/rhythms/sleeps', async (req, res) => {
     }
     const window = { side: driver, timeZone: settingsDB.data.timeZone, from, to };
     const sleeps = result.active
-        ? resolveSleeps({ db: result.db, ...window })
+        ? resolveSleeps({ db: result.db, ...window, coolStartFor: smartCoolStartFor })
         : resolveLegacySleeps({ schedules: schedulesDB.data, ...window });
     res.json(applyAlarmsEnabled(sleeps, driver === side && settingsDB.data[side].alarmsEnabled));
 });
@@ -139,6 +140,17 @@ router.post('/rhythms/disable', async (req, res) => {
         return;
     }
     res.json(await disableRhythms({ powerOffNow: parsed.data.powerOffNow ?? false }, rebuildSchedule));
+});
+// The live Smart Schedule night for a side; an away side reads the present side's.
+router.get('/rhythms/live', async (req, res) => {
+    const parsed = RhythmsLiveQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+        res.status(400).json({ error: 'Pass side' });
+        return;
+    }
+    await settingsDB.read();
+    const driver = drivingSide(settingsDB.data, parsed.data.side);
+    res.json(driver ? liveCurveState(driver) : null);
 });
 export default router;
 //# sourceMappingURL=rhythms.js.map
