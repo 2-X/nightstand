@@ -143,7 +143,10 @@ filter is not authentication or protection from non-browser clients.
     "sleepScore": true,
     "levelTemps": true,
     "oneOffAlarms": true,
-    "nightstandTheme": true
+    "presenceAutoOff": true,
+    "nightstandTheme": true,
+    "rhythms": false,
+    "biometricsV2": false
   }
 }
 ```
@@ -154,7 +157,7 @@ filter is not authentication or protection from non-browser clients.
 - `oneOffAlarm` is a single alarm that fires once at `fireAt` (an ISO 8601 datetime with offset) then disables itself, independent of the recurring per-day schedule in `/api/schedules`.
 - `scheduleOverrides.pause` pauses one side's schedule. While `active`, that side's scheduled power, temperature and recurring alarm jobs are skipped when they come due, and presence auto-off leaves the side alone. The one-time alarm is not affected by the pause, so it rings if the side is on. `expiresAt` is an ISO 8601 datetime with offset, at most 14 days ahead, or `""` to pause until the side is resumed. When `expiresAt` passes, the server clears the pause itself and does not switch the side on or off at that moment.
 - `taps` maps each gesture (`doubleTap`/`tripleTap`/`quadTap`) to a `temperature`, `alarm`, or `base_control` action.
-- `features` are runtime feature flags read by the app.
+- `features` are runtime feature flags read by the app. `features.rhythms` is the Rhythms switch (see `/api/rhythms` below); it changes only through `POST /api/rhythms/enable` and `POST /api/rhythms/disable`.
 
 ### POST
 

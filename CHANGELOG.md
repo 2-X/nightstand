@@ -8,6 +8,51 @@ is a hard fork; for the history of the projects it descends from, see
 
 ## [Unreleased]
 
+- A new switch in Settings > Features, "Rhythms (beta)", is off by default.
+  Rhythms are named sleep plans for each side: bedtime, wake time, alarms,
+  turn off and temperatures. A week picks a rhythm, or no sleep, for each
+  day, and any date up to 60 days ahead can use a different one. Week and
+  date changes save at once and can be undone. The Schedule tab, the Bed
+  page and the Tonight card all follow the same sleeps. With biometrics on,
+  each Rhythms sleep is analyzed 15 minutes after it ends and again 2 hours
+  after, in place of the noon analysis.
+
+  The first time Rhythms is turned on, it copies the weekly schedule into
+  rhythms named after their days and leaves the weekly schedule as it is.
+  Turning it on again later brings back the saved rhythms; changes made to
+  the weekly schedule in the meantime are not added. Turning Rhythms off
+  restores the weekly schedule as it was, with nothing copied back, and
+  keeps the rhythms in their own file for next time. When a side is in the
+  middle of a sleep, you choose whether it stays on until that sleep ends,
+  with its remaining alarm still ringing, or turns off now.
+
+  A rhythm sets its temperatures by hand or with Smart Schedule, which is off
+  unless you choose it for that rhythm. Smart Schedule follows the pattern
+  described in sleep and thermoregulation research such as Kräuchi et al.
+  (1999), Raymann et al. (2005) and Herberger et al. (2024, Sci Rep):
+  comfortable when you lie down, a little cooler once you are settled, and
+  warming gently before your wake time. Changes are small and stay within a
+  few steps of a base temperature you pick. With biometrics on, the
+  cool-down waits until you have settled in bed. A temperature you set by
+  hand holds until the curve's next phase. The step sizes and timings are
+  our own estimates, and none of these studies tested this curve or a
+  water-cooled cover like the Pod's. The editor lists the studies under
+  "Based on sleep research". It is a general starting point for comfort,
+  not a medical recommendation.
+
+  Older versions and upstream free-sleep do not know about Rhythms and run
+  the weekly schedule. Before a downgrade or rollback to a version without
+  Rhythms, or switching to upstream free-sleep, each side goes back to the
+  weekly schedule. A side in a Rhythms sleep that a weekly night also
+  covers follows that night from then on. Otherwise it stays on until the
+  sleep ends, when the Pod's own timer turns it off, and that sleep's
+  remaining alarms do not ring. If the sleep's alarm already rang, the
+  weekly alarms are skipped for the rest of that night so it does not ring
+  twice. Settings > Versions says this before you start. The rhythms stay
+  on the Pod: after coming back, Rhythms carries on if the weekly schedule
+  was not changed in the meantime. If it was, the weekly schedule runs and
+  the app asks whether to go back to Rhythms or use the weekly schedule.
+
 - A new switch in Settings > Features, "New sleep tracking (beta)", is off by
   default and still being tested. When it is on, the bed's capacitance
   sensors are used to estimate which side of the bed has someone in it in the

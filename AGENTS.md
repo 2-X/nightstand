@@ -125,6 +125,13 @@ Biometrics, from the repository root (Python 3.9, as in CI):
 
 ## Scheduling code
 
+There are two schedule engines, and only one runs at a time. `rebuildJobs`
+in `server/src/jobs/jobScheduler.ts` picks one on every rebuild. Priming, the
+daily restart, alarm overrides, one-time alarms and the end of a pause are
+scheduled under either engine.
+
+The weekly engine is the default:
+
 - Client schedule state: `app/src/pages/SchedulePage/scheduleStore.tsx`.
 - Schedule save payloads are assembled in
   `app/src/pages/SchedulePage/SchedulePage.tsx`.
@@ -134,6 +141,87 @@ Biometrics, from the repository root (Python 3.9, as in CI):
   - `server/src/jobs/temperatureScheduler.ts`
   - `server/src/jobs/alarmScheduler.ts`
   - `server/src/jobs/primeScheduler.ts`
+- Sleep analysis runs once a day at noon for each side.
+
+The Rhythms engine runs named sleep plans (rhythms), a week that picks one
+for each day, and date changes:
+
+- Data: `rhythmsDB.json` in the lowdb folder, read and written through
+  `server/src/db/rhythms.ts`, with its schema in
+  `server/src/db/rhythmsSchema.ts`. The job watcher rebuilds on writes to it.
+- Routes: `server/src/routes/rhythms/rhythms.ts`. App:
+  `app/src/pages/SchedulePage/rhythms/` and `app/src/api/rhythms.ts`.
+- Activation: `activation()` in `server/src/jobs/rhythms/activation.ts`. The
+  engine is active only when `features.rhythms` is on, `rhythmsDB.json`
+  exists, can be read and has a version this server knows, and its
+  `legacyFingerprint` matches a hash of the weekly schedule
+  (`fingerprint.ts`). Otherwise the weekly engine runs and
+  `GET /api/rhythms` gives the reason. A fingerprint mismatch means
+  something that does not know Rhythms, such as an older version after a
+  rollback, changed the weekly schedule. The flag stays on and the app asks
+  whether to go back to Rhythms or use the weekly schedule.
+- Only `POST /api/rhythms/enable` and `POST /api/rhythms/disable` change the
+  flag; `POST /api/settings` refuses that change with 409. The first enable
+  converts the weekly schedule into rhythms (`convert.ts`) and creates the
+  file. Later enables keep the saved rhythms and rewrite the fingerprint to
+  the weekly schedule as it is now.
+- Jobs: `scheduleRhythms.ts` resolves sleeps (`resolve.ts`) 48 hours ahead
+  as one-shot jobs named `rhythm-<side>-<date>-<kind>-<HHmm>-<n>`, and an
+  hourly `rhythms-horizon` job extends that window. Each job runs through
+  `runEvent.ts`, which applies the same away mode, pause, alarms-off and
+  alarm override rules as the weekly jobs. Every power-on also sets
+  `secondsRemaining`, so the firmware turns the side off 5 minutes after the
+  sleep's end even if the server is gone.
+- Each sleep is analyzed 15 minutes and 2 hours after it ends. A side keeps
+  the noon analysis only when none of its sleeps ended in the 24 hours
+  before that noon.
+- Smart Schedule: the curve is in `server/src/db/smartCurve.ts`, shared with
+  the app. `curveController.ts` and `curveRuntime.ts` follow it each minute
+  and keep presence-confirmed cool-down starts and manual holds in memory
+  only. Each finished Smart Schedule sleep adds a line to
+  `rhythms-history.jsonl` next to the lowdb folder, kept for 90 days.
+
+Turning Rhythms off and leaving this version both go through
+`server/src/jobs/rhythms/handoff.ts`:
+
+- `POST /api/rhythms/disable` plans each side from the running engine, then
+  writes the flag off and any alarm override in one settings write, rebuilds
+  the jobs and sends the device commands. A side running a Rhythms sleep is
+  handed to the weekly night that covers now (the firmware timer is re-armed
+  to that night's end), or kept on until the rhythm sleep's end with its
+  remaining alarms held in memory (`keptAlarms.ts`), or powered off when the
+  request asks for it. When the sleep's alarm already rang and the weekly
+  night still has one ahead, that side's weekly alarms are switched off
+  until the weekly night ends.
+- Pre-stop handoff: `scripts/update.sh` (downgrades only),
+  `scripts/rollback_pod.sh` and `scripts/revert-to-stock.sh` call
+  `POST /api/update/prepare-to-stop` just before they stop the server, after
+  every check that could still abort them. The update and rollback scripts
+  skip it when the version they switch to has that route. It runs the same
+  plan without touching the flag. Older versions ignore a pause, so it also
+  switches off a paused side's alarms for its coming weekly night when the
+  last of them would still be paused. A failed call never stops the
+  script; the firmware off time set at power-on is the backstop.
+- `server/src/routes/update/update.ts` also ships in the updater overlay for
+  stock installs, so it imports no Rhythms code. `server/src/setup/routes.ts`
+  registers the handoff with `setLeaveHook`.
+
+Revert rules, so that an older version or upstream free-sleep keeps working
+on data this version wrote:
+
+- Never write new keys or objects into `schedulesDB.json`. Rhythms code
+  never writes it at all, so turning Rhythms off brings back the weekly
+  schedule as it was, with nothing copied back.
+- Never delete or rename `rhythmsDB.json`. No script in `scripts/` names
+  it (`server/src/rhythmsFileSafety.test.ts`), so backups and the switch to
+  upstream leave it as it is.
+- Keep runtime state out of watched files: use memory, the log or
+  `rhythms-history.jsonl`.
+- Readers of stored data ignore unknown keys; request bodies are strict.
+- Never add a value to an enum field that older versions already read. New
+  concepts go in new optional keys or in `rhythmsDB.json`.
+- With `features.rhythms` off, the weekly engine, its jobs and their names
+  behave exactly as before.
 
 ## Franken code
 
