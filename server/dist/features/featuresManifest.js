@@ -255,6 +255,8 @@ export const FEATURES_MANIFEST = [
             'biometrics/sleep_detection/calibrate_sensor_thresholds.py', 'biometrics/load_raw_files.py',
             'biometrics/calibration.py', 'server/src/db/settingsSchema.ts', 'server/src/features/biometricsV2.ts',
             'app/src/pages/SettingsPage/FeaturesSection', 'app/src/pages/SettingsPage/SettingsPage.tsx',
+            'server/src/features/sleepTrackingValidation.ts', 'server/src/routes/calibration',
+            'app/src/api/sleepTrackingValidation.ts',
         ],
         depends_on: ['biometrics'],
         reversible: true,
@@ -268,11 +270,16 @@ export const FEATURES_MANIFEST = [
             'app/src/pages/SettingsPage/FeaturesSection/FeaturesSection.test.tsx',
             'app/src/pages/SettingsPage/FeaturesSection/FeaturesSection.partialPayload.test.tsx',
             'app/src/pages/SettingsPage/SettingsPage.categories.test.tsx',
+            'biometrics/__tests__/test_presence_sensors.py', 'biometrics/__tests__/test_presence_piezo.py',
+            'biometrics/__tests__/test_presence_guard.py', 'biometrics/__tests__/test_legacy_capacitance.py',
+            'biometrics/__tests__/test_presence_v2_identity.py', 'biometrics/__tests__/test_presence_model.py',
+            'server/src/features/sleepTrackingValidation.test.ts',
+            'server/src/routes/calibration/calibrationView.test.ts',
         ],
         upstream_offer: false,
         rationale: 'Off by default while it is checked against more nights and more beds. Off leaves live '
             + 'presence, the nightly analysis and every stored value exactly as before. Older versions keep '
-            + 'the setting and ignore it.',
+            + 'the setting and ignore it. On a Pod it was not checked on, the app marks it as experimental.',
     },
     {
         id: 'daily-reboot',

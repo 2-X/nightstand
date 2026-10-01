@@ -1,4 +1,26 @@
-export function buildCalibrationView(profile, originatingRun, lastRun) {
+// With the new sleep tracking on, each capacitance calibration run records
+// the record format the Pod writes, such as capSense2 or capSense. A run that
+// saw no usable records records 'none' or 'unknown', which name no format.
+export function capFormatOf(run) {
+    if (!run?.payload)
+        return null;
+    try {
+        const parsed = JSON.parse(run.payload);
+        const format = typeof parsed === 'object' && parsed !== null ? parsed.format : undefined;
+        if (typeof format !== 'string' || format.length === 0 || format.length > 64)
+            return null;
+        return format === 'none' || format === 'unknown' ? null : format;
+    }
+    catch {
+        return null;
+    }
+}
+// The newest run that names a format, so a later empty-window run does not
+// erase a good label. Runs come newest first.
+export function newestFormatRun(runs) {
+    return runs.find((run) => capFormatOf(run) !== null) ?? null;
+}
+export function buildCalibrationView(profile, originatingRun, lastRun, formatRun = null) {
     if (profile === null) {
         return {
             state: 'none',
@@ -6,6 +28,7 @@ export function buildCalibrationView(profile, originatingRun, lastRun) {
             quality: null,
             calibratedAt: null,
             lastRunStatus: lastRun?.status ?? null,
+            capFormat: capFormatOf(formatRun),
         };
     }
     // An imported profile and a genuinely thin one both carry quality 0. Only
@@ -20,6 +43,7 @@ export function buildCalibrationView(profile, originatingRun, lastRun) {
             quality: null,
             calibratedAt: profile.created_at,
             lastRunStatus: lastRun?.status ?? null,
+            capFormat: capFormatOf(formatRun),
         };
     }
     const windowMinutes = Math.round((profile.source_end - profile.source_start) / 60);
@@ -29,6 +53,7 @@ export function buildCalibrationView(profile, originatingRun, lastRun) {
         quality: profile.quality,
         calibratedAt: profile.created_at,
         lastRunStatus: lastRun?.status ?? null,
+        capFormat: capFormatOf(formatRun),
     };
 }
 //# sourceMappingURL=calibrationView.js.map
