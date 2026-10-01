@@ -7,7 +7,9 @@ import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from presence.piezo import CADENCE_RECORDS, CadenceCheck, PiezoLayout, one_per_second_share, piezo_layout
+from presence.piezo import (
+    CADENCE_RECORDS, CadenceCheck, PiezoLayout, keep_layout, one_per_second_share, piezo_layout,
+)
 
 SECOND = np.zeros(500, dtype=np.int32)
 
@@ -36,6 +38,20 @@ class PiezoLayoutTest(unittest.TestCase):
         self.assertIsNone(piezo_layout({'type': 'capSense2'}))
         self.assertIsNone(piezo_layout({'type': 'piezo-dual', 'left1': 'abc'}))
         self.assertIsNone(piezo_layout(None))
+
+
+class KeepLayoutTest(unittest.TestCase):
+    def test_the_first_layout_with_a_rate_is_kept(self):
+        unrated = PiezoLayout(freq=None, samples=500, sensors_per_side=1)
+        rated = PiezoLayout(freq=500, samples=500, sensors_per_side=1)
+        other = PiezoLayout(freq=1000, samples=1000, sensors_per_side=2)
+        self.assertIsNone(keep_layout(None, None))
+        self.assertIs(keep_layout(None, unrated), unrated)
+        self.assertIs(keep_layout(unrated, None), unrated)
+        self.assertIs(keep_layout(unrated, PiezoLayout(freq=None, samples=1, sensors_per_side=2)), unrated)
+        self.assertIs(keep_layout(unrated, rated), rated)
+        self.assertIs(keep_layout(rated, other), rated)
+        self.assertIs(keep_layout(rated, None), rated)
 
 
 class CadenceTest(unittest.TestCase):

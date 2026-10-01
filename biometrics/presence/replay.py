@@ -10,7 +10,7 @@ import numpy as np
 
 from .cap import CAP_HOLD_SECONDS, CapBaseline, cap_delta
 from .detector import SIDES, DetectorParams, PresenceDetector
-from .piezo import PiezoLayout, one_per_second_share
+from .piezo import PiezoLayout, keep_layout, one_per_second_share
 from .sensors import FORMATS, CapFormat
 
 # (unix seconds, capacitance delta per side, piezo range per side)
@@ -120,8 +120,7 @@ class FrameCollector:
         self.unknown_cap[kind] += 1
 
     def note_piezo_layout(self, layout: Optional[PiezoLayout]) -> None:
-        if self.piezo_layout is None and layout is not None:
-            self.piezo_layout = layout
+        self.piezo_layout = keep_layout(self.piezo_layout, layout)
 
     def one_per_second_share(self) -> float:
         return one_per_second_share(_view(self._piezo_ts, np.int64, len(self._piezo_ts)))

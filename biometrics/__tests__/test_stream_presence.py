@@ -159,6 +159,29 @@ class PiezoLayoutAndCadenceTest(unittest.TestCase):
                 processor.process_piezo_record(record)
         self.assertTrue(processor.cadence.ok())
 
+    def _layout_after(self, first):
+        piezo = [r for r in scenarios.raw_records(Night(seconds=5, left=(), right=())) if r['type'] == 'piezo-dual']
+        for record in piezo:
+            load_piezo_row(record, 'right')
+        processor = StreamProcessor(first)
+        with unittest.mock.patch.object(BiometricProcessor, '_calculate_vitals', fake_vitals), \
+                unittest.mock.patch.object(biometric_processor, 'insert_vitals'):
+            for record in piezo:
+                processor.process_piezo_record(record)
+        return processor.piezo_layout
+
+    def test_a_first_record_without_a_layout_waits_for_one_that_has_it(self):
+        first = {'type': 'piezo-dual', 'ts': T0 - 1, 'freq': 500, 'left1': 'unreadable', 'right1': 'unreadable'}
+        layout = self._layout_after(first)
+        self.assertEqual((layout.freq, layout.sensors_per_side), (500, 2))
+
+    def test_a_first_record_without_a_rate_waits_for_one_that_has_it(self):
+        first = next(r for r in scenarios.raw_records(Night(seconds=1)) if r['type'] == 'piezo-dual')
+        load_piezo_row(first, 'right')
+        del first['freq']
+        layout = self._layout_after(first)
+        self.assertEqual((layout.freq, layout.sensors_per_side), (500, 2))
+
 
 class ShortAbsenceTest(unittest.TestCase):
     def _first_hrv_after_return(self, gap_seconds):

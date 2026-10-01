@@ -43,6 +43,13 @@ def piezo_layout(record) -> Optional[PiezoLayout]:
                        sensors_per_side=2 if 'left2' in record else 1)
 
 
+def keep_layout(current: Optional[PiezoLayout], new: Optional[PiezoLayout]) -> Optional[PiezoLayout]:
+    """The first layout seen with a usable rate, else the first layout seen."""
+    if new is None or (current is not None and (current.freq is not None or new.freq is None)):
+        return current
+    return new
+
+
 def _sample_count(samples) -> Optional[int]:
     if isinstance(samples, (bytes, bytearray)):
         return len(samples) // 4

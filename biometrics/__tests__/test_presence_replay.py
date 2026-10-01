@@ -14,6 +14,7 @@ sys.path.insert(0, HERE)
 
 from presence.cap import CapBaseline
 from presence.detector import DetectorParams, PresenceDetector, SideParams, piezo_range
+from presence.piezo import PiezoLayout
 from presence.replay import FrameCollector, occupied_level, replay
 import presence_scenarios as scenarios
 from presence_scenarios import Night
@@ -210,6 +211,14 @@ class FrameCollectorTest(unittest.TestCase):
         self.assertEqual(collector.cap_coverage(), 0.0)
         self.assertEqual(FrameCollector(BASELINES).cap_coverage(), 0.0)
         self.assertEqual(list(FrameCollector(BASELINES).frames()), [])
+
+    def test_the_first_piezo_layout_with_a_rate_is_kept(self):
+        collector = FrameCollector(BASELINES)
+        collector.note_piezo_layout(None)
+        collector.note_piezo_layout(PiezoLayout(freq=None, samples=500, sensors_per_side=1))
+        collector.note_piezo_layout(PiezoLayout(freq=500, samples=500, sensors_per_side=1))
+        collector.note_piezo_layout(PiezoLayout(freq=1000, samples=1000, sensors_per_side=1))
+        self.assertEqual(collector.piezo_layout, PiezoLayout(freq=500, samples=500, sensors_per_side=1))
 
     def test_a_record_costs_sixteen_bytes(self):
         collector = collect(Night(seconds=1000))
