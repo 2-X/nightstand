@@ -34,6 +34,7 @@ import load_raw_files
 import sleep_detector
 import presence_scenarios as scenarios
 from insufficient_data import InsufficientDataError
+from presence import model
 from presence.params import baselines_from_calibration
 from presence.replay import FrameCollector
 from presence.sensors import CAPSENSE, CAPSENSE2
@@ -366,6 +367,37 @@ class LegacyCapacitanceTest(unittest.TestCase):
         self.assertTrue(any('capSense3' in line for line in logs.output))
 
 
+# Left's capacitance stays flat for most of the night, so it reads a much shorter night than the older rule.
+FLAT_LEFT = dataclasses.replace(scenarios.STAGGERED,
+                                overrides=scenarios.STAGGERED.overrides + (('left', 1800, 10_000, 0.0),))
+
+
+def analyze_on(pod5, side, enabled=True, night=FLAT_LEFT):
+    with unittest.mock.patch.object(model, 'is_pod5', return_value=pod5):
+        return analyze(side, scenarios.raw_records(night), enabled, profiles(), window=(-60, night.seconds + 60))
+
+
+class OtherPodCapsense2Test(unittest.TestCase):
+    """capSense2 on any Pod but a Pod 5 is read as an unchecked format, never costing a night."""
+
+    def test_a_pod_5_reads_the_night_from_capacitance(self):
+        # Too short a night to keep, where the older rule finds a whole one.
+        self.assertEqual(analyze_on(True, 'left')[0], [])
+        self.assertEqual(len(analyze_on(True, 'left', enabled=False)[0]), 1)
+
+    def test_another_pod_keeps_the_older_reading_and_learns_nothing(self):
+        with self.assertLogs(sleep_detector.logger, level='WARNING') as logs:
+            on = analyze_on(False, 'left')
+        self.assertEqual(on, analyze_on(False, 'left', enabled=False))
+        self.assertEqual(on[2], [])
+        self.assertTrue(any('keeping the older reading' in line for line in logs.output))
+
+    def test_another_pod_still_reads_a_good_night_from_capacitance(self):
+        on = analyze_on(False, 'left', night=scenarios.STAGGERED)
+        self.assertEqual(on, analyze_on(True, 'left', night=scenarios.STAGGERED))
+        self.assertEqual(len(on[2]), 1)
+
+
 # Eight hours in bed beside a partner who is in all night.
 LONG = scenarios.Night(seconds=29_400, left=((600, 29_000),), right=((300, 29_200),))
 SEEN = (10_000, 22_000)
@@ -517,6 +549,34 @@ class PresenceParamsTest(unittest.TestCase):
         self.assertIn('capSense3[0m: 2', logs.output[0])
         self.assertNotIn('\n', logs.output[0])
         self.assertNotIn('\x1b', logs.output[0])
+
+    def test_capsense2_on_another_pod_is_read_as_unchecked(self):
+        with unittest.mock.patch.object(model, 'is_pod5', return_value=False), \
+                self.assertLogs(sleep_detector.logger, level='INFO') as logs:
+            params, cap_format = sleep_detector._presence_v2_params(self.collector([('capSense2', 10)]), profiles())
+        self.assertEqual(cap_format.name, 'capSense2')
+        self.assertFalse(cap_format.validated)
+        self.assertEqual(params, sleep_detector.params_from_calibration(profiles()))
+        self.assertTrue(any('not yet checked' in line for line in logs.output))
+
+    def test_capsense2_on_another_pod_needs_piezo_once_a_second(self):
+        collector = FrameCollector(baselines_from_calibration(profiles()))
+        collector.cap_formats.update({'capSense2': 10})
+        for second in range(0, 400, 2):
+            collector.add_piezo(T0 + second, 1.0, 1.0)
+        with unittest.mock.patch.object(model, 'is_pod5', return_value=True):
+            self.assertIsNotNone(sleep_detector._presence_v2_params(collector, profiles()))
+        with unittest.mock.patch.object(model, 'is_pod5', return_value=False), \
+                self.assertLogs(sleep_detector.logger, level='WARNING'):
+            self.assertIsNone(sleep_detector._presence_v2_params(collector, profiles()))
+
+    def test_capsense2_on_an_unknown_model_is_read_as_before_and_says_so(self):
+        with unittest.mock.patch.object(model, 'is_pod5', return_value=None), \
+                unittest.mock.patch.object(model, '_unknown_logged', False), \
+                self.assertLogs(sleep_detector.logger, level='INFO') as logs:
+            params, cap_format = sleep_detector._presence_v2_params(self.collector([('capSense2', 10)]), profiles())
+        self.assertIs(cap_format, CAPSENSE2)
+        self.assertTrue(any('Could not read the Pod model' in line for line in logs.output))
 
     def test_no_readable_capacitance_says_so(self):
         with self.assertLogs(sleep_detector.logger, level='WARNING') as logs:

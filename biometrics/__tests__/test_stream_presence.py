@@ -47,10 +47,11 @@ import biometric_processor
 import stream_processor as stream_processor_module
 from biometric_processor import BiometricProcessor, _PresenceCoordinator
 from load_raw_files import load_piezo_row
+from presence import model
 from presence.cap import CapBaseline
 from presence.detector import DetectorParams, SideParams
 from presence.params import baselines_from_calibration, params_from_calibration
-from presence.sensors import CAPSENSE, read_cap
+from presence.sensors import CAPSENSE, CAPSENSE2, read_cap
 from stream_processor import LatestCap, StreamProcessor, is_side_swap
 import presence_scenarios as scenarios
 from presence_scenarios import Night
@@ -404,6 +405,58 @@ class LegacyLiveTest(unittest.TestCase):
             processor.use_presence_v2((PARAMS, BASELINES))
         self.assertIsNone(processor._guard)
         self.assertIsNone(processor._piezo_presence)
+
+
+with unittest.mock.patch.object(model, 'is_pod5', return_value=False):
+    OTHER_POD_INPUTS = (PARAMS, BASELINES, model.on_this_pod(CAPSENSE2, logging.getLogger()))
+# capSense2 that never rises: the bed is in use and capacitance places nobody in it.
+CAPSENSE2_MISFIT = Night(seconds=1500, left=((0, 1500),), right=((0, 1500),), levels=(0.0, 0.0),
+                         partner_cap=0.0, spike_cap=0.0)
+
+
+class OtherPodLiveTest(unittest.TestCase):
+    """capSense2 on any Pod but a Pod 5: the server keeps hearing the piezo detector."""
+
+    @classmethod
+    def setUpClass(cls):
+        records = list(scenarios.raw_records(scenarios.STAGGERED))
+        cls.records = records
+        cls.other_pod = run_live(records, OTHER_POD_INPUTS)
+        cls.pod5 = run_live(records)
+        cls.off = run_live(records, None)
+
+    def test_the_inputs_are_unchecked_capsense2(self):
+        self.assertEqual(OTHER_POD_INPUTS[2].name, 'capSense2')
+        self.assertFalse(OTHER_POD_INPUTS[2].validated)
+
+    def test_vitals_follow_capacitance_as_on_a_pod_5(self):
+        self.assertEqual(self.other_pod.held, self.pod5.held)
+        self.assertEqual(self.other_pod.inserts, self.pod5.inserts)
+        self.assertIsNotNone(self.other_pod.processor._guard)
+        self.assertIsNotNone(self.other_pod.processor._piezo_presence)
+
+    def test_the_server_hears_exactly_what_it_hears_with_the_switch_off(self):
+        # Presence auto-off, the in-bed indicator and schedule presence read only these posts.
+        self.assertTrue(any(present for _, _, present in self.off.posts))
+        self.assertEqual(self.other_pod.posts, self.off.posts)
+        self.assertNotEqual(self.pod5.posts, self.off.posts)
+
+    def test_turning_on_and_off_mid_night_leaves_the_server_on_piezo(self):
+        switched = run_live(self.records, OTHER_POD_INPUTS, switch_on_at=3000, switch_off_at=9000)
+        self.assertEqual(switched.posts, self.off.posts)
+        self.assertIsNone(switched.processor.presence)
+        self.assertIsNone(switched.processor._piezo_presence)
+
+    def test_capacitance_that_misses_the_bed_hands_back_and_keeps_the_server_on_piezo(self):
+        records = list(scenarios.raw_records(CAPSENSE2_MISFIT))
+        with self.assertLogs(stream_processor_module.logger, level='WARNING') as logs:
+            run = run_live(records, OTHER_POD_INPUTS)
+        self.assertTrue(any('vitals follow the vibration sensor again' in line for line in logs.output))
+        self.assertIsNone(run.processor.presence)
+        self.assertIsNone(run.processor._piezo_presence)
+        self.assertEqual(run.posts, run_live(records, None).posts)
+        run.processor.use_presence_v2(OTHER_POD_INPUTS)
+        self.assertIsNone(run.processor.presence)
 
 
 def with_stray_records(records, seconds):

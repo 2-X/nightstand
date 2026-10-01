@@ -39,6 +39,7 @@ for _name in LOGGER_NAMES:
     get_logger(_name).folder_path = _tmp_folder
 
 import stream
+from presence import model
 from presence.sensors import CAPSENSE, CAPSENSE2
 
 
@@ -297,6 +298,41 @@ class TestPresenceMode(CapPresenceTestCase):
         self.assertIs(cap_format, CAPSENSE)
         self.assertAlmostEqual(params.left.enter_delta, 360.0)
         self.assertEqual(params.left.offset_limit, 225.0)
+
+    def _capsense2_inputs(self, pod5, profiles=None, cadence_ok=True):
+        self.latest.update(time.time(), (12.0, 12.0, 12.0), (12.0, 12.0, 12.0))
+        processor = unittest.mock.Mock()
+        processor.cadence.ok.return_value = cadence_ok
+        with unittest.mock.patch.object(stream, 'biometrics_v2_enabled', return_value=True), \
+                unittest.mock.patch.object(stream.calibration, 'load_presence_profiles',
+                                           return_value=profiles or cap_profiles()), \
+                unittest.mock.patch.object(model, 'is_pod5', return_value=pod5), \
+                unittest.mock.patch.object(model, '_unknown_logged', False):
+            return stream._presence_v2_inputs(processor)
+
+    def test_capsense2_on_a_pod_5_runs_as_checked(self):
+        params, baselines = self._capsense2_inputs(True)
+        self.assertEqual(params.left.enter_delta, 4.0)
+
+    def test_capsense2_on_another_pod_waits_like_an_unchecked_format(self):
+        with self.assertLogs(stream.logger, level='INFO') as logs:
+            self.assertIsNone(self._capsense2_inputs(False))
+        self.assertIn('capSense2 capacitance until', logs.output[0])
+        profiles = cap_profiles()
+        for side in ('left', 'right'):
+            profiles[side]['cap_occupied'] = {'level': 20.0}
+        self.assertIsNone(self._capsense2_inputs(False, profiles, cadence_ok=False))
+        params, baselines, cap_format = self._capsense2_inputs(False, profiles)
+        self.assertEqual(cap_format.name, 'capSense2')
+        self.assertFalse(cap_format.validated)
+        self.assertEqual(params.left.enter_delta, 8.0)
+        self.assertEqual(baselines['left'].mean, (11.0, 11.0, 11.0))
+
+    def test_capsense2_on_an_unknown_model_runs_as_before_and_says_so(self):
+        with self.assertLogs(stream.logger, level='INFO') as logs:
+            params, baselines = self._capsense2_inputs(None)
+        self.assertEqual(params.left.enter_delta, 4.0)
+        self.assertIn('Could not read the Pod model', logs.output[0])
 
     def test_the_refresh_passes_the_processor(self):
         processor = unittest.mock.Mock()

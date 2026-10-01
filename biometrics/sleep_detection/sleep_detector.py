@@ -27,6 +27,7 @@ from piezo_data import load_piezo_df, detect_presence_piezo_p2p
 import calibration
 from features import biometrics_v2_enabled
 from presence.detector import DetectorParams
+from presence.model import on_this_pod
 from presence.params import baselines_from_calibration, params_from_calibration
 from presence.piezo import ONE_PER_SECOND_SHARE
 from presence.replay import FrameCollector, occupied_level, replay
@@ -317,6 +318,7 @@ def _presence_v2_params(collector: Optional[FrameCollector], profiles) -> Option
             counts = ', '.join(f'{name}: {collector.cap_formats[name]:,}' for name in formats)
             logger.warning(f'Capacitance records came in more than one format ({counts}), reading the night as before')
             return None
+        cap_format = on_this_pod(cap_format, logger)
         if not cap_format.validated:
             share = collector.one_per_second_share()
             if share < ONE_PER_SECOND_SHARE:

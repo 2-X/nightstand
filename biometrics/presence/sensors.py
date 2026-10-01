@@ -2,7 +2,7 @@
 
 Every capacitance format the Pod firmware writes is read here and nowhere
 else, so the detector, its thresholds and the analyzer never depend on a
-record's shape or on the Pod model.
+record's shape.
 """
 from __future__ import annotations
 
@@ -20,7 +20,8 @@ class CapFormat:
 
     unit converts the detector's fixed capacitance levels, set on capSense2,
     into this format's raw units. validated is True only for a format whose
-    nights have been checked against sleepers' own notes.
+    nights have been checked against sleepers' own notes, and model.on_this_pod
+    clears it on any Pod but a Pod 5.
     """
     name: str
     unit: float

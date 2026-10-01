@@ -48,6 +48,7 @@ logger = get_logger('free-sleep-stream')
 
 import calibration
 from features import biometrics_v2_enabled
+from presence.model import on_this_pod
 from presence.params import baselines_from_calibration, learned_levels, params_from_calibration
 from presence.sensors import TYPE_NAME_LENGTH, printable_type, read_cap, unknown_cap_type
 from stream_processor import LatestCap, StreamProcessor
@@ -180,9 +181,9 @@ def _is_number(value) -> bool:
 def _presence_v2_inputs(stream_processor=None):
     """Capacitance detector inputs when it should run, else None.
 
-    (params, baselines) for a checked format; (params, baselines, format) for
-    one that is not, which runs only once both sides have a learned level and
-    piezo records are seen to come once a second.
+    (params, baselines) for a checked format on a Pod 5; (params, baselines,
+    format) otherwise, which runs only once both sides have a learned level
+    and piezo records are seen to come once a second.
     """
     if not biometrics_v2_enabled():
         return None
@@ -191,6 +192,7 @@ def _presence_v2_inputs(stream_processor=None):
     cap_format = latest_cap.cap_format()
     if cap_format is None:
         return None
+    cap_format = on_this_pod(cap_format, logger)
     profiles = calibration.load_presence_profiles()
     params = params_from_calibration(profiles, cap_format)
     baselines = baselines_from_calibration(profiles)

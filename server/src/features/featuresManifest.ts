@@ -299,7 +299,7 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
       'app/src/pages/SettingsPage/SettingsPage.categories.test.tsx',
       'biometrics/__tests__/test_presence_sensors.py', 'biometrics/__tests__/test_presence_piezo.py',
       'biometrics/__tests__/test_presence_guard.py', 'biometrics/__tests__/test_legacy_capacitance.py',
-      'biometrics/__tests__/test_presence_v2_identity.py',
+      'biometrics/__tests__/test_presence_v2_identity.py', 'biometrics/__tests__/test_presence_model.py',
       'server/src/features/sleepTrackingValidation.test.ts',
       'server/src/routes/calibration/calibrationView.test.ts',
     ],
