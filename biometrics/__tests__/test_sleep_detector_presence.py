@@ -33,6 +33,7 @@ import calibration
 import load_raw_files
 import sleep_detector
 import presence_scenarios as scenarios
+from insufficient_data import InsufficientDataError
 from presence.sensors import CAPSENSE, CAPSENSE2
 from test_presence_calibration import SCHEMA
 
@@ -60,21 +61,7 @@ def profiles(with_baseline=True):
     }
 
 
-def as_legacy_cap_sense(record):
-    """The same reading in the capSense shape older Pods write."""
-    if record['type'] != 'capSense2':
-        return record
-    converted = {'type': 'capSense', 'ts': record['ts']}
-    for side in ('left', 'right'):
-        values = record[side]['values']
-        converted[side] = {
-            'out': (values[0] + values[1]) / 2, 'cen': (values[2] + values[3]) / 2,
-            'in': (values[4] + values[5]) / 2, 'status': 'good',
-        }
-    return converted
-
-
-def analyze(side, records, enabled, presence_profiles=None, profiles_error=None, window=None):
+def analyze(side, records, enabled, presence_profiles=None, profiles_error=None, window=None, baseline=None):
     """Run detect_sleep over records; returns (records, frame hash, stored occupied levels).
 
     window is (first, last) seconds from the start of the night; the default covers the whole night.
@@ -87,7 +74,7 @@ def analyze(side, records, enabled, presence_profiles=None, profiles_error=None,
         stored = []
         load_profiles = unittest.mock.Mock(return_value=presence_profiles, side_effect=profiles_error)
         with unittest.mock.patch.object(load_raw_files.logger, 'folder_path', os.path.join(folder, '')), \
-                unittest.mock.patch.object(sleep_detector, 'load_baseline', return_value=cap_payload(side)), \
+                unittest.mock.patch.object(sleep_detector, 'load_baseline', return_value=baseline or cap_payload(side)), \
                 unittest.mock.patch.object(sleep_detector, 'biometrics_v2_enabled', return_value=enabled), \
                 unittest.mock.patch.object(sleep_detector.calibration, 'load_presence_profiles', load_profiles), \
                 unittest.mock.patch.object(sleep_detector.calibration, 'record_occupied_level',
@@ -281,12 +268,107 @@ class FallbackTest(unittest.TestCase):
         self.assertEqual(on, off)
         self.assertEqual(on[2], [])
 
-    def test_a_pod_without_capsense2_reads_the_night_as_before(self):
-        legacy = [as_legacy_cap_sense(record) for record in scenarios.raw_records(scenarios.STAGGERED)]
-        on = analyze('left', legacy, True, profiles())
-        off = analyze('left', legacy, False, profiles())
+    def test_legacy_capsense_without_a_baseline_reads_the_night_as_before(self):
+        legacy = list(scenarios.legacy_raw_records(scenarios.STAGGERED, 50.0))
+        no_baseline = {side: {'cap': None, 'cap_occupied': None, 'piezo_floors': []} for side in ('left', 'right')}
+        payload = scenarios.legacy_cap_payload('left')
+        on = analyze('left', legacy, True, no_baseline, baseline=payload)
+        off = analyze('left', legacy, False, no_baseline, baseline=payload)
         self.assertEqual(on, off)
         self.assertEqual(len(on[0]), 1)
+
+
+def legacy_profiles(levels=None, noise=2.0):
+    return {
+        side: {
+            'cap': scenarios.legacy_cap_payload(side, delta_noise=noise),
+            'cap_occupied': None if levels is None else {'level': levels[side]},
+            'piezo_floors': [],
+        }
+        for side in ('left', 'right')
+    }
+
+
+def analyze_legacy(side, counts_per_unit, enabled=True, presence_profiles=None, records=None, night=scenarios.STAGGERED):
+    records = list(scenarios.legacy_raw_records(night, counts_per_unit)) if records is None else records
+    return analyze(side, records, enabled, presence_profiles or legacy_profiles(),
+                   baseline=scenarios.legacy_cap_payload(side), window=(-60, night.seconds + 60))
+
+
+class LegacyCapacitanceTest(unittest.TestCase):
+    """capSense counts read as an unchecked format: learned per Pod, never costing a night."""
+
+    @classmethod
+    def setUpClass(cls):
+        # A rise of 1000 counts on the left and 500 on the right: clear of the 300 count start.
+        cls.results = {side: analyze_legacy(side, 50.0) for side in ('left', 'right')}
+
+    def test_each_side_gets_its_own_night(self):
+        left, right = self.results['left'][0], self.results['right'][0]
+        self.assertEqual((len(left), len(right)), (1, 1))
+        for record, (entered, left_at) in ((left[0], (1819, 13_859)), (right[0], (619, 15_059))):
+            self.assertLessEqual(abs((record['entered_bed_at'] - utc(entered)).total_seconds()), 5)
+            self.assertLessEqual(abs((record['left_bed_at'] - utc(left_at)).total_seconds()), 5)
+        self.assertNotEqual(left[0]['present_intervals'], right[0]['present_intervals'])
+
+    def test_the_level_is_learned_in_counts(self):
+        side, level, *_ = self.results['left'][2][0]
+        self.assertEqual(side, 'left')
+        self.assertAlmostEqual(level, 1000.0, delta=5.0)
+        self.assertAlmostEqual(self.results['right'][2][0][1], 500.0, delta=5.0)
+
+    def test_switched_off_the_night_reads_as_before(self):
+        off = analyze_legacy('left', 50.0, enabled=False)
+        self.assertEqual(off[2], [])
+        self.assertNotEqual(as_json(off[0]), as_json(self.results['left'][0]))
+
+    def test_counts_too_small_for_the_starting_level_keep_the_older_reading(self):
+        # A rise of 40 counts never reaches the 300 count start, so capacitance finds no night.
+        with self.assertLogs(sleep_detector.logger, level='WARNING') as logs:
+            on = analyze_legacy('left', 2.0)
+        off = analyze_legacy('left', 2.0, enabled=False)
+        self.assertEqual(on, off)
+        self.assertEqual(on[2], [])
+        self.assertTrue(any('older reading' in line for line in logs.output))
+
+    def test_a_learned_level_sets_the_thresholds(self):
+        learned = analyze_legacy('left', 50.0, presence_profiles=legacy_profiles({'left': 800.0, 'right': 400.0}))
+        self.assertEqual(len(learned[0]), 1)
+        self.assertAlmostEqual(learned[2][0][1], 1000.0, delta=5.0)
+
+    def test_piezo_two_seconds_apart_reads_the_night_as_before(self):
+        records = list(scenarios.legacy_raw_records(scenarios.STAGGERED, 50.0, piezo_every=2))
+        on = analyze_legacy('left', 50.0, records=records)
+        off = analyze_legacy('left', 50.0, enabled=False, records=records)
+        self.assertEqual(on, off)
+
+    def test_an_unknown_capacitance_type_fails_as_before_and_says_so(self):
+        records = [dict(record, type='capSense3') if record['type'] == 'capSense2' else record
+                   for record in scenarios.raw_records(scenarios.STAGGERED)]
+        with self.assertLogs(sleep_detector.logger, level='WARNING') as logs:
+            with self.assertRaises(InsufficientDataError):
+                analyze('left', records, True, profiles())
+        with self.assertRaises(InsufficientDataError):
+            analyze('left', records, False, profiles())
+        self.assertTrue(any('capSense3' in line for line in logs.output))
+
+
+class LosesANightTest(unittest.TestCase):
+    def record(self, start, end):
+        return {'entered_bed_at': utc(start), 'left_bed_at': utc(end)}
+
+    def test_overlap_keeps_every_night(self):
+        earlier = [self.record(0, 100), self.record(500, 900)]
+        self.assertFalse(sleep_detector._loses_a_night(earlier, [self.record(50, 60), self.record(800, 1000)]))
+
+    def test_a_night_with_nothing_overlapping_is_lost(self):
+        earlier = [self.record(0, 100), self.record(500, 900)]
+        self.assertTrue(sleep_detector._loses_a_night(earlier, [self.record(50, 60)]))
+        self.assertTrue(sleep_detector._loses_a_night(earlier, []))
+        self.assertFalse(sleep_detector._loses_a_night([], []))
+
+    def test_touching_is_not_overlapping(self):
+        self.assertTrue(sleep_detector._loses_a_night([self.record(0, 100)], [self.record(100, 200)]))
 
 
 class CoverageBoundaryTest(unittest.TestCase):
@@ -308,9 +390,9 @@ class CoverageBoundaryTest(unittest.TestCase):
         params = sleep_detector.params_from_calibration(profiles())
         return sleep_detector._replay_side(self.Collector(coverage, cap_format), params, 'left')
 
-    def test_an_unchecked_format_reads_the_night_as_before(self):
-        self.assertIsNone(self.replay_side(1.0, CAPSENSE))
-        self.assertEqual(self.replay_side(1.0, CAPSENSE2), [])
+    def test_the_coverage_rule_is_the_same_for_every_format(self):
+        self.assertEqual(self.replay_side(1.0, CAPSENSE), [])
+        self.assertIsNone(self.replay_side(sleep_detector.MIN_CAP_COVERAGE - 0.001, CAPSENSE))
 
     def test_half_of_the_window_covered_is_enough(self):
         self.assertEqual(self.replay_side(sleep_detector.MIN_CAP_COVERAGE), [])

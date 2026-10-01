@@ -28,12 +28,14 @@ import calibration
 from features import biometrics_v2_enabled
 from presence.detector import DetectorParams
 from presence.params import baselines_from_calibration, params_from_calibration
+from presence.piezo import ONE_PER_SECOND_SHARE
 from presence.replay import FrameCollector, occupied_level, replay
+from presence.sensors import CapFormat
 
 logger = get_logger()
 
 # Below this share of seconds with a capacitance reading, a night is read the
-# way it was before capacitance presence (Pod 3 and 4 have no capSense2).
+# way it was before capacitance presence.
 MIN_CAP_COVERAGE = 0.5
 
 # (epoch seconds of a 2-minute bin start, largest per-second movement in it)
@@ -265,31 +267,52 @@ def _occupancy_from_intervals(index: pd.DatetimeIndex, intervals: List[Tuple[int
     return occupied
 
 
-def _presence_v2_setup(start_time: datetime, end_time: datetime) -> Tuple[Optional[FrameCollector], Optional[DetectorParams]]:
-    """A frame collector and detector parameters when capacitance presence applies to this run."""
+def _presence_v2_setup(start_time: datetime, end_time: datetime) -> Tuple[Optional[FrameCollector], Optional[dict]]:
+    """A frame collector and the calibration it reads, when capacitance presence may apply to this run."""
     if not biometrics_v2_enabled():
         return None, None
     try:
         profiles = calibration.load_presence_profiles(
             window=(int(start_time.timestamp()), int(end_time.timestamp())))
-        params = params_from_calibration(profiles)
         baselines = baselines_from_calibration(profiles)
-        if params is None or baselines is None:
+        if baselines is None:
             logger.warning('No capacitance baseline for both sides yet, reading the night as before')
             return None, None
-        return FrameCollector(baselines), params
+        return FrameCollector(baselines), profiles
     except Exception as error:
         # The switch must never cost a night's analysis.
         logger.warning(f'Could not set up capacitance presence, reading the night as before: {error}')
         return None, None
 
 
+def _presence_v2_params(collector: Optional[FrameCollector], profiles) -> Optional[Tuple[DetectorParams, CapFormat]]:
+    """Detector parameters for the capacitance format this window holds, or None to read it as before."""
+    if collector is None:
+        return None
+    try:
+        cap_format = collector.cap_format()
+        if cap_format is None:
+            for kind in sorted(collector.unknown_cap):
+                logger.warning(f'Capacitance records of type {kind} are not a format this version reads, '
+                               'reading the night as before')
+            return None
+        if not cap_format.validated:
+            share = collector.one_per_second_share()
+            if share < ONE_PER_SECOND_SHARE:
+                logger.warning(f'Only {share:.0%} of piezo records came one second apart, reading the night as before')
+                return None
+            logger.info(f'Reading presence from {cap_format.name} capacitance, not yet checked against sleepers\' '
+                        'notes on this kind of Pod; a night the older reading finds is never dropped')
+        params = params_from_calibration(profiles, cap_format)
+        return None if params is None else (params, cap_format)
+    except Exception as error:
+        logger.warning(f'Could not set up capacitance presence, reading the night as before: {error}')
+        return None
+
+
 def _replay_side(collector: Optional[FrameCollector], params: Optional[DetectorParams], side: Side) -> Optional[List[Tuple[int, int]]]:
     """This side's occupied intervals from the shared detector, or None to use the older rule."""
     if collector is None:
-        return None
-    cap_format = collector.cap_format()
-    if cap_format is not None and not cap_format.validated:
         return None
     coverage = collector.cap_coverage()
     if coverage < MIN_CAP_COVERAGE:
@@ -343,6 +366,24 @@ def _read_night_from_capacitance(merged_df: pd.DataFrame, side: Side, cap_baseli
         return None
 
 
+def _earlier_records(merged_df: pd.DataFrame, side: Side, cap_baseline) -> List[SleepRecord]:
+    """This side's records under the older rule, worked out on a copy so the frame is left as it was."""
+    columns = [f'piezo_{side}1_presence', f'{side}_out', f'{side}_cen', f'{side}_in']
+    frame = merged_df[columns].copy()
+    _set_final_occupancy(frame, side, cap_baseline)
+    final = f'final_{side}_occupied'
+    return build_sleep_records(frame[[final]], side, max_gap_in_minutes=15)
+
+
+def _loses_a_night(earlier: List[SleepRecord], records: List[SleepRecord]) -> bool:
+    """True when a night the older rule found has no overlapping record from capacitance."""
+    return any(
+        not any(record['entered_bed_at'] < night['left_bed_at'] and night['entered_bed_at'] < record['left_bed_at']
+                for record in records)
+        for night in earlier
+    )
+
+
 def _set_final_occupancy(merged_df: pd.DataFrame, side: Side, cap_baseline,
                          occupied_intervals: Optional[List[Tuple[int, int]]] = None) -> pd.DataFrame:
     """Set final_{side}_occupied, from piezo alone when there is no cap baseline.
@@ -382,9 +423,11 @@ def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_pa
     expected_row_count = int((end_time - start_time).total_seconds())
     logger.info(f"Detecting sleep interval for {side} side | {start_time.isoformat()} -> {end_time.isoformat()} | Expected row count: {expected_row_count:,}")
 
-    collector, presence_params = _presence_v2_setup(start_time, end_time)
+    collector, profiles = _presence_v2_setup(start_time, end_time)
     data = load_raw_files(folder_path, start_time, end_time, side, sensor_count=1, raw_data_types=['capSense', 'piezo-dual'],
                           presence_collector=collector)
+    presence = _presence_v2_params(collector, profiles)
+    params, cap_format = presence if presence is not None else (None, None)
 
     piezo_df = load_piezo_df(data, side, expected_row_count=expected_row_count, with_p2p=True)
     cap_df = load_cap_df(data, side, expected_row_count=expected_row_count, with_no_reading=True)
@@ -410,7 +453,17 @@ def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_pa
     gc.collect()
 
     cap_baseline = load_baseline(side)
-    from_capacitance = _read_night_from_capacitance(merged_df, side, cap_baseline, collector, presence_params)
+    earlier = None
+    if cap_format is not None and not cap_format.validated:
+        earlier = _earlier_records(merged_df, side, cap_baseline)
+    from_capacitance = _read_night_from_capacitance(
+        merged_df, side, cap_baseline, collector if presence is not None else None, params)
+    if from_capacitance is not None and earlier is not None and _loses_a_night(earlier, from_capacitance[0]):
+        logger.warning(f'Capacitance found no record for a night the older reading found on the {side} side, '
+                       'keeping the older reading for this run')
+        # Dropped first so the frame's columns come out in the older rule's order.
+        merged_df.drop(columns=[f'final_{side}_occupied'], inplace=True)
+        from_capacitance = None
     if from_capacitance is None:
         _set_final_occupancy(merged_df, side, cap_baseline)
         sleep_records = build_sleep_records(merged_df, side, max_gap_in_minutes=15)
