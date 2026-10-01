@@ -4,6 +4,7 @@ import traceback
 from datetime import datetime, timedelta, timezone
 import cbor2
 from pathlib import Path
+from typing import Optional
 import gc
 import sys
 import os
@@ -237,12 +238,19 @@ def _capture_presence(record: dict):
     return None if kind is None else ('unknown', kind)
 
 
-def _count_cap_format(counts, record) -> None:
+def _cap_format_name(record) -> Optional[str]:
+    """The record's capacitance format name, 'unknown' for capacitance no format reads, else None."""
     kind = record.get('type') if isinstance(record, dict) else None
     if kind in FORMATS:
-        counts[kind] += 1
-    elif unknown_cap_type(record) is not None:
-        counts['unknown'] += 1
+        return kind
+    return 'unknown' if unknown_cap_type(record) is not None else None
+
+
+def _in_window(record: dict, start_time, end_time) -> bool:
+    try:
+        return start_time <= datetime.fromtimestamp(record['ts'], timezone.utc) <= end_time
+    except (KeyError, TypeError, ValueError, OverflowError, OSError):
+        return False
 
 
 def _record_range(raw):
@@ -282,8 +290,7 @@ def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Si
                 if data_bytes is None:
                     continue  # empty placeholder record
                 decoded_data = cbor2.loads(data_bytes)
-                if cap_formats is not None:
-                    _count_cap_format(cap_formats, decoded_data)
+                format_name = _cap_format_name(decoded_data) if cap_formats is not None else None
                 presence_capture = _capture_presence(decoded_data) if presence_collector is not None else None
                 if presence_capture is not None and presence_capture[0] == 'unknown':
                     # An unknown type never passes the type filter below.
@@ -304,6 +311,9 @@ def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Si
                         for cap_side, value in missing.items():
                             decoded_data[cap_side]['no_reading'] = value
                 if not decoded_data['type'] in load_raw_types:
+                    # Never loaded, but still what the Pod writes in this window.
+                    if format_name == 'unknown' and _in_window(decoded_data, start_time, end_time):
+                        cap_formats[format_name] += 1
                     continue
                 _delete_other_side(decoded_data, side, sensor_count)
                 record_time = datetime.fromtimestamp(decoded_data['ts'], timezone.utc)
@@ -322,6 +332,8 @@ def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Si
                 # A file spans ~15 minutes and can straddle either window edge.
                 if not start_time <= record_time <= end_time:
                     continue
+                if format_name is not None:
+                    cap_formats[format_name] += 1
 
                 if decoded_data['type'] == 'piezo-dual':
                     load_piezo_row(decoded_data, side)
@@ -374,8 +386,9 @@ def load_raw_files(folder_path: str, start_time: datetime, end_time: datetime, s
     (see presence.replay.FrameCollector).
     It sees only the types listed in raw_data_types, so a caller that feeds
     one lists both 'capSense' and 'piezo-dual'.
-    cap_formats, when given, is a Counter that receives one count per decoded
-    capacitance record by format name, or 'unknown', before any conversion.
+    cap_formats, when given, is a Counter that receives one count per
+    capacitance record loaded from the window, by format name, and one
+    'unknown' per record in the window of a capacitance type no format reads.
     """
     try:
         data = {}

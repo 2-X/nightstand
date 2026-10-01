@@ -138,6 +138,22 @@ class FormatPayloadTest(unittest.TestCase):
             self.assertIs(collector.cap_format(), sensors.CAPSENSE)
 
 
+class FormatCountTest(unittest.TestCase):
+    def test_only_records_in_the_window_are_counted(self):
+        # capSense2 for the ten minutes before the window, capSense inside it,
+        # and an unknown type every second throughout.
+        night = Night(seconds=1200)
+        records = list(scenarios.raw_records(night, end=600)) + list(scenarios.legacy_raw_records(night, 50.0, start=600))
+        records += [{'type': 'capSense3', 'ts': scenarios.T0 + second} for second in range(1200)]
+        start = datetime.fromtimestamp(scenarios.T0 + 600, timezone.utc)
+        counts = Counter()
+        with tempfile.TemporaryDirectory() as folder:
+            scenarios.write_raw_file(os.path.join(folder, 'night.RAW'), records)
+            load_raw_files.load_raw_files(folder, start, start + timedelta(seconds=599), 'left', sensor_count=1,
+                                          raw_data_types=['capSense', 'piezo-dual'], cap_formats=counts)
+        self.assertEqual(counts, Counter(capSense=1200, unknown=600))
+
+
 class NegativeCountTest(unittest.TestCase):
     def test_rows_with_a_negative_count_are_left_out_of_the_noise(self):
         frame = pd.DataFrame({'left_out': [387, 388, -32768, 387], 'left_cen': [381] * 4, 'left_in': [505] * 4})
