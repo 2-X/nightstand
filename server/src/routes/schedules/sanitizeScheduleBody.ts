@@ -6,12 +6,18 @@ import _ from 'lodash';
 // schedulesDB.json data.
 const KNOWN_DAY_KEYS = ['temperatures', 'power', 'alarm', 'alarms'];
 
+// Only objects are mapped. A side or day of any other type, such as a number
+// or a string, is passed through for the schema to refuse; mapping it used to
+// turn it into an empty update that answered 200. A missing or null one is
+// still an empty update, as before.
+const mapObject = (value: unknown, map: (child: unknown) => unknown): unknown => {
+  if (value === undefined || value === null) return {};
+  return _.isPlainObject(value) ? _.mapValues(value as Record<string, unknown>, map) : value;
+};
+
 export function sanitizeScheduleBody(body: unknown): Record<string, Record<string, unknown>> {
-  return _.mapValues(
-    (body ?? {}) as Record<string, Record<string, unknown>>,
-    (sideSchedule) => _.mapValues(
-      (sideSchedule ?? {}) as Record<string, unknown>,
-      (daySchedule) => _.pick(daySchedule, KNOWN_DAY_KEYS),
-    ),
-  );
+  return mapObject(body, sideSchedule => mapObject(sideSchedule, daySchedule => (
+    daySchedule === undefined || daySchedule === null || _.isPlainObject(daySchedule)
+      ? _.pick(daySchedule, KNOWN_DAY_KEYS) : daySchedule
+  ))) as Record<string, Record<string, unknown>>;
 }

@@ -32,3 +32,16 @@ describe('sanitizeScheduleBody', () => {
     assert.deepEqual(sanitizeScheduleBody({}), {});
   });
 });
+
+describe('sanitizeScheduleBody with wrong types', () => {
+  it('passes a side or day that is not an object through for the schema to refuse', () => {
+    assert.deepEqual(sanitizeScheduleBody({ left: 5 }), { left: 5 });
+    assert.deepEqual(sanitizeScheduleBody({ left: { monday: 'garbage' } }), { left: { monday: 'garbage' } });
+    assert.deepEqual(sanitizeScheduleBody({ right: { sunday: [1] } }), { right: { sunday: [1] } });
+  });
+
+  it('still treats a null side or day as an empty update', () => {
+    assert.deepEqual(sanitizeScheduleBody({ left: null }), { left: {} });
+    assert.deepEqual(sanitizeScheduleBody({ left: { monday: null } }), { left: { monday: {} } });
+  });
+});
