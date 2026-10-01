@@ -366,6 +366,59 @@ class LegacyCapacitanceTest(unittest.TestCase):
         self.assertTrue(any('capSense3' in line for line in logs.output))
 
 
+# Eight hours in bed beside a partner who is in all night.
+LONG = scenarios.Night(seconds=29_400, left=((600, 29_000),), right=((300, 29_200),))
+SEEN = (10_000, 22_000)
+
+
+def readings_only_while_seen(sides, counts_per_unit=50.0):
+    """LONG's records, with these sides' capacitance a placeholder count outside SEEN."""
+    for record in scenarios.legacy_raw_records(LONG, counts_per_unit):
+        if record['type'] == 'capSense' and not SEEN[0] <= record['ts'] - T0 < SEEN[1]:
+            for side in sides:
+                record[side] = dict(record[side], out=-32768, cen=-32768, **{'in': -32768})
+        yield record
+
+
+class PartialCapacitanceTest(unittest.TestCase):
+    """A night is read from capacitance only where capacitance saw nearly all of it."""
+
+    def test_a_night_capacitance_saw_only_part_of_keeps_the_older_reading(self):
+        # The right side's readings keep the window as a whole covered.
+        records = list(readings_only_while_seen(('left',)))
+        with self.assertLogs(sleep_detector.logger, level='WARNING') as logs:
+            on = analyze_legacy('left', 50.0, records=records, night=LONG)
+        off = analyze_legacy('left', 50.0, enabled=False, records=records, night=LONG)
+        self.assertEqual(on, off)
+        self.assertEqual(on[2], [])
+        self.assertGreater((on[0][0]['left_bed_at'] - on[0][0]['entered_bed_at']).total_seconds(), 7 * 3600)
+        self.assertEqual(len([line for line in logs.output if 'keeping the older reading' in line]), 1)
+
+    def test_the_other_side_still_reads_capacitance(self):
+        records = list(readings_only_while_seen(('left',)))
+        right_on = analyze_legacy('right', 50.0, records=records, night=LONG)
+        self.assertEqual(len(right_on[0]), 1)
+        self.assertEqual(right_on[2][0][0], 'right')
+        self.assertAlmostEqual(right_on[2][0][1], 500.0, delta=5.0)
+
+    def test_a_failure_comparing_with_the_older_reading_keeps_it(self):
+        with unittest.mock.patch.object(sleep_detector, '_earlier_records', side_effect=RuntimeError('boom')), \
+                self.assertLogs(sleep_detector.logger, level='WARNING') as logs:
+            on = analyze_legacy('left', 50.0)
+        self.assertEqual(on, analyze_legacy('left', 50.0, enabled=False))
+        self.assertTrue(any('boom' in line and 'keeping the older reading' in line for line in logs.output))
+
+    def test_a_partner_staggered_night_still_reads_from_capacitance(self):
+        # Capacitance tells the sides apart, so the left night is shorter than the older reading's.
+        def length(records):
+            return (records[0]['left_bed_at'] - records[0]['entered_bed_at']).total_seconds()
+
+        on = analyze_legacy('left', 50.0)
+        off = analyze_legacy('left', 50.0, enabled=False)
+        self.assertLess(length(on[0]), 0.9 * length(off[0]))
+        self.assertEqual(len(on[2]), 1)
+
+
 class LosesANightTest(unittest.TestCase):
     def record(self, start, end):
         return {'entered_bed_at': utc(start), 'left_bed_at': utc(end)}

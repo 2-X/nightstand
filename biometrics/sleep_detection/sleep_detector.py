@@ -37,6 +37,10 @@ logger = get_logger()
 # Below this share of seconds with a capacitance reading, a night is read the
 # way it was before capacitance presence.
 MIN_CAP_COVERAGE = 0.5
+# On a format not yet checked against sleepers' notes, capacitance must have a
+# reading for this share of every night the older rule finds, or that side
+# keeps the older reading.
+MIN_NIGHT_CAP_COVERAGE = 0.9
 # Unknown capacitance types named in the log, and how much of each name.
 UNKNOWN_CAP_SHOWN = 5
 UNKNOWN_CAP_NAME_LENGTH = 40
@@ -391,9 +395,40 @@ def _earlier_records(merged_df: pd.DataFrame, side: Side, cap_baseline) -> List[
     """This side's records under the older rule, worked out on a copy so the frame is left as it was."""
     columns = [f'piezo_{side}1_presence', f'{side}_out', f'{side}_cen', f'{side}_in']
     frame = merged_df[columns].copy()
-    _set_final_occupancy(frame, side, cap_baseline)
+    _set_final_occupancy(frame, side, cap_baseline, quiet=True)
     final = f'final_{side}_occupied'
     return build_sleep_records(frame[[final]], side, max_gap_in_minutes=15)
+
+
+def _night_cap_coverage(collector: FrameCollector, side: Side, nights: List[SleepRecord]) -> float:
+    """The lowest share of a night's seconds with a capacitance reading for this side; 1.0 without nights."""
+    spans = sorted((_epoch_seconds(night['entered_bed_at']), _epoch_seconds(night['left_bed_at'])) for night in nights)
+    seconds, covered = [0] * len(spans), [0] * len(spans)
+    index = 0
+    for t, cap, _ in collector.frames():
+        while index < len(spans) and t >= spans[index][1]:
+            index += 1
+        if index == len(spans):
+            break
+        if spans[index][0] <= t:
+            seconds[index] += 1
+            covered[index] += cap.get(side) is not None
+    return min((part / whole if whole else 0.0) for part, whole in zip(covered, seconds)) if spans else 1.0
+
+
+def _older_reading_reason(merged_df: pd.DataFrame, side: Side, cap_baseline, collector: FrameCollector,
+                          records: List[SleepRecord]) -> Optional[str]:
+    """Why this side keeps the older rule's records instead of these, or None to keep these."""
+    try:
+        earlier = _earlier_records(merged_df, side, cap_baseline)
+        if _loses_a_night(earlier, records):
+            return 'Capacitance found no record for a night the older reading found'
+        coverage = _night_cap_coverage(collector, side, earlier)
+        if coverage < MIN_NIGHT_CAP_COVERAGE:
+            return f'Capacitance had readings for only {coverage:.0%} of a night the older reading found'
+        return None
+    except Exception as error:
+        return f'Could not compare capacitance with the older reading ({error})'
 
 
 def _loses_a_night(earlier: List[SleepRecord], records: List[SleepRecord]) -> bool:
@@ -406,7 +441,7 @@ def _loses_a_night(earlier: List[SleepRecord], records: List[SleepRecord]) -> bo
 
 
 def _set_final_occupancy(merged_df: pd.DataFrame, side: Side, cap_baseline,
-                         occupied_intervals: Optional[List[Tuple[int, int]]] = None) -> pd.DataFrame:
+                         occupied_intervals: Optional[List[Tuple[int, int]]] = None, quiet: bool = False) -> pd.DataFrame:
     """Set final_{side}_occupied, from piezo alone when there is no cap baseline.
 
     Extracted from detect_sleep so the piezo-only fallback (cap_baseline is
@@ -420,7 +455,8 @@ def _set_final_occupancy(merged_df: pd.DataFrame, side: Side, cap_baseline,
         # No calibrated baseline yet: fall back to piezo alone rather than
         # inventing a zero baseline, which would make every reading look
         # like an enormous deviation and manufacture presence in an empty bed.
-        logger.warning(f'Skipping cap presence for {side} side: no baseline calibrated yet')
+        if not quiet:
+            logger.warning(f'Skipping cap presence for {side} side: no baseline calibrated yet')
         merged_df[f'final_{side}_occupied'] = merged_df[f'piezo_{side}1_presence']
     else:
         detect_presence_cap(
@@ -474,17 +510,15 @@ def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_pa
     gc.collect()
 
     cap_baseline = load_baseline(side)
-    earlier = None
-    if cap_format is not None and not cap_format.validated:
-        earlier = _earlier_records(merged_df, side, cap_baseline)
     from_capacitance = _read_night_from_capacitance(
         merged_df, side, cap_baseline, collector if presence is not None else None, params)
-    if from_capacitance is not None and earlier is not None and _loses_a_night(earlier, from_capacitance[0]):
-        logger.warning(f'Capacitance found no record for a night the older reading found on the {side} side, '
-                       'keeping the older reading for this run')
-        # Dropped first so the frame's columns come out in the older rule's order.
-        merged_df.drop(columns=[f'final_{side}_occupied'], inplace=True)
-        from_capacitance = None
+    if from_capacitance is not None and not cap_format.validated:
+        reason = _older_reading_reason(merged_df, side, cap_baseline, collector, from_capacitance[0])
+        if reason is not None:
+            logger.warning(f'{reason} on the {side} side, keeping the older reading for this run')
+            # Dropped first so the frame's columns come out in the older rule's order.
+            merged_df.drop(columns=[f'final_{side}_occupied'], inplace=True)
+            from_capacitance = None
     if from_capacitance is None:
         _set_final_occupancy(merged_df, side, cap_baseline)
         sleep_records = build_sleep_records(merged_df, side, max_gap_in_minutes=15)
