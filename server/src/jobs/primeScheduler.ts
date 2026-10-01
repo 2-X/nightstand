@@ -10,6 +10,7 @@ import settingsDB from '../db/settings.js';
 import serverStatus from '../serverStatus.js';
 import servicesDB from '../db/services.js';
 import reboot from './reboot.js';
+import { rebootClock } from './rebootTime.js';
 import { OperationCheckError, PrivilegedCommandError } from './privilegedCommand.js';
 
 
@@ -93,10 +94,8 @@ export const schedulePrimingRebootAndCalibration = (settingsData: Settings) => {
   dailyRule.minute = onMinute;
   dailyRule.tz = timeZone;
 
-  // Wrap around midnight: a prime time of 00:30 reboots at 23:30, not at an
-  // hour of -1, which node-schedule rejects silently so the pod would simply
-  // stop rebooting.
-  scheduleRebootJob((onHour + 23) % 24, onMinute, timeZone);
+  const restart = rebootClock(time);
+  scheduleRebootJob(restart.hour, restart.minute, timeZone);
 
   logger.debug(`Scheduling daily prime job at ${primePodDaily.time}`);
   schedule.scheduleJob(`daily-priming-${time}`, dailyRule, async () => {
