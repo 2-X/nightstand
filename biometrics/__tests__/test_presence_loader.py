@@ -103,6 +103,12 @@ class FormatTest(unittest.TestCase):
         self.assertGreater(collector.cap_coverage(), 0.99)
         self.assertEqual(len(loaded['cap_senses']), 1200)
 
+    def test_the_piezo_layout_and_cadence_are_kept(self):
+        collector, _ = self._collect(scenarios.raw_records(NIGHT))
+        self.assertEqual(collector.piezo_layout.freq, 500)
+        self.assertEqual(collector.piezo_layout.sensors_per_side, 2)
+        self.assertEqual(collector.one_per_second_share(), 1.0)
+
     def test_an_unknown_capacitance_type_is_named_and_not_read(self):
         records = [dict(record, type='capSense3') if record['type'] == 'capSense2' else record
                    for record in scenarios.raw_records(NIGHT)]

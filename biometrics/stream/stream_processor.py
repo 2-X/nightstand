@@ -23,6 +23,7 @@ from buffer import Buffer
 from data_types import *
 from presence.cap import CAP_HOLD_SECONDS, CapBaseline, cap_delta
 from presence.detector import FRAME_GAP_SECONDS, DetectorParams, PresenceDetector, piezo_range
+from presence.piezo import CadenceCheck, piezo_layout
 from presence.sensors import CAPSENSE2, CapFormat
 import numpy as np
 
@@ -81,6 +82,10 @@ class StreamProcessor:
             self.sensor_count = 2
         else:
             self.sensor_count = 1
+        # Vitals read the sample rate from here; presence reads the cadence.
+        self.piezo_layout = piezo_layout(piezo_record)
+        self.cadence = CadenceCheck()
+        self.cadence.add(piezo_record.get('ts'))
         self.left_processor = BiometricProcessor(side='left', sensor_count=self.sensor_count, insertion_frequency=60, debug=debug)
         self.right_processor = BiometricProcessor(side='right', sensor_count=self.sensor_count, insertion_frequency=60, debug=debug)
         self.buffer = Buffer(
@@ -180,6 +185,7 @@ class StreamProcessor:
         )
 
     def process_piezo_record(self, piezo_record: PiezoDualData):
+        self.cadence.add(piezo_record.get('ts'))
         self.iteration_count += 1
         self.buffer.append(piezo_record)
         if self.presence is not None:

@@ -13,6 +13,7 @@ sys.path.append(os.getcwd())
 from data_types import *
 from get_logger import get_logger
 from presence.detector import piezo_range
+from presence.piezo import piezo_layout
 from presence.sensors import read_cap, unknown_cap_type
 
 logger = get_logger()
@@ -226,7 +227,7 @@ def _delete_other_side(decoded_data: dict, side: Side, sensor_count: int):
 def _capture_presence(record: dict):
     """Both sides' presence inputs, taken before normalization and _delete_other_side drop them."""
     if record.get('type') == 'piezo-dual':
-        return 'piezo', record.get('left1'), record.get('right1')
+        return 'piezo', record.get('left1'), record.get('right1'), piezo_layout(record)
     reading = read_cap(record)
     if reading is not None:
         if reading.left is not None and reading.right is not None:
@@ -252,8 +253,9 @@ def _feed_presence(collector, capture, ts: int):
         collector.add_cap(ts, left, right)
         collector.note_cap_format(name)
     else:
-        _, left, right = capture
+        _, left, right, layout = capture
         collector.add_piezo(ts, _record_range(left), _record_range(right))
+        collector.note_piezo_layout(layout)
 
 
 def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Side, sensor_count: int, presence_collector=None):

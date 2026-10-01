@@ -61,8 +61,10 @@ latest_cap = LatestCap()
 # Capacitance presence runs only while capacitance records keep arriving, so a
 # Pod without them keeps piezo presence with the switch on.
 CAP_FRESH_SECONDS = 60
-# Capacitance types this version cannot read, each warned about once.
+# Capacitance types this version cannot read, each warned about once, up to a cap.
 _unknown_cap_logged = set()
+UNKNOWN_CAP_LOG_LIMIT = 16
+UNKNOWN_CAP_NAME_LENGTH = 40
 
 # How often the NATS consumer loop reports itself healthy. Matches the 60s
 # cadence of BiometricProcessor._presence_heartbeat_interval; frequent enough
@@ -139,7 +141,8 @@ def _store_decoded_cap_record(decoded_data) -> bool:
         kind = unknown_cap_type(decoded_data)
         if kind is None:
             return False
-        if kind not in _unknown_cap_logged:
+        kind = kind[:UNKNOWN_CAP_NAME_LENGTH]
+        if kind not in _unknown_cap_logged and len(_unknown_cap_logged) < UNKNOWN_CAP_LOG_LIMIT:
             _unknown_cap_logged.add(kind)
             logger.warning(f'Capacitance records of type {kind} are not a format this version reads, '
                            'live presence stays on the vibration sensor')

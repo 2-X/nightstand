@@ -141,6 +141,25 @@ class StaggeredLiveNightTest(unittest.TestCase):
             self.assertTrue(all(entered[side] <= second < left_at[side] for second in seconds), side)
 
 
+class PiezoLayoutAndCadenceTest(unittest.TestCase):
+    def _processor(self, records):
+        records = list(records)
+        for record in records:
+            load_piezo_row(record, 'right')
+        return StreamProcessor(records[0]), records
+
+    def test_the_layout_comes_from_the_first_record_and_the_cadence_from_all(self):
+        piezo = [r for r in scenarios.raw_records(Night(seconds=130, left=(), right=())) if r['type'] == 'piezo-dual']
+        processor, records = self._processor(piezo)
+        self.assertEqual((processor.piezo_layout.freq, processor.piezo_layout.sensors_per_side), (500, 2))
+        self.assertIsNone(processor.cadence.ok())
+        with unittest.mock.patch.object(BiometricProcessor, '_calculate_vitals', fake_vitals), \
+                unittest.mock.patch.object(biometric_processor, 'insert_vitals'):
+            for record in records[1:]:
+                processor.process_piezo_record(record)
+        self.assertTrue(processor.cadence.ok())
+
+
 class ShortAbsenceTest(unittest.TestCase):
     def _first_hrv_after_return(self, gap_seconds):
         night = Night(seconds=3600, right=((100, 900), (900 + gap_seconds, 3600)))

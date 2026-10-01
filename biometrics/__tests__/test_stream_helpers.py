@@ -202,6 +202,23 @@ class TestStoreDecodedCapRecord(CapPresenceTestCase):
         for kind in kinds:
             self.assertEqual(sum(kind in line for line in logs.output), 1, kind)
 
+    def test_bounds_the_unknown_types_it_remembers_and_the_name_it_logs(self):
+        now = datetime.now().timestamp()
+        with self.assertLogs(stream.logger, level='WARNING') as logs:
+            for index in range(stream.UNKNOWN_CAP_LOG_LIMIT + 10):
+                self.assertTrue(stream._store_decoded_cap_record({'type': f'capSense{index + 3}', 'ts': now}))
+            self.assertTrue(stream._store_decoded_cap_record({'type': 'capSense' + 'x' * 500, 'ts': now}))
+            stream.logger.warning('end')
+        self.assertEqual(len(stream._unknown_cap_logged), stream.UNKNOWN_CAP_LOG_LIMIT)
+        self.assertEqual(len(logs.output), stream.UNKNOWN_CAP_LOG_LIMIT + 1)
+
+    def test_logs_a_long_unknown_type_name_truncated(self):
+        record = {'type': 'capSense' + 'x' * 500, 'ts': datetime.now().timestamp()}
+        with self.assertLogs(stream.logger, level='WARNING') as logs:
+            self.assertTrue(stream._store_decoded_cap_record(record))
+        self.assertLess(len(logs.output[0]), 250)
+        self.assertNotIn('x' * (stream.UNKNOWN_CAP_NAME_LENGTH + 1), logs.output[0])
+
     def test_leaves_other_records_to_the_piezo_path(self):
         self.assertFalse(stream._store_decoded_cap_record(recent_piezo()))
         self.assertFalse(stream._store_decoded_cap_record(None))
