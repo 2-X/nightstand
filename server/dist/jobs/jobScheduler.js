@@ -17,6 +17,14 @@ import { schedulePauseResume } from './pauseResume.js';
 import eventBus from '../events/eventBus.js';
 import { emitJobEvent } from './jobEvents.js';
 import { isScheduleDbChange } from './isScheduleDbChange.js';
+import { loadRhythms } from '../db/rhythms.js';
+import { activation } from './rhythms/activation.js';
+import { dropKeptAlarms, keptAlarmsGeneration } from './rhythms/keptAlarms.js';
+import { scheduleKeptAlarms, scheduleRhythms } from './rhythms/scheduleRhythms.js';
+import { reportRhythmsStatus } from './rhythms/rhythmsStatus.js';
+import { setEngineActivation, sleepAround } from './scheduleQueries.js';
+// Under Rhythms a replacement alarm belongs to the resolved sleep around it.
+const rhythmSleepAt = (side) => (at) => sleepAround(side, at);
 async function rebuildJobs() {
     try {
         serverStatus.status.jobs.status = 'started';
@@ -26,57 +34,85 @@ async function rebuildJobs() {
             schedule.cancelJob(jobName);
         });
         await schedule.gracefulShutdown();
+        // A turn off that saved after this read keeps its alarms for the next pass.
+        const keptUpTo = keptAlarmsGeneration();
         await settingsDB.read();
         await schedulesDB.read();
         moment.tz.setDefault(settingsDB.data.timeZone || 'UTC');
         const schedulesData = schedulesDB.data;
         const settingsData = settingsDB.data;
+        const load = settingsData.features.rhythms
+            ? await loadRhythms().catch((error) => ({ state: 'invalid', error: String(error) }))
+            : null;
+        const engine = load ? activation(settingsData, load, schedulesData) : { active: false, reason: 'flag-off' };
+        setEngineActivation(engine);
         logger.info('Scheduling jobs...');
         // Clearing a pause that ended while the server was down writes settings,
         // which triggers another rebuild.
         await schedulePauseResume(settingsData, 'left');
         await schedulePauseResume(settingsData, 'right');
-        scheduleAlarmOverride(settingsData, 'left');
-        scheduleAlarmOverride(settingsData, 'right');
+        scheduleAlarmOverride(settingsData, 'left', engine.active ? rhythmSleepAt('left') : undefined);
+        scheduleAlarmOverride(settingsData, 'right', engine.active ? rhythmSleepAt('right') : undefined);
         if (settingsData.features.oneOffAlarms) {
             scheduleOneOffAlarm(settingsData, 'left');
             scheduleOneOffAlarm(settingsData, 'right');
         }
-        // Sleep analysis runs daily per side, decoupled from power schedule:
-        // a side that's being measured (biometrics on, person actually using
-        // it) gets sleep records even when no temperature schedule is enabled
-        // for that side. Was previously gated on power.enabled inside the
-        // per-day loop, which silently skipped partners without heating
-        // schedules.
-        scheduleSleepAnalysis(settingsData, 'left');
-        scheduleSleepAnalysis(settingsData, 'right');
-        // Schedule each day independently. Old jobs are already cancelled by the
-        // time we get here, so letting one malformed day throw would leave the pod
-        // with no power, temperature or alarm jobs at all until something else
-        // triggers a reschedule. Skip the bad day and keep the rest.
         let failedDays = 0;
-        SCHEDULE_SIDES.forEach(side => {
-            SCHEDULE_DAYS.forEach(day => {
-                try {
-                    const schedule = schedulesData[side][day];
-                    schedulePowerOn(settingsData, side, day, schedule.power);
-                    schedulePowerOff(settingsData, side, day, schedule.power);
-                    scheduleTemperatures(settingsData, side, day, schedule.temperatures, schedule.power);
-                    scheduleAlarm(settingsData, side, day, schedule);
-                }
-                catch (error) {
-                    failedDays += 1;
-                    const message = error instanceof Error ? error.message : String(error);
-                    logger.error(`Failed to schedule ${side} ${day}, skipping it: ${message}`);
-                }
+        let plan = { jobCount: 0, failedSides: [] };
+        if (engine.active) {
+            // Rhythms owns every per-day job and analyses each side after each sleep.
+            plan = scheduleRhythms(settingsData, engine.db, new Date());
+            logger.info(`Rhythms planned ${plan.jobCount} job(s)`);
+        }
+        else {
+            // Sleep analysis runs daily per side, decoupled from power schedule:
+            // a side that's being measured (biometrics on, person actually using
+            // it) gets sleep records even when no temperature schedule is enabled
+            // for that side. Was previously gated on power.enabled inside the
+            // per-day loop, which silently skipped partners without heating
+            // schedules.
+            scheduleSleepAnalysis(settingsData, 'left');
+            scheduleSleepAnalysis(settingsData, 'right');
+            // Schedule each day independently. Old jobs are already cancelled by the
+            // time we get here, so letting one malformed day throw would leave the pod
+            // with no power, temperature or alarm jobs at all until something else
+            // triggers a reschedule. Skip the bad day and keep the rest.
+            SCHEDULE_SIDES.forEach(side => {
+                SCHEDULE_DAYS.forEach(day => {
+                    try {
+                        const schedule = schedulesData[side][day];
+                        schedulePowerOn(settingsData, side, day, schedule.power);
+                        schedulePowerOff(settingsData, side, day, schedule.power);
+                        scheduleTemperatures(settingsData, side, day, schedule.temperatures, schedule.power);
+                        scheduleAlarm(settingsData, side, day, schedule);
+                    }
+                    catch (error) {
+                        failedDays += 1;
+                        const message = error instanceof Error ? error.message : String(error);
+                        logger.error(`Failed to schedule ${side} ${day}, skipping it: ${message}`);
+                    }
+                });
             });
-        });
+        }
+        // A sleep left running when Rhythms was turned off keeps its alarms until
+        // a rhythm engine is active again; that engine plans them itself.
+        if (engine.active)
+            dropKeptAlarms(keptUpTo);
+        else
+            scheduleKeptAlarms(new Date());
         schedulePrimingRebootAndCalibration(settingsData);
+        reportRhythmsStatus(engine, plan, settingsData.timeZone);
         logger.info('Done scheduling jobs!');
-        serverStatus.status.jobs.status = failedDays > 0 ? 'failed' : 'healthy';
-        serverStatus.status.jobs.message = failedDays > 0
-            ? `Skipped ${failedDays} unschedulable day(s), check the schedule data`
-            : '';
+        const failedSides = plan.failedSides.length;
+        serverStatus.status.jobs.status = failedDays + failedSides > 0 ? 'failed' : 'healthy';
+        if (failedSides > 0) {
+            serverStatus.status.jobs.message = `Could not plan Rhythms for ${failedSides} side(s), check the Rhythms data`;
+        }
+        else {
+            serverStatus.status.jobs.message = failedDays > 0
+                ? `Skipped ${failedDays} unschedulable day(s), check the schedule data`
+                : '';
+        }
         // A fresh set of jobs starts clean, so drop any earlier failure text.
         const scheduleKeys = [
             'alarmSchedule', 'primeSchedule', 'powerSchedule', 'rebootSchedule', 'temperatureSchedule',
@@ -93,6 +129,7 @@ async function rebuildJobs() {
             powerSchedule: serverStatus.status.powerSchedule,
             rebootSchedule: serverStatus.status.rebootSchedule,
             temperatureSchedule: serverStatus.status.temperatureSchedule,
+            rhythmsSchedule: serverStatus.status.rhythmsSchedule,
         });
     }
     catch (error) {
@@ -104,23 +141,26 @@ async function rebuildJobs() {
         eventBus.emit('service-health', { jobs: serverStatus.status.jobs });
     }
 }
-let setupRunning = false;
+let setupRun = null;
 let setupRequested = false;
-// Coalesce changes during a rebuild, then read the latest files in another pass.
-async function setupJobs() {
+// Coalesce changes during a rebuild, then read the latest files in another
+// pass. A caller that awaits gets the pass that saw its change.
+export function setupJobs() {
     setupRequested = true;
-    if (setupRunning)
-        return;
-    setupRunning = true;
-    try {
-        do {
-            setupRequested = false;
-            await rebuildJobs();
-        } while (setupRequested);
-    }
-    finally {
-        setupRunning = false;
-    }
+    if (setupRun)
+        return setupRun;
+    setupRun = (async () => {
+        try {
+            do {
+                setupRequested = false;
+                await rebuildJobs();
+            } while (setupRequested);
+        }
+        finally {
+            setupRun = null;
+        }
+    })();
+    return setupRun;
 }
 let RETRY_COUNT = 0;
 const FAST_RETRIES = 20;
@@ -157,7 +197,7 @@ function waitForValidDateAndSetupJobs() {
 chokidar.watch(config.lowDbFolder).on('change', (changedPath) => {
     const fileName = path.basename(changedPath);
     if (!isScheduleDbChange(fileName)) {
-        // Only settings and schedules affect these jobs. Future databases do not.
+        // Only settings, schedules and Rhythms data affect these jobs.
         logger.debug(`Skipping restarting jobs for DB change: ${fileName}`);
         return;
     }

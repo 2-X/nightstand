@@ -240,6 +240,41 @@ export const FEATURES_MANIFEST = [
             + 'correctly.',
     },
     {
+        id: 'biometrics-v2',
+        title: 'New sleep tracking (beta)',
+        description: 'Tells the two sides apart with the bed\'s capacitance sensors, in live presence and the '
+            + 'nightly analysis, and keeps vitals through short trips out of bed.',
+        category: 'biometrics',
+        version: 'n/a',
+        flag: 'biometricsV2',
+        default: false,
+        touchpoints: [
+            'biometrics/presence', 'biometrics/features.py', 'biometrics/stream/stream.py',
+            'biometrics/stream/stream_processor.py', 'biometrics/stream/biometric_processor.py',
+            'biometrics/sleep_detection/sleep_detector.py', 'biometrics/sleep_detection/cap_data.py',
+            'biometrics/sleep_detection/calibrate_sensor_thresholds.py', 'biometrics/load_raw_files.py',
+            'biometrics/calibration.py', 'server/src/db/settingsSchema.ts', 'server/src/features/biometricsV2.ts',
+            'app/src/pages/SettingsPage/FeaturesSection', 'app/src/pages/SettingsPage/SettingsPage.tsx',
+        ],
+        depends_on: ['biometrics'],
+        reversible: true,
+        tests: [
+            'biometrics/__tests__/test_features.py', 'biometrics/__tests__/test_presence_cap.py',
+            'biometrics/__tests__/test_presence_detector.py', 'biometrics/__tests__/test_presence_params.py',
+            'biometrics/__tests__/test_presence_calibration.py', 'biometrics/__tests__/test_presence_loader.py',
+            'biometrics/__tests__/test_presence_replay.py', 'biometrics/__tests__/test_sleep_detector_presence.py',
+            'biometrics/__tests__/test_stream_presence.py', 'biometrics/__tests__/test_vitals_state_retention.py',
+            'biometrics/__tests__/test_toggle_off_identity.py', 'server/src/features/biometricsV2.test.ts',
+            'app/src/pages/SettingsPage/FeaturesSection/FeaturesSection.test.tsx',
+            'app/src/pages/SettingsPage/FeaturesSection/FeaturesSection.partialPayload.test.tsx',
+            'app/src/pages/SettingsPage/SettingsPage.categories.test.tsx',
+        ],
+        upstream_offer: false,
+        rationale: 'Off by default while it is checked against more nights and more beds. Off leaves live '
+            + 'presence, the nightly analysis and every stored value exactly as before. Older versions keep '
+            + 'the setting and ignore it.',
+    },
+    {
         id: 'daily-reboot',
         title: 'Daily reboot',
         description: 'Restarts the pod an hour before daily priming.',
@@ -460,6 +495,37 @@ export const FEATURES_MANIFEST = [
         upstream_offer: false,
         rationale: 'A user action with no background behavior change until someone pauses a side, so there is nothing to turn off. '
             + 'Older versions ignore the setting.',
+    },
+    {
+        id: 'rhythms',
+        title: 'Rhythms',
+        description: 'Named sleep plans per side, a weekly plan, date changes and an optional Smart Schedule temperature curve.',
+        category: 'platform',
+        version: '3.5.0',
+        flag: 'rhythms',
+        default: false,
+        touchpoints: [
+            'server/src/db/settingsSchema.ts', 'server/src/db/rhythmsSchema.ts', 'server/src/db/rhythms.ts', 'server/src/jobs/rhythms',
+            'server/src/routes/rhythms/rhythms.ts', 'server/src/jobs/jobScheduler.ts', 'server/src/jobs/scheduleQueries.ts',
+            'server/src/jobs/alarmActivity.ts', 'server/src/jobs/alarmScheduler.ts', 'server/src/jobs/powerScheduler.ts',
+            'server/src/routes/deviceStatus/updateDeviceStatus.ts', 'server/src/routes/settings/settingsGuards.ts',
+            'server/src/routes/update/update.ts', 'server/src/setup/routes.ts',
+            'scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh',
+        ],
+        depends_on: ['agent'],
+        reversible: true,
+        tests: [
+            'server/src/jobs/rhythms/equivalence.test.ts', 'server/src/db/rhythms.test.ts', 'server/src/routes/rhythms/rhythms.test.ts',
+            'server/src/routes/rhythms/rhythmsSwitchRoutes.test.ts', 'server/src/routes/settings/settingsGuards.test.ts',
+            'server/src/jobs/rhythms/scheduleRhythms.test.ts', 'server/src/jobs/rhythms/runEvent.test.ts',
+            'server/src/jobs/rhythms/gates.test.ts', 'server/src/jobs/rhythms/handoff.test.ts',
+            'server/src/jobs/rhythms/keptAlarms.test.ts', 'server/src/jobs/rhythms/lifecycle.test.ts',
+            'server/src/jobs/rhythms/engineSwitch.test.ts', 'server/src/jobs/scheduleQueries.test.ts',
+            'server/src/rhythmsFileSafety.test.ts', 'server/src/setup/leaveHookWiring.test.ts',
+        ],
+        upstream_offer: false,
+        rationale: 'Off by default. Its data lives only in rhythmsDB.json and it never writes schedulesDB.json, so turning it '
+            + 'off, rolling back or switching to upstream leaves the weekly schedule exactly as it was.',
     },
 ];
 //# sourceMappingURL=featuresManifest.js.map

@@ -23,7 +23,7 @@ import settingsDB from '../db/settings.js';
 import { getPresenceData } from '../routes/metrics/presence.js';
 import { getDeviceStatusCoalesced } from './frankenServer.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
-import { scheduleWrapsToNextDay } from '../jobs/utils.js';
+import { isInScheduledSleep } from '../jobs/scheduleQueries.js';
 import { isSchedulePaused } from '../jobs/schedulePause.js';
 export const PRESENCE_AUTO_OFF_MS = 45 * 60 * 1000;
 // Matches the presence stream's own ~once-a-minute heartbeat cadence, so a
@@ -46,33 +46,6 @@ const lastSeenOnAt = { left: null, right: null };
 const prevIsOn = { left: null, right: null };
 let lastTickAt = null;
 let timer = null;
-/**
- * Returns true if `now` falls inside an enabled power schedule's on-window for
- * the given side. A window opens at power.on on its own day and closes at
- * power.off, which lands on the next day when it is not strictly later than
- * power.on (see `scheduleWrapsToNextDay`). Checking the windows opened by both
- * yesterday and today covers overnight schedules without special-casing them.
- */
-function isInActivePowerSchedule(side, now, schedules) {
-    const parseAt = (anchor, hhmm) => {
-        const [h, m] = hhmm.split(':').map(Number);
-        return anchor.clone().startOf('day').hour(h).minute(m).second(0).millisecond(0);
-    };
-    for (const daysAgo of [1, 0]) {
-        const anchor = now.clone().subtract(daysAgo, 'day');
-        const dayName = anchor.format('dddd').toLowerCase();
-        const daySchedule = schedules[side]?.[dayName];
-        if (!daySchedule?.power.enabled)
-            continue;
-        const start = parseAt(anchor, daySchedule.power.on);
-        const end = parseAt(anchor, daySchedule.power.off);
-        if (scheduleWrapsToNextDay(daySchedule.power))
-            end.add(1, 'day');
-        if (now.isSameOrAfter(start) && now.isBefore(end))
-            return true;
-    }
-    return false;
-}
 async function tick() {
     let status;
     try {
@@ -87,8 +60,6 @@ async function tick() {
     await schedulesDB.read();
     const presence = getPresenceData();
     const now = Date.now();
-    const tz = settingsDB.data.timeZone || 'UTC';
-    const nowMoment = moment.tz(now, tz);
     // A wall-clock jump (NTP correcting a bad boot clock) would otherwise read
     // as hours of absence and power a side off immediately. Rebase the
     // references and wait for the next tick to measure real elapsed time.
@@ -123,10 +94,9 @@ async function tick() {
         // A paused side has no schedule window, and its sleeper may be up for a while.
         if (isSchedulePaused(settingsDB.data, side, new Date(now)))
             continue;
-        // Respect the user's explicit power schedule. If we're inside their
-        // declared on-window (e.g., 21:50 → 09:50 overnight), don't auto-off -
-        // the schedule's own power-off job will handle shutdown at the right time.
-        if (isInActivePowerSchedule(side, nowMoment, schedulesDB.data))
+        // Inside a scheduled sleep (weekly or Rhythms) the schedule's own
+        // power-off handles shutdown, so auto-off stays out of it.
+        if (isInScheduledSleep(side, new Date(now)))
             continue;
         // If the live stream currently reports present, the user is on the bed
         // right now - don't even consider auto-off. The stream's hysteresis

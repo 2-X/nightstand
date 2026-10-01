@@ -73,7 +73,7 @@ it('keeps future keys through narrow POST flows and schedules only known days', 
         for (const name of ['settingsDB', 'schedulesDB', 'servicesDB', 'rhythmsDB']) {
             const saved = JSON.parse(readFileSync(path.join(lowdb, `${name}.json`), 'utf8'));
             const input = fixture(name);
-            for (const key of ['futureTop', 'futureSide', 'strayScalar', 'sentryLogging', 'futureService', 'rhythms']) {
+            for (const key of ['futureTop', 'futureSide', 'strayScalar', 'sentryLogging', 'futureService']) {
                 if (key in input)
                     assert.deepEqual(saved[key], input[key]);
             }
@@ -81,6 +81,7 @@ it('keeps future keys through narrow POST flows and schedules only known days', 
                 assert.deepEqual(saved.left.futureSide, input.left.futureSide);
                 assert.deepEqual(saved.left.scheduleOverrides.pause, input.left.scheduleOverrides.pause);
                 assert.equal(saved.features.rhythms, true);
+                assert.equal(saved.features.futureFeature, true);
             }
             if (name === 'schedulesDB') {
                 assert.deepEqual(saved.left.futureDay, input.left.futureDay);
@@ -104,7 +105,7 @@ it('keeps future keys through narrow POST flows and schedules only known days', 
         let reads = 0;
         const originalRead = settingsDB.read.bind(settingsDB);
         const readMock = mock.method(settingsDB, 'read', async () => { reads++; await originalRead(); });
-        for (const name of ['rhythmsDB.json', '.rhythmsDB.json.tmp', 'servicesDB.json', '.servicesDB.json.tmp', 'unrelated.json'])
+        for (const name of ['servicesDB.json', '.servicesDB.json.tmp', 'unrelated.json'])
             change(name);
         await new Promise(resolve => setTimeout(resolve, 30));
         assert.equal(reads, 0, 'unrelated writes rebuilt jobs');
@@ -129,6 +130,7 @@ it('keeps future keys through narrow POST flows and schedules only known days', 
         assert.equal(schedule.scheduledJobs['left-monday-21:00-power-on'], undefined);
         assert.equal(status.status.jobs.status, 'healthy');
         scheduleReadMock.mock.restore();
+        assert.equal(readFileSync(path.join(lowdb, 'rhythmsDB.json'), 'utf8'), JSON.stringify(fixture('rhythmsDB')), 'nothing rewrote rhythmsDB.json');
     }
     finally {
         await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));

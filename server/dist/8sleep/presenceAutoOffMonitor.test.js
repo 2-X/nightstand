@@ -271,5 +271,19 @@ describe('presenceAutoOffMonitor', () => {
         });
         assert.deepEqual(powerOffCalls, [], 'powered off during a presence dropout');
     });
+    it('stays out of a Rhythms sleep when Rhythms is active', async () => {
+        const { setEngineActivation } = await import('../jobs/scheduleQueries.js');
+        const { everyNight, testNight, testRhythmsDB } = await import('../jobs/rhythms/testSupport.js');
+        await schedulesDB.read();
+        setEngineActivation({ active: true, db: testRhythmsDB(schedulesDB.data, everyNight(testNight('13:00', '17:00'))) });
+        try {
+            // Every weekly window is disabled in beforeEach, so only the rhythm covers 14:00 to 15:00.
+            await runTicks(at('2026-03-02T14:00:00'), 60, heartbeatAbsent);
+            assert.deepEqual(powerOffCalls, [], 'auto-off fired inside a Rhythms sleep');
+        }
+        finally {
+            setEngineActivation({ active: false, reason: 'flag-off' });
+        }
+    });
 });
 //# sourceMappingURL=presenceAutoOffMonitor.test.js.map

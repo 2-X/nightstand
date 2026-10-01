@@ -24,7 +24,7 @@ before(async () => {
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 // Seeds a single temperature entry on the left side at `hoursFromNow`,
 // wherever that lands relative to the real clock (today or tomorrow), so
-// findNextScheduledTempChange's own today/tomorrow walk has exactly one
+// the weekly next-change walk in nextScheduledChange has exactly one
 // candidate to find.
 async function setNextScheduledChange(hoursFromNow) {
     await schedulesDB.read();

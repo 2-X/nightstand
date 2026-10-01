@@ -3,6 +3,7 @@ import { describe, it, mock } from 'node:test';
 import { mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import schedule from 'node-schedule';
 // config.ts throws if these aren't set, and reading it is what settingsDB.ts
 // needs to resolve its lowdb path, must run before the dynamic imports
 // below. A fresh temp dir keeps this test isolated from any real
@@ -20,7 +21,9 @@ mock.module('../../8sleep/deviceApi.js', {
     namedExports: { executeFunction: executeFunctionMock },
 });
 const { updateDeviceStatus } = await import('./updateDeviceStatus.js');
+const { default: settingsDB } = await import('../../db/settings.js');
 const { FrankenSupersededError } = await import('../../8sleep/frankenErrors.js');
+const { keptSleeps, rememberKeptAlarms } = await import('../../jobs/rhythms/keptAlarms.js');
 describe('updateDeviceStatus', () => {
     it('applies an explicit targetTemperatureF of 0 instead of silently dropping it', async () => {
         executeFunctionMock.mock.resetCalls();
@@ -51,6 +54,49 @@ describe('updateDeviceStatus', () => {
         executeFunctionMock.mock.mockImplementationOnce(async () => { throw new FrankenSupersededError(); });
         await updateDeviceStatus({ left: { isOn: true, targetTemperatureF: 80 } }, { background: true });
         assert.equal(executeFunctionMock.mock.callCount(), 1, 'the set point of a replaced power-on must not be sent');
+    });
+    it('mirrors a timed power-on to both sides while one side is away', async () => {
+        settingsDB.data.right.awayMode = true;
+        await settingsDB.write();
+        executeFunctionMock.mock.resetCalls();
+        try {
+            await updateDeviceStatus({ left: { isOn: true, targetTemperatureF: 80, secondsRemaining: 29100 } }, { background: true });
+        }
+        finally {
+            settingsDB.data.right.awayMode = false;
+            await settingsDB.write();
+        }
+        // The third argument is the command options, pinned by the tests above.
+        assert.deepEqual(executeFunctionMock.mock.calls.map(call => call.arguments.slice(0, 2)), [
+            ['LEFT_TEMP_DURATION', '43200'], ['RIGHT_TEMP_DURATION', '43200'],
+            ['TEMP_LEVEL_LEFT', '-9'], ['TEMP_LEVEL_RIGHT', '-9'],
+            ['LEFT_TEMP_DURATION', '29100'], ['RIGHT_TEMP_DURATION', '29100'],
+        ]);
+    });
+    it('forgets the kept alarms of a side that is turned off', async () => {
+        const name = 'rhythm-left-2026-09-28-alarm-0600-0';
+        schedule.scheduleJob(name, new Date(Date.now() + 60_000), () => { });
+        rememberKeptAlarms('left', { sleep: {}, alarms: [{ name, event: {} }] });
+        await updateDeviceStatus({ left: { isOn: false } });
+        assert.equal(schedule.scheduledJobs[name], undefined);
+        assert.deepEqual(keptSleeps(), []);
+    });
+    it('forgets the kept alarms of both sides when one is away, since both turn off', async () => {
+        const names = ['rhythm-left-2026-09-28-alarm-0600-0', 'rhythm-right-2026-09-28-alarm-0600-0'];
+        names.forEach(name => schedule.scheduleJob(name, new Date(Date.now() + 60_000), () => { }));
+        rememberKeptAlarms('left', { sleep: {}, alarms: [{ name: names[0], event: {} }] });
+        rememberKeptAlarms('right', { sleep: {}, alarms: [{ name: names[1], event: {} }] });
+        settingsDB.data.right.awayMode = true;
+        await settingsDB.write();
+        try {
+            await updateDeviceStatus({ left: { isOn: false } });
+        }
+        finally {
+            settingsDB.data.right.awayMode = false;
+            await settingsDB.write();
+        }
+        names.forEach(name => assert.equal(schedule.scheduledJobs[name], undefined));
+        assert.deepEqual(keptSleeps(), []);
     });
 });
 //# sourceMappingURL=updateDeviceStatus.test.js.map

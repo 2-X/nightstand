@@ -1,5 +1,6 @@
 import express from 'express';
 import fs from 'fs';
+import { z } from 'zod';
 import logger from '../../logger.js';
 import { triggerUpdateService } from '../../jobs/update.js';
 import { triggerRollbackService } from '../../jobs/rollback.js';
@@ -14,6 +15,40 @@ const PREV_SERVER_INFO_PATH = '/home/dac/free-sleep-prev/server/src/serverInfo.j
 // Consumed once by scripts/update.sh (deleted immediately after reading), so
 // a stale file can never redirect a future plain update.
 const TARGET_FILE = '/persistent/free-sleep-data/update-target.json';
+const PrepareToStopSchema = z.object({ reason: z.enum(['downgrade', 'rollback', 'revert']) }).strict();
+let leaveHook;
+// This file also ships in the updater overlay for stock installs, which has
+// no Rhythms, so the server registers the handoff here at startup.
+export function setLeaveHook(hook) {
+    leaveHook = hook;
+}
+export function isLoopbackAddress(address) {
+    return address !== undefined && /^(::ffff:)?127\.|^::1$/.test(address);
+}
+// The update, rollback and switch scripts call this just before they stop
+// the server, after every check that could still abort them. The next
+// version may not know Rhythms, so this server hands any sleep it started
+// back to the weekly schedule. A failure never stops the script; the
+// firmware off time set at power-on is the backstop.
+router.post('/prepare-to-stop', async (req, res) => {
+    if (!isLoopbackAddress(req.socket.remoteAddress)) {
+        res.status(403).json({ error: 'Only the Pod itself can prepare the server to stop' });
+        return;
+    }
+    const parsed = PrepareToStopSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+        res.status(400).json({ error: 'Invalid request data', details: parsed.error.errors });
+        return;
+    }
+    const { reason } = parsed.data;
+    try {
+        await leaveHook?.(reason);
+    }
+    catch (error) {
+        logger.error(`Rhythms handoff before ${reason} failed, continuing`, error);
+    }
+    res.status(204).end();
+});
 router.post('/', async (req, res) => {
     const parsed = UpdateRequestSchema.safeParse(req.body);
     if (!parsed.success) {

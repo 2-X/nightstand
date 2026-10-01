@@ -112,6 +112,12 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
             alarmOccurrences.delete(occurrenceKey);
     }
 };
+// True once an alarm with this occurrence id has rung (or is ringing) in this process.
+export function hasAlarmOccurrence(side, occurrenceId) {
+    return alarmOccurrences.has(`${side}:${occurrenceId}`);
+}
+// Test isolation only.
+export const resetAlarmOccurrences = () => alarmOccurrences.clear();
 /**
  * Next occurrence of HH:mm in tz (today or tomorrow depending on 'now').
  * If the HH:mm is already passed for 'now', schedule for tomorrow.
@@ -200,7 +206,24 @@ function openedItsNight(side, occurrence) {
     }
     return false;
 }
-export function scheduleAlarmOverride(settingsData, side) {
+// The same rule for a Rhythms sleep: it ends at this minute and began a
+// full day earlier.
+function rhythmOpenedItsNight(sleep, occurrence) {
+    return !!sleep && sleep.end.getTime() === occurrence.valueOf()
+        && !occurrence.clone().subtract(1, 'day').isBefore(sleep.start);
+}
+// A Rhythms lookup that fails counts as no sleep, so it can never reject
+// inside a job or stop a rebuild after every job was cancelled.
+function rhythmSleepFor(lookup, side, at) {
+    try {
+        return lookup(at);
+    }
+    catch (error) {
+        logger.error(`Could not find the ${side} Rhythms sleep at ${at.toISOString()}: ${error instanceof Error ? error.message : String(error)}`);
+        return null;
+    }
+}
+export function scheduleAlarmOverride(settingsData, side, rhythmSleepAt) {
     if (!settingsData[side].alarmsEnabled)
         return null;
     const alarmOverride = settingsData[side]?.scheduleOverrides?.alarm;
@@ -220,7 +243,10 @@ export function scheduleAlarmOverride(settingsData, side) {
         if (ranAt < Date.now() - OCCURRENCE_RETENTION_MS)
             overrideRuns.delete(key);
     }
-    if (next.isSame(expiresAt) && overrideRuns.has(overrideKey) && openedItsNight(side, next))
+    const opened = () => (rhythmSleepAt
+        ? rhythmOpenedItsNight(rhythmSleepFor(rhythmSleepAt, side, next.toDate()), next)
+        : openedItsNight(side, next));
+    if (next.isSame(expiresAt) && overrideRuns.has(overrideKey) && opened())
         return null;
     logger.debug(`Alarm override is set! Scheduling alarm for ${next.format()}`);
     const jobName = `${side}-alarm-override-${alarmOverride.timeOverride}`;
@@ -240,7 +266,11 @@ export function scheduleAlarmOverride(settingsData, side) {
         // The replacement belongs to a night starting today or yesterday, not
         // necessarily the calendar date on which it rings.
         let sourceAlarm;
-        for (const offset of [-1, 0]) {
+        if (rhythmSleepAt) {
+            const first = rhythmSleepFor(rhythmSleepAt, side, next.toDate())?.events.find(event => event.kind === 'alarm');
+            sourceAlarm = first?.kind === 'alarm' ? first.alarm : undefined;
+        }
+        for (const offset of rhythmSleepAt ? [] : [-1, 0]) {
             const date = next.clone().startOf('day').add(offset, 'day');
             const dayKey = date.format('dddd').toLowerCase();
             const daily = schedulesDB.data?.[side]?.[dayKey];

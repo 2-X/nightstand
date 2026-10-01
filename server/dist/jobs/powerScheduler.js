@@ -19,6 +19,11 @@ const lastPowerOn = new Map();
 const minuteOf = (date) => Math.floor(date.getTime() / 60_000) * 60_000;
 // Test isolation only.
 export const resetPowerOnTimes = () => lastPowerOn.clear();
+// The Rhythms engine shares the record, so its power-offs follow the same rule.
+export const notePowerOn = (side, at) => {
+    lastPowerOn.set(side, minuteOf(at));
+};
+export const poweredOnSince = (side, dueAt) => (lastPowerOn.get(side) ?? -Infinity) >= minuteOf(dueAt);
 export const schedulePowerOn = (settingsData, side, day, power) => {
     if (!power.enabled)
         return;
@@ -69,7 +74,7 @@ export const schedulePowerOn = (settingsData, side, day, power) => {
     });
 };
 // Analyze a full sleep day for each side, independent of temperature schedules.
-export const scheduleSleepAnalysis = (settingsData, side) => {
+export const scheduleSleepAnalysis = (settingsData, side, skipAt) => {
     if (settingsData[side].awayMode)
         return;
     if (settingsData.timeZone === null)
@@ -81,6 +86,10 @@ export const scheduleSleepAnalysis = (settingsData, side) => {
     const time = `${String(SLEEP_ANALYSIS_HOUR).padStart(2, '0')}:${String(SLEEP_ANALYSIS_MINUTE).padStart(2, '0')}`;
     logger.debug(`Scheduling daily sleep-analyzer job for ${side} at ${time}`);
     schedule.scheduleJob(`daily-analyze-sleep-${side}`, dailyRule, async () => {
+        if (skipAt?.(new Date())) {
+            logger.debug(`Skipping daily sleep analyzer job for ${side}, its Rhythms sleep is analyzed already`);
+            return;
+        }
         await servicesDB.read();
         if (!servicesDB.data.biometrics.enabled) {
             logger.debug('Not executing sleep analyzer job, biometrics is disabled');

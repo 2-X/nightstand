@@ -69,6 +69,24 @@ describe('FEATURES_MANIFEST', () => {
             assert.ok(existsSync(path.join(repoRoot, file)), `${file} does not exist`);
         }
     });
+    it('lists rhythms as an optional feature whose files exist', () => {
+        const entry = FEATURES_MANIFEST.find((candidate) => candidate.id === 'rhythms');
+        assert.ok(entry, 'rhythms has no featuresManifest entry');
+        assert.equal(entry.flag, 'rhythms');
+        assert.equal(entry.default, false);
+        assert.equal(entry.reversible, true);
+        assert.ok(entry.tests.includes('server/src/jobs/rhythms/equivalence.test.ts'), 'the equivalence gate is listed');
+        for (const file of [...entry.touchpoints, ...entry.tests]) {
+            assert.ok(existsSync(path.join(repoRoot, file)), `${file} does not exist`);
+        }
+    });
+    it('points biometrics-v2 at files that exist', () => {
+        const entry = FEATURES_MANIFEST.find((candidate) => candidate.id === 'biometrics-v2');
+        assert.ok(entry, 'biometrics-v2 has no featuresManifest entry');
+        for (const file of [...entry.touchpoints, ...entry.tests]) {
+            assert.ok(existsSync(path.join(repoRoot, file)), `${file} does not exist`);
+        }
+    });
     // No bundle releases exist yet, so this passes vacuously today. It is the
     // guard that arms the moment the first one lands.
     it('has every feature id named by a bundle release', () => {

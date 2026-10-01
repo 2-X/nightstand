@@ -1,0 +1,145 @@
+// One place that answers what the schedule says for either engine. Rhythms
+// answers come from the data the last rebuild activated.
+import moment from 'moment-timezone';
+import settingsDB from '../db/settings.js';
+import schedulesDB from '../db/schedules.js';
+import { SCHEDULE_DAYS } from '../db/scheduleKeys.js';
+import { compareTimes, isValidTime, scheduleWrapsToNextDay } from './utils.js';
+import { resolveLegacySleeps, resolveSleeps } from './rhythms/resolve.js';
+const HOUR_MS = 60 * 60 * 1000;
+const CHANGE_LOOKAHEAD_MS = 48 * HOUR_MS;
+const TEMPERATURE_LOOKAHEAD_MS = 7 * 24 * HOUR_MS;
+let engine = { active: false, reason: 'flag-off' };
+export function setEngineActivation(next) {
+    engine = next;
+}
+export function engineActivation() {
+    return engine;
+}
+function otherSide(side) {
+    return side === 'left' ? 'right' : 'left';
+}
+// An away side drives nothing; a present side next to an away side drives the whole bed.
+export function effectiveSides(settings, side) {
+    if (settings[side].awayMode)
+        return [];
+    return settings[otherSide(side)].awayMode ? [side, otherSide(side)] : [side];
+}
+export function drivingSide(settings, side) {
+    if (!settings[side].awayMode)
+        return side;
+    return settings[otherSide(side)].awayMode ? null : otherSide(side);
+}
+function podTimeZone() {
+    return settingsDB.data.timeZone || 'UTC';
+}
+// Weekly engine: a window opens at power.on and closes at power.off, on the
+// next day when it wraps. Yesterday's and today's windows cover overnights.
+function legacyIsInPowerWindow(side, now, schedules) {
+    const parseAt = (anchor, hhmm) => {
+        const [h, m] = hhmm.split(':').map(Number);
+        return anchor.clone().startOf('day').hour(h).minute(m).second(0).millisecond(0);
+    };
+    for (const daysAgo of [1, 0]) {
+        const anchor = now.clone().subtract(daysAgo, 'day');
+        const dayName = anchor.format('dddd').toLowerCase();
+        const daySchedule = schedules[side]?.[dayName];
+        if (!daySchedule?.power.enabled)
+            continue;
+        const start = parseAt(anchor, daySchedule.power.on);
+        const end = parseAt(anchor, daySchedule.power.off);
+        if (scheduleWrapsToNextDay(daySchedule.power))
+            end.add(1, 'day');
+        if (now.isSameOrAfter(start) && now.isBefore(end))
+            return true;
+    }
+    return false;
+}
+// Weekly engine: yesterday's schedule is included because its after-midnight rows run today.
+function legacyNextTempChange(side, now, timeZone) {
+    const sideSchedule = schedulesDB.data[side];
+    if (!sideSchedule)
+        return null;
+    let next = null;
+    for (let dayOffset = -1; dayOffset < 2; dayOffset++) {
+        const candidateDay = now.clone().tz(timeZone).add(dayOffset, 'day');
+        const daily = sideSchedule[SCHEDULE_DAYS[candidateDay.day()]];
+        if (!daily?.power.enabled || !daily.temperatures)
+            continue;
+        // Power-on applies a temperature too, even when there are no later adjustments.
+        const times = new Set([daily.power.on, ...Object.keys(daily.temperatures)]);
+        for (const time of times) {
+            if (!isValidTime(time))
+                continue;
+            const [h, m] = time.split(':').map(Number);
+            const candidate = candidateDay.clone().hour(h).minute(m).second(0).millisecond(0);
+            if (compareTimes(time, daily.power.on) < 0)
+                candidate.add(1, 'day');
+            if (candidate.isAfter(now) && (!next || candidate.isBefore(next)))
+                next = candidate;
+        }
+    }
+    return next;
+}
+function rhythmSleeps(side, from, to) {
+    if (!engine.active)
+        return null;
+    const driver = drivingSide(settingsDB.data, side);
+    if (!driver)
+        return [];
+    return resolveSleeps({ db: engine.db, side: driver, timeZone: podTimeZone(), from, to });
+}
+function scheduledSleeps(side, from, to) {
+    return rhythmSleeps(side, from, to)
+        ?? resolveLegacySleeps({ schedules: schedulesDB.data, side, timeZone: podTimeZone(), from, to });
+}
+function setsTemperature(event) {
+    return event.kind === 'power-on' || event.kind === 'temperature';
+}
+export function currentSleep(side, now) {
+    const t = now.getTime();
+    return scheduledSleeps(side, now, now).find(sleep => sleep.start.getTime() <= t && t < sleep.end.getTime()) ?? null;
+}
+// The sleep containing `at`, its end instant included; where one sleep ends
+// as the next starts, the earlier one wins, as the weekly override lookup does.
+export function sleepAround(side, at) {
+    const t = at.getTime();
+    return scheduledSleeps(side, at, at).find(sleep => sleep.start.getTime() <= t && t <= sleep.end.getTime()) ?? null;
+}
+export function isInScheduledSleep(side, now) {
+    if (!engine.active)
+        return legacyIsInPowerWindow(side, moment.tz(now, podTimeZone()), schedulesDB.data);
+    return currentSleep(side, now) !== null;
+}
+export function nextScheduledChange(side, now) {
+    if (!engine.active) {
+        const timeZone = podTimeZone();
+        return legacyNextTempChange(side, moment.tz(now, timeZone), timeZone)?.toDate() ?? null;
+    }
+    let next = null;
+    for (const sleep of rhythmSleeps(side, now, new Date(now.getTime() + CHANGE_LOOKAHEAD_MS)) ?? []) {
+        for (const event of sleep.events) {
+            if (!setsTemperature(event) || event.at.getTime() <= now.getTime())
+                continue;
+            if (!next || event.at.getTime() < next.getTime())
+                next = event.at;
+        }
+    }
+    return next;
+}
+// The temperature the schedule has the side at now, or the next sleep's
+// power-on temperature when no sleep is in progress.
+export function scheduledTemperatureNow(side, now) {
+    const t = now.getTime();
+    const upcoming = scheduledSleeps(side, now, new Date(t + TEMPERATURE_LOOKAHEAD_MS))
+        .filter(sleep => t < sleep.end.getTime())
+        .sort((a, b) => a.start.getTime() - b.start.getTime())[0];
+    if (!upcoming)
+        return null;
+    const temperatureEvents = upcoming.events.filter(setsTemperature);
+    if (temperatureEvents.length === 0)
+        return upcoming.night.power.onTemperature;
+    const applied = temperatureEvents.filter(event => event.at.getTime() <= t);
+    return (applied[applied.length - 1] ?? temperatureEvents[0]).temperatureF;
+}
+//# sourceMappingURL=scheduleQueries.js.map

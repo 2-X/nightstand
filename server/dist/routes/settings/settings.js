@@ -4,7 +4,7 @@ import logger from '../../logger.js';
 const router = express.Router();
 import settingsDB, { updateSettings } from '../../db/settings.js';
 import { SettingsSchema } from '../../db/settingsSchema.js';
-import { pauseRejection, wouldOrphanLevelFormat } from './settingsGuards.js';
+import { changesRhythmsFlag, pauseRejection, wouldOrphanLevelFormat } from './settingsGuards.js';
 import { syncRawArchiveConf } from '../../jobs/rawArchiveConf.js';
 router.get('/settings', async (req, res) => {
     await settingsDB.read();
@@ -27,11 +27,15 @@ router.post('/settings', async (req, res) => {
     // into settingsDB.data verbatim if the raw body were merged instead.
     const validatedUpdate = validationResult.data;
     delete validatedUpdate.id;
-    let conflict = false;
+    let conflict = '';
     const rejected = {};
     const saved = await updateSettings(draft => {
+        if (changesRhythmsFlag(draft, validatedUpdate)) {
+            conflict = 'Use /rhythms/enable or /rhythms/disable to turn Rhythms on or off';
+            return false;
+        }
         if (wouldOrphanLevelFormat(draft, validatedUpdate)) {
-            conflict = true;
+            conflict = 'Set temperature display away from Level before disabling this feature';
             return false;
         }
         const pauseError = pauseRejection(draft, validatedUpdate, new Date());
@@ -46,9 +50,7 @@ router.post('/settings', async (req, res) => {
         }
     });
     if (conflict) {
-        res.status(409).json({
-            error: 'Set temperature display away from Level before disabling this feature',
-        });
+        res.status(409).json({ error: conflict });
         return;
     }
     if (rejected.error) {
