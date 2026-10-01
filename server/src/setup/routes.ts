@@ -19,6 +19,8 @@ import logs from '../routes/logs/logs.js';
 import serverStatus from '../routes/serverStatus/serverStatus.js';
 import baseControl from '../routes/baseControl/baseControl.js';
 import update from '../routes/update/update.js';
+import { setLeaveHook } from '../routes/update/update.js';
+import { prepareToLeaveRhythms } from '../jobs/rhythms/handoff.js';
 import metricsServer from '../routes/metricsServer/metricsServer.js';
 import storage from '../routes/storage/storage.js';
 import memory from '../routes/memory/memory.js';
@@ -49,6 +51,7 @@ export default function (app: Express) {
   app.use('/api/logs', logs);
   app.use('/api/serverStatus', serverStatus);
   app.use('/api/', baseControl);
+  setLeaveHook(prepareToLeaveRhythms);
   app.use('/api/update', update);
   app.use('/api/', metricsServer);
   app.use('/api/storage', storage);

@@ -19,6 +19,27 @@ const PREV_SERVER_INFO_PATH = '/home/dac/free-sleep-prev/server/src/serverInfo.j
 // a stale file can never redirect a future plain update.
 const TARGET_FILE = '/persistent/free-sleep-data/update-target.json';
 
+export type LeaveReason = 'downgrade' | 'rollback' | 'revert';
+type LeaveHook = (reason: LeaveReason) => Promise<unknown>;
+let leaveHook: LeaveHook | undefined;
+
+// This file also ships in the updater overlay for stock installs, which has
+// no Rhythms, so the server registers the handoff here at startup.
+export function setLeaveHook(hook: LeaveHook): void {
+  leaveHook = hook;
+}
+
+// The next version may not know Rhythms, so this server hands any sleep it
+// started back to the weekly schedule first. The firmware off time set at
+// power-on still covers a handoff that fails.
+async function handOffRhythms(reason: LeaveReason): Promise<void> {
+  try {
+    await leaveHook?.(reason);
+  } catch (error) {
+    logger.error(`Rhythms handoff before ${reason} failed, continuing`, error);
+  }
+}
+
 router.post('/', async (req, res) => {
   const parsed = UpdateRequestSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -32,6 +53,7 @@ router.post('/', async (req, res) => {
   try {
     await triggerUpdateService({
       beforeStart: async () => {
+        if (targetVersion && allowDowngrade) await handOffRhythms('downgrade');
         if (targetVersion) {
           ownsTarget = true;
           await fs.promises.writeFile(
@@ -69,7 +91,7 @@ router.get('/rollback-info', async (_req, res) => {
 
 router.post('/rollback', async (_req, res) => {
   try {
-    await triggerRollbackService();
+    await triggerRollbackService({ beforeStart: () => handOffRhythms('rollback') });
     res.status(204).end();
   } catch (error) {
     logger.error('Failed to start rollback', error);
@@ -84,7 +106,7 @@ router.post('/rollback', async (_req, res) => {
 // afterward. There's no in-app way back once upstream free-sleep is running.
 router.post('/revert-to-stock', async (_req, res) => {
   try {
-    await triggerRevertToStockService();
+    await triggerRevertToStockService({ beforeStart: () => handOffRhythms('revert') });
     res.status(204).end();
   } catch (error) {
     logger.error('Could not start switching to upstream free-sleep.', error);

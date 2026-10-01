@@ -45,12 +45,23 @@ mock.module(new URL('../../jobs/biometrics.js', import.meta.url).href, { namedEx
   triggerBiometricsDisable: trigger,
   shouldDisableBiometrics: (body: { biometrics?: { enabled?: boolean } }) => body.biometrics?.enabled === false,
 } });
+const handoffs: string[] = [];
+let handoffFails = false;
+mock.module(new URL('../../jobs/rhythms/handoff.js', import.meta.url).href, { namedExports: {
+  prepareToLeaveRhythms: async (reason: string) => {
+    handoffs.push(reason);
+    if (handoffFails) throw new Error('Pod unreachable');
+    return { sides: [] };
+  },
+} });
 let server: Server;
 let url: string;
 before(async () => {
   const app = express();
   app.use(express.json());
-  app.use('/update', (await import('./update.js')).default);
+  const update = await import('./update.js');
+  update.setLeaveHook((await import('../../jobs/rhythms/handoff.js')).prepareToLeaveRhythms);
+  app.use('/update', update.default);
   app.use((await import('../services/services.js')).default);
   server = app.listen(0);
   await new Promise<void>(resolve => server.once('listening', resolve));
@@ -101,4 +112,41 @@ it('a failed start removes only the target written after admission', async () =>
     assert.deepEqual(targetWrites, ['/persistent/free-sleep-data/update-target.json']);
     assert.deepEqual(targetDeletes, targetWrites);
   } finally { startFailed = false; }
+});
+
+const postJson = (endpoint: string, body: unknown) => fetch(`${url}${endpoint}`, {
+  method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+});
+
+it('hands Rhythms sleeps back before a downgrade, rollback or switch starts', async () => {
+  fail = false; handoffs.length = 0;
+  assert.equal((await postJson('/update', { targetVersion: '3.4.0', allowDowngrade: true })).status, 204);
+  assert.equal((await postJson('/update/rollback', {})).status, 204);
+  assert.equal((await postJson('/update/revert-to-stock', {})).status, 204);
+  assert.deepEqual(handoffs, ['downgrade', 'rollback', 'revert']);
+});
+
+it('leaves Rhythms alone for a plain update or a refused start', async () => {
+  fail = false; handoffs.length = 0;
+  assert.equal((await postJson('/update', {})).status, 204);
+  assert.equal((await postJson('/update', { targetVersion: '3.6.0' })).status, 204);
+  fail = true;
+  assert.equal((await postJson('/update/rollback', {})).status, 500);
+  assert.deepEqual(handoffs, []);
+});
+
+it('still starts the operation when the handoff fails', async () => {
+  fail = false; handoffs.length = 0; handoffFails = true;
+  try {
+    assert.equal((await postJson('/update/rollback', {})).status, 204);
+  } finally {
+    handoffFails = false;
+  }
+  assert.deepEqual(handoffs, ['rollback']);
+});
+
+it('registers the Rhythms handoff when the server mounts the update route', () => {
+  const source = fs.readFileSync(new URL('../../setup/routes.ts', import.meta.url), 'utf8');
+  assert.match(source, /^import \{ prepareToLeaveRhythms \} from '\.\.\/jobs\/rhythms\/handoff\.js';$/m);
+  assert.match(source, /^ {2}setLeaveHook\(prepareToLeaveRhythms\);$/m);
 });
