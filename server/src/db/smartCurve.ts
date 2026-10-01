@@ -102,6 +102,10 @@ export function buildCurve(input: CurveInput): CurvePoint[] {
     if (at >= prewarmStart && at < powerOff) points.push({ at: new Date(at), level, phase });
   };
   const afterWake = wake + CURVE.afterWakeMinutes * MINUTE;
+  // A sleep that turns off when the person gets up holds the wake level to the end.
+  const after = () => {
+    if (!smart.offWhenUp) push(afterWake, base, 'after');
+  };
 
   if (windowMinutes < CURVE.veryShortWindowMinutes) {
     push(prewarmStart, base, 'prewarm');
@@ -110,7 +114,7 @@ export function buildCurve(input: CurveInput): CurvePoint[] {
     const wakeLevel = smart.warmUp && warmAt > bedtime ? clamp(base + 1) : base;
     if (wakeLevel !== base) push(warmAt, wakeLevel, 'warmup');
     push(wake, wakeLevel, 'wake');
-    push(afterWake, base, 'after');
+    after();
     return points;
   }
 
@@ -146,7 +150,7 @@ export function buildCurve(input: CurveInput): CurvePoint[] {
 
   if (!smart.warmUp) {
     push(wake, level, 'wake');
-    push(afterWake, base, 'after');
+    after();
     return points;
   }
 
@@ -165,7 +169,7 @@ export function buildCurve(input: CurveInput): CurvePoint[] {
     push(at, next, at === wake ? 'wake' : 'warmup');
   });
   if (steps === 0) push(wake, level, 'wake');
-  push(afterWake, base, 'after');
+  after();
   return points;
 }
 

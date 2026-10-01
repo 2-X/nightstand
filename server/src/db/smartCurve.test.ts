@@ -5,7 +5,7 @@ import {
   buildCurve, curveBounds, CURVE, isDaySleep, levelAt, levelToF, phaseAt, prewarmMinutes, warmsBeforeBedtime,
   type CurveInput, type CurvePoint,
 } from './smartCurve.js';
-import type { SmartSchedule } from './rhythmsSchema.js';
+import { DEFAULT_SMART, type SmartSchedule } from './rhythmsSchema.js';
 
 const TZ = 'America/Los_Angeles';
 const MINUTE = 60_000;
@@ -379,5 +379,32 @@ describe('warmsBeforeBedtime', () => {
     assert.ok(cool[0].level < 0);
     assert.equal(warmsBeforeBedtime(cool), false);
     assert.equal(warmsBeforeBedtime(night({ baseLevel: -2 })), false); // -2 plus the warm start lands on 0, which is neutral
+  });
+});
+
+describe('"When I get up"', () => {
+  const shapeOf = (smart: Partial<SmartSchedule>, bedtime: string, wake: string) => ({
+    smart: { ...DEFAULT_SMART, ...smart },
+    bedtime: new Date(bedtime),
+    coolStart: new Date(bedtime),
+    wake: new Date(wake),
+    powerOff: new Date(Date.parse(wake) + 60 * 60_000),
+    timeZone: 'America/Los_Angeles',
+  });
+
+  it('holds the wake level to the end instead of dropping back to the base', () => {
+    const shapes = [
+      shapeOf({}, '2026-09-30T05:45:00Z', '2026-09-30T13:30:00Z'),
+      shapeOf({ warmUp: false }, '2026-09-30T05:45:00Z', '2026-09-30T13:30:00Z'),
+      shapeOf({}, '2026-09-30T05:45:00Z', '2026-09-30T08:15:00Z'),
+      shapeOf({}, '2026-09-30T05:45:00Z', '2026-09-30T06:45:00Z'),
+    ];
+    for (const shape of shapes) {
+      const before = buildCurve(shape);
+      const after = buildCurve({ ...shape, smart: { ...shape.smart, offWhenUp: true } });
+      assert.equal(before.at(-1)?.phase, 'after');
+      assert.deepEqual(after, before.slice(0, -1));
+      assert.equal(after.at(-1)?.phase, 'wake');
+    }
   });
 });
