@@ -215,7 +215,9 @@ sh /home/dac/free-sleep/scripts/enable_biometrics.sh
 After that, it can be turned on and off under Settings > Features.
 
 Data is stored on the Pod in `/persistent/free-sleep-data/free-sleep.db` and
-is available from `http://<POD_IP>:3000/api/metrics/vitals`. See
+is available from `http://<POD_IP>:3000/api/metrics/vitals`, which returns the
+last 24 hours by default and up to 7 days per request with `startTime` and
+`endTime` (see [server/API.md](server/API.md)). See
 [biometrics/BIOMETRICS.md](biometrics/BIOMETRICS.md) for details.
 
 ## Updating

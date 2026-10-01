@@ -1,14 +1,14 @@
 import express, { Request, Response } from 'express';
 import { Prisma, vitals as VitalRecord } from '@prisma/client';
-import { parseMetricsQuery } from './metricsQuery.js';
+import { parseMetricsQuery, parseRowsQuery, ROWS_QUERY_ERROR } from './metricsQuery.js';
 import { prisma } from '../../db/prisma.js';
 
 
 const router = express.Router();
 
 router.get('/vitals', async (req: Request, res: Response) => {
-  const range = parseMetricsQuery(req.query);
-  if (!range) return res.status(400).json({ error: 'Invalid side, startTime or endTime' });
+  const range = parseRowsQuery(req.query);
+  if (!range) return res.status(400).json({ error: ROWS_QUERY_ERROR });
   const query: Prisma.vitalsWhereInput = { side: range.side, timestamp: { gte: range.start, lte: range.end } };
 
 

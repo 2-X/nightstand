@@ -141,6 +141,11 @@ Rhythms with an optional Smart Schedule, pausing a side's schedule, a new beta s
 - Leaving the log viewer while a log was still loading no longer keeps the
   server watching that file until it restarts.
 
+- The vitals and movement endpoints return the last 24 hours when no time
+  range is given, instead of every row ever stored, and refuse a range longer
+  than 7 days. Without a range, vitals took several seconds on a Pod and
+  more than doubled the server's memory use.
+
 ## [3.4.0] - 2026-09-29
 
 A redesigned app, sleep records that start at your real bedtime, and safer updates, rollbacks and reinstalls.

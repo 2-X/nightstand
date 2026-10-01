@@ -648,8 +648,9 @@ Repeated keys in one request run once. If an analysis or calibration for the sam
 - Retrieves vital records based on optional query parameters.
 - Query parameters:
   - `side` (optional): Filter by the side of the bed (e.g., "left" or "right").
-  - `startTime` (optional): Filter by the start time of vital records, in ISO 8601 format.
-  - `endTime` (optional): Filter by the end time of vital records, in ISO 8601 format.
+  - `startTime` (optional): Filter by the start time of vital records, in ISO 8601 format. Defaults to 24 hours before `endTime`.
+  - `endTime` (optional): Filter by the end time of vital records, in ISO 8601 format. Defaults to now.
+- The range can be at most 7 days long. A longer range, or a malformed `side`, `startTime` or `endTime`, returns 400.
 
 #### Response
 
@@ -707,7 +708,7 @@ Repeated keys in one request run once. If an analysis or calibration for the sam
 ### GET
 
 - Per-bucket movement records derived from piezo data. Used to render the "movement" chart and as input to the sleep-stage classifier (high-movement epochs are flagged as `awake`).
-- Query parameters: `side`, `startTime`, `endTime` (all optional, ISO 8601).
+- Query parameters: `side`, `startTime`, `endTime` (all optional, ISO 8601). As with `/api/metrics/vitals`, `endTime` defaults to now and `startTime` to 24 hours before it, and a range longer than 7 days returns 400.
 
 #### Response
 

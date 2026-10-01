@@ -1,12 +1,12 @@
 import express, { Request, Response } from 'express';
 import { legacyMovement, loadMovement } from '../../db/movement.js';
-import { parseMetricsQuery } from './metricsQuery.js';
+import { parseRowsQuery, ROWS_QUERY_ERROR } from './metricsQuery.js';
 
 const router = express.Router();
 
 router.get('/movement', async (req: Request, res: Response) => {
-  const query = parseMetricsQuery(req.query);
-  if (!query) return res.status(400).json({ error: 'Invalid side, startTime or endTime' });
+  const query = parseRowsQuery(req.query);
+  if (!query) return res.status(400).json({ error: ROWS_QUERY_ERROR });
 
   const movementRecords = await loadMovement(query.side, query.start, query.end);
 
