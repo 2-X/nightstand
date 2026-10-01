@@ -40,7 +40,7 @@ logger = get_logger('calibrate-sensor')
 from data_types import *
 from load_raw_files import load_raw_files
 from piezo_data import load_piezo_df, detect_presence_piezo, identify_baseline_period, summarize_empty_floor, one_value_per_second
-from cap_data import load_cap_df, create_cap_baseline_from_cap_df, save_baseline, summed_delta_noise
+from cap_data import load_cap_df, create_cap_baseline_from_cap_df, reading_means, save_baseline, summed_delta_noise
 from features import biometrics_v2_enabled
 from presence.sensors import CAPSENSE, majority_format
 from resource_usage import get_memory_usage_unix, get_available_memory_mb
@@ -260,13 +260,14 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
                 f'nothing to calibrate against. This resolves once the sensors '
                 f'record a stretch of empty bed.'
             )
-        legacy_counts = cap_formats is not None and majority_format(cap_formats) is CAPSENSE
-        cap_baseline = create_cap_baseline_from_cap_df(merged_df, baseline_start_time, baseline_end_time, side,
-                                                       skip_negative=legacy_counts)
+        cap_baseline = create_cap_baseline_from_cap_df(merged_df, baseline_start_time, baseline_end_time, side)
         if presence_v2:
             # The capacitance presence detector keeps its entry level clear of
             # this. Readers of the channel means ignore the extra key.
             cap_baseline['delta_noise'] = summed_delta_noise(merged_df[baseline_start_time:baseline_end_time], side)
+            if majority_format(cap_formats) is CAPSENSE:
+                # Only that detector reads these; the channel means stay what every version computes.
+                cap_baseline['reading_means'] = reading_means(merged_df[baseline_start_time:baseline_end_time], side)
 
         # Score the profile over the baseline window that was actually used,
         # not the much longer window of raw data loaded to find it.

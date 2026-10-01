@@ -91,13 +91,16 @@ def _side_entry(profiles, side: str) -> dict:
 def _cap_baseline(side: str, payload) -> Optional[CapBaseline]:
     if not isinstance(payload, dict):
         return None
+    readings = payload.get('reading_means')
+    readings = readings if isinstance(readings, dict) else {}
     mean = []
     for channel in CHANNELS:
         entry = payload.get(f'{side}_{channel}')
         value = _number(entry.get('mean')) if isinstance(entry, dict) else None
         if value is None:
             return None
-        mean.append(value)
+        reading = _number(readings.get(channel))
+        mean.append(value if reading is None else reading)
     noise = payload.get('delta_noise')
     return CapBaseline(mean=tuple(mean), noise=_number(noise) if _positive(noise) else 0.0)
 

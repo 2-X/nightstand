@@ -33,7 +33,6 @@ import presence_scenarios as scenarios
 from presence import sensors
 from presence.params import baselines_from_calibration
 from presence.replay import FrameCollector
-from insufficient_data import InsufficientDataError
 from presence_scenarios import Night
 from test_presence_calibration import SCHEMA
 
@@ -117,22 +116,29 @@ class LegacyCalibrationTest(unittest.TestCase):
         self.assertNotIn('delta_noise', payload)
         self.assertEqual(runs, [('success', None)])
 
-    def test_a_placeholder_count_stays_out_of_a_legacy_baseline(self):
+    def test_a_placeholder_count_stays_out_of_what_the_new_detector_reads(self):
         records = list(with_placeholders(empty_records()))
-        payload, _ = self.calibrate(enabled=True, records=records)
-        self.assertAlmostEqual(payload['left_out']['mean'], 387.0, places=0)
-        self.assertLess(payload['left_out']['std'], 2.0)
-        # Switched off, the baseline is what it always was.
-        payload, _ = self.calibrate(enabled=False, records=records)
-        self.assertLess(payload['left_out']['mean'], 0.0)
+        on, _ = self.calibrate(enabled=True, records=records)
+        self.assertAlmostEqual(on['reading_means']['out'], 387.0, places=0)
+        self.assertEqual(on['reading_means']['cen'], 381.0)
+        right = scenarios.legacy_cap_payload('right')
+        baselines = baselines_from_calibration({
+            'left': {'cap': on, 'cap_occupied': None, 'piezo_floors': []},
+            'right': {'cap': right, 'cap_occupied': None, 'piezo_floors': []},
+        })
+        self.assertAlmostEqual(baselines['left'].mean[0], 387.0, places=0)
 
-    def test_only_a_legacy_window_skips_negative_values(self):
-        spy = unittest.mock.Mock(wraps=cap_data.create_cap_baseline_from_cap_df)
-        with unittest.mock.patch.object(self.calibrator, 'create_cap_baseline_from_cap_df', spy):
-            self.calibrate(enabled=True)
-            self.calibrate(enabled=False)
-            self.calibrate(enabled=True, records=empty_records('capsense2'))
-        self.assertEqual([call.kwargs['skip_negative'] for call in spy.call_args_list], [True, False, False])
+    def test_the_baseline_older_versions_read_is_the_same_either_way(self):
+        # The analyzer with the switch off, and older versions, read only the channel entries.
+        records = list(with_placeholders(empty_records()))
+        on, _ = self.calibrate(enabled=True, records=records)
+        off, _ = self.calibrate(enabled=False, records=records)
+        self.assertLess(off['left_out']['mean'], 0.0)
+        self.assertEqual({key: value for key, value in on.items() if key not in ('delta_noise', 'reading_means')}, off)
+
+    def test_only_a_capsense_window_with_the_switch_on_stores_reading_means(self):
+        self.assertNotIn('reading_means', self.calibrate(enabled=False)[0])
+        self.assertNotIn('reading_means', self.calibrate(enabled=True, records=empty_records('capsense2'))[0])
 
     def test_a_run_without_readable_capacitance_still_says_what_it_saw(self):
         records = [dict(record, type='capSense3') if record['type'] == 'capSense' else record
@@ -186,23 +192,28 @@ class NegativeCountTest(unittest.TestCase):
         clean = pd.DataFrame({'left_out': [387, 388, 387], 'left_cen': [381] * 3, 'left_in': [505] * 3})
         self.assertAlmostEqual(cap_data.summed_delta_noise(frame, 'left'), cap_data.summed_delta_noise(clean, 'left'))
 
-    def baseline(self, out, **options):
-        index = pd.date_range('2026-09-28 04:00:00', periods=len(out), freq='s')
-        frame = pd.DataFrame({'left_out': out, 'left_cen': [381] * len(out), 'left_in': [505] * len(out)}, index=index)
-        return cap_data.create_cap_baseline_from_cap_df(frame, index[0], index[-1], 'left', **options)
+    def means(self, out):
+        frame = pd.DataFrame({'left_out': out, 'left_cen': [381] * len(out), 'left_in': [505] * len(out)})
+        return cap_data.reading_means(frame, 'left')
 
-    def test_negative_counts_are_left_out_of_a_legacy_baseline(self):
-        self.assertEqual(self.baseline([387, 389, -32768, 387, -1], skip_negative=True),
-                         self.baseline([387, 389, 387]))
+    def test_negative_counts_are_left_out_of_the_reading_means(self):
+        self.assertEqual(self.means([387, 389, -32768, 387, -1]), {'out': 388 - 1 / 3, 'cen': 381.0, 'in': 505.0})
 
-    def test_every_row_counts_otherwise(self):
-        # capSense2's -1.0 rows have always been part of its baseline.
-        self.assertEqual(self.baseline([12.0, 12.5, -1.0])['left_out']['mean'], 23.5 / 3)
+    def test_a_single_reading_is_its_own_mean(self):
+        self.assertEqual(self.means([-32768, 390, -32768])['out'], 390.0)
 
-    def test_a_window_of_placeholders_only_is_not_enough(self):
-        with self.assertRaises(InsufficientDataError):
-            self.baseline([-32768, -32768], skip_negative=True)
+    def test_a_channel_of_placeholders_only_is_left_out(self):
+        self.assertEqual(self.means([-32768, -32768]), {'cen': 381.0, 'in': 505.0})
 
+    def test_the_new_detector_falls_back_to_the_plain_mean_per_channel(self):
+        payload = scenarios.legacy_cap_payload('left', reading_means={'out': 390.0, 'cen': 'bad'})
+        right = scenarios.legacy_cap_payload('right')
+        baselines = baselines_from_calibration({
+            'left': {'cap': payload, 'cap_occupied': None, 'piezo_floors': []},
+            'right': {'cap': right, 'cap_occupied': None, 'piezo_floors': []},
+        })
+        self.assertEqual(baselines['left'].mean, (390.0, 381.0, 505.0))
+        self.assertEqual(baselines['right'].mean, (1076.0, 1075.0, 1074.0))
 
 if __name__ == '__main__':
     unittest.main()
