@@ -55,17 +55,23 @@ fi
 if [ -z "$MIN_FREE_KB" ]; then
   MIN_FREE_KB=2097152
   total_kb=$(df -kP "$ARCHIVE" 2>/dev/null | awk 'NR == 2 { print $2 }')
-  if [ -n "$total_kb" ] && [ "$((total_kb / 4))" -lt "$MIN_FREE_KB" ]; then
-    MIN_FREE_KB=$((total_kb / 4))
-  fi
+  case $total_kb in
+    '' | *[!0-9]*) ;;
+    *) [ "$((total_kb / 4))" -ge "$MIN_FREE_KB" ] || MIN_FREE_KB=$((total_kb / 4)) ;;
+  esac
 fi
 
+# The newest firmware file is the one being written, so it is never removed.
+newest=
 linked=0
 for src in "$PERSIST"/*.RAW; do
   [ -f "$src" ] || continue
   base=$(basename "$src")
   # Skip the firmware's sequencer state file
   [ "$base" = "SEQNO.RAW" ] && continue
+  if [ -z "$newest" ] || [ "$src" -nt "$newest" ]; then
+    newest=$src
+  fi
   dst="$ARCHIVE/$base"
   [ -e "$dst" ] && continue
   if ln "$src" "$dst" 2>/dev/null; then
@@ -78,7 +84,7 @@ done
 pruned=$(($(find "$ARCHIVE" -type f -name '*.RAW' -mmin "+$((RETENTION_HOURS * 60))" -print -delete 2>/dev/null | wc -l)))
 # Same retention for firmware files it never deleted itself. Top level only,
 # since the archive lives under /persistent too.
-live_pruned=$(($(find "$PERSIST/" -maxdepth 1 -type f -name '*.RAW' ! -name 'SEQNO.RAW' -mmin "+$((RETENTION_HOURS * 60))" -print -delete 2>/dev/null | wc -l)))
+live_pruned=$(($(find "$PERSIST/" -maxdepth 1 -type f -name '*.RAW' ! -name 'SEQNO.RAW' ! -name "${newest##*/}" -mmin "+$((RETENTION_HOURS * 60))" -print -delete 2>/dev/null | wc -l)))
 
 free_kb() {
   df -kP "$ARCHIVE" 2>/dev/null | awk 'NR == 2 { print $4 }'
@@ -87,9 +93,8 @@ free_kb() {
 # Keep at least MIN_FREE_KB free on the data partition by dropping the oldest
 # archived files first. Sorted by mtime: the firmware's file names are
 # sequence numbers, not times. A file the firmware still holds only frees
-# space once both links are gone. The newest firmware file is the one being
-# written, so it is never removed.
-newest=$(ls -1t "$PERSIST"/*.RAW 2>/dev/null | grep -v '/SEQNO\.RAW$' | head -1)
+# space once both links are gone, so its own link goes too, but only when it
+# is the same file: names repeat if the firmware's sequence restarts.
 floor_pruned=0
 avail=$(free_kb)
 while [ -n "$avail" ] && [ "$avail" -lt "$MIN_FREE_KB" ]; do
@@ -98,13 +103,22 @@ while [ -n "$avail" ] && [ "$avail" -lt "$MIN_FREE_KB" ]; do
     echo "archive-raw: WARNING free space ${avail}KB is below ${MIN_FREE_KB}KB with the archive empty; something else is filling the disk"
     break
   fi
-  base=$(basename "$oldest")
-  if [ -n "$newest" ] && [ "$base" = "$(basename "$newest")" ]; then
+  # ls prints a name with a newline in it as two lines. Stop rather than
+  # loop on a path that is not there.
+  if [ ! -f "$oldest" ] || [ -L "$oldest" ]; then
+    echo "archive-raw: WARNING cannot free space, $oldest is not a regular file"
+    break
+  fi
+  if [ -n "$newest" ] && [ "$oldest" -ef "$newest" ]; then
     echo "archive-raw: WARNING free space ${avail}KB is below ${MIN_FREE_KB}KB with only the newest RAW file left; something else is filling the disk"
     break
   fi
+  base=$(basename "$oldest")
+  livefile="$PERSIST/$base"
+  if [ "$base" != "SEQNO.RAW" ] && [ "$oldest" -ef "$livefile" ]; then
+    rm -f -- "$livefile"
+  fi
   rm -f -- "$oldest"
-  [ "$base" = "SEQNO.RAW" ] || rm -f -- "$PERSIST/$base"
   floor_pruned=$((floor_pruned + 1))
   avail=$(free_kb)
 done

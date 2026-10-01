@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -42,18 +42,20 @@ echo 'fake ${totalKb} ${totalKb - availKb} ${availKb} 50% /persistent'
   return { PATH: `${bin}:${process.env.PATH}` };
 }
 
+function scriptEnv(env: Record<string, string>) {
+  return {
+    ...process.env,
+    ARCHIVE_RAW_PERSIST: persist,
+    ARCHIVE_RAW_DIR: archive,
+    ARCHIVE_RAW_CONF: conf,
+    ARCHIVE_RAW_MIN_FREE_KB: '0',
+    ...env,
+  };
+}
+
+// The timeout turns a floor loop that never ends into a failure.
 function run(env: Record<string, string> = {}) {
-  return execFileSync('bash', [SCRIPT], {
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      ARCHIVE_RAW_PERSIST: persist,
-      ARCHIVE_RAW_DIR: archive,
-      ARCHIVE_RAW_CONF: conf,
-      ARCHIVE_RAW_MIN_FREE_KB: '0',
-      ...env,
-    },
-  });
+  return execFileSync('bash', [SCRIPT], { encoding: 'utf8', timeout: 20_000, env: scriptEnv(env) });
 }
 
 const archived = () => readdirSync(archive).sort();
@@ -175,7 +177,9 @@ describe('archive-raw.sh', () => {
 echo 'Filesystem 1024-blocks Used Available Capacity Mounted on'
 echo 'fake 1.0G 0.7G 300000 70% /persistent'
 `, { mode: 0o755 });
-    run(env);
+    const result = spawnSync('bash', [SCRIPT], { encoding: 'utf8', timeout: 20_000, env: scriptEnv(env) });
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, '');
     assert.deepEqual(archived(), ['a.RAW']);
   });
 
@@ -194,6 +198,33 @@ echo 'fake 1.0G 0.7G 300000 70% /persistent'
     const out = run(env);
     assert.deepEqual(archived(), []);
     assert.match(out, /floor_pruned=1/);
+  });
+
+  it('keeps a firmware file that only shares its name with an older archived one', () => {
+    mkdirSync(archive);
+    addArchived('0001.RAW', 100);
+    addLive('0001.RAW', 1);
+    addLive('0002.RAW', 0);
+    run({ ARCHIVE_RAW_MIN_FREE_KB: '999999999999' });
+    assert.deepEqual(live(), ['0001.RAW', '0002.RAW']);
+    assert.deepEqual(archived(), ['0002.RAW']);
+  });
+
+  it('never removes the newest firmware file by age, even after a clock jump', () => {
+    addLive('only.RAW', 15 * 24);
+    const out = run();
+    assert.deepEqual(live(), ['only.RAW']);
+    assert.match(out, /live_pruned=0/);
+  });
+
+  it('never removes a non-RAW /persistent file named by a crafted archive entry', () => {
+    mkdirSync(archive);
+    writeFileSync(path.join(persist, 'victim'), 'keep');
+    addLive('new.RAW', 0);
+    addArchived('victim\nzzz.RAW', 50);
+    run({ ARCHIVE_RAW_MIN_FREE_KB: '999999999999' });
+    assert.equal(readFileSync(path.join(persist, 'victim'), 'utf8'), 'keep');
+    assert.equal(existsSync(path.join(persist, 'new.RAW')), true);
   });
 
   it('refuses to delete through a symlinked archive', () => {
