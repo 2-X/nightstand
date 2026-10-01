@@ -42,6 +42,15 @@ export function smartOffRuntime(): SmartOffDeps {
       const skipped = isAlarmOverridden(settingsDB.data, side, night, new Date());
       return nightAlarmPending(side, until, skipped ? name => ofNight(name) && !name.startsWith(own) : ofNight);
     },
-    nextRestart: after => nextReboot(settingsDB.data, after),
+    // A restart it cannot read counts as none, so a tick goes on.
+    nextRestart: after => {
+      try {
+        return nextReboot(settingsDB.data, after);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn(`smart schedule: could not read the daily restart: ${message}`);
+        return null;
+      }
+    },
   };
 }

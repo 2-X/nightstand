@@ -11,14 +11,19 @@ import { updateDeviceStatus } from '../../routes/deviceStatus/updateDeviceStatus
 import { hasAlarmOccurrence } from '../alarmScheduler.js';
 import { isAlarmPaused, isSchedulePaused } from '../schedulePause.js';
 import { drivingSide, engineActivation } from '../scheduleQueries.js';
-import { resolveLegacySleeps, resolveSleeps, type ResolvedSleep } from './resolve.js';
+import { resolveLegacySleeps, resolveSleeps, turnsOffWhenUp, type PowerOffFor, type ResolvedSleep } from './resolve.js';
 import { alarmOccurrenceId, firmwareSeconds, forgetArmedEnds, holdForHandBack } from './runEvent.js';
 import { keepSleepAlarms } from './scheduleRhythms.js';
+import { smartPowerOffFor } from './curveController.js';
 
 export type HandoffAction = 'legacy-takes-over' | 'kept-on-until' | 'powered-off' | 'none';
 export type SideHandoff = { side: Side; action: HandoffAction; until?: string; alarmOverrideSet: boolean; deviceUpdateFailed?: true };
 export type HandoffReport = { sides: SideHandoff[] };
-export type HandoffPlan = { side: Side; action: HandoffAction; until?: Date; alarmOverrideExpiresAt?: string; keptSleep?: ResolvedSleep };
+export type HandoffPlan = {
+  side: Side; action: HandoffAction; until?: Date; alarmOverrideExpiresAt?: string; keptSleep?: ResolvedSleep;
+  // A "When I get up" sleep's timer runs past its end, so the handoff sets it to the end.
+  rearm?: true;
+};
 export type LeaveReason = 'downgrade' | 'rollback' | 'revert';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -40,13 +45,14 @@ export function planHandoff(input: {
   powerOffNow: boolean;
   isOn: (side: Side) => boolean;
   alarmRang: (side: Side, occurrenceId: string) => boolean;
+  powerOffFor?: PowerOffFor;
 }): HandoffPlan[] {
-  const { settings, schedules, db, now, powerOffNow, isOn, alarmRang } = input;
+  const { settings, schedules, db, now, powerOffNow, isOn, alarmRang, powerOffFor } = input;
   const timeZone = settings.timeZone || 'UTC';
   return SCHEDULE_SIDES.map((side): HandoffPlan => {
     const driver = drivingSide(settings, side);
     if (!driver || !isOn(side)) return { side, action: 'none' };
-    const sleep = sleepAt(resolveSleeps({ db, side: driver, timeZone, from: now, to: now }), now);
+    const sleep = sleepAt(resolveSleeps({ db, side: driver, timeZone, from: now, to: now, powerOffFor }), now);
     if (!sleep) return { side, action: 'none' };
     if (powerOffNow) return { side, action: 'powered-off' };
     let legacy = sleepAt(resolveLegacySleeps({ schedules, side: driver, timeZone, from: now, to: now }), now);
@@ -58,7 +64,14 @@ export function planHandoff(input: {
         .find(night => night.start <= bedtime && night.end > now);
     }
     // Alarms ring only on the present side.
-    if (!legacy) return { side, action: 'kept-on-until', until: sleep.end, ...(side === driver ? { keptSleep: sleep } : {}) };
+    if (!legacy) {
+      const rearm = turnsOffWhenUp(sleep);
+      return {
+        side, action: 'kept-on-until', until: sleep.end,
+        ...(rearm ? { rearm: true as const } : {}),
+        ...(side === driver ? { keptSleep: sleep } : {}),
+      };
+    }
     const plan: HandoffPlan = { side, action: 'legacy-takes-over', until: legacy.end };
     const rhythmAlarmRang = sleep.events.some(event => event.kind === 'alarm'
       && event.at.getTime() <= now.getTime()
@@ -120,6 +133,10 @@ async function applyHandoff(plans: HandoffPlan[], now: Date): Promise<Set<Side>>
         // still running once the hold before a stop has ended.
         forgetArmedEnds(plan.side);
       }
+      if (plan.action === 'kept-on-until' && plan.rearm && plan.until) {
+        await updateDeviceStatus({ [plan.side]: { secondsRemaining: firmwareSeconds(plan.until, now) } });
+        forgetArmedEnds(plan.side);
+      }
     } catch (error: unknown) {
       failed.add(plan.side);
       logger.error(`Rhythms handoff could not update the ${plan.side} side: ${errorMessage(error)}`);
@@ -172,6 +189,7 @@ async function planNow(powerOffNow: boolean, now: Date): Promise<HandoffPlan[]> 
     powerOffNow,
     isOn: await readOnStates(),
     alarmRang: hasAlarmOccurrence,
+    powerOffFor: smartPowerOffFor,
   });
 }
 

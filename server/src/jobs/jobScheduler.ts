@@ -26,6 +26,7 @@ import { dropKeptAlarms, keptAlarmsGeneration } from './rhythms/keptAlarms.js';
 import { scheduleKeptAlarms, scheduleRhythms, type RhythmsPlan } from './rhythms/scheduleRhythms.js';
 import { reportRhythmsStatus } from './rhythms/rhythmsStatus.js';
 import { setCurveRetime, startCurveRuntime, stopCurveRuntime, syncCurvePlan } from './rhythms/curveRuntime.js';
+import { smartOffRuntime } from './rhythms/smartOffRuntime.js';
 import { setEngineActivation, sleepAround } from './scheduleQueries.js';
 
 
@@ -60,7 +61,7 @@ async function rebuildJobs() {
     setEngineActivation(engine);
     // Before anything below can throw, so Smart Schedule follows the engine.
     if (engine.active) {
-      startCurveRuntime();
+      startCurveRuntime(smartOffRuntime());
       syncCurvePlan(settingsData, engine.db);
     } else {
       stopCurveRuntime();

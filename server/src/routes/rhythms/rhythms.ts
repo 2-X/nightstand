@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { enableRhythms } from '../../jobs/rhythms/enable.js';
 import { disableRhythms } from '../../jobs/rhythms/handoff.js';
 import { drivingSide } from '../../jobs/scheduleQueries.js';
-import { liveCurveState, smartCoolStartFor } from '../../jobs/rhythms/curveController.js';
+import { liveCurveState, smartResolveHooks } from '../../jobs/rhythms/curveController.js';
 
 const router = express.Router();
 
@@ -110,7 +110,7 @@ router.get('/rhythms/sleeps', async (req: Request, res: Response) => {
   }
   const window = { side: driver, timeZone: settingsDB.data.timeZone, from, to };
   const sleeps = result.active
-    ? resolveSleeps({ db: result.db, ...window, coolStartFor: smartCoolStartFor })
+    ? resolveSleeps({ db: result.db, ...window, ...smartResolveHooks })
     : resolveLegacySleeps({ schedules: schedulesDB.data, ...window });
   res.json(applyAlarmsEnabled(sleeps, driver === side && settingsDB.data[side].alarmsEnabled));
 });

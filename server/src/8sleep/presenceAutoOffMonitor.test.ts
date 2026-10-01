@@ -312,4 +312,83 @@ describe('presenceAutoOffMonitor', () => {
       setEngineActivation({ active: false, reason: 'flag-off' });
     }
   });
+
+  it('stays out of a "When I get up" sleep kept on past its set off', async () => {
+    const { setEngineActivation } = await import('../jobs/scheduleQueries.js');
+    const { everyNight, testNight, testRhythmsDB } = await import('../jobs/rhythms/testSupport.js');
+    const { startCurveController, stopCurveController } = await import('../jobs/rhythms/curveController.js');
+    const { resolveSleeps } = await import('../jobs/rhythms/resolve.js');
+    const { DEFAULT_SMART } = await import('../db/rhythmsSchema.js');
+    await schedulesDB.read();
+    const side = everyNight(testNight('13:00', '17:00'));
+    side.rhythms['every-night'].temperatureMode = 'smart';
+    side.rhythms['every-night'].smart = { ...DEFAULT_SMART, offWhenUp: true };
+    const db = testRhythmsDB(schedulesDB.data, side);
+    setEngineActivation({ active: true, db });
+    const setOff = new Date(at('2026-03-02T17:00:00'));
+    const inBed = { present: true, lastUpdatedAt: setOff.toISOString(), stateChangedAt: setOff.toISOString() };
+    const controller = startCurveController({
+      now: () => setOff,
+      presence: () => ({ left: inBed, right: { present: false } }),
+      awayMode: () => ({ left: false, right: false }),
+      isPaused: () => false,
+      sleeps: () => [],
+      applyLevel: async () => {},
+      retime: () => {},
+      recordHistory: async () => {},
+      smartOff: { sideIsOn: async () => true, powerOff: () => {}, armTimer: () => {}, alarmPending: () => false, nextRestart: () => null },
+    });
+    try {
+      const [sleep] = resolveSleeps({ db, side: 'left', timeZone: 'UTC', from: new Date(at('2026-03-02T16:00:00')), to: setOff });
+      assert.equal(controller.decideOff('left', sleep, setOff), 'keep');
+      // Kept on to 20:00 at the latest; the 45 minute rule stays out of it.
+      await runTicks(at('2026-03-02T17:00:00'), 120, heartbeatAbsent);
+      assert.deepEqual(powerOffCalls, [], 'auto-off fired while the sleep was kept on');
+    } finally {
+      stopCurveController();
+      setEngineActivation({ active: false, reason: 'flag-off' });
+    }
+  });
+
+  it('comes back right after a "When I get up" sleep turned off early', async () => {
+    const { isInScheduledSleep, setEngineActivation } = await import('../jobs/scheduleQueries.js');
+    const { everyNight, testNight, testRhythmsDB } = await import('../jobs/rhythms/testSupport.js');
+    const { smartResolveHooks, startCurveController, stopCurveController } = await import('../jobs/rhythms/curveController.js');
+    const { resolveSleeps } = await import('../jobs/rhythms/resolve.js');
+    const { DEFAULT_SMART } = await import('../db/rhythmsSchema.js');
+    await schedulesDB.read();
+    const side = everyNight(testNight('13:00', '17:00'));
+    const rhythm = side.rhythms['every-night'];
+    rhythm.wake = '15:00';
+    rhythm.temperatureMode = 'smart';
+    rhythm.smart = { ...DEFAULT_SMART, offWhenUp: true };
+    const db = testRhythmsDB(schedulesDB.data, side);
+    setEngineActivation({ active: true, db });
+    const upAt = new Date(at('2026-03-02T15:30:00'));
+    const controller = startCurveController({
+      now: () => upAt,
+      presence: () => ({
+        left: { present: false, lastUpdatedAt: upAt.toISOString(), stateChangedAt: new Date(at('2026-03-02T15:10:00')).toISOString() },
+        right: { present: false },
+      }),
+      awayMode: () => ({ left: false, right: false }),
+      isPaused: () => false,
+      sleeps: (sleepSide, from, to) => resolveSleeps({ db, side: sleepSide, timeZone: 'UTC', from, to, ...smartResolveHooks }),
+      applyLevel: async () => {},
+      retime: () => {},
+      recordHistory: async () => {},
+      smartOff: { sideIsOn: async () => true, powerOff: () => {}, armTimer: () => {}, alarmPending: () => false, nextRestart: () => null },
+    });
+    try {
+      await controller.tick();
+      assert.equal(controller.powerOffFor('left', '2026-03-02')?.toISOString(), upAt.toISOString());
+      assert.equal(isInScheduledSleep('left', new Date(at('2026-03-02T15:31:00'))), false);
+      // Without the early off the sleep would run to 17:00 and keep it out.
+      await runTicks(at('2026-03-02T15:31:00'), 50, heartbeatAbsent);
+      assert.ok(powerOffCalls.length > 0, 'auto-off stayed out after the early off');
+    } finally {
+      stopCurveController();
+      setEngineActivation({ active: false, reason: 'flag-off' });
+    }
+  });
 });

@@ -11,7 +11,7 @@ import { resolveSleeps, type ResolvedSleep, type RhythmEvent } from './resolve.j
 import {
   ANALYSIS_DELAY_MS, ANALYSIS_MAX_WINDOW_MS, REANALYSIS_DELAY_MS, armedEnd, rearmRhythmSleep, runRhythmEvent, runSleepAnalysis,
 } from './runEvent.js';
-import { smartCoolStartFor } from './curveController.js';
+import { smartOffExtends, smartResolveHooks } from './curveController.js';
 import { trackAlarm } from '../alarmActivity.js';
 import { forgetKeptAlarms, keptSleeps, rememberKeptAlarms, type KeptAlarm } from './keptAlarms.js';
 import { poweredOnSince, scheduleSleepAnalysis } from '../powerScheduler.js';
@@ -84,7 +84,8 @@ const REARM_DELAY_MS = 1000;
 function scheduleRearm(side: Side, sleeps: ResolvedSleep[], now: Date): number {
   const t = now.getTime();
   const current = sleeps.filter(sleep => sleep.start.getTime() <= t && t < sleep.end.getTime()).pop();
-  if (!current || armedEnd(side) === current.end.getTime()) return 0;
+  // A sleep kept on past its set off has its timer moved in steps by the controller.
+  if (!current || armedEnd(side) === current.end.getTime() || smartOffExtends(side, current.date)) return 0;
   const name = `rhythm-${side}-${current.date}-rearm`;
   return scheduleOnce(name, new Date(t + REARM_DELAY_MS), now, () => rearmRhythmSleep(side, current)) ? 1 : 0;
 }
@@ -158,10 +159,14 @@ export function scheduleKeptAlarms(now: Date): number {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// A sleep that ended in the day before `at` has its own analyses.
+// A sleep that ended in the day before `at` has its own analyses. One kept on
+// past its set off counts from the set off, since its analyses are still to come.
 function sleptWithin(db: RhythmsDB, side: Side, timeZone: string, at: Date): boolean {
   const from = new Date(at.getTime() - DAY_MS);
-  return resolveSleeps({ db, side, timeZone, from, to: at }).some(sleep => sleep.end > from && sleep.end <= at);
+  return resolveSleeps({ db, side, timeZone, from, to: at, ...smartResolveHooks }).some(sleep => {
+    const ended = Math.min(sleep.end.getTime(), (sleep.setOff ?? sleep.end).getTime());
+    return ended > from.getTime() && ended <= at.getTime();
+  });
 }
 
 function nextNoon(now: Date, timeZone: string): Date {
@@ -217,7 +222,7 @@ export function scheduleRhythms(settings: Settings, db: RhythmsDB, now: Date): R
     }
     let keepNoon = true;
     try {
-      const sleeps = resolveSleeps({ db, side, timeZone, from, to, coolStartFor: smartCoolStartFor });
+      const sleeps = resolveSleeps({ db, side, timeZone, from, to, ...smartResolveHooks });
       for (const sleep of sleeps) {
         jobCount += scheduleSleep(settings, side, sleep, now, timeZone);
       }

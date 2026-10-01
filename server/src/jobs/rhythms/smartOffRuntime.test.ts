@@ -32,6 +32,11 @@ mock.module(new URL('../../8sleep/frankenServer.js', import.meta.url).href, {
 const { default: settingsDB } = await import('../../db/settings.js');
 const { smartOffRuntime } = await import('./smartOffRuntime.js');
 const { holdForHandBack, resetOffTimes } = await import('./runEvent.js');
+const { default: schedulesDB } = await import('../../db/schedules.js');
+const { DEFAULT_SMART } = await import('../../db/rhythmsSchema.js');
+const { everyNight, testNight, testRhythmsDB } = await import('./testSupport.js');
+const { resolveSleeps } = await import('./resolve.js');
+const { smartResolveHooks, startCurveController, stopCurveController } = await import('./curveController.js');
 
 beforeEach(async () => {
   updates.length = 0;
@@ -95,5 +100,50 @@ describe('smartOffRuntime', () => {
     assert.equal(smartOffRuntime().nextRestart(new Date('2026-09-29T06:00:00Z'))?.toISOString(), '2026-09-29T13:30:00.000Z');
     settingsDB.data.rebootDaily = false;
     assert.equal(smartOffRuntime().nextRestart(new Date('2026-09-29T06:00:00Z')), null);
+  });
+
+  it('counts a restart it cannot read as none, so a sleep kept on still steps its timer', async () => {
+    await settingsDB.read();
+    const prime = settingsDB.data.primePodDaily;
+    settingsDB.data.timeZone = 'UTC';
+    settingsDB.data.primePodDaily = undefined as unknown as typeof prime;
+    await schedulesDB.read();
+    const left = everyNight(testNight('22:00', '06:30'));
+    left.rhythms['every-night'].temperatureMode = 'smart';
+    left.rhythms['every-night'].smart = { ...DEFAULT_SMART, offWhenUp: true };
+    const db = testRhythmsDB(schedulesDB.data, left);
+    let clock = new Date('2026-09-29T06:30:00Z');
+    const arms: string[] = [];
+    const controller = startCurveController({
+      now: () => clock,
+      presence: () => ({
+        left: { present: true, lastUpdatedAt: clock.toISOString(), stateChangedAt: '2026-09-29T05:00:00Z' }, right: { present: false },
+      }),
+      awayMode: () => ({ left: false, right: false }),
+      isPaused: () => false,
+      sleeps: (side, from, to) => resolveSleeps({ db, side, timeZone: 'UTC', from, to, ...smartResolveHooks }),
+      applyLevel: async () => {},
+      retime: () => {},
+      recordHistory: async () => {},
+      smartOff: {
+        ...smartOffRuntime(),
+        sideIsOn: async () => true,
+        powerOff: () => {},
+        armTimer: (_side, until) => { arms.push(until.toISOString()); },
+        alarmPending: () => false,
+      },
+    });
+    try {
+      assert.equal(smartOffRuntime().nextRestart(clock), null);
+      const [sleep] = resolveSleeps({ db, side: 'left', timeZone: 'UTC', from: new Date('2026-09-29T06:00:00Z'), to: clock });
+      assert.equal(controller.decideOff('left', sleep, clock), 'keep');
+      clock = new Date('2026-09-29T06:31:00Z');
+      await controller.tick();
+      assert.equal(arms.length, 1);
+      assert.equal(controller.powerOffFor('left', '2026-09-28')?.toISOString(), '2026-09-29T09:30:00.000Z');
+    } finally {
+      stopCurveController();
+      settingsDB.data.primePodDaily = prime;
+    }
   });
 });

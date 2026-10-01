@@ -9,7 +9,7 @@ import { SCHEDULE_DAYS } from '../db/scheduleKeys.js';
 import { compareTimes, isValidTime, scheduleWrapsToNextDay } from './utils.js';
 import type { Activation } from './rhythms/activation.js';
 import { resolveLegacySleeps, resolveSleeps, type ResolvedSleep, type RhythmEvent } from './rhythms/resolve.js';
-import { smartCoolStartFor } from './rhythms/curveController.js';
+import { smartResolveHooks } from './rhythms/curveController.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 const CHANGE_LOOKAHEAD_MS = 48 * HOUR_MS;
@@ -90,7 +90,7 @@ function rhythmSleeps(side: Side, from: Date, to: Date): ResolvedSleep[] | null 
   if (!engine.active) return null;
   const driver = drivingSide(settingsDB.data, side);
   if (!driver) return [];
-  return resolveSleeps({ db: engine.db, side: driver, timeZone: podTimeZone(), from, to, coolStartFor: smartCoolStartFor });
+  return resolveSleeps({ db: engine.db, side: driver, timeZone: podTimeZone(), from, to, ...smartResolveHooks });
 }
 
 function scheduledSleeps(side: Side, from: Date, to: Date): ResolvedSleep[] {
