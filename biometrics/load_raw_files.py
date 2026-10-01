@@ -292,12 +292,10 @@ def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Si
                 decoded_data = cbor2.loads(data_bytes)
                 format_name = _cap_format_name(decoded_data) if cap_formats is not None else None
                 presence_capture = _capture_presence(decoded_data) if presence_collector is not None else None
+                unknown_kind = None
                 if presence_capture is not None and presence_capture[0] == 'unknown':
                     # An unknown type never passes the type filter below.
-                    try:
-                        presence_collector.note_unknown_cap(presence_capture[1])
-                    except Exception as error:
-                        logger.error(error)
+                    unknown_kind = presence_capture[1]
                     presence_capture = None
                 # Pod 5 writes 'capSense2' records; normalize them to the
                 # legacy 'capSense' shape before the type filter so Pod 5
@@ -312,8 +310,15 @@ def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Si
                             decoded_data[cap_side]['no_reading'] = value
                 if not decoded_data['type'] in load_raw_types:
                     # Never loaded, but still what the Pod writes in this window.
-                    if format_name == 'unknown' and _in_window(decoded_data, start_time, end_time):
-                        cap_formats[format_name] += 1
+                    if (format_name == 'unknown' or unknown_kind is not None) and \
+                            _in_window(decoded_data, start_time, end_time):
+                        if format_name == 'unknown':
+                            cap_formats[format_name] += 1
+                        if unknown_kind is not None:
+                            try:
+                                presence_collector.note_unknown_cap(unknown_kind)
+                            except Exception as error:
+                                logger.error(error)
                     continue
                 _delete_other_side(decoded_data, side, sensor_count)
                 record_time = datetime.fromtimestamp(decoded_data['ts'], timezone.utc)
@@ -383,7 +388,8 @@ def load_raw_files(folder_path: str, start_time: datetime, end_time: datetime, s
 
     presence_collector, when given, also receives both sides' capacitance
     channels (any format presence.sensors reads) and per-record piezo ranges
-    (see presence.replay.FrameCollector).
+    (see presence.replay.FrameCollector), and the type of each capacitance
+    record in the window that no format reads.
     It sees only the types listed in raw_data_types, so a caller that feeds
     one lists both 'capSense' and 'piezo-dual'.
     cap_formats, when given, is a Counter that receives one count per

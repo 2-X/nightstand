@@ -114,8 +114,8 @@ class FormatTest(unittest.TestCase):
                    for record in scenarios.raw_records(NIGHT)]
         collector, _ = self._collect(records)
         self.assertIsNone(collector.cap_format())
-        # Every record in the file, inside the window or not.
-        self.assertEqual(collector.unknown_cap['capSense3'], 1800)
+        # Only records inside the window, as calibration counts them.
+        self.assertEqual(collector.unknown_cap['capSense3'], 1200)
         self.assertEqual(collector.cap_coverage(), 0.0)
 
     def test_the_common_format_wins_and_a_tie_goes_to_the_one_listed_first(self):
