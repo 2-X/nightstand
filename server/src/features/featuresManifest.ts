@@ -499,12 +499,22 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     default: false,
     touchpoints: [
       'server/src/db/settingsSchema.ts', 'server/src/db/rhythmsSchema.ts', 'server/src/db/rhythms.ts', 'server/src/jobs/rhythms',
-      'server/src/routes/rhythms/rhythms.ts',
+      'server/src/routes/rhythms/rhythms.ts', 'server/src/jobs/jobScheduler.ts', 'server/src/jobs/scheduleQueries.ts',
+      'server/src/jobs/alarmActivity.ts', 'server/src/jobs/alarmScheduler.ts', 'server/src/jobs/powerScheduler.ts',
+      'server/src/routes/deviceStatus/updateDeviceStatus.ts', 'server/src/routes/settings/settingsGuards.ts',
+      'server/src/routes/update/update.ts', 'server/src/setup/routes.ts',
+      'scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh',
     ],
     depends_on: ['agent'],
     reversible: true,
     tests: [
       'server/src/jobs/rhythms/equivalence.test.ts', 'server/src/db/rhythms.test.ts', 'server/src/routes/rhythms/rhythms.test.ts',
+      'server/src/routes/rhythms/rhythmsSwitchRoutes.test.ts', 'server/src/routes/settings/settingsGuards.test.ts',
+      'server/src/jobs/rhythms/scheduleRhythms.test.ts', 'server/src/jobs/rhythms/runEvent.test.ts',
+      'server/src/jobs/rhythms/gates.test.ts', 'server/src/jobs/rhythms/handoff.test.ts',
+      'server/src/jobs/rhythms/keptAlarms.test.ts', 'server/src/jobs/rhythms/lifecycle.test.ts',
+      'server/src/jobs/rhythms/engineSwitch.test.ts', 'server/src/jobs/scheduleQueries.test.ts',
+      'server/src/rhythmsFileSafety.test.ts', 'server/src/setup/leaveHookWiring.test.ts',
     ],
     upstream_offer: false,
     rationale: 'Off by default. Its data lives only in rhythmsDB.json and it never writes schedulesDB.json, so turning it '

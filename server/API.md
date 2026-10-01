@@ -408,12 +408,12 @@ Rhythms are named sleep plans per side, a weekly plan that picks a rhythm for ea
 {
   "sides": [
     { "side": "left", "action": "kept-on-until", "until": "2026-10-06T14:00:00.000Z", "alarmOverrideSet": false },
-    { "side": "right", "action": "none", "alarmOverrideSet": false, "deviceUpdateFailed": true }
+    { "side": "right", "action": "legacy-takes-over", "until": "2026-10-06T14:30:00.000Z", "alarmOverrideSet": false, "deviceUpdateFailed": true }
   ]
 }
 ```
 
-- `action` is `none` (nothing was running), `legacy-takes-over` (the weekly schedule runs the rest of the night, until `until`), `kept-on-until` (the side stays on until `until`, with its alarms) or `powered-off`. `alarmOverrideSet` is `true` when the side's weekly alarms are switched off until `until` because that night's alarm already rang. `deviceUpdateFailed` is present and `true` when the Pod could not be told to change that side; the settings change was still made.
+- `action` is `none` (nothing was running), `legacy-takes-over` (the weekly schedule runs the rest of the night, until `until`), `kept-on-until` (the side stays on until `until`, and the firmware turns it off 5 minutes after that; its remaining alarms still ring, except on an away side, which has none, but they are held in memory only, so a server restart, including the daily reboot, drops them) or `powered-off`. `alarmOverrideSet` is `true` when the side's weekly alarms are switched off until `until` because that night's alarm already rang. `deviceUpdateFailed` is present and `true` when the Pod could not be told to change that side; the settings change was still made.
 
 ---
 

@@ -14,18 +14,24 @@ process.env.ENV = 'local';
 
 const calls: unknown[][] = [];
 let enableResult: { converted: boolean } | { error: string } = { converted: true };
+let runRebuild = false;
+mock.module(new URL('../../jobs/jobScheduler.js', import.meta.url).href, {
+  namedExports: { setupJobs: async () => { calls.push(['setupJobs']); } },
+});
 mock.module(new URL('../../jobs/rhythms/enable.js', import.meta.url).href, {
   namedExports: {
-    enableRhythms: async (rebuild: unknown) => {
+    enableRhythms: async (rebuild: () => Promise<void>) => {
       calls.push(['enable', typeof rebuild]);
+      if (runRebuild) await rebuild();
       return enableResult;
     },
   },
 });
 mock.module(new URL('../../jobs/rhythms/handoff.js', import.meta.url).href, {
   namedExports: {
-    disableRhythms: async (options: unknown, rebuild: unknown) => {
+    disableRhythms: async (options: unknown, rebuild: () => Promise<void>) => {
       calls.push(['disable', options, typeof rebuild]);
+      if (runRebuild) await rebuild();
       return { sides: [] };
     },
   },
@@ -56,6 +62,7 @@ after(async () => {
 beforeEach(() => {
   calls.length = 0;
   enableResult = { converted: true };
+  runRebuild = false;
 });
 
 const post = (route: string, body?: unknown) => fetch(`${url}${route}`, {
@@ -96,6 +103,18 @@ describe('POST /rhythms/disable', () => {
     assert.equal((await post('/rhythms/disable', { powerOffNow: 'yes' })).status, 400);
     assert.equal((await post('/rhythms/disable', { extra: 1 })).status, 400);
     assert.deepEqual(calls, []);
+  });
+});
+
+describe('rebuild', () => {
+  it('both routes rebuild the jobs with setupJobs', async () => {
+    runRebuild = true;
+    assert.equal((await post('/rhythms/enable', {})).status, 200);
+    assert.equal((await post('/rhythms/disable', {})).status, 200);
+    assert.deepEqual(calls, [
+      ['enable', 'function'], ['setupJobs'],
+      ['disable', { powerOffNow: false }, 'function'], ['setupJobs'],
+    ]);
   });
 });
 
