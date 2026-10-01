@@ -97,6 +97,14 @@ describe('FeaturesSection experimental label', () => {
     expect(await screen.findByText(EXPERIMENTAL_ON_THIS_POD)).toBeVisible();
   });
 
+  it('labels a Pod 4 writing capSense2 as experimental', async () => {
+    server.use(
+      http.get('*/api/settings', () => HttpResponse.json(switchedOn())), pod('Pod 4'), formats('capSense2', 'capSense2'),
+    );
+    renderWithProviders(<FeaturesSection />);
+    expect(await screen.findByText(EXPERIMENTAL_ON_THIS_POD)).toBeVisible();
+  });
+
   it('labels a Pod 5 writing the older format as experimental', async () => {
     server.use(http.get('*/api/settings', () => HttpResponse.json(switchedOn())), formats('capSense', null));
     renderWithProviders(<FeaturesSection />);

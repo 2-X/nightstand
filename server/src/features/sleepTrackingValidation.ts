@@ -1,6 +1,6 @@
 // The new sleep tracking has been checked only on a Pod 5 whose cover writes
-// capSense2 capacitance records. The recorded format decides; the model is the
-// fallback until a format is recorded.
+// capSense2 capacitance records. Any other model is experimental whatever it
+// writes; on a Pod 5, so is any recorded format but capSense2.
 export const VALIDATED_MODEL = 'Pod 5';
 export const VALIDATED_CAP_FORMATS: readonly string[] = ['capSense2'];
 
@@ -9,7 +9,6 @@ export const sleepTrackingExperimental = (
   hubVersion: string | undefined,
   capFormats: ReadonlyArray<string | null | undefined>,
 ): boolean => {
-  const known = capFormats.filter((format): format is string => typeof format === 'string');
-  if (known.length > 0) return known.some((format) => !VALIDATED_CAP_FORMATS.includes(format));
-  return coverVersion !== VALIDATED_MODEL || hubVersion !== VALIDATED_MODEL;
+  if (coverVersion !== VALIDATED_MODEL || hubVersion !== VALIDATED_MODEL) return true;
+  return capFormats.some((format) => typeof format === 'string' && !VALIDATED_CAP_FORMATS.includes(format));
 };
