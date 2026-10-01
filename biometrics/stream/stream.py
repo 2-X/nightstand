@@ -212,7 +212,7 @@ def _experimental_ready(stream_processor, profiles, cap_format) -> bool:
         return True
     if (cap_format.name, reason) not in _experimental_logged:
         _experimental_logged.add((cap_format.name, reason))
-        logger.info(f'Live presence stays on the vibration sensor with {cap_format.name} capacitance {reason}')
+        logger.info(f'Vitals stay on the vibration sensor with {cap_format.name} capacitance {reason}')
     return False
 
 

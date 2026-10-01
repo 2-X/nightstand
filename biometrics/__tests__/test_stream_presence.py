@@ -283,7 +283,13 @@ LEGACY_PROFILES = {
            'piezo_floors': [40_000.0]}
     for side, level in (('left', 1000.0), ('right', 500.0))
 }
-LEGACY_INPUTS = (params_from_calibration(LEGACY_PROFILES, CAPSENSE), baselines_from_calibration(LEGACY_PROFILES), CAPSENSE)
+
+
+def legacy_inputs():
+    return params_from_calibration(LEGACY_PROFILES, CAPSENSE), baselines_from_calibration(LEGACY_PROFILES), CAPSENSE
+
+
+LEGACY_INPUTS = legacy_inputs()
 # Counts far too small for the learned levels: the bed is in use and capacitance places nobody in it.
 MISFIT = Night(seconds=1500, left=((0, 1500),), right=((0, 1500),))
 
@@ -331,8 +337,10 @@ class LegacyLiveTest(unittest.TestCase):
         processor = run.processor
         self.assertIsNone(processor.presence)
         self.assertIsNone(processor._piezo_presence)
-        self.assertTrue(any('back on the vibration sensor' in line for line in logs.output))
-        processor.use_presence_v2(LEGACY_INPUTS)
+        messages = [record.getMessage() for record in logs.records]
+        self.assertTrue(any('vitals follow the vibration sensor again' in message for message in messages))
+        self.assertFalse(any('presence' in message for message in messages))
+        processor.use_presence_v2(legacy_inputs())
         self.assertIsNone(processor.presence)
         changed = dict(LEGACY_PROFILES, left=dict(LEGACY_PROFILES['left'], cap_occupied={'level': 900.0}))
         processor.use_presence_v2((params_from_calibration(changed, CAPSENSE), LEGACY_INPUTS[1], CAPSENSE))
@@ -353,6 +361,31 @@ class LegacyLiveTest(unittest.TestCase):
         self.assertIsNot(processor.presence, detector)
         self.assertIs(processor._piezo_presence, piezo)
         self.assertIsNotNone(processor._guard)
+
+    def test_a_failure_building_the_detector_leaves_presence_with_piezo(self):
+        processor = StreamProcessor(legacy_records(Night(seconds=1))[0], cap_source=LatestCap())
+        left, right = processor.left_processor, processor.right_processor
+        for target in ('PresenceDetector', 'UnexplainedUseGuard'):
+            with unittest.mock.patch.object(stream_processor_module, target, side_effect=RuntimeError('boom')):
+                with self.assertRaises(RuntimeError):
+                    processor.use_presence_v2(legacy_inputs())
+            self.assertIsNone(processor.presence, target)
+            self.assertIsNone(processor._piezo_presence, target)
+            self.assertIsNone(processor._guard, target)
+            self.assertIs(processor.left_processor, left, target)
+            self.assertIs(processor.right_processor, right, target)
+
+    def test_a_failure_replacing_the_detector_keeps_the_running_one(self):
+        processor = StreamProcessor(legacy_records(Night(seconds=1))[0], cap_source=LatestCap())
+        processor.use_presence_v2(legacy_inputs())
+        detector, piezo, guard = processor.presence, processor._piezo_presence, processor._guard
+        changed = dict(LEGACY_PROFILES, right=dict(LEGACY_PROFILES['right'], cap_occupied={'level': 600.0}))
+        with unittest.mock.patch.object(stream_processor_module, 'PresenceDetector', side_effect=RuntimeError('boom')):
+            with self.assertRaises(RuntimeError):
+                processor.use_presence_v2((params_from_calibration(changed, CAPSENSE), LEGACY_INPUTS[1], CAPSENSE))
+        self.assertIs(processor.presence, detector)
+        self.assertIs(processor._piezo_presence, piezo)
+        self.assertIs(processor._guard, guard)
 
     def test_capsense2_never_gets_a_guard(self):
         processor = StreamProcessor(next(iter(scenarios.raw_records(Night(seconds=1)))), cap_source=LatestCap())

@@ -152,21 +152,24 @@ class StreamProcessor:
             return
         if self.presence is not None and _inputs_format(inputs) != _inputs_format(self._presence_inputs):
             self.use_presence_v2(None)
+        if self.presence is not None and (inputs == self._presence_inputs or any(self.presence.state().values())):
+            return
         validated = _inputs_format(inputs).validated
+        # Built before anything is swapped: a failure here must leave presence as it was.
+        detector = PresenceDetector(inputs[0])
+        guard = None if validated else UnexplainedUseGuard(inputs[0])
         if self.presence is None:
             logger.info('Presence switching to the capacitance detector')
             if validated:
                 self._end_sessions()
             else:
+                quiet = (self._quiet_processor('left'), self._quiet_processor('right'))
                 self._piezo_presence = (self.left_processor, self.right_processor)
-                self.left_processor = self._quiet_processor('left')
-                self.right_processor = self._quiet_processor('right')
-        elif inputs == self._presence_inputs or any(self.presence.state().values()):
-            return
-        self.presence = PresenceDetector(inputs[0])
+                self.left_processor, self.right_processor = quiet
+        self.presence = detector
         self._presence_inputs = inputs
         self._presence_epoch = None
-        self._guard = None if validated else UnexplainedUseGuard(inputs[0])
+        self._guard = guard
 
     def _quiet_processor(self, side: str) -> BiometricProcessor:
         return _QuietProcessor(side=side, sensor_count=self.sensor_count, insertion_frequency=60, debug=self.debug)
@@ -196,8 +199,8 @@ class StreamProcessor:
         }
         states = self.presence.step(epoch, cap, piezo)
         if self._guard is not None and self._guard.step(states, piezo):
-            logger.warning('Capacitance placed nobody in the bed for 10 of the last 15 minutes while it was in use, '
-                           'presence is back on the vibration sensor until calibration changes')
+            logger.warning('Capacitance did not explain the bed in use for 10 of the last 15 minutes, '
+                           'vitals follow the vibration sensor again until calibration changes')
             declined = self._presence_inputs
             self.use_presence_v2(None)
             self._declined_inputs = declined

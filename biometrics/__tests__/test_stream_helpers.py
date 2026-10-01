@@ -358,6 +358,87 @@ class TestStalePresenceHandBack(CapPresenceTestCase):
         processor.use_presence_v2.assert_called_once_with(None)
 
 
+class TestUncheckedFormatRunning(CapPresenceTestCase):
+    """The stream's own hand-back and refresh while an unchecked format drives vitals."""
+
+    def setUp(self):
+        super().setUp()
+        self.latest.update(time.time(), (500.0, 500.0, 500.0), (500.0, 500.0, 500.0), CAPSENSE)
+        self.processor = stream.StreamProcessor(recent_piezo(), cap_source=self.latest)
+        self.piezo = (self.processor.left_processor, self.processor.right_processor)
+        self.profiles = cap_profiles()
+        for side in ('left', 'right'):
+            self.profiles[side]['cap_occupied'] = {'level': 900.0}
+        self.enabled = unittest.mock.patch.object(stream, 'biometrics_v2_enabled', return_value=True)
+        self.enabled.start()
+        self.addCleanup(self.enabled.stop)
+        self.cadence = unittest.mock.patch.object(self.processor.cadence, 'ok', return_value=True)
+        self.cadence.start()
+        self.addCleanup(self.cadence.stop)
+        self.read = unittest.mock.patch.object(stream.calibration, 'load_presence_profiles',
+                                               side_effect=lambda: self.profiles)
+        self.read.start()
+        self.addCleanup(self.read.stop)
+
+    def _refresh(self):
+        stream._refresh_presence_mode(self.processor)
+
+    def test_the_refresh_starts_it_and_leaves_it_running(self):
+        self._refresh()
+        detector = self.processor.presence
+        self.assertIsNotNone(detector)
+        self.assertEqual(self.processor._piezo_presence, self.piezo)
+        self._refresh()
+        self.assertIs(self.processor.presence, detector)
+        self.assertEqual(self.processor._piezo_presence, self.piezo)
+
+    def test_stale_capacitance_hands_vitals_back_to_the_piezo_detector(self):
+        self._refresh()
+        self.latest.update(time.time() - stream.CAP_FRESH_SECONDS - 5, (500.0, 500.0, 500.0), (500.0, 500.0, 500.0), CAPSENSE)
+        stream._drop_stale_presence_v2(self.processor)
+        self.assertIsNone(self.processor.presence)
+        self.assertIsNone(self.processor._piezo_presence)
+        self.assertEqual((self.processor.left_processor, self.processor.right_processor), self.piezo)
+
+    def test_fresh_capacitance_is_left_running(self):
+        self._refresh()
+        detector = self.processor.presence
+        stream._drop_stale_presence_v2(self.processor)
+        self.assertIs(self.processor.presence, detector)
+
+    def test_the_refresh_hands_back_when_the_levels_go_away(self):
+        self._refresh()
+        for side in ('left', 'right'):
+            self.profiles[side]['cap_occupied'] = None
+        self._refresh()
+        self.assertIsNone(self.processor.presence)
+        self.assertEqual((self.processor.left_processor, self.processor.right_processor), self.piezo)
+
+    def test_the_refresh_hands_back_when_piezo_stops_coming_once_a_second(self):
+        self._refresh()
+        with unittest.mock.patch.object(self.processor.cadence, 'ok', return_value=False):
+            self._refresh()
+        self.assertIsNone(self.processor.presence)
+        self.assertEqual((self.processor.left_processor, self.processor.right_processor), self.piezo)
+
+    def test_the_refresh_does_not_restart_inputs_the_guard_declined(self):
+        self._refresh()
+        declined = self.processor._presence_inputs
+        self.processor.use_presence_v2(None)
+        self.processor._declined_inputs = declined
+        self._refresh()
+        self.assertIsNone(self.processor.presence)
+        self.assertEqual((self.processor.left_processor, self.processor.right_processor), self.piezo)
+
+    def test_the_refresh_takes_new_levels_into_a_running_detector(self):
+        self._refresh()
+        detector = self.processor.presence
+        self.profiles['right']['cap_occupied'] = {'level': 600.0}
+        self._refresh()
+        self.assertIsNot(self.processor.presence, detector)
+        self.assertEqual(self.processor._piezo_presence, self.piezo)
+
+
 class TestProcessBiometricsLoop(CapPresenceTestCase):
     def test_refreshes_the_mode_at_start_and_every_minute_and_checks_freshness_per_record(self):
         for _ in range(71):
