@@ -115,9 +115,10 @@ In Settings:
 - **Sleep score and stages** under Features: needs biometrics.
 - **Presence auto-off** under Features: on by default, and needs biometrics. Turns a side off
   after 45 minutes with no one on it, outside its scheduled on-window.
-- **New sleep tracking (beta)** under Features: off by default, needs biometrics, Pod 5
-  only. Uses the bed's capacitance sensors to tell the two sides apart (see
-  [Biometrics](#biometrics)).
+- **New sleep tracking (beta)** under Features: off by default, needs biometrics. Uses
+  the bed's capacitance sensors to tell the two sides apart (see
+  [Biometrics](#biometrics)). On Pod 3 and Pod 4 it has no effect yet: it reads the
+  Pod 5's capacitance format and has only been checked on Pod 5 data.
 - **Level temperature display** and
   **one-time alarms** under Features: on by default.
 

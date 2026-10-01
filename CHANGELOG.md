@@ -14,7 +14,9 @@ is a hard fork; for the history of the projects it descends from, see
   live and in the nightly analysis, and heart rate and breathing readings are
   kept through short trips out of bed. It is an estimate from bed sensors and
   may be wrong. With the switch off, presence, sleep records and everything
-  stored behave exactly as before. Pod 3 and Pod 4 are unaffected either way.
+  stored behave exactly as before. On Pod 3 and Pod 4 the switch has no effect
+  yet: the new tracking reads the Pod 5's capacitance format and has only been
+  checked on Pod 5 data.
 
   On one night checked against both sleepers' own notes, the old live
   presence split the two sleepers' nights into 20 and 31 pieces, and the old
@@ -23,10 +25,34 @@ is a hard fork; for the history of the projects it descends from, see
   [before and after](https://github.com/LTimothy/nightstand/blob/main/docs/presence-before-after.png).
   So far this has been checked on one Pod 5 over a handful of nights.
 
+- You can pause one side's schedule with Pause schedule on the Bed page's
+  Tonight card: for tonight only, until a set time up to 14 days ahead, or
+  until you resume it. While a side is paused, its scheduled power changes,
+  temperature changes and alarms are skipped and presence auto-off leaves it
+  alone, so it stays under your control. The other side keeps its schedule,
+  and a one-time alarm still rings. The side's tile, the Tonight card and the
+  Schedule page show the pause with a Resume schedule button. A side in away
+  mode cannot be paused.
+
+  Older versions do not know about a pause. Before a downgrade, a rollback or
+  switching to upstream free-sleep, a paused side's alarms for the coming
+  night are skipped, but the older version runs the rest of that side's
+  schedule.
+
+- Alarms on a Pod 3 or Pod 4 vibrate with Double pulse. Pod 3 firmware
+  refuses the Builds up pattern, so those alarms did not vibrate at all while
+  the app reported success, and Pod 4 firmware falls back to Double pulse on
+  its own. Builds up is now offered only on a Pod 5, and a Pod whose model is
+  not recognized also gets Double pulse. Saved alarms keep their setting.
+  Reported by caseyWebb in
+  [throwaway31265/free-sleep#55](https://github.com/throwaway31265/free-sleep/issues/55);
+  jmakes made the same change for Pod 4 in
+  [their fork](https://github.com/jmakes/free-sleep/commit/9be14cdb).
+
 - Running sleep analysis again for the same night now replaces that night's
   movement as well as its sleep records, instead of keeping the movement from
   an earlier run. Repeated runs over the same data agree, and the movement for
-  a moment no longer depends on the time window that was analysed.
+  a moment no longer depends on the time window that was analyzed.
 
 - Movement no longer counts moments when a bed sensor reported no reading,
   which showed up as spikes.
@@ -35,7 +61,21 @@ is a hard fork; for the history of the projects it descends from, see
   Status page instead of healthy, and a successful one says how many sleep
   records and movement rows it wrote. Each run is also recorded with its time
   window, how much sensor data it read, how long it took and its peak memory
-  use.
+  use. A run that finds no sleep still shows as healthy, but now says that it
+  found none and that the bed may have been empty or presence was not
+  detected.
+
+- If the part of the biometrics stream that processes sensor records stopped,
+  incoming records kept piling up in memory, about 10 KB a second, until the
+  Pod ran out of memory. The stream now notices, starts that part again, and
+  restarts the service if that fails.
+
+- The biometrics stream no longer logs an error every second while the Pod is
+  still writing the last record of a sensor file, and sleep analysis no longer
+  logs one when it reaches such a record.
+
+- Biometrics exceptions are logged with their full traceback. On Pods running
+  Python 3.9, logging an exception raised an error of its own.
 
 ## [3.4.0] - 2026-09-29
 
@@ -53,11 +93,11 @@ A redesigned app, sleep records that start at your real bedtime, and safer updat
   are kept apart from code backups, so several updates in a row no longer
   rotate out the last database copy.
 
-- Settings > Features and Sleep status no longer say "Could not load" after
-  switching from upstream free-sleep or jmew's fork, and switching to
-  upstream no longer shows "Still not done" after it has finished. The app
-  now ignores response fields it does not recognize, which also keeps it
-  working after rolling back from a newer version.
+- The app now checks each response from the Pod before using it. Fields it
+  does not recognize are ignored, so it keeps working after rolling back from
+  a newer version, and on a Pod switched over from upstream free-sleep or
+  jmew's fork, feature switches that have no stored value yet are shown
+  disabled instead of off.
 
 - Switching to upstream free-sleep converts schedules and settings to a shape
   upstream can save. Each day keeps its first enabled alarm, alarm length is
@@ -69,8 +109,9 @@ A redesigned app, sleep records that start at your real bedtime, and safer updat
 
 - Roll back, switching to upstream and turning biometrics off check that the
   Pod can run them before starting, and say what to do if it cannot. Only one
-  update, rollback or switch runs at a time, and restarts wait for it to
-  finish.
+  update, rollback or switch runs at a time. While one is running, Restart Pod
+  is refused with a message and the daily restart is skipped, and none of them
+  can start while a restart is under way.
 
 - Downgrading from this version to 3.2.2 or older keeps archived sensor
   recordings. Those versions delete recordings older than 36 hours; the
@@ -91,7 +132,9 @@ A redesigned app, sleep records that start at your real bedtime, and safer updat
 - The sleep, vitals and movement endpoints answer a malformed `startTime`,
   `endTime` or `side` with a 400 error instead of a server error. Movement
   records return their times as epoch seconds, as the API documentation
-  describes.
+  describes. The sleep stages and score endpoints need a side and a range of
+  at most 48 hours; a range reaching far into the future could use all of
+  the Pod's memory and stop the server.
 
 - Sleep records start when you got into bed. The nightly analysis began at
   the first sensor file after midnight, so most nights were recorded as
@@ -142,15 +185,21 @@ A redesigned app, sleep records that start at your real bedtime, and safer updat
   short message, and 500 responses no longer include internal error text.
   The schedule editor stops adding temperature changes at that limit.
 
-- The Sleep page copes better with bad or partial data. One bad row no longer
-  hides a whole night, records dated in the future are ignored, and stage
-  totals are hidden when there are too few heart readings. The Bed page
+- The Sleep page copes better with bad or partial data. Records dated in the
+  future are ignored, and stage totals are hidden when there are too few
+  heart readings. The Bed page
   scores the same night the Sleep page shows, and requests that never answer
   now show an error instead of loading.
 
 - Schedule editing keeps turn-off after the latest alarm, accepts the wake
-  time in the alarm change dialog, sends one alarm test per press and keeps
-  keyboard focus after saving or discarding.
+  time in the alarm change dialog, sends one alarm test per press, says when a
+  test alarm did not start and keeps keyboard focus after saving or
+  discarding.
+
+- A temperature change made with + or - just before switching sides or
+  leaving the page is sent instead of dropped. One made just before turning
+  the side off is dropped instead of being sent after it, where it could
+  pause that side's temperature schedule.
 
 - Keyboard use is easier across the app. Buttons, tabs and accordions show a
   focus outline, a skip link and the navigation come first in tab order, and
@@ -159,15 +208,17 @@ A redesigned app, sleep records that start at your real bedtime, and safer updat
 
 - Update notices and the Update button use the selected release channel and
   offer only newer releases. Failed updates restart the restored biometrics
-  service. Migration stops if database setup fails; dry-run leaves the Pod
-  clock unchanged. Backup restore checks the code and dependencies before
-  replacing the running app.
+  service. Switching from another fork restores the original if database
+  setup fails, and its dry run leaves the Pod clock unchanged. Backup restore
+  checks the code and dependencies before replacing the running app.
 
 - The app now has Bed, Schedule, Sleep and Settings navigation. Schedule
   editing shows night events and save scope; elevation cancels queued moves
-  on Stop.
-  Sleep separates Night and Week, preserves selection, uses the Pod timezone,
-  and distinguishes missing recordings from zero sleep.
+  on Stop. Sleep separates Night and Week, preserves selection, uses the Pod
+  timezone, and distinguishes missing recordings from zero sleep.
+
+- The app's icon, and its name when added to a home screen, are Nightstand's
+  instead of free-sleep's.
 
 - Settings are grouped by task. System status separates problems from healthy
   services, and logs show when the connection drops and resumes.
@@ -195,9 +246,9 @@ A redesigned app, sleep records that start at your real bedtime, and safer updat
   the Status page or trip a false pump alert. From Kris's fork, 2-X/nightstand.
 
 - Presence auto-off, which turns a side off after 45 minutes with no one on it
-  outside its scheduled on-window, can now be turned off in Settings, under
-  Automation > Features. It stays on by default, so nothing changes unless
-  you turn it off.
+  outside its scheduled on-window, can now be turned off in Settings >
+  Features. It stays on by default, so nothing changes unless you turn it
+  off.
 
 - The nightly sensor calibration for biometrics now runs whether or not daily
   priming is on. Before, it was scheduled together with priming, so a Pod with
@@ -214,7 +265,9 @@ A redesigned app, sleep records that start at your real bedtime, and safer updat
 - Switching from another fork now downloads the migration tool's two helper
   files along with it, and the tool checks for them before it changes
   anything. Following the guide before this downloaded only the main script,
-  so the install stage could not start.
+  so the install stage could not start. The tool also installs the newest
+  release, the same one a fresh install gets, instead of the newest stable
+  release, which can be well behind.
 
 - The README and install guide are reorganized around which install path
   each pod takes and what tools each one needs.
@@ -384,6 +437,9 @@ Steadier presence calibration, a fix for missing database tables after updates, 
   it stayed down, with no server and no cooling, until it was unplugged. Updates
   do not run this script. It is run once, as root, on the pod.
 
+- The README says how to open the app, at http://eight-pod.local:3000 or the
+  pod's IP address, and how to add it to a phone's home screen.
+
 ## [3.1.0] - 2026-08-07
 
 Sleep page charts show data again, and the Status page shows what presence calibration learned.
@@ -393,6 +449,10 @@ Sleep page charts show data again, and the Status page shows what presence calib
   succeeded. Calibration results are stored with the window they came from,
   so a thin result can be told apart from a good one. A pod that has never
   calibrated now says so plainly rather than reporting an error.
+
+- Sleep analysis no longer fails on a pod whose presence calibration has not
+  run yet. It stopped with an error asking for a calibration command to be run
+  by hand; it now uses the vibration sensor alone until a calibration exists.
 
 - The in-bed indicator starts and ends far more sessions than anyone actually
   has. Over eleven days of recordings the live detector counted 23 to 30
@@ -445,7 +505,7 @@ Sleep page charts show data again, and the Status page shows what presence calib
 
 Scheduling fixes, including sides that stayed on, alarms on the wrong day, and controls that showed unsaved values.
 
-A bug-fix release. Most of it comes from one root cause: the app and the
+A bug-fix release. Much of it comes from one root cause: the app and the
 server disagreed about which day a schedule ends on. The app asked whether
 the off time falls before the on time, which is right. The server used a
 fixed rule that a time at or before noon belongs to the next day, and never
@@ -497,7 +557,18 @@ Fixed in the app:
 - Dismissing a vibrating alarm latched the dialog closed, so the next alarm
   did not show one.
 - Several controls kept an optimistic value after the save failed, showing a
-  temperature, power state, or away-mode setting the pod never accepted.
+  temperature or LED brightness the pod never accepted. A failed prime also
+  left the power, temperature, and prime controls disabled until the page was
+  reloaded.
+- The + and - temperature buttons sent the previous target, so the pod kept
+  its old temperature and the display jumped back on the next status update.
+  Quick taps could also push the target past the allowed range.
+- Cancel did not close the rollback and revert-to-stock confirmation dialogs.
+- A failed alarm dismiss closed the dialog while the pod could still be
+  vibrating. It now stays open.
+- The schedule editor refused an overnight turn-off more than 12 hours after
+  turn-on, and chose which day to show from the browser's time zone rather
+  than the pod's.
 - The sleep chart labelled times like "22:30pm" and could put the wrong
   weekday under a bar.
 - A schedule with alarms saved in the older single-alarm shape always looked
@@ -508,10 +579,28 @@ Fixed in the app:
 
 Also in this release:
 
-- Settings now links to Software and updates, which was built and routed but
-  had no way in. Its version picker and instant rollback were gated behind a
-  version floor that no release had reached, so both were unavailable; the
-  floor now sits at 3.0.0, where the features it guards actually shipped.
+- Settings now has a Versions row that opens Software & updates, which was
+  built and routed but had no way in. Its version picker and instant
+  rollback were gated behind a version floor that no release had reached, so
+  both were unavailable; the floor now sits at 3.0.0, where the features it
+  guards actually shipped.
+- The update check compared the pod with upstream free-sleep's newest
+  version, which is numbered 2.x, so it always reported the pod as up to date
+  and the Update button never appeared. It now checks this project's releases.
+- Settings > Features has three new switches, all on by default: Sleep score
+  and stages, Level temperature display, and One-off alarms. Turning one off
+  hides that feature in the app, and with One-off alarms off a pending
+  one-off alarm does not ring. Sleep score and stages needs biometrics, and
+  while either is off the server returns no score or stages instead of
+  computing them from whatever data it has. Level temperature display cannot
+  be turned off while level is the selected temperature format.
+- A fresh install downloaded upstream free-sleep's code, then set up this
+  project's rollback and revert-to-stock services, which pointed at files that
+  were not there. It now installs Nightstand.
+- Switching to Nightstand from another fork with the migration tool always
+  stopped before changing anything, saying the staged tree had no readable
+  serverInfo.json. It now runs.
+- The low water warning links to this project's issues.
 
 Known limitation, not fixed here: on the spring daylight-saving change, a job
 scheduled in the hour that does not exist that day is skipped, and a weekly
