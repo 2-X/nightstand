@@ -198,11 +198,13 @@ def _drop_stale_presence_v2(stream_processor) -> None:
         _switch_presence_mode(stream_processor, None)
 
 
-def _report_stream_health(processing_thread) -> None:
+def _report_stream_health(processing_thread) -> bool:
+    """Post the stream's health; False once the processing thread has stopped."""
     if processing_thread.is_alive():
         update_health('stream', 'healthy', '')
-    else:
-        update_health('stream', 'failed', 'processing thread stopped')
+        return True
+    update_health('stream', 'failed', 'processing thread stopped')
+    return False
 
 
 class LatestRawFileHandler(FileSystemEventHandler):
@@ -411,7 +413,9 @@ async def watch_nats_stream():
 
         while True:
             if time.monotonic() - last_health_update >= STREAM_HEALTH_INTERVAL_SECONDS:
-                _report_stream_health(processing_thread)
+                if not _report_stream_health(processing_thread):
+                    # Nothing drains the queue now; leave so the file watcher or a service restart recovers.
+                    raise RuntimeError('processing thread stopped')
                 last_health_update = time.monotonic()
                 logger.debug(f'NATS stream heartbeat; queued piezo records={queued_count}')
 
@@ -437,8 +441,20 @@ async def watch_nats_stream():
     finally:
         if nc is not None:
             await nc.close()
-        piezo_record_queue.put(None)
-        processing_thread.join(timeout=5)
+        if processing_thread.is_alive():
+            piezo_record_queue.put(None)
+            processing_thread.join(timeout=5)
+        else:
+            # A stop signal left here would end the next thread once it reached it.
+            _drain_queue(piezo_record_queue)
+
+
+def _drain_queue(records) -> None:
+    while True:
+        try:
+            records.get_nowait()
+        except queue.Empty:
+            return
 
 
 def watch_stream():

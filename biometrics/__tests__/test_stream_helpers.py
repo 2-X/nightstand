@@ -8,7 +8,9 @@ Run locally (needs cbor2, numpy, watchdog):
     python3 -m unittest biometrics.__tests__.test_stream_helpers -v
 (also runs under plain unittest discover, or pytest where available)
 """
+import asyncio
 import time
+import types
 import unittest
 import unittest.mock
 from datetime import datetime, timedelta
@@ -281,15 +283,63 @@ class TestStreamHealth(unittest.TestCase):
         thread = unittest.mock.Mock()
         thread.is_alive.return_value = True
         with unittest.mock.patch.object(stream, 'update_health') as update:
-            stream._report_stream_health(thread)
+            self.assertTrue(stream._report_stream_health(thread))
         update.assert_called_once_with('stream', 'healthy', '')
 
     def test_reports_failed_once_the_processing_thread_has_died(self):
         thread = unittest.mock.Mock()
         thread.is_alive.return_value = False
         with unittest.mock.patch.object(stream, 'update_health') as update:
-            stream._report_stream_health(thread)
+            self.assertFalse(stream._report_stream_health(thread))
         self.assertEqual(update.call_args.args[:2], ('stream', 'failed'))
+
+
+class TestDeadProcessingThread(unittest.TestCase):
+    class Runaway(Exception):
+        pass
+
+    def _fake_nats(self, fetches):
+        class NatsTimeout(Exception):
+            pass
+
+        async def fetch(count, timeout):
+            fetches.append(1)
+            if len(fetches) > 20:
+                raise self.Runaway()
+            raise NatsTimeout()
+
+        subscription = unittest.mock.Mock()
+        subscription.fetch = fetch
+        jetstream = unittest.mock.Mock()
+        jetstream.stream_info = unittest.mock.AsyncMock(return_value=types.SimpleNamespace(config=types.SimpleNamespace(subjects=['raw'])))
+        jetstream.pull_subscribe = unittest.mock.AsyncMock(return_value=subscription)
+        connection = unittest.mock.Mock()
+        connection.jetstream.return_value = jetstream
+        connection.close = unittest.mock.AsyncMock()
+        modules = {name: unittest.mock.Mock() for name in ('nats', 'nats.js', 'nats.js.api')}
+        modules['nats'].connect = unittest.mock.AsyncMock(return_value=connection)
+        modules['nats.errors'] = types.SimpleNamespace(TimeoutError=NatsTimeout)
+        return modules
+
+    def test_the_nats_loop_ends_so_the_file_watcher_can_take_over(self):
+        fetches = []
+        stream.piezo_record_queue.put(recent_piezo())
+        self.addCleanup(lambda: [stream.piezo_record_queue.get_nowait() for _ in range(stream.piezo_record_queue.qsize())])
+        with unittest.mock.patch.dict(sys.modules, self._fake_nats(fetches)), \
+                unittest.mock.patch.object(stream, 'process_biometrics', lambda: None), \
+                unittest.mock.patch.object(stream, 'update_health') as update, \
+                unittest.mock.patch.object(stream, 'STREAM_HEALTH_INTERVAL_SECONDS', 0):
+            with self.assertRaises(RuntimeError):
+                asyncio.run(stream.watch_nats_stream())
+        self.assertLess(len(fetches), 20)
+        self.assertTrue(stream.piezo_record_queue.empty())
+        self.assertEqual(update.call_args_list[-1].args[:2], ('stream', 'failed'))
+
+    def test_a_dead_thread_sends_the_stream_to_the_file_watcher(self):
+        with unittest.mock.patch.object(stream, 'watch_nats_stream', side_effect=RuntimeError('processing thread stopped')), \
+                unittest.mock.patch.object(stream, 'watch_directory') as watch:
+            stream.watch_stream()
+        watch.assert_called_once_with('/persistent')
 
 
 class TestRawFileCapRecords(CapPresenceTestCase):
