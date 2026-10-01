@@ -33,6 +33,7 @@ import presence_scenarios as scenarios
 from presence import sensors
 from presence.params import baselines_from_calibration
 from presence.replay import FrameCollector
+from insufficient_data import InsufficientDataError
 from presence_scenarios import Night
 from test_presence_calibration import SCHEMA
 
@@ -48,6 +49,14 @@ def empty_records(kind='legacy'):
         elif record['type'] == 'capSense':
             # A one-count wobble on out, so the summed noise is measurable.
             record['left']['out'] += index % 3 - 1
+        yield record
+
+
+def with_placeholders(records, every=50):
+    """Every so many capSense records carry the -32768 placeholder on the left out channel."""
+    for index, record in enumerate(records):
+        if record['type'] == 'capSense' and index % every == 0:
+            record['left']['out'] = -32768
         yield record
 
 
@@ -108,6 +117,23 @@ class LegacyCalibrationTest(unittest.TestCase):
         self.assertNotIn('delta_noise', payload)
         self.assertEqual(runs, [('success', None)])
 
+    def test_a_placeholder_count_stays_out_of_a_legacy_baseline(self):
+        records = list(with_placeholders(empty_records()))
+        payload, _ = self.calibrate(enabled=True, records=records)
+        self.assertAlmostEqual(payload['left_out']['mean'], 387.0, places=0)
+        self.assertLess(payload['left_out']['std'], 2.0)
+        # Switched off, the baseline is what it always was.
+        payload, _ = self.calibrate(enabled=False, records=records)
+        self.assertLess(payload['left_out']['mean'], 0.0)
+
+    def test_only_a_legacy_window_skips_negative_values(self):
+        spy = unittest.mock.Mock(wraps=cap_data.create_cap_baseline_from_cap_df)
+        with unittest.mock.patch.object(self.calibrator, 'create_cap_baseline_from_cap_df', spy):
+            self.calibrate(enabled=True)
+            self.calibrate(enabled=False)
+            self.calibrate(enabled=True, records=empty_records('capsense2'))
+        self.assertEqual([call.kwargs['skip_negative'] for call in spy.call_args_list], [True, False, False])
+
     def test_a_run_without_readable_capacitance_still_says_what_it_saw(self):
         records = [dict(record, type='capSense3') if record['type'] == 'capSense' else record
                    for record in empty_records()]
@@ -159,6 +185,23 @@ class NegativeCountTest(unittest.TestCase):
         frame = pd.DataFrame({'left_out': [387, 388, -32768, 387], 'left_cen': [381] * 4, 'left_in': [505] * 4})
         clean = pd.DataFrame({'left_out': [387, 388, 387], 'left_cen': [381] * 3, 'left_in': [505] * 3})
         self.assertAlmostEqual(cap_data.summed_delta_noise(frame, 'left'), cap_data.summed_delta_noise(clean, 'left'))
+
+    def baseline(self, out, **options):
+        index = pd.date_range('2026-09-28 04:00:00', periods=len(out), freq='s')
+        frame = pd.DataFrame({'left_out': out, 'left_cen': [381] * len(out), 'left_in': [505] * len(out)}, index=index)
+        return cap_data.create_cap_baseline_from_cap_df(frame, index[0], index[-1], 'left', **options)
+
+    def test_negative_counts_are_left_out_of_a_legacy_baseline(self):
+        self.assertEqual(self.baseline([387, 389, -32768, 387, -1], skip_negative=True),
+                         self.baseline([387, 389, 387]))
+
+    def test_every_row_counts_otherwise(self):
+        # capSense2's -1.0 rows have always been part of its baseline.
+        self.assertEqual(self.baseline([12.0, 12.5, -1.0])['left_out']['mean'], 23.5 / 3)
+
+    def test_a_window_of_placeholders_only_is_not_enough(self):
+        with self.assertRaises(InsufficientDataError):
+            self.baseline([-32768, -32768], skip_negative=True)
 
 
 if __name__ == '__main__':

@@ -42,7 +42,7 @@ from load_raw_files import load_raw_files
 from piezo_data import load_piezo_df, detect_presence_piezo, identify_baseline_period, summarize_empty_floor, one_value_per_second
 from cap_data import load_cap_df, create_cap_baseline_from_cap_df, save_baseline, summed_delta_noise
 from features import biometrics_v2_enabled
-from presence.sensors import majority_format
+from presence.sensors import CAPSENSE, majority_format
 from resource_usage import get_memory_usage_unix, get_available_memory_mb
 from biometrics_helpers import validate_datetime_utc
 from service_health import update_health, is_biometrics_enabled
@@ -260,7 +260,9 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
                 f'nothing to calibrate against. This resolves once the sensors '
                 f'record a stretch of empty bed.'
             )
-        cap_baseline = create_cap_baseline_from_cap_df(merged_df, baseline_start_time, baseline_end_time, side)
+        legacy_counts = cap_formats is not None and majority_format(cap_formats) is CAPSENSE
+        cap_baseline = create_cap_baseline_from_cap_df(merged_df, baseline_start_time, baseline_end_time, side,
+                                                       skip_negative=legacy_counts)
         if presence_v2:
             # The capacitance presence detector keeps its entry level clear of
             # this. Readers of the channel means ignore the extra key.

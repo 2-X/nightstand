@@ -33,7 +33,8 @@ pd.set_option('display.width', 300)
 pd.set_option('display.max_columns', 50)
 
 
-def create_cap_baseline_from_cap_df(merged_df: pd.DataFrame, start_time: datetime, end_time: datetime, side: Side, min_std: float = 1) -> CapBaseline:
+def create_cap_baseline_from_cap_df(merged_df: pd.DataFrame, start_time: datetime, end_time: datetime, side: Side, min_std: float = 1,
+                                    skip_negative: bool = False) -> CapBaseline:
     # min_std floors the per-sensor std used later as a z-score denominator in
     # detect_presence_cap, so a calibration window that happens to be
     # unusually still doesn't produce a near-zero std and blow the presence
@@ -56,14 +57,21 @@ def create_cap_baseline_from_cap_df(merged_df: pd.DataFrame, start_time: datetim
     # against that recording in biometrics/__tests__/test_cap_presence.py.
     # If this code ever runs against genuine legacy capSense hardware again,
     # this default will need to be re-derived for that value scale.
+    # skip_negative leaves out negative counts, which capSense writes only as
+    # placeholders; capSense2's -1.0 rows stay in as they always have.
     logger.debug(f'Creating baseline for capacitance sensors...')
     filtered_df = merged_df[start_time:end_time]
     logger.debug(f'filtered_df: \n{filtered_df.describe()}')
     cap_baseline = {}
     for sensor in [f'{side}_out', f'{side}_cen', f'{side}_in']:
+        values = filtered_df[sensor]
+        if skip_negative:
+            values = values[values >= 0]
+            if values.empty:
+                raise InsufficientDataError(f'No {sensor} capacitance readings in the empty-bed window, only placeholders')
         cap_baseline[sensor] = {
-            "mean": filtered_df[sensor].mean(),
-            "std": max(filtered_df[sensor].std(), min_std)
+            "mean": values.mean(),
+            "std": max(values.std(), min_std)
         }
 
     logger.debug(f'cap_baseline: \n{json.dumps(cap_baseline, indent=4)}')
