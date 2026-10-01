@@ -89,6 +89,8 @@ describe('FEATURES_MANIFEST', () => {
     assert.equal(entry.default, false);
     assert.equal(entry.reversible, true);
     assert.ok(entry.tests.includes('server/src/jobs/rhythms/equivalence.test.ts'), 'the equivalence gate is listed');
+    assert.ok(entry.touchpoints.includes('app/src/pages/SchedulePage/ScheduleTab.tsx'), 'the app screens are listed');
+    assert.ok(entry.tests.includes('app/src/pages/ControlTempPage/BedRhythms.test.tsx'), 'the app tests are listed');
     for (const file of [...entry.touchpoints, ...entry.tests]) {
       assert.ok(existsSync(path.join(repoRoot, file)), `${file} does not exist`);
     }
