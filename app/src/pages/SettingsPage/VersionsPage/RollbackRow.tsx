@@ -7,6 +7,7 @@ import {
 import RestorePageIcon from '@mui/icons-material/RestorePage';
 import { postRollback } from '@api/update.ts';
 import { useUpdateProgress } from '@api/useUpdateProgress.ts';
+import RhythmsLeaveNote from './RhythmsLeaveNote';
 
 type Props = {
   runningVersion: string | undefined;
@@ -63,6 +64,7 @@ export default function RollbackRow({ runningVersion, rollbackVersion }: Props) 
               Schedules and alarms pause for about 2 minutes.
             </DialogContentText>
           ) }
+          { phase === 'idle' && <RhythmsLeaveNote targetVersion={ rollbackVersion }/> }
           { phase === 'updating' && (
             <Stack spacing={ 2 } alignItems="center" sx={ { py: 2 } }>
               <CircularProgress/>

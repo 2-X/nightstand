@@ -7,6 +7,7 @@ import {
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { postRevertToStock } from '@api/update.ts';
 import { useUpdateProgress } from '@api/useUpdateProgress.ts';
+import RhythmsLeaveNote from './RhythmsLeaveNote';
 
 type Props = {
   runningVersion: string | undefined;
@@ -88,6 +89,7 @@ export default function RevertToStockRow({ runningVersion }: Props) {
               </Typography>
             </DialogContentText>
           ) }
+          { phase === 'idle' && <RhythmsLeaveNote/> }
           { phase === 'updating' && (
             <Stack spacing={ 2 } alignItems="center" sx={ { py: 2 } }>
               <CircularProgress/>

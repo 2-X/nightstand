@@ -9,6 +9,7 @@ import { postUpdate } from '@api/update.ts';
 import { migrationsApplied, useUpdateProgress } from '@api/useUpdateProgress.ts';
 import type { Release } from '@api/releases.ts';
 import { downgradeWarnings } from './downgradeWarnings';
+import RhythmsLeaveNote from './RhythmsLeaveNote';
 import { palette } from '@design/tokens';
 
 type Props = {
@@ -75,6 +76,7 @@ export default function ReleaseRow({ release, runningVersion, offerReinstall = f
           { phase === 'idle' && warnings.length > 0 && <Alert severity="warning" sx={ { mt: 2 } }>
             <Box component="ul" sx={ { m: 0, pl: 2 } }>{ warnings.map(warning => <li key={ warning }>{ warning }</li>) }</Box>
           </Alert> }
+          { phase === 'idle' && isDowngrade && <RhythmsLeaveNote targetVersion={ release.version }/> }
           { phase === 'updating' && (
             <Stack spacing={ 2 } alignItems="center" sx={ { py: 2 } }>
               <CircularProgress/>
