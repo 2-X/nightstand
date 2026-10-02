@@ -13,6 +13,7 @@ import DialRing from './DialRing';
 import { DIAL_HEIGHT, DIAL_WIDTH } from './dialGeometry';
 import TemperatureButtons from './TemperatureButtons.tsx';
 import TemperatureLabel, { centreSx } from './TemperatureLabel.tsx';
+import { usePendingGrey } from './usePendingGrey';
 
 type TemperatureDialProps = {
   // The side's status: live, or the last known one while staleSince is set.
@@ -66,6 +67,7 @@ export default function TemperatureDial({ status, staleSince, loading = false, a
   const targetLevel = fahrenheitToLevel(target);
   // An edit the Pod has not reported back yet.
   const pending = isOn && !stale && !!status && target !== status.targetTemperatureF;
+  const unconfirmed = usePendingGrey(pending, target);
   return <Box sx={ columnSx }>
     <Box data-dial sx={ dialSx }>
       <DialRing
@@ -73,6 +75,7 @@ export default function TemperatureDial({ status, staleSince, loading = false, a
         stale={ stale }
         away={ away }
         pending={ pending }
+        unconfirmed={ unconfirmed }
         targetLevel={ targetLevel }
         currentLevel={ fahrenheitToLevel(status?.currentTemperatureF ?? target) }/>
       { loading && <Box sx={ centreSx }>
@@ -81,7 +84,7 @@ export default function TemperatureDial({ status, staleSince, loading = false, a
       { status && <TemperatureLabel
         isOn={ isOn }
         sliderTemp={ target }
-        sliderColor={ away ? palette.text.secondary : temperatureColor(targetLevel) }
+        sliderColor={ away || unconfirmed ? palette.text.secondary : temperatureColor(targetLevel) }
         currentTargetTemp={ status.targetTemperatureF }
         currentTemperatureF={ status.currentTemperatureF }
         format={ format }

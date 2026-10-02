@@ -26,6 +26,24 @@ test('a change the Pod has not confirmed says "Set to" and draws a hollow dot', 
   await expect(page.locator('[data-dial] circle[data-pending]')).toHaveCount(1);
 });
 
+test('a change still unconfirmed after two seconds is drawn in the last known grey', async ({ page }) => {
+  await open(page, { 'nightstand-demo-writes': 'hang' });
+  await expect(lead(page)).toHaveText('Warming to');
+  await page.getByRole('button', { name: 'Warmer' }).click();
+  const dot = page.locator('[data-dial] circle[data-pending]');
+  const numeral = page.locator('[data-dial] h2');
+  await expect(dot).toHaveCount(1);
+  const colour = await dot.getAttribute('stroke');
+  expect(colour).not.toBe('#848C95');
+
+  await page.clock.fastForward(1900);
+  await expect(dot).toHaveAttribute('stroke', colour!);
+  await page.clock.fastForward(200);
+  await expect(dot).toHaveAttribute('stroke', '#848C95');
+  await expect(numeral).toHaveCSS('color', 'rgb(163, 170, 178)');
+  await expect(lead(page)).toHaveText('Set to');
+});
+
 test('the dot fills once the Pod confirms the change', async ({ page }) => {
   await open(page);
   await page.getByRole('button', { name: 'Warmer' }).click();

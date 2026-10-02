@@ -1,7 +1,9 @@
-import { beforeEach, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { palette } from '@design/tokens';
+import { temperatureColor } from '@lib/temperatureColor';
+import { fahrenheitToLevel } from '@lib/temperatureConversions.ts';
 import { getDeviceStatus } from '../../mocks/mockData';
 import TemperatureDial from './TemperatureDial';
 import { useControlTempStore } from './controlTempStore';
@@ -125,6 +127,86 @@ it('says "Set to" and draws a hollow dot while an edit waits for the Pod', () =>
   const { container } = render(<TemperatureDial status={ on } refetch={ vi.fn() } format="level"/>);
   expect(screen.getByText('Set to')).toBeInTheDocument();
   expect(container.querySelector('circle[data-pending]')).not.toBeNull();
+});
+
+describe('a target the Pod has not confirmed', () => {
+  const setTarget = (targetTemperatureF: number) => act(() => {
+    const status = getDeviceStatus();
+    useControlTempStore.setState({ deviceStatus: { ...status, left: { ...status.left, ...on, targetTemperatureF } } });
+  });
+  const dot = (container: HTMLElement) => container.querySelector('circle[data-pending]')!;
+  const wait = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('keeps its colour for the first two seconds, then turns grey', () => {
+    setTarget(86);
+    const { container } = render(<TemperatureDial status={ on } refetch={ vi.fn() } format="level"/>);
+    const colour = temperatureColor(fahrenheitToLevel(86));
+    expect(dot(container)).toHaveAttribute('stroke', colour);
+    wait(1999);
+    expect(dot(container)).toHaveAttribute('stroke', colour);
+    expect(container.querySelector('g[data-band="fill"] path')).not.toHaveAttribute('stroke', palette.text.tertiary);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveStyle({ color: colour });
+    wait(1);
+    expect(dot(container)).toHaveAttribute('stroke', palette.text.tertiary);
+    expect(container.querySelector('circle[data-halo]')).toHaveAttribute('stroke', palette.text.tertiary);
+    const strokes = (selector: string) => Array.from(container.querySelectorAll(selector), node => node.getAttribute('stroke'));
+    expect(new Set(strokes('g[data-band="fill"] path'))).toEqual(new Set([palette.text.tertiary]));
+    expect(new Set(strokes('g[data-band="ghost"] path'))).toEqual(new Set([palette.text.tertiary]));
+    expect(new Set(strokes('line[data-tick="major"]'))).toEqual(new Set([palette.dial.tickMajorOff]));
+    expect(screen.getByRole('heading', { level: 2 })).toHaveStyle({ color: palette.text.secondary });
+    expect(screen.getByText('Set to')).toBeInTheDocument();
+  });
+
+  it('returns to colour as soon as the Pod confirms', () => {
+    setTarget(86);
+    const { container } = render(<TemperatureDial status={ on } refetch={ vi.fn() } format="level"/>);
+    wait(2000);
+    expect(dot(container)).toHaveAttribute('stroke', palette.text.tertiary);
+    setTarget(83);
+    expect(container.querySelector('circle[data-pending]')).toBeNull();
+    expect(container.querySelector('circle[data-target]')).toHaveAttribute('fill', temperatureColor(fahrenheitToLevel(83)));
+    expect(screen.getByRole('heading', { level: 2 })).toHaveStyle({ color: temperatureColor(fahrenheitToLevel(83)) });
+  });
+
+  it('starts the two seconds again on a new target', () => {
+    setTarget(86);
+    const { container } = render(<TemperatureDial status={ on } refetch={ vi.fn() } format="level"/>);
+    wait(1500);
+    setTarget(88);
+    wait(1999);
+    expect(dot(container)).toHaveAttribute('stroke', temperatureColor(fahrenheitToLevel(88)));
+    wait(1);
+    expect(dot(container)).toHaveAttribute('stroke', palette.text.tertiary);
+  });
+
+  it('turns colour again at once on a tap while grey, and waits two seconds more', () => {
+    setTarget(86);
+    const { container } = render(<TemperatureDial status={ on } refetch={ vi.fn() } format="level"/>);
+    wait(2000);
+    expect(dot(container)).toHaveAttribute('stroke', palette.text.tertiary);
+    setTarget(88);
+    expect(dot(container)).toHaveAttribute('stroke', temperatureColor(fahrenheitToLevel(88)));
+    expect(container.querySelector('g[data-band="fill"] path')).not.toHaveAttribute('stroke', palette.text.tertiary);
+    wait(1999);
+    expect(dot(container)).toHaveAttribute('stroke', temperatureColor(fahrenheitToLevel(88)));
+    wait(1);
+    expect(dot(container)).toHaveAttribute('stroke', palette.text.tertiary);
+  });
+
+  it('leaves no timer behind once confirmed or unmounted', () => {
+    setTarget(86);
+    const { unmount } = render(<TemperatureDial status={ on } refetch={ vi.fn() } format="level"/>);
+    expect(vi.getTimerCount()).toBe(1);
+    setTarget(83);
+    expect(vi.getTimerCount()).toBe(0);
+    setTarget(86);
+    expect(vi.getTimerCount()).toBe(1);
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });
 
 const since = new Date('2026-09-29T04:41:00Z');

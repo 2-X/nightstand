@@ -5,16 +5,18 @@ import {
   radialLine, ticks,
 } from './dialGeometry';
 
-type DialRingProps = { isOn: boolean; targetLevel: number; currentLevel: number; pending?: boolean; stale?: boolean; away?: boolean };
+type DialRingProps = {
+  isOn: boolean; targetLevel: number; currentLevel: number; pending?: boolean; unconfirmed?: boolean; stale?: boolean; away?: boolean;
+};
 
 const tickColor = (level: number, major: boolean, isOn: boolean) => isOn
   ? level === 0 ? palette.dial.tickZero : major ? palette.dial.tickMajor : palette.dial.tick
   : major ? palette.dial.tickMajorOff : palette.dial.tickOff;
 
-const band = (from: number, to: number) => bandSegments(from, to).map(segment => <path
+const band = (from: number, to: number, grey = false) => bandSegments(from, to).map(segment => <path
   key={ segment.d }
   d={ segment.d }
-  stroke={ temperatureColor(segment.level) }
+  stroke={ grey ? palette.text.tertiary : temperatureColor(segment.level) }
   strokeWidth={ TRACK_WIDTH }
   fill="none"/>);
 
@@ -25,6 +27,7 @@ const endLabel = (level: number) => level < 0 ? `\u2212${-level}` : `+${level}`;
 
 // The parts of the ring that never move, worked out once.
 const GHOST_BAND = band(SCALE_MIN, SCALE_MAX);
+const GHOST_BAND_GREY = band(SCALE_MIN, SCALE_MAX, true);
 const OFF_ARC = offArc();
 const TICKS = ticks();
 const END_LABELS = endLabels();
@@ -34,20 +37,24 @@ const svgStyle = {
 } as const;
 
 // Every mark is a state: the faint scale, the span to the target, the notch for now, the dot for the target.
-export default function DialRing({ isOn, targetLevel, currentLevel, pending = false, stale = false, away = false }: DialRingProps) {
+export default function DialRing({
+  isOn, targetLevel, currentLevel, pending = false, unconfirmed = false, stale = false, away = false,
+}: DialRingProps) {
   // Colour means live: a last known target, or an away side's, is drawn grey on the off track.
   const live = isOn && !stale && !away;
   const target = clampLevel(targetLevel);
   const current = clampLevel(currentLevel);
   const fill = fillRange(target);
   const dot = dialPoint(target);
-  const colour = temperatureColor(target);
+  // A pending target that has waited too long is drawn in the grey of a last known one, ring and all.
+  const grey = live && pending && unconfirmed;
+  const colour = grey ? palette.text.tertiary : temperatureColor(target);
   const notch = radialLine(current, NOTCH.inner, NOTCH.outer);
   return (
     <svg viewBox={ `0 0 ${DIAL_WIDTH} ${DIAL_HEIGHT}` } aria-hidden="true" style={ svgStyle }>
       { live ? <>
-        <g data-band="ghost" opacity={ palette.dial.ghostOpacity }>{ GHOST_BAND }</g>
-        { fill && <g data-band="fill">{ band(fill[0], fill[1]) }</g> }
+        <g data-band="ghost" opacity={ palette.dial.ghostOpacity }>{ grey ? GHOST_BAND_GREY : GHOST_BAND }</g>
+        { fill && <g data-band="fill">{ band(fill[0], fill[1], grey) }</g> }
       </> : <path
         data-band="off"
         d={ OFF_ARC }
@@ -59,7 +66,7 @@ export default function DialRing({ isOn, targetLevel, currentLevel, pending = fa
         key={ level }
         data-tick={ major ? 'major' : 'minor' }
         { ...line }
-        stroke={ tickColor(level, major, live) }
+        stroke={ tickColor(level, major, live && !grey) }
         strokeWidth={ major ? 1.8 : 1.4 }
         strokeLinecap="round"/>) }
       { live && Math.abs(current - target) > SAME_LEVEL && <>
@@ -98,7 +105,7 @@ export default function DialRing({ isOn, targetLevel, currentLevel, pending = fa
         textAnchor="middle"
         fontSize="11.5"
         fontFamily="inherit"
-        fill={ live ? palette.text.tertiary : palette.text.disabled }>{ endLabel(level) }</text>) }
+        fill={ live && !grey ? palette.text.tertiary : palette.text.disabled }>{ endLabel(level) }</text>) }
     </svg>
   );
 }
