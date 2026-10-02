@@ -245,3 +245,78 @@ describe('update.sh with a published checksum', () => {
     assert.match(result.out, /This install cannot check checksums yet; installing without one/);
   });
 });
+
+describe('revert-to-stock.sh installs the upstream commit the switch was checked with', () => {
+  const src = readFileSync(path.join(repoRoot, 'scripts/revert-to-stock.sh'), 'utf8');
+  const commit = 'a'.repeat(40);
+  const upstream = {
+    'server/src/serverInfo.json': '{"version":"2.1.5"}',
+    'server/dist/server.js': 'server',
+    'server/public/index.html': 'app',
+  };
+  const expected = digest(tree(upstream));
+  const MISMATCH = 'the download of upstream free-sleep does not match its published checksum; live install untouched';
+  const UNREADABLE = 'could not read the release list to find the checked upstream version; live install untouched';
+  const switchTo = (manifest: object | string | undefined, extra: { liveDigest?: boolean | 'broken' } = {},
+    archiveTop = `free-sleep-${commit}`) => runStaging(
+    src, '# --- dependencies (old server still running)', { manifest, archiveTop, tree: upstream, ...extra });
+  const pinned = (pin: unknown) => ({ channels: ['stable'], releases: [], upstreamSwitch: pin });
+  const stoppedBeforeChanging = (result: ReturnType<typeof switchTo>, reason: string) => {
+    assert.equal(result.status, 1, result.out);
+    assert.match(result.out, new RegExp(`FATAL: ${reason.replaceAll('.', '\\.')}`));
+    assert.equal(result.record.operation, 'switch');
+    assert.equal(result.record.outcome, 'stopped');
+    assert.equal(result.record.message, reason);
+    assert.equal(result.liveVersion, '{"version":"3.5.1"}');
+    assert.equal(result.staged, false);
+  };
+
+  it('downloads the recorded commit and checks it', () => {
+    const result = switchTo(pinned({ commit, date: '2026-10-02', treeSha256: expected }));
+    assert.equal(result.status, 0, result.out);
+    assert.equal(result.urls[1], `https://github.com/throwaway31265/free-sleep/archive/${commit}.zip`);
+    assert.match(result.out, new RegExp(`Installing upstream commit ${commit}, the one this switch was checked with`));
+    assert.match(result.out, /matches its published checksum/);
+  });
+
+  it('refuses a recorded commit whose download does not match, before anything changes', () => {
+    stoppedBeforeChanging(switchTo(pinned({ commit, date: '2026-10-02', treeSha256: '0'.repeat(64) })), MISMATCH);
+  });
+
+  it('stops before anything changes when the checksum cannot be computed', () => {
+    stoppedBeforeChanging(
+      switchTo(pinned({ commit, date: '2026-10-02', treeSha256: expected }), { liveDigest: 'broken' }),
+      'could not compute the checksum of upstream free-sleep; live install untouched');
+  });
+
+  it('installs a recorded commit without a checksum, and says it went unchecked', () => {
+    const result = switchTo(pinned({ commit, date: '2026-10-02' }));
+    assert.equal(result.status, 0, result.out);
+    assert.equal(result.urls[1], `https://github.com/throwaway31265/free-sleep/archive/${commit}.zip`);
+    assert.match(result.out, new RegExp(`No published checksum for upstream commit ${commit}; installing without one`));
+  });
+
+  it('installs upstream\'s main only when the release list was read and records no checked commit', () => {
+    const result = switchTo({ channels: ['stable'], releases: [] }, {}, 'free-sleep-main');
+    assert.equal(result.status, 0, result.out);
+    assert.equal(result.urls[0], 'https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json');
+    assert.equal(result.urls[1], 'https://github.com/throwaway31265/free-sleep/archive/refs/heads/main.zip');
+    assert.match(result.out, /No checked upstream commit is recorded; installing upstream's main/);
+  });
+
+  for (const [what, manifest] of [
+    ['the release list cannot be fetched', undefined],
+    ['the release list is not JSON', '<html>rate limited</html>'],
+    ['the release list is not an object', '[]'],
+    ['the recorded commit is not a full commit id', pinned({ commit: 'main', date: '2026-10-02' })],
+    ['the record is not an object', pinned('main')],
+    ['the record is empty', pinned(null)],
+    ['the recorded checksum is malformed', pinned({ commit, date: '2026-10-02', treeSha256: 'abc' })],
+  ] as const) {
+    it(`stops before downloading anything when ${what}`, () => {
+      const result = switchTo(manifest);
+      stoppedBeforeChanging(result, UNREADABLE);
+      assert.equal(result.urls.length, 1, 'nothing is downloaded');
+    });
+  }
+});

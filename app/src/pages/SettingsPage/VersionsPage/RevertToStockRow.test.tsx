@@ -58,3 +58,27 @@ describe('RevertToStockRow when the bed may be in use', () => {
     expect(screen.queryByRole('button', { name: 'Continue anyway' })).not.toBeInTheDocument();
   });
 });
+
+describe('RevertToStockRow says what the switch installs', () => {
+  const UNCHECKED_UPSTREAM_NOTE = 'Installs upstream free-sleep\'s newest code, which this switch has not been checked with.';
+
+  it('says upstream\'s newest code is unchecked while no checked commit is recorded', async () => {
+    const { user } = renderWithProviders(<RevertToStockRow runningVersion="3.0.0"/>);
+    await user.click(screen.getByText('Switch to upstream free-sleep'));
+    expect(await screen.findByText(UNCHECKED_UPSTREAM_NOTE)).toBeInTheDocument();
+  });
+
+  it('names the date of the checked upstream commit once one is recorded', async () => {
+    server.use(http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json', () => HttpResponse.json({
+      channels: ['stable', 'beta'],
+      releases: [],
+      upstreamSwitch: { commit: 'a'.repeat(40), date: '2026-10-09', treeSha256: 'b'.repeat(64) },
+    })));
+    const { user } = renderWithProviders(<RevertToStockRow runningVersion="3.0.0"/>);
+    await user.click(screen.getByText('Switch to upstream free-sleep'));
+    expect(await screen.findByText(
+      'Installs upstream free-sleep as of 2026-10-09, the version this switch was last checked with.',
+    )).toBeInTheDocument();
+    expect(screen.queryByText(UNCHECKED_UPSTREAM_NOTE)).not.toBeInTheDocument();
+  });
+});

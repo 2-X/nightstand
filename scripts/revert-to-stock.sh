@@ -1,7 +1,9 @@
 #!/bin/bash
 # Reverts this pod to plain upstream free-sleep. Upstream ships no tags or
-# releases, so main is the only thing to install. Same shape as update.sh:
-# backup, stage, atomic swap, health check, auto-rollback on failure.
+# releases, so this installs the upstream commit the switch was last checked
+# with when releases.json records one, and main when it records none. Same
+# shape as update.sh: backup, stage, atomic swap, health check, auto-rollback
+# on failure.
 #
 # Runs via free-sleep-revert.service. Re-adopting this fork afterward means
 # re-running scripts/migrate/switch-to-this-fork.sh; there's no way back
@@ -9,6 +11,8 @@
 set -uo pipefail
 
 UPSTREAM_ZIP_URL="https://github.com/throwaway31265/free-sleep/archive/refs/heads/main.zip"
+# Only read for upstreamSwitch, the upstream commit this switch was checked with.
+SWITCH_RELEASES_URL="https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json"
 
 LIVE=/home/dac/free-sleep
 PREV=/home/dac/free-sleep-prev
@@ -256,7 +260,40 @@ PERS_FREE=$(free_mb /persistent)
 
 # --- download + stage ---------------------------------------------------------
 open_wan
-say "Downloading upstream (throwaway31265/free-sleep main)..."
+# The switch installs the upstream commit it was last checked with, when
+# releases.json names one. Upstream's main is installed only when the list was
+# read and records no such commit; an unreadable list or a malformed record
+# stops the switch, since the app may already have promised the checked one.
+SWITCH_MANIFEST=$(curl -fsSL --max-time 20 "$SWITCH_RELEASES_URL") || SWITCH_MANIFEST=""
+SWITCH_PIN=$(printf '%s' "$SWITCH_MANIFEST" | python3 -c '
+import json, re, sys
+data = json.load(sys.stdin)
+if not isinstance(data, dict):
+    sys.exit(1)
+if "upstreamSwitch" not in data:
+    print("main")
+    sys.exit(0)
+pin = data["upstreamSwitch"]
+if not isinstance(pin, dict):
+    sys.exit(1)
+commit = pin.get("commit")
+digest = pin.get("treeSha256", "")
+if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
+    sys.exit(1)
+if not isinstance(digest, str) or (digest and not re.fullmatch(r"[0-9a-f]{64}", digest)):
+    sys.exit(1)
+print("pin", commit, digest)' 2>/dev/null) \
+  || fail "could not read the release list to find the checked upstream version; live install untouched"
+SWITCH_COMMIT=""
+SWITCH_DIGEST=""
+read -r _ SWITCH_COMMIT SWITCH_DIGEST _ <<< "$SWITCH_PIN" || true
+if [ -n "$SWITCH_COMMIT" ]; then
+  UPSTREAM_ZIP_URL="https://github.com/throwaway31265/free-sleep/archive/${SWITCH_COMMIT}.zip"
+  say "Installing upstream commit $SWITCH_COMMIT, the one this switch was checked with"
+else
+  say "No checked upstream commit is recorded; installing upstream's main"
+fi
+say "Downloading upstream (throwaway31265/free-sleep ${SWITCH_COMMIT:-main})..."
 curl -fL --max-time 300 -o "$ZIP" "$UPSTREAM_ZIP_URL" || fail "download failed; live install untouched"
 rm -rf "$STAGE" "$STAGE.unzip"
 unzip -q "$ZIP" -d "$STAGE.unzip" || fail "unzip failed; live install untouched"
@@ -267,6 +304,20 @@ STAGED_DIR=$(find "$STAGE.unzip" -mindepth 1 -maxdepth 1 -type d | head -n1)
 mv "$STAGED_DIR" "$STAGE" && rm -rf "$STAGE.unzip"
 rm -f "$ZIP"
 chown -R dac:dac "$STAGE"
+# Checked with the installed copy of the digest script, never the downloaded one.
+if [ -n "$SWITCH_COMMIT" ]; then
+  if [ -z "$SWITCH_DIGEST" ]; then
+    say "No published checksum for upstream commit $SWITCH_COMMIT; installing without one"
+  elif [ ! -f "$LIVE/scripts/tree_digest.py" ]; then
+    say "This install cannot check checksums yet; installing without one"
+  else
+    SWITCH_ACTUAL=$(python3 "$LIVE/scripts/tree_digest.py" "$STAGE") \
+      || fail "could not compute the checksum of upstream free-sleep; live install untouched"
+    [ "$SWITCH_ACTUAL" = "$SWITCH_DIGEST" ] \
+      || fail "the download of upstream free-sleep does not match its published checksum; live install untouched"
+    say "Upstream commit $SWITCH_COMMIT matches its published checksum"
+  fi
+fi
 
 [ -f "$STAGE/server/dist/server.js" ] || fail "staged tree is missing server/dist/server.js"
 [ -f "$STAGE/server/public/index.html" ] || fail "staged tree is missing server/public/index.html"

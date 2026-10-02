@@ -39,6 +39,25 @@ describe('ReleasesManifestSchema', () => {
     expect(() => ReleasesManifestSchema.parse(bad)).toThrow();
   });
 
+  it('keeps a release\'s published tree checksum, which older releases do not have', () => {
+    const withDigest = { ...bundle, treeSha256: 'a'.repeat(64) };
+    const parsed = ReleasesManifestSchema.parse({ channels: ['stable'], releases: [withDigest, agent] });
+    expect(parsed.releases).toEqual([withDigest, agent]);
+  });
+
+  it('reads the upstream commit the switch was checked with, when one is recorded', () => {
+    const upstreamSwitch = { commit: 'b'.repeat(40), date: '2026-10-02', treeSha256: 'c'.repeat(64) };
+    expect(ReleasesManifestSchema.parse({ channels: ['stable'], releases: [], upstreamSwitch }).upstreamSwitch)
+      .toEqual(upstreamSwitch);
+    expect(ReleasesManifestSchema.parse({ channels: ['stable'], releases: [] }).upstreamSwitch).toBeUndefined();
+  });
+
+  it('drops a malformed upstream switch record rather than the whole manifest', () => {
+    const parsed = ReleasesManifestSchema.parse({ channels: ['stable'], releases: [bundle], upstreamSwitch: { commit: 1 } });
+    expect(parsed.upstreamSwitch).toBeUndefined();
+    expect(parsed.releases).toEqual([bundle]);
+  });
+
   it('skips an unknown kind without losing known releases', () => {
     const bad = { channels: ['stable'], releases: [{ ...agent, kind: 'overlay' }, bundle] };
     expect(ReleasesManifestSchema.parse(bad).releases).toEqual([bundle]);

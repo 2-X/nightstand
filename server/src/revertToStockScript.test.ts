@@ -29,7 +29,12 @@ describe('revert-to-stock.sh', () => {
   it('downloads from upstream, not this fork', () => {
     const src = readFileSync(path.join(repoRoot, SCRIPT), 'utf8');
     assert.match(src, /github\.com\/throwaway31265\/free-sleep\/archive\/refs\/heads\/main\.zip/);
-    assert.doesNotMatch(src, /LTimothy\/nightstand/, 'must not fetch from this fork');
+    assert.match(src, /UPSTREAM_ZIP_URL="https:\/\/github\.com\/throwaway31265\/free-sleep\/archive\/\$\{SWITCH_COMMIT\}\.zip"/);
+    // This fork is read only for releases.json, which names the upstream
+    // commit the switch was checked with; no code comes from it.
+    const forkLines = src.split('\n').filter((line) => /LTimothy\/nightstand/.test(line));
+    assert.deepEqual(forkLines, ['SWITCH_RELEASES_URL="https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json"'],
+      'must not fetch code from this fork');
   });
 
   it('re-blocks WAN even on failure', () => {

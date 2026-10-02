@@ -12,6 +12,8 @@ const releaseFields = {
   channel: z.enum(RELEASE_CHANNELS),
   date: z.string(),
   artifacts: z.record(z.string(), z.string()).optional(),
+  // Digest of the release tree, which the updater checks a download against.
+  treeSha256: z.string().optional(),
 };
 
 // Every release is a bundle: the full tree built against one upstream
@@ -36,6 +38,11 @@ export const ReleasesManifestSchema = z.object({
     return !(entry && typeof entry === 'object' && 'kind' in entry
       && typeof entry.kind === 'string' && !['agent', 'bundle'].includes(entry.kind));
   })).pipe(z.array(ReleaseSchema)),
+  // The upstream commit "Switch to upstream" installs, recorded once the
+  // switch has been checked with it. A malformed record is dropped rather
+  // than taking the release list down with it.
+  upstreamSwitch: z.object({ commit: z.string(), date: z.string(), treeSha256: z.string().optional() })
+    .optional().catch(undefined),
 });
 
 export type Release = z.infer<typeof ReleaseSchema>;
@@ -80,9 +87,9 @@ export const podUpstreamBase = (): string => currentServerInfo.upstreamBase;
 // A bundle swaps the whole tree, so installing one built against a different
 // upstream release silently changes the upstream code underneath. Surface
 // that; do not block it. Note reverting to stock does not undo it: there is
-// no snapshot of the tree a pod started from, only a download of whatever
-// upstream main is that day, so the base a pod lands back on is not
-// guaranteed to be the one it left.
+// no snapshot of the tree a pod started from, only a download of the upstream
+// commit the switch was checked with (or main, before one is recorded), so
+// the base a pod lands back on is not guaranteed to be the one it left.
 export const baseMismatch = (release: Release, installedBase: string | undefined): boolean => {
   if (release.kind !== 'bundle') return false;
   if (installedBase === undefined) return false;

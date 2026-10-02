@@ -114,9 +114,10 @@ export const AGENT_MANIFEST: AgentEntry[] = [
   { path: 'scripts/rollback_pod.sh', mode: 'add', why: 'swaps the live and previous trees offline' },
   { path: 'scripts/close_update_window.sh', mode: 'add', why: 'closes the download window after the update or revert unit stops' },
   // No snapshot exists to restore. Upstream ships no tags, so this downloads
-  // whatever main is that day, which is not pinned to AGENT_BASE.sha and need
-  // not equal the tree the pod started from.
-  { path: 'scripts/revert-to-stock.sh', mode: 'add', why: 'the reversibility claim: downloads and installs plain upstream main' },
+  // the upstream commit releases.json records as checked with the switch, or
+  // main until one is recorded. Neither is pinned to AGENT_BASE.sha, and
+  // neither need equal the tree the pod started from.
+  { path: 'scripts/revert-to-stock.sh', mode: 'add', why: 'the reversibility claim: downloads and installs plain upstream' },
   { path: 'scripts/systemd/free-sleep-rollback.service', mode: 'add', why: 'stock has no systemd directory; it writes its unit inline' },
   { path: 'scripts/systemd/free-sleep-revert.service', mode: 'add', why: 'stock has no systemd directory; it writes its unit inline' },
 

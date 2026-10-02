@@ -5,6 +5,7 @@ import {
   DialogContentText, DialogTitle, Stack, Typography,
 } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import { useReleases } from '@api/releases.ts';
 import { postRevertToStock } from '@api/update.ts';
 import { useUpdateProgress } from '@api/useUpdateProgress.ts';
 import InUseConfirm from '../../../components/InUseConfirm';
@@ -18,6 +19,7 @@ export default function RevertToStockRow({ runningVersion }: Props) {
   const [open, setOpen] = useState(false);
   const titleId = useId();
   const { phase, error, inUse, recordedOutcome, start, reset } = useUpdateProgress(runningVersion, undefined, 'switch');
+  const checked = useReleases().data?.upstreamSwitch;
 
   const revert = () => start(confirmInUse => postRevertToStock(confirmInUse ? { confirmInUse } : undefined));
 
@@ -62,6 +64,11 @@ export default function RevertToStockRow({ runningVersion }: Props) {
               <Typography variant="body2" sx={ { mb: 2 } }>
                 Replace the app with the current upstream free-sleep build. Settings and sleep data remain on the Pod.
                 Schedules and alarms pause during restart.
+              </Typography>
+              <Typography variant="body2" sx={ { mb: 2 } }>
+                { checked
+                  ? `Installs upstream free-sleep as of ${checked.date}, the version this switch was last checked with.`
+                  : 'Installs upstream free-sleep\'s newest code, which this switch has not been checked with.' }
               </Typography>
               <Typography variant="body2" sx={ { mb: 2 } }>
                 A copy of the original code and settings is saved under /persistent/free-sleep-backups/
