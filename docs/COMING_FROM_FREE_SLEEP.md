@@ -179,9 +179,10 @@ keeps the original settings.
 The archive timer is disabled. `raw-archive/` stays in place, and the switch
 log prints its size; you can remove it if you no longer need those recordings.
 Switching does not uninstall every Nightstand change. Shared services,
-sudoers rules, firewall rules, any manually enabled watchdog setting, Python
-and Node dependencies, backups, and archived data remain. Nightstand's
-archive/rollback/revert units and service memory-limit drop-ins are removed.
+sudoers rules, firewall rules, Python and Node dependencies, backups, and
+archived data remain. Nightstand's archive, rollback, revert and health check
+units, its service memory-limit and restart drop-ins, and its hardware
+watchdog setting are removed.
 
 Upstream's first update can print a "reset, all data will be lost" message
 because its migration history differs. Do not follow that reset prompt.
@@ -196,8 +197,11 @@ Downgrading within Nightstand restores the target's older firewall and feature
 behavior. In particular, 3.3.x to 3.2.x can reduce RAW retention to 36 hours;
 the current downgrade path protects retention, but those older updaters do not.
 
-Nightstand does not automatically arm the hardware watchdog. Its setup helper
-is manual. A Pod 5 firmware reset still has no verified procedure here.
+On a Pod 5, installs and updates turn on the hardware watchdog once they
+have succeeded; other models keep it off for now. It was checked by hand on
+one Pod 5, and the automatic setup is checked on hardware before release.
+Switching to upstream removes that setting. A Pod 5 firmware reset still has
+no verified procedure here.
 
 ## Reporting problems
 

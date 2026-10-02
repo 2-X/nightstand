@@ -576,6 +576,15 @@ if [ "$MIGRATION_FAILED" = yes ]; then
   HEALTHY=no
 fi
 
+# The first arming of the hardware watchdog can reset the Pod, so it runs only
+# once the update has succeeded. Older trees carry a hand-run copy of the
+# script without the trial, which must not run on its own.
+arm_watchdog() {
+  local script="$LIVE/scripts/setup_watchdog.sh"
+  grep -q NIGHTSTAND_WATCHDOG_TRIAL "$script" 2>/dev/null || return 0
+  bash "$script" || say "WARNING: the hardware watchdog could not be turned on; see above"
+}
+
 if [ "$HEALTHY" = yes ]; then
   for FIREWALL_ATTEMPT in 1 2; do
     sh "$LIVE/scripts/block_internet_access.sh" || say "WARNING: firewall script reported an error; checking rules"
@@ -588,11 +597,13 @@ if [ "$HEALTHY" = yes ]; then
     if fw4 -C OUTPUT -j DROP; then
       if [ "$EXPECT_RESET" = no ] || fw4 -C OUTPUT -p tcp --dport 1337 -j REJECT --reject-with tcp-reset; then
         say "SUCCESS: pod is serving v$STAGED_VERSION. Previous version kept at $PREV; backup at $BK"
+        arm_watchdog
         exit 0
       fi
       if [ "$FIREWALL_ATTEMPT" = 2 ]; then
         say "WARNING: port 1337 reset rule is unavailable; internet access remains blocked by OUTPUT DROP"
         say "SUCCESS: pod is serving v$STAGED_VERSION. Previous version kept at $PREV; backup at $BK"
+        arm_watchdog
         exit 0
       fi
     fi

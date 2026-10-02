@@ -51,17 +51,15 @@ if [ "$(systemctl is-active free-sleep 2>/dev/null)" != active ] || lock_held ||
   exit 0
 fi
 
-# Only no answer at all counts. An error status is still an answer: a full or
-# read-only /persistent fails this route with 500, and a server restarted
-# then might not start again.
+# Only curl's 000, no answer at all, counts. An error status is still an
+# answer: a full or read-only /persistent fails this route with 500, and a
+# server restarted then might not start again. No output means curl itself
+# did not run, which says nothing about the server.
 CODE=$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/serverStatus 2>/dev/null)
-case "$CODE" in
-  '' | 000) ;;
-  *)
-    rm -f "$STATE"
-    exit 0
-    ;;
-esac
+if [ "$CODE" != 000 ]; then
+  rm -f "$STATE"
+  exit 0
+fi
 
 FAILS=$(cat "$STATE" 2>/dev/null)
 case "$FAILS" in '' | *[!0-9]*) FAILS=0 ;; esac

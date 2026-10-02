@@ -313,3 +313,41 @@ describe('update.sh hands the rest of an update to the version it installs', () 
     assert.match(src, /\ndef parts\(v\): return/);
   });
 });
+
+// The first arming of the hardware watchdog can reset the Pod. Inside an
+// update, a reset before the health check would skip the automatic rollback,
+// so it runs only once the update has succeeded.
+describe('the hardware watchdog is turned on only after a successful install or update', () => {
+  const read = (file: string) => readFileSync(path.join(repoRoot, file), 'utf8');
+
+  it('update.sh arms it only in the success branch, after the health check', () => {
+    const src = read('scripts/update.sh');
+    const calls = [...src.matchAll(/^\s*arm_watchdog\s*$/gm)].map((m) => m.index ?? -1);
+    assert.ok(calls.length >= 1, 'update.sh must arm the watchdog after success');
+    const health = src.indexOf('Health check (up to 90s)');
+    const rollback = src.indexOf('Health check FAILED: rolling back');
+    for (const at of calls) {
+      assert.ok(at > health && at < rollback, 'arm_watchdog must sit in the success branch');
+      const before = src.lastIndexOf('say "SUCCESS: pod is serving', at);
+      assert.ok(before > health && src.indexOf('exit 0', before) > at, 'arm only after SUCCESS is logged, before exiting');
+    }
+  });
+
+  it('update.sh runs only the script that carries the trial, never an older hand-run copy', () => {
+    const src = read('scripts/update.sh');
+    const fn = src.slice(src.indexOf('arm_watchdog() {'), src.indexOf('\n}\n', src.indexOf('arm_watchdog() {')));
+    assert.match(fn, /grep -q[^\n]*NIGHTSTAND_WATCHDOG_TRIAL/);
+    assert.match(read('scripts/setup_watchdog.sh'), /NIGHTSTAND_WATCHDOG_TRIAL/);
+  });
+
+  it('setup_services.sh never arms it, since it runs before the update is checked', () => {
+    assert.doesNotMatch(read('scripts/setup_services.sh'), /setup_watchdog/);
+  });
+
+  it('install.sh arms it last, and not after a failed migration', () => {
+    const src = read('scripts/install.sh');
+    const arm = src.indexOf('scripts/setup_watchdog.sh');
+    assert.ok(arm > src.indexOf('Installation complete!'), 'install.sh must arm the watchdog last');
+    assert.match(src.slice(src.lastIndexOf('\nif ', arm), arm), /migration_failed/);
+  });
+});

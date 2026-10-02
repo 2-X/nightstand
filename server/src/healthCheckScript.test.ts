@@ -18,6 +18,8 @@ type Options = {
   answers?: boolean;
   // An HTTP status the server answers with; overrides answers.
   status?: number;
+  // curl printed nothing: it is missing or was killed before it ran.
+  silentCurl?: boolean;
   // Holds the lock on another filesystem whose inode number matches.
   otherDeviceLock?: boolean;
   lockHeld?: boolean;
@@ -34,7 +36,7 @@ function lockKey(file: string) {
 }
 
 function setup({
-  active = 'active', answers = false, status, lockHeld = false, otherDeviceLock = false, procLocks = true, activeSince,
+  active = 'active', answers = false, status, silentCurl = false, lockHeld = false, otherDeviceLock = false, procLocks = true, activeSince,
   uptime = 100000,
 }: Options = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-health-'));
@@ -52,7 +54,8 @@ function setup({
   // With -f, curl itself fails on an HTTP error status.
   const failFlag = code !== undefined && code >= 400
     ? `for a in "$@"; do case "$a" in --fail | -[!-]*f*) printf ${code}; exit 22 ;; esac; done\n` : '';
-  stub('curl', code === undefined ? 'printf 000; exit 28' : `${failFlag}printf ${code}; exit 0`);
+  stub('curl', silentCurl ? 'exit 127'
+    : code === undefined ? 'printf 000; exit 28' : `${failFlag}printf ${code}; exit 0`);
   // Only reached when /proc/locks cannot be read.
   stub('flock', `exit ${lockHeld ? 1 : 0}`);
   const lock = path.join(dir, 'operation.lock');
@@ -120,6 +123,15 @@ describe('health_check.sh', () => {
       assert.equal(existsSync(t.state), false, `HTTP ${status} is an answer and clears the count`);
       t.cleanup();
     }
+  });
+
+  it('counts only curl\'s own no-answer code, never an empty result', () => {
+    // curl prints 000 whenever it runs and nothing answers. Printing nothing
+    // means curl itself did not run, which says nothing about the server.
+    const t = setup({ silentCurl: true });
+    for (let i = 0; i < 5; i++) t.run();
+    assert.doesNotMatch(t.log(), /restart/);
+    t.cleanup();
   });
 
   it('forgets failures once the server answers', () => {

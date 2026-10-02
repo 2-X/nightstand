@@ -87,6 +87,8 @@ describe('revert-to-stock.sh', () => {
     assert.match(rest, /systemctl disable --now free-sleep-health\.timer/);
     assert.match(rest, /\/etc\/systemd\/system\/free-sleep-health\.service/);
     assert.match(rest, /\/etc\/systemd\/system\/free-sleep-health\.timer/);
+    // The fork's tree is at $PREV by then; $LIVE is upstream's.
+    assert.match(rest, /bash "\$PREV\/scripts\/setup_watchdog\.sh" --remove/);
   });
 
   it('never rewrites /persistent/free-sleep-data other than a backup copy', () => {

@@ -380,6 +380,10 @@ if [ "$HEALTHY" = yes ]; then
     /etc/systemd/system/free-sleep.service.d/20-nightstand-restart.conf \
     /etc/systemd/system/free-sleep-stream.service.d/10-nightstand-limits.conf
   systemctl daemon-reload >/dev/null 2>&1 || true
+  # Upstream never turns on the hardware watchdog; take Nightstand's setting out.
+  if [ -f "$PREV/scripts/setup_watchdog.sh" ]; then
+    bash "$PREV/scripts/setup_watchdog.sh" --remove || say "WARNING: could not remove the hardware watchdog setting"
+  fi
   exit 0
 fi
 

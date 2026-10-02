@@ -1,0 +1,377 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import { execFileSync, spawnSync } from 'node:child_process';
+import {
+  chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// scripts/setup_watchdog.sh turns on systemd's runtime watchdog after every
+// successful install and update on a Pod 5, and turns it off again on a
+// switch to upstream. The
+// watchdog resets the whole Pod if PID 1 stops petting it, so these run the
+// script for real against a fake /proc, sysfs and systemd and check that it
+// only ever arms where the hardware can hold the timeout, never overrides
+// someone else's setting, and undoes exactly its own file.
+//
+// History: the stock Wi-Fi driver once oopsed and froze PID 1 partway
+// through the nightly reboot. systemd shipped with RuntimeWatchdogSec off and
+// arms the reboot watchdog only at the final handoff, which that shutdown
+// never reached, so the Pod sat with no server and no cooling for hours.
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const SCRIPT = path.join(repoRoot, 'scripts/setup_watchdog.sh');
+const DROPIN = '10-nightstand-watchdog.conf';
+// What the first, hand-run version of the script wrote.
+const MANUAL_DROPIN = '# Managed by scripts/setup_watchdog.sh. See that script for why this exists.\n'
+  + '[Manager]\nRuntimeWatchdogSec=30s\nRebootWatchdogSec=60s\n';
+
+type Pod = {
+  device?: boolean;
+  systemdVersion?: string;
+  runtime?: string | null;
+  sysfs?: Partial<Record<'identity' | 'timeout' | 'max_timeout' | 'min_timeout' | 'nowayout', string>> | null;
+  otherHolder?: boolean;
+  pid1Holds?: boolean;
+  // How the fake PID 1 reacts to daemon-reexec with the drop-in in place.
+  arm?: 'yes' | 'no' | 'wrong-timeout';
+  reexecFails?: boolean;
+  dropin?: string;
+  trialMark?: string;
+  // Contents of the Pod's device label, or null for none.
+  label?: string | null;
+};
+
+function pod(opts: Pod = {}) {
+  const {
+    device = true, systemdVersion = '250', runtime = '0', otherHolder = false, pid1Holds = false,
+    arm = 'yes', reexecFails = false,
+  } = opts;
+  const sysfsValues = opts.sysfs === undefined
+    ? { identity: 'mtk-wdt', timeout: '31', max_timeout: '31', min_timeout: '1', nowayout: '0' }
+    : opts.sysfs;
+  const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-watchdog-'));
+  const bin = path.join(dir, 'bin');
+  const conf = path.join(dir, 'system.conf.d');
+  const runConf = path.join(dir, 'run-system.conf.d');
+  const mark = path.join(dir, 'watchdog-trial');
+  const sysfs = path.join(dir, 'sysfs');
+  const proc = path.join(dir, 'proc');
+  const devicePath = path.join(dir, 'watchdog');
+  const calls = path.join(dir, 'calls');
+  const runtimeFile = path.join(dir, 'runtime');
+  const labelFile = path.join(dir, 'device-label');
+  const label = opts.label === undefined ? '20500-0005-G53-00012345\n' : opts.label;
+  if (label !== null) writeFileSync(labelFile, label);
+  mkdirSync(bin);
+  mkdirSync(path.join(proc, '1', 'fd'), { recursive: true });
+  if (device) writeFileSync(devicePath, '');
+  if (sysfsValues) {
+    mkdirSync(sysfs);
+    for (const [name, value] of Object.entries(sysfsValues)) writeFileSync(path.join(sysfs, name), `${value}\n`);
+  }
+  if (runtime !== null) writeFileSync(runtimeFile, runtime);
+  if (pid1Holds) symlinkSync('/dev/watchdog0', path.join(proc, '1', 'fd', '3'));
+  if (otherHolder) {
+    mkdirSync(path.join(proc, '321', 'fd'), { recursive: true });
+    symlinkSync('/dev/watchdog', path.join(proc, '321', 'fd', '4'));
+  }
+  if (opts.dropin !== undefined) {
+    mkdirSync(conf);
+    writeFileSync(path.join(conf, DROPIN), opts.dropin);
+  }
+  if (opts.trialMark !== undefined) writeFileSync(mark, opts.trialMark);
+
+  const armed = arm === 'no' ? ':' : [
+    `echo 30s > "${runtimeFile}"`,
+    `ln -sf /dev/watchdog0 "${proc}/1/fd/3"`,
+    arm === 'yes' && sysfsValues ? `echo 30 > "${sysfs}/timeout"` : ':',
+  ].join('; ');
+  writeFileSync(path.join(bin, 'systemctl'), `#!/bin/sh
+echo "$*" >> "${calls}"
+case "$1" in
+  --version) echo "systemd ${systemdVersion} (${systemdVersion}.1)"; echo "+PAM +AUDIT" ;;
+  show) [ -f "${runtimeFile}" ] && echo "RuntimeWatchdogUSec=$(cat "${runtimeFile}")" ;;
+  daemon-reexec)
+    ${reexecFails ? 'exit 1' : ''}
+    if [ -f "${conf}/${DROPIN}" ] || [ -f "${runConf}/${DROPIN}" ]; then ${armed}; else echo 0 > "${runtimeFile}"; rm -f "${proc}/1/fd/3"; fi ;;
+esac
+exit 0
+`);
+  chmodSync(path.join(bin, 'systemctl'), 0o755);
+  writeFileSync(path.join(bin, 'sync'), `#!/bin/sh\necho "sync" >> "${calls}"\n`);
+  chmodSync(path.join(bin, 'sync'), 0o755);
+
+  const run = (...args: string[]) => spawnSync('bash', [SCRIPT, ...args], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH}`,
+      NIGHTSTAND_SYSTEM_CONF_DIR: conf,
+      NIGHTSTAND_RUNTIME_CONF_DIR: runConf,
+      NIGHTSTAND_WATCHDOG_TRIAL_MARK: mark,
+      NIGHTSTAND_WATCHDOG_TRIAL: '0',
+      NIGHTSTAND_WATCHDOG_DEVICE: devicePath,
+      NIGHTSTAND_WATCHDOG_SYSFS: sysfs,
+      NIGHTSTAND_PROC: proc,
+      NIGHTSTAND_WATCHDOG_WAIT: '1',
+      NIGHTSTAND_DEVICE_LABEL: labelFile,
+    },
+  });
+  const dropinPath = path.join(conf, DROPIN);
+  const trialPath = path.join(runConf, DROPIN);
+  return {
+    run,
+    dropin: () => (existsSync(dropinPath) ? readFileSync(dropinPath, 'utf8') : null),
+    trialDropin: () => existsSync(trialPath),
+    writeTrialDropin: () => { mkdirSync(runConf, { recursive: true }); writeFileSync(trialPath, MANUAL_DROPIN); },
+    mark: () => (existsSync(mark) ? readFileSync(mark, 'utf8') : null),
+    reexecs: () => (existsSync(calls) ? readFileSync(calls, 'utf8').split('\n').filter((l) => l === 'daemon-reexec').length : 0),
+    calls: () => (existsSync(calls) ? readFileSync(calls, 'utf8').split('\n') : []),
+    setLabel: (text: string) => writeFileSync(labelFile, text),
+    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+  };
+}
+
+describe('setup_watchdog.sh', () => {
+  it('parses and carries the exec bit', () => {
+    assert.doesNotThrow(() => execFileSync('bash', ['-n', SCRIPT]));
+    assert.ok(statSync(SCRIPT).mode & 0o111, 'setup_watchdog.sh must carry the exec bit');
+  });
+
+  it('arms the runtime watchdog through its own drop-in and checks that it took', () => {
+    const p = pod();
+    const result = p.run();
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const dropin = p.dropin() ?? '';
+    assert.match(dropin, /^# Managed by scripts\/setup_watchdog\.sh/);
+    assert.match(dropin, /^\[Manager\]$/m);
+    assert.match(dropin, /^RuntimeWatchdogSec=30s$/m);
+    assert.doesNotMatch(dropin, /RebootWatchdogSec/, 'the stock reboot watchdog is left as it is');
+    assert.equal(p.reexecs(), 1, 'daemon-reload does not re-read Manager settings');
+    assert.match(result.stdout, /Hardware watchdog on/);
+    assert.equal(p.trialDropin(), false, 'the trial copy in /run is gone once /etc holds it');
+    assert.equal(p.mark(), null, 'a finished trial leaves no trial file');
+    p.cleanup();
+  });
+
+  it('does not try again after a trial that never finished', () => {
+    // An empty trial file means the run stopped partway, most likely because
+    // the watchdog reset the Pod. /run was cleared by that reset.
+    const p = pod({ trialMark: '' });
+    p.writeTrialDropin();
+    const result = p.run();
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /Hardware watchdog left off: an earlier trial did not finish/);
+    assert.equal(p.reexecs(), 0);
+    assert.equal(p.dropin(), null);
+    assert.equal(p.trialDropin(), false);
+    p.cleanup();
+  });
+
+  it('writes the trial file to disk before the re-exec that could reset the Pod', () => {
+    const p = pod();
+    p.run();
+    const calls = p.calls();
+    assert.ok(calls.includes('sync'), 'the trial file must be flushed');
+    assert.ok(calls.indexOf('sync') < calls.indexOf('daemon-reexec'));
+    p.cleanup();
+  });
+
+  it('is turned on only on the Pod 5 it was checked on, and tries again at the next update', () => {
+    // A Pod 4 with a G-revision label older than G53, or a driver other than
+    // mtk-wdt with its 31 second maximum, has not been checked.
+    const other: Array<[string, Pod]> = [
+      ['an older hub revision', { label: '20500-0004-G00-00012345\n' }],
+      ['no device label', { label: null }],
+      // The server reads these as no revision at all, so not a Pod 5.
+      ['a label without dashes', { label: 'garbage\n' }],
+      ['a third field that is not a revision', { label: '20500-0005-zzz-00012345\n' }],
+      ['a revision split from its field by a line break', { label: '20500-0005-\nG53-00012345\n' }],
+      ['another driver', { sysfs: { identity: 'omap_wdt', timeout: '60', max_timeout: '60', nowayout: '0' } }],
+      ['another maximum', { sysfs: { identity: 'mtk-wdt', timeout: '31', max_timeout: '0', nowayout: '0' } }],
+    ];
+    for (const [why, opts] of other) {
+      const p = pod(opts);
+      const result = p.run();
+      assert.equal(result.status, 0, why);
+      assert.match(result.stdout, /Hardware watchdog left off: .*Pod 5/, why);
+      assert.equal(p.dropin(), null, why);
+      assert.equal(p.reexecs(), 0, why);
+      assert.equal(p.mark(), null, `${why}: a skipped Pod is not marked, so it tries again`);
+      p.cleanup();
+    }
+    // The server splits the whole file, not only its first line.
+    const multiline = pod({ label: '20500-0005\n-G53-00012345\n' });
+    assert.equal(multiline.run().status, 0);
+    assert.match(multiline.dropin() ?? '', /RuntimeWatchdogSec=30s/, 'G53 is the third field of the whole label');
+    multiline.cleanup();
+
+    const later = pod({ label: '20500-0004-G00-00012345\n' });
+    later.run();
+    later.setLabel('20500-0005-G60-00012345\n');
+    assert.equal(later.run().status, 0);
+    assert.match(later.dropin() ?? '', /RuntimeWatchdogSec=30s/);
+    later.cleanup();
+  });
+
+  it('does nothing on a second run', () => {
+    const p = pod();
+    p.run();
+    const first = p.dropin();
+    const again = p.run();
+    assert.equal(again.status, 0);
+    assert.equal(p.dropin(), first);
+    assert.equal(p.reexecs(), 1, 'an update must not re-exec PID 1 again');
+    assert.match(again.stdout, /already on/);
+    p.cleanup();
+  });
+
+  it('keeps the drop-in the hand-run version wrote, byte for byte', () => {
+    const p = pod({ dropin: MANUAL_DROPIN, runtime: '30s', pid1Holds: true });
+    const result = p.run();
+    assert.equal(result.status, 0);
+    assert.equal(p.dropin(), MANUAL_DROPIN);
+    assert.equal(p.reexecs(), 0);
+    p.cleanup();
+  });
+
+  const skips: Array<[string, Pod, RegExp]> = [
+    ['there is no watchdog device', { device: false }, /no watchdog device/],
+    ['systemd is older than 230', { systemdVersion: '229' }, /systemd 229/],
+    ['the systemd version cannot be read', { systemdVersion: 'unknown' }, /systemd unknown/],
+    ['systemd does not report the setting', { runtime: null }, /does not report/],
+    ['the runtime watchdog is already set elsewhere', { runtime: '1min' }, /already set to 1min/],
+    ['the driver does not report its timeout', { sysfs: null }, /timeout/],
+    ['the hardware timeout is shorter than 30 seconds', { sysfs: { timeout: '16', max_timeout: '16', nowayout: '0' } }, /16/],
+    ['the hardware maximum is below 30 seconds', { sysfs: { timeout: '60', max_timeout: '20', nowayout: '0' } }, /20/],
+    ['the hardware minimum is above 30 seconds', { sysfs: { timeout: '60', min_timeout: '45', nowayout: '0' } }, /45/],
+    ['another program holds the watchdog', { otherHolder: true }, /another program/],
+  ];
+  for (const [why, opts, reason] of skips) {
+    it(`leaves the watchdog off when ${why}`, () => {
+      const p = pod(opts);
+      const result = p.run();
+      assert.equal(result.status, 0, 'skipping is not a failure');
+      assert.match(result.stdout, /Hardware watchdog left off/);
+      assert.match(result.stdout, reason);
+      assert.equal(p.dropin(), null);
+      assert.equal(p.reexecs(), 0);
+      p.cleanup();
+    });
+  }
+
+  it('leaves a drop-in of the same name that is not its own alone', () => {
+    const foreign = '[Manager]\nRuntimeWatchdogSec=2min\n';
+    const p = pod({ dropin: foreign });
+    const result = p.run();
+    assert.equal(result.status, 0);
+    assert.equal(p.dropin(), foreign);
+    assert.equal(p.reexecs(), 0);
+    p.cleanup();
+  });
+
+  it('takes its setting back out when PID 1 did not open the device, and does not try again', () => {
+    const p = pod({ arm: 'no' });
+    const result = p.run();
+    assert.equal(result.status, 1);
+    assert.match(result.stdout + result.stderr, /is NOT active/);
+    assert.equal(p.dropin(), null);
+    assert.equal(p.trialDropin(), false);
+    assert.equal(p.reexecs(), 2, 'nothing is armed, so re-exec again to drop the setting');
+    assert.match(p.mark() ?? '', /PID 1 did not take the device/);
+    const again = p.run();
+    assert.equal(again.status, 0);
+    assert.match(again.stdout, /left off: PID 1 did not take the device/);
+    assert.equal(p.reexecs(), 2);
+    p.cleanup();
+  });
+
+  it('never re-execs to undo an armed device it could not configure', () => {
+    // PID 1 holds the device but the timeout did not take. It still pets more
+    // often than the hardware's own timeout, while closing the device on a
+    // kernel that cannot stop it would reset the Pod.
+    const p = pod({ arm: 'wrong-timeout' });
+    const result = p.run();
+    assert.equal(result.status, 1);
+    assert.match(result.stdout + result.stderr, /is NOT active as set up/);
+    assert.equal(p.dropin(), null);
+    assert.equal(p.trialDropin(), false);
+    assert.equal(p.reexecs(), 1);
+    p.cleanup();
+  });
+
+  it('takes its setting back out when the re-exec fails', () => {
+    const p = pod({ reexecFails: true });
+    const result = p.run();
+    assert.equal(result.status, 1);
+    assert.equal(p.dropin(), null);
+    assert.equal(p.trialDropin(), false);
+    p.cleanup();
+  });
+
+  describe('--remove', () => {
+    it('removes its drop-in and turns the watchdog off now on a kernel that can stop it', () => {
+      const p = pod({ dropin: MANUAL_DROPIN, runtime: '30s', pid1Holds: true });
+      const result = p.run('--remove');
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(p.dropin(), null);
+      assert.equal(p.reexecs(), 1);
+      p.cleanup();
+    });
+
+    it('removes a trial copy and a trial file too', () => {
+      const p = pod({ runtime: '30s', pid1Holds: true, trialMark: 'PID 1 did not take the device' });
+      p.writeTrialDropin();
+      assert.equal(p.run('--remove').status, 0);
+      assert.equal(p.trialDropin(), false);
+      assert.equal(p.mark(), null);
+      p.cleanup();
+    });
+
+    it('leaves PID 1 petting until the next restart where the watchdog cannot be stopped', () => {
+      for (const sysfs of [{ timeout: '30', nowayout: '1' }, { timeout: '30' }]) {
+        const p = pod({ dropin: MANUAL_DROPIN, runtime: '30s', pid1Holds: true, sysfs });
+        const result = p.run('--remove');
+        assert.equal(result.status, 0);
+        assert.equal(p.dropin(), null);
+        assert.equal(p.reexecs(), 0);
+        assert.match(result.stdout, /next restart/);
+        p.cleanup();
+      }
+    });
+
+    it('leaves anything that is not its own alone', () => {
+      const foreign = '[Manager]\nRuntimeWatchdogSec=2min\n';
+      const p = pod({ dropin: foreign, runtime: '2min', pid1Holds: true });
+      assert.equal(p.run('--remove').status, 0);
+      assert.equal(p.dropin(), foreign);
+      assert.equal(p.reexecs(), 0);
+      p.cleanup();
+
+      const none = pod();
+      assert.equal(none.run('--remove').status, 0);
+      assert.equal(none.reexecs(), 0);
+      none.cleanup();
+    });
+  });
+
+  describe('source', () => {
+    const src = readFileSync(SCRIPT, 'utf8');
+
+    it('keeps the runtime timeout inside the 31 second mtk-wdt hardware maximum', () => {
+      // Above the maximum the timeout either needs the kernel to extend it in
+      // software or fails to set, and a failed set leaves the hardware on its
+      // own timeout while PID 1 pets at half the longer one: a reset loop.
+      const match = src.match(/^RUNTIME=(\d+)$/m);
+      assert.ok(match, 'the runtime timeout must be a plain number of seconds');
+      assert.ok(Number(match[1]) <= 31, `${match[1]}s exceeds the 31s mtk-wdt hardware maximum`);
+    });
+
+    it('never writes the stock system.conf', () => {
+      assert.match(src, /system\.conf\.d/);
+      assert.doesNotMatch(src, />+ *"?\/etc\/systemd\/system\.conf"?\s*$/m);
+    });
+  });
+});

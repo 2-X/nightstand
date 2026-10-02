@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const SCRIPT = path.join(repoRoot, 'scripts/setup_services.sh');
 
-function sandbox(opts: { existingSudoers?: string; visudoFails?: boolean; withoutHealthCheck?: boolean } = {}) {
+function sandbox(opts: { existingSudoers?: string; visudoFails?: boolean; withoutHealthCheck?: boolean; watchdog?: 'ok' } = {}) {
   const root = mkdtempSync(path.join(tmpdir(), 'nightstand-services-'));
   const bin = path.join(root, 'bin');
   const systemd = path.join(root, 'systemd');
@@ -31,6 +31,12 @@ function sandbox(opts: { existingSudoers?: string; visudoFails?: boolean; withou
     copyFileSync(path.join(repoRoot, 'scripts/systemd', unit), path.join(repo, 'scripts/systemd', unit));
   }
   writeFileSync(path.join(bin, 'systemctl'), `#!/bin/sh\necho "$@" >> "${calls}"\n`);
+  if (opts.watchdog) {
+    writeFileSync(
+      path.join(repo, 'scripts', 'setup_watchdog.sh'),
+      `echo "watchdog $*" >> "${calls}"\nexit 0\n`,
+    );
+  }
   writeFileSync(path.join(bin, 'visudo'), `#!/bin/sh\nexit ${opts.visudoFails ? 1 : 0}\n`);
   chmodSync(path.join(bin, 'systemctl'), 0o755);
   chmodSync(path.join(bin, 'visudo'), 0o755);
@@ -72,7 +78,7 @@ describe('setup_services.sh', () => {
     assert.doesNotThrow(() => execFileSync('bash', ['-n', SCRIPT]));
   });
 
-  it('installs the update, rollback, and revert units without starting any', () => {
+  it('installs the update, rollback, and revert units without starting them', () => {
     const box = sandbox();
     const result = box.run();
     assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -111,6 +117,13 @@ describe('setup_services.sh', () => {
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.equal(box.read(box.calls).trim(), 'daemon-reload');
     assert.equal(existsSync(path.join(box.systemd, 'free-sleep-health.timer')), false);
+  });
+
+  it('leaves the hardware watchdog to the caller, after its success check', () => {
+    const box = sandbox({ watchdog: 'ok' });
+    const result = box.run();
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.doesNotMatch(box.read(box.calls), /watchdog/);
   });
 
   it('grants a sudoers rule for every command the server runs through sudo', () => {

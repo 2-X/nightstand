@@ -54,13 +54,16 @@ describe('rollback_pod.sh', () => {
     assert.match(src, /cmp -s "\$LIVE\/server\/package-lock\.json" "\$source\/server\/package-lock\.json"/);
   });
 
-  it('removes the health check only when rolling back to another fork', () => {
+  it('removes the health check and the watchdog setting only when rolling back to another fork', () => {
     const src = readFileSync(path.join(repoRoot, SCRIPT), 'utf8');
     const success = src.slice(src.indexOf('if [ "$HEALTHY" = yes ]; then'), src.indexOf('# --- swap back on failure'));
-    const otherFork = success.slice(success.indexOf('if [ "$TARGET_IS_NIGHTSTAND" != yes ]; then'), success.indexOf('  fi\n'));
+    const otherFork = success.slice(success.indexOf('if [ "$TARGET_IS_NIGHTSTAND" != yes ]; then'), success.indexOf('\n  fi\n'));
     assert.match(otherFork, /disable --now [^\n]*free-sleep-health\.timer/);
     assert.match(otherFork, /\/etc\/systemd\/system\/free-sleep-health\.service/);
     assert.match(otherFork, /\/etc\/systemd\/system\/free-sleep-health\.timer/);
+    // After the swap, $PREV holds the Nightstand tree that was running.
+    assert.match(otherFork, /bash "\$PREV\/scripts\/setup_watchdog\.sh" --remove/);
+    assert.equal(success.match(/setup_watchdog/g)?.length, 2, 'a Nightstand target keeps the watchdog');
   });
 
   it('the systemd unit runs the script via bash and exists', () => {

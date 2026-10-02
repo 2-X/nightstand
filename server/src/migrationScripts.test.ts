@@ -203,6 +203,23 @@ describe('fork-switch tool scripts', () => {
       assert.doesNotMatch(src, /\/etc\/sudoers/, 'sudoers changes belong in setup_services.sh');
     });
 
+    // The first arming of the hardware watchdog can reset the Pod. Before the
+    // sentinel is disarmed, that reset would restore their fork 12 minutes
+    // after boot even though the migration had succeeded.
+    it('turns on the hardware watchdog only after the sentinel is disarmed', () => {
+      const success = src.slice(src.indexOf('Health check passed'));
+      const disarm = success.indexOf('\ndisarm_sentinel\n');
+      const arm = success.indexOf('bash "$LIVE/scripts/setup_watchdog.sh"');
+      assert.ok(disarm > 0, 'expected the sentinel to be disarmed on success');
+      assert.ok(arm > disarm, 'setup_watchdog.sh must run after disarm_sentinel');
+      // A reset during the trial must not leave a healthy migration recorded
+      // as unfinished, so the success record and line come first.
+      assert.ok(arm > success.indexOf('write_status "install" "success"'), 'arm after the success status is written');
+      assert.ok(arm > success.indexOf('say "SUCCESS: migrated'), 'arm after the SUCCESS line');
+      assert.ok(arm > success.indexOf('rm -f "$SWAP_MARKER"'), 'arm after the swap marker is cleared');
+      assert.equal(src.split('setup_watchdog.sh').length - 1, 2, 'one guard and one call, both after the swap succeeded');
+    });
+
     it('applies this fork\'s WAN policy only after the health check succeeds', () => {
       assertOrder(src, [
         'if [ "$HEALTHY" != yes ]',

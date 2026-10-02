@@ -25,6 +25,13 @@ is a hard fork; for the history of the projects it descends from, see
   stored and returned by the API.
 - Nightstand now restarts its server if it is running but stops answering for
   three minutes, except while an update, rollback or switch is in progress.
+- Installs and updates now turn on the hardware watchdog on the Pod 5, so a
+  Pod whose system freezes restarts itself within about 30 seconds instead of
+  staying down until it is unplugged. Other models are left as they are for
+  now. It also stays off where a watchdog is already set up some other way,
+  and switching to upstream turns it off again (on some Pods, at the next
+  restart). Checked by hand on one Pod 5; the automatic setup is checked on
+  hardware before release.
 - Updates no longer turn the firewall off while downloading. They allow only
   HTTPS and name lookups out for the download and keep blocking the
   firmware's upload port, and a stalled dependency install now gives up after

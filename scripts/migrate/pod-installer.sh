@@ -460,3 +460,9 @@ rm -rf "$IPTABLES_SNAPSHOT" "$BASELINE_FILE" "$RESTORE_SCRIPT_DEST" "$PREEXISTIN
 rm -f "$SWAP_MARKER"
 write_status "install" "success" "migrated to v$STAGED_VERSION; previous fork kept at $PREV (in-app instant rollback)"
 say "SUCCESS: migrated to v$STAGED_VERSION. Their original install is kept at $PREV, the app's Settings > Software & updates > Roll back button uses it."
+
+# Last: its first arming can reset the Pod, so the migration is already
+# recorded as a success and the sentinel is disarmed before it runs.
+if [ -f "$LIVE/scripts/setup_watchdog.sh" ]; then
+  bash "$LIVE/scripts/setup_watchdog.sh" || say "WARNING: the hardware watchdog could not be turned on; see above"
+fi

@@ -156,6 +156,9 @@ if [ "$HEALTHY" = yes ]; then
       /etc/systemd/system/free-sleep.service.d/10-nightstand-limits.conf \
       /etc/systemd/system/free-sleep-stream.service.d/10-nightstand-limits.conf
     systemctl daemon-reload
+    if [ -f "$PREV/scripts/setup_watchdog.sh" ]; then
+      bash "$PREV/scripts/setup_watchdog.sh" --remove || say "WARNING: could not remove the hardware watchdog setting"
+    fi
   fi
   say "SUCCESS: pod is serving v$TARGET_VERSION (rolled back from v$CUR_VERSION)"
   exit 0

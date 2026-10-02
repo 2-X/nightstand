@@ -404,6 +404,28 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     rationale: 'Safety: restarts a server that stops answering, since schedules and alarms run in it. '
       + 'Switching to upstream free-sleep removes the timer; an older release leaves it installed as a no-op.',
   },
+  {
+    id: 'hardware-watchdog',
+    title: 'Hardware watchdog',
+    description: 'After a successful install or update, sets systemd\'s RuntimeWatchdogSec to 30 seconds through a drop-in, '
+      + 'after a one-minute trial from /run, so a frozen kernel or PID 1 resets the Pod. Pod 5 only (mtk-wdt, 31 s '
+      + 'maximum, hub revision G53 or later); skipped where the device, systemd or the driver\'s timeout limits cannot '
+      + 'hold it, and after a trial that did not finish.',
+    category: 'safety',
+    version: 'n/a',
+    flag: null,
+    default: true,
+    touchpoints: [
+      'scripts/setup_watchdog.sh', 'scripts/update.sh', 'scripts/install.sh', 'scripts/migrate/pod-installer.sh',
+      'scripts/revert-to-stock.sh', 'scripts/rollback_pod.sh',
+    ],
+    depends_on: ['agent'],
+    reversible: true,
+    tests: ['server/src/watchdogScript.test.ts', 'server/src/updaterScripts.test.ts', 'server/src/migrationScripts.test.ts'],
+    upstream_offer: false,
+    rationale: 'Safety: a frozen system otherwise leaves the Pod with no server and no cooling until it is unplugged. '
+      + 'Switching to upstream free-sleep removes the drop-in; it never overrides a watchdog set up some other way.',
+  },
 
   {
     id: 'primary-navigation',

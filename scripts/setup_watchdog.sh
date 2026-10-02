@@ -1,72 +1,217 @@
 #!/bin/bash
 #
-# Enable the hardware watchdog so a wedged kernel cannot strand the pod.
+# Turns on the Pod's hardware watchdog, so a frozen kernel or PID 1 resets the
+# Pod instead of leaving it with no server and no cooling. install.sh,
+# update.sh and pod-installer.sh run it once they have succeeded; safe to run
+# again.
 #
 # Background: the stock Wi-Fi driver hit a kernel oops, processes wedged in
-# uninterruptible sleep, and the nightly reboot hung with PID 1 frozen. systemd arms its reboot watchdog only at the final reboot handoff,
-# which that shutdown never reached, so nothing reset the board and the pod sat
-# with no server and no cooling until it was power cycled by hand.
+# uninterruptible sleep, and the nightly reboot hung with PID 1 frozen.
+# systemd arms its reboot watchdog only at the final reboot handoff, which
+# that shutdown never reached, so nothing reset the board. RuntimeWatchdogSec
+# is the layer that was missing: PID 1 pets /dev/watchdog at half the timeout.
 #
-# RuntimeWatchdogSec is the layer that was missing. PID 1 pets /dev/watchdog at
-# half the timeout, so a frozen kernel or a frozen PID 1 hard-resets the SoC.
+# 30 seconds stays inside mtk-wdt's 31 second hardware maximum. A longer value
+# depends on the kernel extending the timeout in software, and where it cannot,
+# the hardware keeps its own timeout while PID 1 pets at half the longer one,
+# which resets the Pod over and over.
 #
-# Run once as root on the pod. Safe to re-run.
-# To undo: rm the drop-in below, then systemctl daemon-reexec.
+# It is turned on only for the Pod 5 it was checked on: the mtk-wdt driver
+# with a 31 second maximum, on a hub whose device label shows revision G53 or
+# later (the rule the server uses for "Pod 5"). The first arming can reset
+# the Pod, so callers run it only after they succeed. It is also left off where
+# there is no watchdog device, where systemd is older than 230, where
+# something else already set RuntimeWatchdogSec, where another program holds
+# the device, or where the driver's timeout limits do not allow 30 seconds.
+# A Pod left off for any of these reasons looks again at the next update.
+#
+# The first time, the setting goes in /run, which a reset clears, and stays
+# there for two full timeouts before it is copied to /etc. A watchdog that
+# does not take PID 1's pets therefore resets the Pod once rather than at
+# every boot. The trial file in the data folder, kept after a reset or a
+# failed attempt, stops it from trying again. The drop-in in /etc is the
+# record of what this did: "--remove" deletes it and the trial files, and
+# nothing else.
+#
+# Usage: setup_watchdog.sh [--remove]   (run as root)
+set -u
 
-set -euo pipefail
+CONF_DIR="${NIGHTSTAND_SYSTEM_CONF_DIR:-/etc/systemd/system.conf.d}"
+TRIAL_DIR="${NIGHTSTAND_RUNTIME_CONF_DIR:-/run/systemd/system.conf.d}"
+NAME=10-nightstand-watchdog.conf
+DROPIN="$CONF_DIR/$NAME"
+TRIAL_DROPIN="$TRIAL_DIR/$NAME"
+TRIAL_MARK="${NIGHTSTAND_WATCHDOG_TRIAL_MARK:-/persistent/free-sleep-data/watchdog-trial}"
+TRIAL_SECONDS="${NIGHTSTAND_WATCHDOG_TRIAL:-60}"
+DEVICE="${NIGHTSTAND_WATCHDOG_DEVICE:-/dev/watchdog}"
+SYSFS="${NIGHTSTAND_WATCHDOG_SYSFS:-/sys/class/watchdog/watchdog0}"
+PROC="${NIGHTSTAND_PROC:-/proc}"
+WAIT="${NIGHTSTAND_WATCHDOG_WAIT:-10}"
+MARKER="# Managed by scripts/setup_watchdog.sh."
+RUNTIME=30
+POD5_IDENTITY=mtk-wdt
+POD5_MAX_TIMEOUT=31
+POD5_REVISION=G53
 
-DROPIN_DIR="/etc/systemd/system.conf.d"
-DROPIN="${DROPIN_DIR}/10-nightstand-watchdog.conf"
+skip() { echo "Hardware watchdog left off: $*."; exit 0; }
+ours() { [ -f "$DROPIN" ] && head -n 1 "$DROPIN" | grep -qF "$MARKER"; }
+number() { case "${1:-}" in '' | *[!0-9]*) return 1 ;; esac; }
+sysfs() { tr -d '[:space:]' < "$SYSFS/$1" 2>/dev/null; }
+runtime_setting() {
+  systemctl show -p RuntimeWatchdogUSec 2>/dev/null | sed -n 's/^RuntimeWatchdogUSec=//p'
+}
 
-# mtk-wdt reports a 31s hardware maximum, so the runtime timer stays inside it.
-# The reboot timer may exceed it because the watchdog core extends longer
-# timeouts in software.
-RUNTIME_TIMEOUT="${NIGHTSTAND_WATCHDOG_RUNTIME:-30s}"
-REBOOT_TIMEOUT="${NIGHTSTAND_WATCHDOG_REBOOT:-60s}"
+# Prints the PIDs that hold a watchdog device open.
+holders() {
+  local fd pid
+  for fd in "$PROC"/[0-9]*/fd/*; do
+    case "$(readlink "$fd" 2>/dev/null)" in
+      /dev/watchdog*)
+        pid=${fd#"$PROC"/}
+        echo "${pid%%/*}"
+        ;;
+    esac
+  done | sort -u
+}
+pid1_holds() { holders | grep -qx 1; }
 
-if [ "$(id -u)" -ne 0 ]; then
-  echo "This script must run as root." >&2
-  exit 1
-fi
+# The hub revision from the Pod's device label: the third "-" field of the
+# whole file, as the server splits it, up to any whitespace. Empty when the
+# label has fewer than two dashes or the field is not a letter and two digits.
+hub_revision() {
+  local file field
+  for file in ${NIGHTSTAND_DEVICE_LABEL:-/deviceinfo/device-label /persistent/deviceinfo/device-label}; do
+    if [ -f "$file" ]; then
+      field=$(tr '\n' ' ' < "$file" | cut -s -d- -f3)
+      field=${field%%[[:space:]]*}
+      case "$field" in [A-Z][0-9][0-9]) echo "$field" ;; esac
+      return
+    fi
+  done
+}
+# True when revision $1 sorts at or after POD5_REVISION, as the server compares.
+pod5_revision() {
+  [ -n "$1" ] && [ "$(printf '%s\n%s\n' "$POD5_REVISION" "$1" | LC_ALL=C sort | head -n 1)" = "$POD5_REVISION" ]
+}
 
-if [ ! -e /dev/watchdog ]; then
-  echo "No /dev/watchdog on this device. Refusing to configure a watchdog that cannot arm." >&2
-  exit 1
-fi
-
-echo "Writing ${DROPIN}..."
-mkdir -p "${DROPIN_DIR}"
-cat > "${DROPIN}" <<EOF
-# Managed by scripts/setup_watchdog.sh. See that script for why this exists.
+# Writes the drop-in into directory $1, replacing any earlier copy at once.
+write_dropin() {
+  mkdir -p "$1" || return 1
+  cat > "$1/$NAME.tmp" <<EOF || { rm -f "$1/$NAME.tmp"; return 1; }
+$MARKER See that script for why this exists.
 [Manager]
-RuntimeWatchdogSec=${RUNTIME_TIMEOUT}
-RebootWatchdogSec=${REBOOT_TIMEOUT}
+RuntimeWatchdogSec=${RUNTIME}s
 EOF
+  mv "$1/$NAME.tmp" "$1/$NAME" || { rm -f "$1/$NAME.tmp"; return 1; }
+}
 
-echo "Re-executing systemd to apply it (running services are not restarted)..."
-systemctl daemon-reexec
-sleep 3
+# Takes the setting back out after a failed trial and records why, so later
+# runs do not try again. A re-exec closes the device, which on a kernel that
+# cannot stop a running watchdog resets the Pod, so PID 1 lets go of an open
+# device only at the next restart.
+abandon() {
+  rm -f "$TRIAL_DROPIN"
+  echo "$*" > "$TRIAL_MARK" 2>/dev/null
+  if pid1_holds; then
+    echo "WARNING: the hardware watchdog is NOT active as set up: $*. Nightstand's setting was removed, and PID 1 lets go of the device at the next restart." >&2
+  else
+    systemctl daemon-reexec >/dev/null 2>&1 || true
+    echo "WARNING: the hardware watchdog is NOT active: $*. Nightstand's setting was removed." >&2
+  fi
+  exit 1
+}
 
-# Verify rather than assume. An unverified assumption that the watchdog was
-# active is what made the outage above last eight hours instead of thirty
-# seconds, so this script fails loudly if the device did not actually arm.
-runtime_effective="$(systemctl show -p RuntimeWatchdogUSec --value || true)"
-reboot_effective="$(systemctl show -p RebootWatchdogUSec --value || true)"
-echo "Verifying..."
-echo "  RuntimeWatchdogUSec=${runtime_effective}"
-echo "  RebootWatchdogUSec=${reboot_effective}"
+if [ "${1:-}" = --remove ]; then
+  rm -f "$TRIAL_MARK"
+  if ! ours && [ ! -f "$TRIAL_DROPIN" ]; then
+    echo "Hardware watchdog: no Nightstand setting to remove."
+    exit 0
+  fi
+  if ours; then
+    rm -f "$DROPIN" || { echo "WARNING: could not remove $DROPIN" >&2; exit 1; }
+  fi
+  rm -f "$TRIAL_DROPIN"
+  # Same reason as in abandon: only re-exec where closing the device is safe.
+  if pid1_holds && [ "$(sysfs nowayout)" != 0 ]; then
+    echo "Hardware watchdog: Nightstand's setting removed; it turns off at the next restart."
+  elif systemctl daemon-reexec; then
+    echo "Hardware watchdog: Nightstand's setting removed and the watchdog turned off."
+  else
+    echo "Hardware watchdog: Nightstand's setting removed; it turns off at the next restart."
+  fi
+  exit 0
+fi
 
-if [ -z "${runtime_effective}" ] || [ "${runtime_effective}" = "0" ]; then
-  echo "FAILED: the runtime watchdog is still disabled." >&2
+if [ -f "$DROPIN" ]; then
+  ours || skip "$DROPIN was not written by Nightstand"
+  echo "Hardware watchdog already on (RuntimeWatchdogUSec=$(runtime_setting))."
+  exit 0
+fi
+if [ -e "$TRIAL_MARK" ]; then
+  rm -f "$TRIAL_DROPIN"
+  REASON=$(head -n 1 "$TRIAL_MARK" 2>/dev/null)
+  skip "${REASON:-an earlier trial did not finish, so the Pod may have reset during it}; delete $TRIAL_MARK to try again"
+fi
+
+[ -e "$DEVICE" ] || skip "no watchdog device at $DEVICE"
+VERSION=$(systemctl --version 2>/dev/null | awk 'NR == 1 { print $2 }')
+number "$VERSION" && [ "$VERSION" -ge 230 ] || skip "systemd ${VERSION:-unknown} is older than 230 or unknown"
+CURRENT=$(runtime_setting)
+[ -n "$CURRENT" ] || skip "systemd does not report RuntimeWatchdogUSec"
+case "$CURRENT" in
+  0 | 0s) ;;
+  *) skip "RuntimeWatchdogSec is already set to $CURRENT outside Nightstand" ;;
+esac
+# Even if the new timeout fails to set, the hardware keeps this one, and PID 1
+# petting every RUNTIME/2 seconds stays well inside it.
+TIMEOUT=$(sysfs timeout)
+number "$TIMEOUT" || skip "the driver does not report its timeout"
+[ "$TIMEOUT" -ge "$RUNTIME" ] || skip "the hardware timeout is ${TIMEOUT}s, under ${RUNTIME}s"
+MAX=$(sysfs max_timeout)
+if number "$MAX" && [ "$MAX" -gt 0 ] && [ "$MAX" -lt "$RUNTIME" ]; then
+  skip "the hardware maximum is ${MAX}s, under ${RUNTIME}s"
+fi
+MIN=$(sysfs min_timeout)
+if number "$MIN" && [ "$MIN" -gt "$RUNTIME" ]; then
+  skip "the hardware minimum is ${MIN}s, over ${RUNTIME}s"
+fi
+IDENTITY=$(sysfs identity)
+REVISION=$(hub_revision)
+if [ "$IDENTITY" != "$POD5_IDENTITY" ] || [ "$MAX" != "$POD5_MAX_TIMEOUT" ] || ! pod5_revision "$REVISION"; then
+  skip "it is only turned on for the Pod 5 it was checked on (driver $POD5_IDENTITY, ${POD5_MAX_TIMEOUT}s maximum, hub revision $POD5_REVISION or later), and this Pod has driver ${IDENTITY:-unknown}, maximum ${MAX:-unknown}s, revision ${REVISION:-unknown}"
+fi
+OTHERS=$(holders | grep -vx 1 | tr '\n' ' ')
+[ -z "$OTHERS" ] || skip "another program (PID ${OTHERS% }) already uses the watchdog"
+
+: > "$TRIAL_MARK" || { echo "WARNING: could not write $TRIAL_MARK; the hardware watchdog stays off" >&2; exit 1; }
+# On disk before the re-exec, so a reset straight after it cannot lose it.
+sync
+if ! write_dropin "$TRIAL_DIR"; then
+  rm -f "$TRIAL_MARK"
+  echo "WARNING: could not write $TRIAL_DROPIN; the hardware watchdog stays off" >&2
   exit 1
 fi
 
-if ls -l /proc/1/fd 2>/dev/null | grep -q watchdog; then
-  echo "OK: PID 1 holds the watchdog device."
-else
-  echo "FAILED: PID 1 did not open a watchdog device, so the watchdog is NOT active." >&2
-  exit 1
+# daemon-reload does not re-read Manager settings. A re-exec keeps every
+# service running.
+echo "Hardware watchdog: trying it for ${TRIAL_SECONDS} seconds (running services are not restarted)"
+if ! systemctl daemon-reexec; then
+  abandon "systemctl daemon-reexec failed"
 fi
 
-echo
-echo "Done. A frozen kernel or PID 1 now hard-resets the pod within ${RUNTIME_TIMEOUT}."
+# Verify rather than assume: PID 1 holds the device, systemd reports the
+# setting, and the driver took the timeout.
+i=0
+until pid1_holds && CURRENT=$(runtime_setting) && [ -n "$CURRENT" ] && [ "$CURRENT" != 0 ] \
+  && [ "$(sysfs timeout)" = "$RUNTIME" ]; do
+  [ "$i" -lt "$WAIT" ] || abandon "PID 1 did not take the device with a ${RUNTIME}s timeout (RuntimeWatchdogUSec=$(runtime_setting), driver timeout $(sysfs timeout)s)"
+  sleep 1
+  i=$((i + 1))
+done
+
+# A Pod still running here has had its pets taken twice over.
+sleep "$TRIAL_SECONDS"
+pid1_holds || abandon "PID 1 let go of the device during the trial"
+write_dropin "$CONF_DIR" || abandon "could not write $DROPIN"
+rm -f "$TRIAL_DROPIN" "$TRIAL_MARK"
+echo "Hardware watchdog on: a frozen system now restarts within about ${RUNTIME} seconds."

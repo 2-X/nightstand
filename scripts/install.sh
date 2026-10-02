@@ -281,3 +281,9 @@ echo -e "\033[0;32mSee logs with: journalctl -u free-sleep --no-pager --output=c
 if [ "$migration_failed" = "true" ]; then
   echo -e "\033[33mWARNING: Prisma migrations failed! A backup of your database prior to the migration was saved to ${DEST:-/persistent/free-sleep-database-backups} \033[0m"
 fi
+
+# Last, since its first arming can reset the Pod; skipped when the database
+# did not migrate, so a broken install is not made worse.
+if [ "$migration_failed" != "true" ] && [ -f "$REPO_DIR/scripts/setup_watchdog.sh" ]; then
+  bash "$REPO_DIR/scripts/setup_watchdog.sh" || echo "WARNING: the hardware watchdog could not be turned on; see above"
+fi
