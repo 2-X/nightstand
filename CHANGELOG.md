@@ -6,6 +6,24 @@ is a hard fork; for the history of the projects it descends from, see
 [jmew/free-sleep](https://github.com/jmew/free-sleep) and
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
 
+## [Unreleased]
+
+- With "New sleep tracking (beta)" on, heart rate and breathing rate come
+  from newer estimators built for the bed's vibration sensors. They write a
+  value only while the bed's presence sensor says that side is occupied, and
+  leave a minute blank when the signal is unclear or the sleeper is moving a
+  lot. Until the presence sensor is ready, for example before its first
+  calibration, the existing estimates are used instead. The Sleep page shows
+  the breathing rate again while the switch is on; HRV is stored but not
+  shown. On a public dataset recorded with chest straps, the newer heart
+  rate was within about 1.3 bpm on average. On a shared bed, one side can
+  still pick up the partner's heart rate. These remain estimates from bed
+  sensors, not medical measurements. With the switch off, the estimates are
+  the same as before.
+- HRV is no longer shown in the app. Checked against chest-strap recordings,
+  the stored estimate was no more accurate than a fixed guess. It is still
+  stored and returned by the API.
+
 ## [3.5.1] - 2026-10-01
 
 Keeps biometrics RAW files from filling the disk on a Pod 3 with internet access blocked.
