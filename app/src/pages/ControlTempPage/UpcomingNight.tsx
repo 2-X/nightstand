@@ -1,4 +1,5 @@
 import SectionHeading from '@components/SectionHeading';
+import StatusText from '@components/StatusText';
 import { useEffect, useRef, useState } from 'react';
 import moment from 'moment-timezone';
 import { Box, Button, Typography } from '@mui/material';
@@ -52,10 +53,11 @@ export default function UpcomingNight() {
     return (
       <Box data-tonight sx={ cardSx }>
         <SectionHeading sx={ headingSx }>Tonight</SectionHeading>
-        { failed ? <>
-          <Typography sx={ tonightLineSx } role="status">Schedule unavailable.</Typography>
-          <Button sx={ { ...shared.lampLink, ml: '-10px' } } onClick={ retry }>Try again</Button>
-        </> : <Typography sx={ { ...tonightLineSx, color: palette.text.tertiary } } role="status">Loading schedule</Typography> }
+        { /* One region from Loading schedule to Schedule unavailable, so the change is announced. */ }
+        <StatusText sx={ failed ? tonightLineSx : { ...tonightLineSx, color: palette.text.tertiary } }>
+          { failed ? 'Schedule unavailable.' : 'Loading schedule' }
+        </StatusText>
+        { failed && <Button sx={ { ...shared.lampLink, ml: '-10px' } } onClick={ retry }>Try again</Button> }
       </Box>
     );
   }

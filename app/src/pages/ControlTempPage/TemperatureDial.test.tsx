@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { palette } from '@design/tokens';
 import { getDeviceStatus } from '../../mocks/mockData';
 import TemperatureDial from './TemperatureDial';
@@ -67,6 +68,12 @@ it('says Loading in the dial and leaves every slot empty while the status loads'
   expect(container.querySelector('[data-dial] path[data-band="off"]')).not.toBeNull();
   expect(container.querySelector('[data-caption-slot]')!.textContent).toBe('');
   expect(container.querySelector('[data-controls-row]')).toBeEmptyDOMElement();
+});
+
+it('fills the Loading region only once it is in the page, so it is announced', () => {
+  const markup = renderToStaticMarkup(<TemperatureDial loading refetch={ vi.fn() } format="level"/>);
+  expect(markup).toMatch(/role="status"[^>]*><\/p>/);
+  expect(markup).not.toContain('Loading');
 });
 
 it('draws the empty track and no text before the status loads', () => {

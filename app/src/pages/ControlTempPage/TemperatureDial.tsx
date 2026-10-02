@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box } from '@mui/material';
+import StatusText from '@components/StatusText';
 import { useAppStore } from '@state/appStore';
 import { useSettings } from '@api/settings.ts';
 import { media, palette } from '@design/tokens';
@@ -75,7 +76,7 @@ export default function TemperatureDial({ status, staleSince, loading = false, a
         targetLevel={ targetLevel }
         currentLevel={ fahrenheitToLevel(status?.currentTemperatureF ?? target) }/>
       { loading && <Box sx={ centreSx }>
-        <Typography role="status" sx={ { fontSize: 15, color: palette.text.tertiary } }>Loading</Typography>
+        <StatusText sx={ { fontSize: 15, color: palette.text.tertiary } }>Loading</StatusText>
       </Box> }
       { status && <TemperatureLabel
         isOn={ isOn }

@@ -36,3 +36,18 @@ it('holds the card in place with "Loading schedule" while the schedule loads', (
   expect(screen.getByRole('status')).toHaveTextContent('Loading schedule');
   expect(screen.queryByText('Schedule unavailable.')).not.toBeInTheDocument();
 });
+
+it('says Schedule unavailable in the region that said Loading schedule, so it is announced', async () => {
+  let fail: () => void = () => undefined;
+  const failed = new Promise<void>(resolve => { fail = resolve; });
+  server.use(http.get('*/api/schedules', async () => {
+    await failed;
+    return new HttpResponse(null, { status: 500 });
+  }));
+  renderWithProviders(<UpcomingNight />);
+  const region = screen.getByRole('status');
+  expect(region).toHaveTextContent('Loading schedule');
+  fail();
+  await waitFor(() => expect(region).toHaveTextContent('Schedule unavailable.'));
+  expect(screen.getByRole('status')).toBe(region);
+});
