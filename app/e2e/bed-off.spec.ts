@@ -56,6 +56,12 @@ for (const [width, height] of sizes) {
       expect(box.x + box.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 0.5);
     }
     expect(await row.evaluate(node => node.scrollHeight <= node.clientHeight + 1)).toBe(true);
+    // A full size target beside the text, not on top of it.
+    expect(linkBox.width).toBeGreaterThanOrEqual(44);
+    expect(linkBox.height).toBeGreaterThanOrEqual(44);
+    const apart = linkBox.x >= textBox.x + textBox.width - 0.5 || textBox.x >= linkBox.x + linkBox.width - 0.5
+      || linkBox.y >= textBox.y + textBox.height - 0.5 || textBox.y >= linkBox.y + linkBox.height - 0.5;
+    expect(apart).toBe(true);
   });
 }
 
@@ -306,5 +312,6 @@ test('an off side\'s Tonight card leads with when it starts', async ({ page }) =
   await page.goto('/');
   await page.getByRole('button', { name: 'Turn off' }).click();
   await expect(page.getByRole('button', { name: 'Turn on' })).toBeVisible();
-  await expect(page.locator('[data-tonight]')).toContainText(/(Starts warming|Turns on) tonight at 10:\d\d PM/);
+  await expect(page.locator('[data-tonight]').getByText(/^Starts warming/))
+    .toHaveText(/^Starts warming tonight at 10:00\sPM for a 10:30\sPM bedtime, set to \+1 \(Workday\)$/);
 });
