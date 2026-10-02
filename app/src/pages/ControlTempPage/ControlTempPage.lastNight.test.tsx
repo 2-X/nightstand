@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { screen, waitFor } from '@testing-library/react';
-import { getDeviceStatus } from '../../mocks/mockData';
+import { getDeviceStatus, getSettings } from '../../mocks/mockData';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import { useAppStore } from '@state/appStore.tsx';
@@ -32,36 +32,58 @@ describe('last night on the Bed page', () => {
     );
   });
 
-  it('moves under the dial, with time asleep and a link to Sleep, while the side is off', async () => {
+  it('moves under the dial, as time asleep with a link to Sleep, while the side is off', async () => {
     leftSide(false);
     renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
 
     const link = await screen.findByRole('link', { name: 'View last night\'s sleep' });
     expect(link).toHaveAttribute('href', '/sleep');
     expect(link).toHaveTextContent('View sleep');
-    expect(screen.getByText("Last night's sleep estimate: 86")).toBeInTheDocument();
-    expect(screen.getByText('7h 12m asleep')).toBeInTheDocument();
-    expect(screen.getByText("Last night's sleep estimate: 86").parentElement)
-      .toHaveTextContent("Last night's sleep estimate: 86, 7h 12m asleep");
+    expect(link.closest('[data-controls-row]')).not.toBeNull();
+    expect(screen.getByText('Last night: about 7h 12m asleep')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Turn on' })).toBeInTheDocument();
-    // The card below is not shown as well.
-    expect(screen.getAllByText(/Last night's sleep estimate/)).toHaveLength(1);
-    expect(screen.queryByRole('button', { name: /View sleep/ })).not.toBeInTheDocument();
+    // The chip is not shown as well, and the score is never shown.
+    expect(screen.getAllByText(/^Last night:/)).toHaveLength(1);
+    expect(screen.queryByText(/Last night: 86/)).not.toBeInTheDocument();
   });
 
-  it('keeps the card below the controls while the side is on', async () => {
+  it('keeps the chip below the controls while the side is on', async () => {
     leftSide(true);
-    renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
+    const { container } = renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
 
-    expect(await screen.findByRole('button', { name: /^Last night's sleep estimate: 86 ?View sleep$/ })).toBeInTheDocument();
+    expect(await screen.findByText('Last night: about 7h 12m asleep')).toBeInTheDocument();
+    const chip = container.querySelector('[data-last-night-chip]')!;
+    expect(chip).toContainElement(screen.getByRole('link', { name: 'View last night\'s sleep' }));
     expect(screen.getByRole('button', { name: 'Warmer' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'View last night\'s sleep' })).not.toBeInTheDocument();
-    expect(screen.queryByText('7h 12m asleep')).not.toBeInTheDocument();
+  });
+
+  it('moves under the dial for an away side that is on, without the chip', async () => {
+    leftSide(true);
+    const settings = getSettings();
+    server.use(http.get('*/api/settings', () => HttpResponse.json({ ...settings, left: { ...settings.left, awayMode: true } })));
+    const { container } = renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
+
+    expect(await screen.findByText(/^Away mode is on/)).toBeInTheDocument();
+    const link = await screen.findByRole('link', { name: 'View last night\'s sleep' });
+    expect(link.closest('[data-controls-row]')).not.toBeNull();
+    expect(screen.getAllByText(/^Last night:/)).toHaveLength(1);
+    expect(container.querySelector('[data-last-night-chip]')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Warmer' })).not.toBeInTheDocument();
+  });
+
+  it('says time in bed when coverage is low', async () => {
+    leftSide(false);
+    server.use(http.get('*/metrics/sleep-score', () => HttpResponse.json({
+      ...score, components: { duration: { score: 70, weight: 0.4, value: '8h in bed', available: true } },
+    })));
+    renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
+    expect(await screen.findByText('Last night: 8h in bed')).toBeInTheDocument();
   });
 
   it.each([
     ['no night was recorded', [], score],
     ['sleep score is off', [night], { active: false, score: null, components: {} }],
+    ['the score has no duration', [night], { ...score, components: { duration: { score: 0, weight: 0.4, value: '', available: false } } }],
   ])('shows nothing under the dial when %s', async (_, records, response) => {
     leftSide(false);
     let answered = 0;
@@ -74,18 +96,7 @@ describe('last night on the Bed page', () => {
     await screen.findByRole('button', { name: 'Turn on' });
     await waitFor(() => expect(answered).toBe(records.length ? 2 : 1));
     await new Promise(resolve => setTimeout(resolve, 50));
-    expect(screen.queryByText(/Last night's sleep estimate/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Last night/)).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'View last night\'s sleep' })).not.toBeInTheDocument();
-  });
-
-  it('leaves out the duration when the score has none', async () => {
-    leftSide(false);
-    server.use(http.get('*/metrics/sleep-score', () => HttpResponse.json({
-      ...score, components: { duration: { score: 0, weight: 0.4, value: '', available: false } },
-    })));
-    renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
-
-    expect(await screen.findByText("Last night's sleep estimate: 86")).toBeInTheDocument();
-    expect(screen.getByText("Last night's sleep estimate: 86").parentElement).toHaveTextContent(/^Last night's sleep estimate: 86$/);
   });
 });

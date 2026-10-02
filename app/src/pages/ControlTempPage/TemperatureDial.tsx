@@ -14,6 +14,8 @@ import TemperatureLabel from './TemperatureLabel.tsx';
 type TemperatureDialProps = {
   status?: { isOn: boolean; targetTemperatureF: number; currentTemperatureF: number };
   statusUnavailable?: boolean;
+  // An away side that is on follows the other side; it shows last night instead of steppers.
+  away?: boolean;
   refetch: () => unknown;
   format: TemperatureFormat;
   // Shown on the controls row while the side is off.
@@ -47,7 +49,7 @@ const controlsRowSx = {
   [media.tight]: { height: 67, mt: '2px' },
 } as const;
 
-export default function TemperatureDial({ status, statusUnavailable, refetch, format, whenOff }: TemperatureDialProps) {
+export default function TemperatureDial({ status, statusUnavailable, away = false, refetch, format, whenOff }: TemperatureDialProps) {
   const { side } = useAppStore();
   const stored = useControlTempStore(state => state.deviceStatus?.[side]?.targetTemperatureF);
   const isOn = !!status?.isOn;
@@ -66,7 +68,7 @@ export default function TemperatureDial({ status, statusUnavailable, refetch, fo
     </Box>
     <CaptionSlot isOn={ isOn }/>
     <Box data-controls-row sx={ controlsRowSx }>
-      { status && (isOn
+      { status && (isOn && !away
         ? <TemperatureButtons
           key={ side }
           statusUnavailable={ statusUnavailable }

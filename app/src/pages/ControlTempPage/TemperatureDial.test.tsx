@@ -41,6 +41,12 @@ it('shows the steppers only while on, and what it is given in their place while 
   expect(screen.getByText('Last night')).toBeInTheDocument();
 });
 
+it('shows last night, not the steppers, for an away side that is on', () => {
+  render(<TemperatureDial status={ on } away refetch={ vi.fn() } format="level" whenOff={ <span>Last night</span> }/>);
+  expect(screen.queryByText('Temperature stepper')).not.toBeInTheDocument();
+  expect(screen.getByText('Last night')).toBeInTheDocument();
+});
+
 it('draws the empty track and no text before the status loads', () => {
   const { container } = render(<TemperatureDial refetch={ vi.fn() } format="level"/>);
   expect(container.querySelector('[data-dial] path[data-band="off"]')).not.toBeNull();

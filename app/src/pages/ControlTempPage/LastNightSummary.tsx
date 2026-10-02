@@ -1,29 +1,21 @@
 import { Link } from 'react-router-dom';
 import { Box, Button, Typography } from '@mui/material';
-
+import { sx as shared } from '@design/tokens';
+import { lastNightText } from './lastNightText';
 import type { LastNight } from './useLastNight.ts';
 
-// A quiet line under the dial while the side is off.
+// A quiet line on the controls row while the side is off, centred in the row's full height.
 export default function LastNightSummary({ lastNight }: { lastNight?: LastNight }) {
-  if (!lastNight) return null;
+  const text = lastNight && lastNightText(lastNight);
+  if (!text) return null;
   return (
     <Box
       sx={ {
-        display: 'flex',
-        flexWrap: 'wrap',
-        justifyContent: 'center',
-        alignItems: 'center',
-        columnGap: 1,
-        textAlign: 'center',
+        height: '100%', display: 'flex', flexWrap: 'wrap', alignItems: 'center', alignContent: 'center',
+        justifyContent: 'center', columnGap: '4px', textAlign: 'center',
       } }>
-      <Typography variant="body2" color="text.secondary">
-        <Box component="span" sx={ { whiteSpace: 'nowrap' } }>Last night's sleep estimate: { lastNight.score }</Box>
-        { lastNight.duration && <>
-          { ', ' }
-          <Box component="span" sx={ { whiteSpace: 'nowrap' } }>{ lastNight.duration }</Box>
-        </> }
-      </Typography>
-      <Button component={ Link } to="/sleep" size="small" aria-label="View last night's sleep" sx={ { minWidth: 0 } }>View sleep</Button>
+      <Typography component="span" sx={ { fontSize: 15, color: 'text.secondary', whiteSpace: 'nowrap' } }>{ text }</Typography>
+      <Button component={ Link } to="/sleep" aria-label="View last night's sleep" sx={ shared.lampLink }>View sleep</Button>
     </Box>
   );
 }

@@ -50,8 +50,9 @@ export default function ControlTempPage() {
   const sideStatus = deviceStatus?.[side];
   const isOn = sideStatus?.isOn || false;
   const lastNight = useLastNight();
-  // While off, last night moves up into the stepper's place under the dial.
-  const lastNightUnderDial = !!sideStatus && !isOn;
+  const away = !!settings?.[side]?.awayMode;
+  // While off or away, last night moves up into the steppers' row under the dial.
+  const lastNightUnderDial = !!sideStatus && (!isOn || away);
 
   useEffect(() => {
     refetch();
@@ -85,6 +86,7 @@ export default function ControlTempPage() {
           { sideStatus && (
             <TemperatureDial
               status={ sideStatus }
+              away={ away }
               statusUnavailable={ isError }
               refetch={ refetch }
               format={ settings?.temperatureFormat ?? 'fahrenheit' }

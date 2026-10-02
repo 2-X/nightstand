@@ -3,22 +3,26 @@ import { test, expect } from '@playwright/test';
 
 test.use({ viewport: { width: 390, height: 844 } });
 
+const sizes = [[320, 740], [360, 640], [375, 560], [375, 667], [390, 844], [768, 1024], [1280, 800]] as const;
+
 test('turning a side off keeps the power button in place and shows last night under the dial', async ({ page }) => {
   await page.goto('/');
   const turnOff = page.getByRole('button', { name: 'Turn off' });
   await expect(turnOff).toBeVisible();
-  // While on, last night stays in the card below the controls.
-  await expect(page.getByRole('button', { name: /^Last night's sleep estimate: \d+/ })).toBeVisible();
+  // While on, last night stays in the chip below the controls.
+  const chip = page.locator('[data-last-night-chip]');
+  await expect(chip).toContainText(/^Last night: about \d+h \d+m asleep/);
   await expect(page.getByRole('button', { name: 'Warmer' })).toBeVisible();
   const onTop = (await turnOff.boundingBox())!.y;
 
   await turnOff.click();
   const turnOn = page.getByRole('button', { name: 'Turn on' });
   await expect(turnOn).toBeVisible();
-  const viewSleep = page.getByRole('link', { name: 'View last night\'s sleep' });
+  const row = page.locator('[data-controls-row]');
+  const viewSleep = row.getByRole('link', { name: 'View last night\'s sleep' });
   await expect(viewSleep).toBeVisible();
-  await expect(page.getByText(/^Last night's sleep estimate: \d+$/)).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Last night's sleep estimate/ })).toHaveCount(0);
+  await expect(row.getByText(/^Last night: about \d+h \d+m asleep$/)).toBeVisible();
+  await expect(chip).toHaveCount(0);
 
   const offTop = (await turnOn.boundingBox())!.y;
   expect(Math.abs(offTop - onTop)).toBeLessThanOrEqual(1);
@@ -30,6 +34,30 @@ test('turning a side off keeps the power button in place and shows last night un
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
+
+for (const [width, height] of sizes) {
+  test(`the off side's last night line fits the controls row on one line at ${width}x${height}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Turn off' }).click();
+    await expect(page.getByRole('button', { name: 'Turn on' })).toBeVisible();
+    const row = page.locator('[data-controls-row]');
+    const text = row.getByText(/^Last night: about \d+h \d+m asleep$/);
+    await expect(text).toBeVisible();
+    const rowBox = (await row.boundingBox())!;
+    const textBox = (await text.boundingBox())!;
+    const linkBox = (await row.getByRole('link', { name: 'View last night\'s sleep' }).boundingBox())!;
+    // One line of text, and everything inside the row's box, so nothing spills over the caption or the power row.
+    expect(textBox.height).toBeLessThanOrEqual(24);
+    for (const box of [textBox, linkBox]) {
+      expect(box.y).toBeGreaterThanOrEqual(rowBox.y - 0.5);
+      expect(box.y + box.height).toBeLessThanOrEqual(rowBox.y + rowBox.height + 0.5);
+      expect(box.x).toBeGreaterThanOrEqual(rowBox.x - 0.5);
+      expect(box.x + box.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 0.5);
+    }
+    expect(await row.evaluate(node => node.scrollHeight <= node.clientHeight + 1)).toBe(true);
+  });
+}
 
 for (const [width, height] of [[390, 844], [320, 740], [360, 640], [375, 560], [375, 667]] as const) {
   test(`the caption keeps its slot under the dial when the side turns off at ${width}x${height}`, async ({ page }) => {
@@ -114,7 +142,6 @@ for (const [width, height] of [[320, 740], [360, 640], [375, 560], [375, 667], [
   });
 }
 
-const sizes = [[320, 740], [360, 640], [375, 560], [375, 667], [390, 844], [768, 1024], [1280, 800]] as const;
 for (const [width, height] of sizes) {
   test(`the power button never moves while toggling at ${width}x${height}`, async ({ page }) => {
     await page.setViewportSize({ width, height });
