@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { Box } from '@mui/material';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import { useAppStore } from '@state/appStore';
@@ -11,7 +10,7 @@ import { getSettings } from '../../mocks/mockData';
 import type { BedSleeps } from './useBedSleeps';
 import { useControlTempStore } from './controlTempStore';
 import UpcomingNight from './UpcomingNight';
-import TemperatureLabel from './TemperatureLabel';
+import DockCaption from './DockCaption';
 import PowerButton from './PowerButton';
 import AlarmNotification from './AlarmNotification';
 
@@ -98,15 +97,9 @@ it('shows no schedule text while it cannot tell which engine runs', async () => 
   expect(screen.queryByRole('heading', { name: 'Upcoming' })).not.toBeInTheDocument();
 });
 
-it('names the resolved power-off under the dial', async () => {
+it('names the resolved power-off beside the power control', async () => {
   vi.setSystemTime(new Date('2026-09-29T08:00:00Z'));
-  renderWithProviders(<Box sx={ { position: 'relative' } }><TemperatureLabel
-    isOn
-    sliderTemp={ 77 }
-    sliderColor="#ffffff"
-    currentTargetTemp={ 77 }
-    currentTemperatureF={ 77 }
-    format="level"/></Box>);
+  renderWithProviders(<DockCaption isOn/>);
   expect(await screen.findByText('Turns off today at 6:45 AM')).toBeInTheDocument();
 });
 

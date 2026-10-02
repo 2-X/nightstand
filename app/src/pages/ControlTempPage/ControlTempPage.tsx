@@ -11,7 +11,7 @@ import ErrorBoundary from '@components/ErrorBoundary.tsx';
 import LastNightChip from './LastNightChip.tsx';
 import LastNightSummary from './LastNightSummary.tsx';
 import PageContainer from '../PageContainer.tsx';
-import PowerButton from './PowerButton.tsx';
+import PowerDock from './PowerDock.tsx';
 import ScheduleOverrideBanner from './ScheduleOverrideBanner.tsx';
 import SideControl from '../../components/SideControl.tsx';
 import Slider from './Slider.tsx';
@@ -93,7 +93,7 @@ export default function ControlTempPage() {
               Try again
             </Button>
           ) : (
-            sideStatus && <PowerButton isOn={ sideStatus.isOn } refetch={ refetch } />
+            sideStatus && <PowerDock isOn={ sideStatus.isOn } refetch={ refetch } />
           ) }
           { commandError && <Alert severity="error" sx={ { width: '100%' } }>{ commandError }</Alert> }
         </Box>

@@ -1,5 +1,4 @@
-import { Link } from 'react-router-dom';
-import { Button, Box, Typography } from '@mui/material';
+import { Button } from '@mui/material';
 import { postDeviceStatus } from '@api/deviceStatus.ts';
 import { DeviceStatus } from '@api/deviceStatusSchema.ts';
 import { DeepPartial } from 'ts-essentials';
@@ -11,9 +10,10 @@ import { useControlTempStore } from './controlTempStore.tsx';
 import { scheduledTemperatureFromSleeps } from './sleepEvents';
 import { useBedSleeps } from './useBedSleeps';
 import { bedCommandMessage } from '@lib/requestError.ts';
+import { powerPillSx } from './powerPill';
 
 
-type PowerButtonProps = {
+export type PowerButtonProps = {
   isOn: boolean;
   refetch: any;
 }
@@ -30,7 +30,6 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
   const clearPoweredOff = useControlTempStore(state => state.clearPoweredOff);
   const setCommandError = useControlTempStore(state => state.setCommandError);
   const isInAwayMode = settings?.[side]?.awayMode;
-  const disabled = isUpdating || isInAwayMode;
 
   const handleOnClick = (powerOn: boolean) => {
     // Powering on manually starts at the temperature the schedule would have
@@ -91,19 +90,15 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
       });
   };
 
-  if (isInAwayMode) {
-    return (
-      <Typography variant="body2" color="text.secondary" sx={ { textAlign: 'center' } }>
-        Away mode is on. Change it in <Link to="/settings/bed" style={ { color: 'inherit' } }>Settings, Bed and sides</Link>.
-      </Typography>
-    );
-  }
+  if (isInAwayMode) return null;
 
+  // aria-disabled, not disabled, so a click does not drop focus to the page while it saves.
   return (
-    <Box sx={ { width: '100%', mt: 0, display: 'flex', flexDirection: 'column', gap: 2 } }>
-      <Button fullWidth variant="outlined" disabled={ disabled } onClick={ () => handleOnClick(!isOn) }>
-        { isOn ? 'Turn off' : 'Turn on' }
-      </Button>
-    </Box>
+    <Button
+      aria-disabled={ isUpdating || undefined }
+      onClick={ () => { if (!isUpdating) handleOnClick(!isOn); } }
+      sx={ powerPillSx(isOn ? 'off' : 'on') }>
+      { isOn ? 'Turn off' : 'Turn on' }
+    </Button>
   );
 }

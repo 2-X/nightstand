@@ -31,7 +31,6 @@ it('keeps Bed text at AA on its new surfaces', () => {
   expect(ratio(palette.text.secondary, palette.dock.bg)).toBeGreaterThanOrEqual(4.5);
   expect(ratio(palette.text.secondary, palette.ember)).toBeGreaterThanOrEqual(4.5);
   expect(ratio(palette.text.primary, palette.ember)).toBeGreaterThanOrEqual(4.5);
-  expect(ratio(palette.power.onText, palette.lamp)).toBeGreaterThanOrEqual(4.5);
   expect(ratio(palette.lamp, palette.power.nightBg)).toBeGreaterThanOrEqual(4.5);
   expect(ratio(palette.text.tertiary, palette.bg.elevated)).toBeGreaterThanOrEqual(4.5);
   expect(ratio(palette.strip.chipText, palette.lamp)).toBeGreaterThanOrEqual(4.5);
@@ -43,5 +42,7 @@ it('keeps Bed text at AA on its new surfaces', () => {
 it('keeps control boundaries at 3:1', () => {
   expect(ratio(palette.step.cool, palette.step.fill)).toBeGreaterThanOrEqual(3);
   expect(ratio(palette.step.warm, palette.step.fill)).toBeGreaterThanOrEqual(3);
-  expect(ratio(palette.power.nightBorder, palette.dock.bg)).toBeGreaterThanOrEqual(3);
+  // Turn on's outline, against the dock around it and its own fill.
+  expect(ratio(palette.tile.selectedBorder, palette.dock.bg)).toBeGreaterThanOrEqual(3);
+  expect(ratio(palette.tile.selectedBorder, palette.power.nightBg)).toBeGreaterThanOrEqual(3);
 });

@@ -31,7 +31,7 @@ export const palette = {
   },
   step: { fill: '#0B0B0C', cool: '#3E6A92', warm: '#8F673A', disabled: '#2E3338' },
   dock: { bg: '#13110F', border: '#25211C' },
-  power: { offBorder: '#3A332A', onText: '#1A1814', nightBg: '#1C1915', nightBorder: 'rgba(233,227,213,0.55)' },
+  power: { offBorder: '#3A332A', nightBg: '#1C1915' },
   tile: { selectedBorder: 'rgba(233,227,213,0.7)' },
   strip: {
     line: '#2A2E33',
