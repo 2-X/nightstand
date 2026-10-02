@@ -9,7 +9,7 @@ import { usePresence, PresenceSide } from '@api/presence.ts';
 import { isSchedulePaused } from '@api/schedulePause.ts';
 import { displayTemperature, fahrenheitToLevel } from '@lib/temperatureConversions.ts';
 import { temperatureColor } from '@lib/temperatureColor';
-import { palette } from '@design/tokens';
+import { media, palette } from '@design/tokens';
 
 function presenceLabel(observation: PresenceSide | undefined): string | undefined {
   const age = Date.now() - Date.parse(observation?.lastUpdatedAt ?? '');
@@ -73,6 +73,8 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
           sx={ {
             position: 'relative', display: 'flex', alignItems: 'center', gap: 1, minWidth: 0,
             minHeight: compact ? 48 : 88, py: compact ? 0.5 : 1, px: compact ? 1 : 1.5, cursor: 'pointer', borderRadius: '24px',
+            // Still room for the name, the state and the occupancy line, so the tile never grows when presence arrives.
+            ...!compact && { [media.short]: { minHeight: 80, py: 0.5 }, [media.tight]: { minHeight: 66, py: '2px' } },
             bgcolor: selected ? palette.bg.selected : palette.bg.elevated,
             border: `2px solid ${selected ? palette.lamp : palette.border.subtle}`,
             '&:has(input:focus-visible)': { outline: `2px solid ${palette.lamp}`, outlineOffset: 3 },
@@ -85,7 +87,12 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
             } } }
             sx={ { position: 'absolute', inset: 0, opacity: 0, p: 0, '& input': { width: '100%', height: '100%' } } }/>
           <Box sx={ { minWidth: 0, flex: 1 } }>
-            <Typography fontWeight={ 600 } sx={ { fontSize: 16, pr: 2.5, overflowWrap: 'anywhere', lineHeight: compact ? 1.2 : 1.5 } }>
+            <Typography
+              fontWeight={ 600 }
+              sx={ {
+                fontSize: 16, pr: 2.5, overflowWrap: 'anywhere', lineHeight: compact ? 1.2 : 1.5,
+                ...!compact && { [media.tight]: { lineHeight: 1.3 } },
+              } }>
               <bdi>{ title }</bdi>
             </Typography>
             <Box sx={ { display: 'flex', alignItems: 'center', gap: 0.5 } }>
@@ -93,11 +100,13 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
                 variant="caption"
                 color={ !captions?.[key] && status?.isOn && !away
                   ? temperatureColor(fahrenheitToLevel(status.targetTemperatureF)) : 'text.secondary' }
-                sx={ { lineHeight: compact ? 1.2 : 1.5 } }>
+                sx={ { lineHeight: compact ? 1.2 : 1.5, ...!compact && { [media.tight]: { lineHeight: 1.4 } } } }>
                 { captions?.[key] ?? (compact && status?.isOn && !away ? `${paused ? 'Paused, ' : ''}${temperature}` : state) }
               </Typography>
             </Box>
-            { occupancy && <Typography variant="caption" color="text.secondary">{ occupancy }</Typography> }
+            { occupancy && <Typography variant="caption" color="text.secondary" sx={ { [media.tight]: { lineHeight: 1.4 } } }>
+              { occupancy }
+            </Typography> }
           </Box>
           { selected && <CheckCircleOutline
             aria-hidden

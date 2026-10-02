@@ -1,4 +1,4 @@
-import { fonts, media, palette } from '@design/tokens';
+import { media, palette } from '@design/tokens';
 
 export type PillKind = 'off' | 'on';
 
@@ -11,18 +11,16 @@ const looks = {
 export function powerPillSx(kind: PillKind) {
   const look = looks[kind];
   return {
-    flex: 'none',
-    minWidth: 124,
+    width: '100%',
     minHeight: 54,
-    px: '22px',
     borderRadius: '27px',
-    fontFamily: fonts.rounded,
     fontSize: 17,
-    fontWeight: 650,
+    fontWeight: 600,
+    letterSpacing: '-0.005em',
     textTransform: 'none',
     ...look,
     '&:hover': look,
     '&[aria-disabled="true"]': { cursor: 'default' },
-    [media.narrow]: { minWidth: 100, px: '16px' },
+    [media.tight]: { minHeight: 48, borderRadius: '24px' },
   } as const;
 }

@@ -1,8 +1,8 @@
-import { useId } from 'react';
 import { palette } from '@design/tokens';
 import { temperatureColor } from '@lib/temperatureColor';
 import {
-  BAND_WIDTH, DIAL_VIEWBOX, HAND, NOTCH, RUNWAY_LEVEL, bandSegments, clampLevel, dialPoint, fillRange, offArc, radialLine, ticks,
+  DIAL_HEIGHT, DIAL_WIDTH, NOTCH, SCALE_MAX, SCALE_MIN, TRACK_WIDTH, bandSegments, clampLevel, dialPoint, endLabels, fillRange, offArc,
+  radialLine, ticks,
 } from './dialGeometry';
 
 type DialRingProps = { isOn: boolean; targetLevel: number; currentLevel: number };
@@ -15,36 +15,33 @@ const band = (from: number, to: number) => bandSegments(from, to).map(segment =>
   key={ segment.d }
   d={ segment.d }
   stroke={ temperatureColor(segment.level) }
-  strokeWidth={ BAND_WIDTH }
+  strokeWidth={ TRACK_WIDTH }
   fill="none"/>);
 
-// The scale spans 200 degrees of a 240 degree band; the spare ends run under the steppers.
+const endLabel = (level: number) => level < 0 ? `\u2212${-level}` : `+${level}`;
+
+const svgStyle = {
+  position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', overflow: 'visible', pointerEvents: 'none',
+} as const;
+
+// Every mark is a state: the faint scale, the span to the target, the notch for now, the dot for the target.
 export default function DialRing({ isOn, targetLevel, currentLevel }: DialRingProps) {
-  const blur = useId();
   const target = clampLevel(targetLevel);
+  const current = clampLevel(currentLevel);
   const fill = fillRange(target);
-  const glow = dialPoint(target);
-  const hand = radialLine(target, HAND.inner, HAND.outer);
-  const notch = radialLine(clampLevel(currentLevel), NOTCH.inner, NOTCH.outer);
+  const dot = dialPoint(target);
+  const colour = temperatureColor(target);
+  const notch = radialLine(current, NOTCH.inner, NOTCH.outer);
   return (
-    <svg
-      viewBox={ `0 0 ${DIAL_VIEWBOX} ${DIAL_VIEWBOX}` }
-      aria-hidden="true"
-      style={ {
-        position: 'absolute', left: 0, top: 0, width: '100%', height: 'auto', aspectRatio: '1', display: 'block',
-        overflow: 'visible', pointerEvents: 'none',
-      } }>
-      <defs>
-        <filter id={ blur } x="-1" y="-1" width="3" height="3"><feGaussianBlur stdDeviation="11"/></filter>
-      </defs>
+    <svg viewBox={ `0 0 ${DIAL_WIDTH} ${DIAL_HEIGHT}` } aria-hidden="true" style={ svgStyle }>
       { isOn ? <>
-        <g data-band="ghost" opacity={ palette.dial.ghostOpacity }>{ band(-RUNWAY_LEVEL, RUNWAY_LEVEL) }</g>
+        <g data-band="ghost" opacity={ palette.dial.ghostOpacity }>{ band(SCALE_MIN, SCALE_MAX) }</g>
         { fill && <g data-band="fill">{ band(fill[0], fill[1]) }</g> }
       </> : <path
         data-band="off"
         d={ offArc() }
-        stroke={ palette.dial.track }
-        strokeWidth={ BAND_WIDTH }
+        stroke={ palette.dial.trackOff }
+        strokeWidth={ TRACK_WIDTH }
         strokeLinecap="round"
         fill="none"/> }
       { ticks().map(({ level, major, ...line }) => <line
@@ -52,14 +49,33 @@ export default function DialRing({ isOn, targetLevel, currentLevel }: DialRingPr
         data-tick={ major ? 'major' : 'minor' }
         { ...line }
         stroke={ tickColor(level, major, isOn) }
-        strokeWidth={ major ? 1.6 : 1.4 }
+        strokeWidth={ major ? 1.8 : 1.4 }
         strokeLinecap="round"/>) }
-      { isOn && <>
-        <line data-notch { ...notch } stroke={ palette.lamp } strokeWidth="2.6" strokeLinecap="round" opacity="0.85"/>
-        <circle data-glow cx={ glow.x } cy={ glow.y } r="24" fill={ temperatureColor(target) } opacity="0.55" filter={ `url(#${blur})` }/>
-        <line { ...hand } stroke={ palette.bg.base } strokeWidth="11" strokeLinecap="round"/>
-        <line data-hand { ...hand } stroke={ palette.lamp } strokeWidth="5" strokeLinecap="round"/>
+      { isOn && current !== target && <>
+        <line { ...notch } stroke={ palette.bg.base } strokeWidth="5.5" strokeLinecap="round"/>
+        <line data-notch { ...notch } stroke={ palette.lamp } strokeWidth="2.2" strokeLinecap="round" opacity="0.9"/>
       </> }
+      { isOn && <>
+        <circle
+          data-halo
+          cx={ dot.x }
+          cy={ dot.y }
+          r="14"
+          fill="none"
+          stroke={ colour }
+          strokeWidth="1.5"
+          opacity={ palette.dial.haloOpacity }/>
+        <circle data-target cx={ dot.x } cy={ dot.y } r="8.5" fill={ colour } stroke={ palette.bg.base } strokeWidth="2.5"/>
+      </> }
+      { endLabels().map(({ level, x, y }) => <text
+        key={ level }
+        data-end-label
+        x={ x }
+        y={ y }
+        textAnchor="middle"
+        fontSize="11.5"
+        fontFamily="inherit"
+        fill={ isOn ? palette.text.tertiary : palette.text.disabled }>{ endLabel(level) }</text>) }
     </svg>
   );
 }

@@ -1,10 +1,9 @@
 import { useRef, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { palette } from '@design/tokens';
+import { media, palette } from '@design/tokens';
 import { Button, Box } from '@mui/material';
 import { Add, Remove } from '@mui/icons-material';
 import { useControlTempStore } from './controlTempStore.tsx';
-import { controlsSlotSx } from './controlsSlot.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { postDeviceStatus } from '@api/deviceStatus.ts';
 import { useSettings } from '@api/settings.ts';
@@ -146,9 +145,13 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
   if (isInAwayMode) return null;
 
   const disabled = statusUnavailable || isInAwayMode || !Number.isFinite(deviceStatus?.[side]?.targetTemperatureF);
+  const targetF = deviceStatus?.[side]?.targetTemperatureF;
+  const atMin = (targetF ?? MIN_TEMP_F) <= MIN_TEMP_F;
+  const atMax = (targetF ?? MAX_TEMP_F) >= MAX_TEMP_F;
 
   const handleClick = (direction: 1 | -1) => {
     if (!deviceStatus || disabled) return;
+    if ((direction === -1 && atMin) || (direction === 1 && atMax)) return;
     const currentF = useControlTempStore.getState().deviceStatus![side].targetTemperatureF;
     if (!Number.isFinite(currentF)) return;
     steps.current.state = stepTemperature(currentF, format, direction, steps.current.state);
@@ -167,54 +170,41 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
     scheduleUpdate();
   };
 
-  const buttonStyle = {
-    borderWidth: '2px',
-    borderColor: palette.border.control,
-    color: palette.lamp,
-    '&.Mui-disabled': { borderWidth: '2px', borderColor: palette.border.subtle, color: palette.text.disabled },
-    width: 64,
-    height: 64,
-    borderRadius: '50%',
-    minWidth: 0,
-    padding: 0,
-  };
+  const stepperSx = (edge: string) => ({
+    position: 'relative', overflow: 'visible', width: 64, height: 64, minWidth: 0, p: 0, borderRadius: '50%',
+    bgcolor: 'transparent', color: palette.text.primary, boxShadow: `inset 0 0 0 2px ${edge}`,
+    '&:hover': { bgcolor: 'transparent' },
+    '& .MuiSvgIcon-root': { fontSize: 22 },
+    '&[aria-disabled="true"]': { boxShadow: `inset 0 0 0 2px ${palette.step.disabled}`, color: palette.text.disabled, cursor: 'default' },
+    '&[aria-disabled="true"] .stepper-label': { color: palette.text.disabled },
+    [media.narrow]: { width: 56, height: 56 },
+    [media.short]: { width: 56, height: 56 },
+    [media.tight]: { width: 48, height: 48 },
+  }) as const;
+  const labelSx = {
+    position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', mt: '5px', whiteSpace: 'nowrap',
+    fontSize: 12.5, fontWeight: 600, lineHeight: 1.3, color: palette.text.secondary,
+    [media.narrow]: { fontSize: 12 },
+    [media.tight]: { mt: '3px', fontSize: 12 },
+  } as const;
 
-  return (
-    <Box
-      sx={ {
-        position: 'relative',
-        ...controlsSlotSx,
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: '48px',
-        width: '100%',
-        marginLeft: 'auto',
-        marginRight: 'auto',
-      } }
-    >
-      <Button
-        aria-label="Decrease temperature"
-        variant="outlined"
-        color="primary"
-        sx={ buttonStyle }
-        onClick={ () => handleClick(-1) }
-        onKeyDown={ event => { if (event.key === 'ArrowDown' || event.key === 'ArrowLeft') { event.preventDefault(); handleClick(-1); } } }
-        disabled={ disabled || (deviceStatus?.[side]?.targetTemperatureF ?? MIN_TEMP_F) <= MIN_TEMP_F }
-      >
-        <Remove/>
-      </Button>
-      <Button
-        aria-label="Increase temperature"
-        variant="outlined"
-        sx={ buttonStyle }
-
-        onClick={ () => handleClick(1) }
-        onKeyDown={ event => { if (event.key === 'ArrowUp' || event.key === 'ArrowRight') { event.preventDefault(); handleClick(1); } } }
-        disabled={ disabled || (deviceStatus?.[side]?.targetTemperatureF ?? MAX_TEMP_F) >= MAX_TEMP_F }
-      >
-        <Add/>
-      </Button>
-    </Box>
-  );
+  // aria-disabled, not disabled, so focus stays on a stepper that reaches its limit.
+  return <Box sx={ { display: 'flex', gap: '48px', [media.narrow]: { gap: '44px' } } }>
+    <Button
+      aria-disabled={ disabled || atMin || undefined }
+      sx={ stepperSx(palette.step.cool) }
+      onClick={ () => handleClick(-1) }
+      onKeyDown={ event => { if (event.key === 'ArrowDown' || event.key === 'ArrowLeft') { event.preventDefault(); handleClick(-1); } } }>
+      <Remove/>
+      <Box component="span" className="stepper-label" sx={ labelSx }>Cooler</Box>
+    </Button>
+    <Button
+      aria-disabled={ disabled || atMax || undefined }
+      sx={ stepperSx(palette.step.warm) }
+      onClick={ () => handleClick(1) }
+      onKeyDown={ event => { if (event.key === 'ArrowUp' || event.key === 'ArrowRight') { event.preventDefault(); handleClick(1); } } }>
+      <Add/>
+      <Box component="span" className="stepper-label" sx={ labelSx }>Warmer</Box>
+    </Button>
+  </Box>;
 }

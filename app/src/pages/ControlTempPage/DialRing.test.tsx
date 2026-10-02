@@ -3,55 +3,79 @@ import { render } from '@testing-library/react';
 import { palette } from '@design/tokens';
 import { temperatureColor } from '@lib/temperatureColor';
 import DialRing from './DialRing';
-import { HAND, NOTCH, bandSegments, offArc, radialLine } from './dialGeometry';
+import { NOTCH, bandSegments, dialPoint, offArc, radialLine } from './dialGeometry';
 
 const ring = (isOn: boolean, targetLevel: number, currentLevel = 0) =>
   render(<DialRing isOn={ isOn } targetLevel={ targetLevel } currentLevel={ currentLevel }/>).container;
+const centre = (element: Element | null) => [Number(element?.getAttribute('cx')), Number(element?.getAttribute('cy'))];
 const attrs = (element: Element | null, ...names: string[]) => names.map(name => Number(element?.getAttribute(name)));
 
-it('draws a quiet track with dim ticks and nothing else while off', () => {
+it('draws a quiet track with dim ticks and dim end labels while off', () => {
   const container = ring(false, 3);
   const svg = container.querySelector('svg')!;
   expect(svg).toHaveAttribute('aria-hidden', 'true');
-  expect(container.querySelector('path[data-band="off"]')).toHaveAttribute('d', offArc());
-  expect(container.querySelector('path[data-band="off"]')).toHaveAttribute('stroke', palette.dial.track);
+  expect(svg).toHaveAttribute('viewBox', '0 0 280 240');
+  const track = container.querySelector('path[data-band="off"]');
+  expect(track).toHaveAttribute('d', offArc());
+  expect(track).toHaveAttribute('stroke', palette.dial.trackOff);
   expect(container.querySelectorAll('line[data-tick]')).toHaveLength(21);
   expect(container.querySelector('line[data-tick="major"]')).toHaveAttribute('stroke', palette.dial.tickMajorOff);
-  for (const selector of ['g[data-band="ghost"]', 'g[data-band="fill"]', 'line[data-hand]', 'circle[data-glow]', 'line[data-notch]'])
+  const labels = container.querySelectorAll('text[data-end-label]');
+  expect(Array.from(labels, label => label.textContent)).toEqual(['\u221210', '+10']);
+  expect(labels[0]).toHaveAttribute('fill', palette.text.disabled);
+  for (const selector of ['g[data-band="ghost"]', 'g[data-band="fill"]', 'line[data-notch]', 'circle[data-halo]', 'circle[data-target]'])
     expect(container.querySelector(selector)).toBeNull();
 });
 
-it('fills clockwise from 0 to a warm target and puts the hand and glow there', () => {
+it('draws the whole scale faintly, a solid span from 0 to a warm target, and the dot there', () => {
   const container = ring(true, 3, 1);
-  expect(container.querySelectorAll('g[data-band="ghost"] path')).toHaveLength(120);
+  expect(container.querySelectorAll('g[data-band="ghost"] path')).toHaveLength(100);
   expect(container.querySelector('g[data-band="ghost"]')).toHaveAttribute('opacity', String(palette.dial.ghostOpacity));
   const fill = container.querySelectorAll('g[data-band="fill"] path');
   expect(fill).toHaveLength(15);
-  expect(fill[0].getAttribute('d')!.startsWith('M 170 24 ')).toBe(true);
-  const hand = radialLine(3, HAND.inner, HAND.outer);
-  expect(attrs(container.querySelector('line[data-hand]'), 'x1', 'y1', 'x2', 'y2')).toEqual([hand.x1, hand.y1, hand.x2, hand.y2]);
-  expect(container.querySelector('circle[data-glow]')).toHaveAttribute('fill', temperatureColor(3));
-  const notch = radialLine(1, NOTCH.inner, NOTCH.outer);
-  expect(attrs(container.querySelector('line[data-notch]'), 'x1', 'y1')).toEqual([notch.x1, notch.y1]);
+  expect(fill[0].getAttribute('d')!.startsWith('M 140 22 ')).toBe(true);
+  const at = dialPoint(3);
+  const target = container.querySelector('circle[data-target]');
+  expect(centre(target)[0]).toBeCloseTo(at.x);
+  expect(centre(target)[1]).toBeCloseTo(at.y);
+  expect(target).toHaveAttribute('r', '8.5');
+  expect(target).toHaveAttribute('fill', temperatureColor(3));
+  const halo = container.querySelector('circle[data-halo]');
+  expect(halo).toHaveAttribute('r', '14');
+  expect(halo).toHaveAttribute('fill', 'none');
+  expect(halo).toHaveAttribute('stroke', temperatureColor(3));
+  expect(halo).toHaveAttribute('opacity', String(palette.dial.haloOpacity));
+  expect(container.querySelector('text[data-end-label]')).toHaveAttribute('fill', palette.text.tertiary);
+  expect(container.querySelector('line[data-tick="major"]')).toHaveAttribute('stroke', palette.dial.tickMajor);
 });
 
-it('fills counter-clockwise for a cool target', () => {
-  const container = ring(true, -3, -1);
-  const fill = container.querySelectorAll('g[data-band="fill"] path');
+it('spans counter-clockwise to a cool target', () => {
+  const fill = ring(true, -3, -1).querySelectorAll('g[data-band="fill"] path');
   expect(fill).toHaveLength(15);
-  expect(fill[fill.length - 1].getAttribute('d')!.endsWith(' 170 24')).toBe(true);
+  expect(fill[fill.length - 1].getAttribute('d')!.endsWith(' 140 22')).toBe(true);
   expect(fill[0]).toHaveAttribute('stroke', temperatureColor(bandSegments(-3, 0)[0].level));
 });
 
-it('leaves the band empty at 0 and stands the hand at 12 o\'clock', () => {
+it('marks where the bed is now only while it differs from the target', () => {
+  const notch = radialLine(1, NOTCH.inner, NOTCH.outer);
+  expect(attrs(ring(true, 3, 1).querySelector('line[data-notch]'), 'x1', 'y1', 'x2', 'y2'))
+    .toEqual([notch.x1, notch.y1, notch.x2, notch.y2]);
+  expect(ring(true, 3, 3).querySelector('line[data-notch]')).toBeNull();
+});
+
+it('leaves the span empty at 0 and puts the dot at 12 o\'clock', () => {
   const container = ring(true, 0);
   expect(container.querySelector('g[data-band="fill"]')).toBeNull();
-  expect(attrs(container.querySelector('line[data-hand]'), 'x1', 'x2')).toEqual([170, 170]);
-  expect(container.querySelector('circle[data-glow]')).toHaveAttribute('fill', temperatureColor(0));
+  const [x, y] = centre(container.querySelector('circle[data-target]'));
+  expect(x).toBeCloseTo(140);
+  expect(y).toBeCloseTo(22);
 });
 
 it('keeps an out of range target on the scale', () => {
-  const container = ring(true, 14);
-  const hand = radialLine(10, HAND.inner, HAND.outer);
-  expect(attrs(container.querySelector('line[data-hand]'), 'x1', 'y1')).toEqual([hand.x1, hand.y1]);
+  const at = dialPoint(10);
+  expect(centre(ring(true, 14).querySelector('circle[data-target]'))[0]).toBeCloseTo(at.x);
+});
+
+it('marks the target with a flat halo, never a blur', () => {
+  expect(ring(true, 3).querySelector('filter')).toBeNull();
 });

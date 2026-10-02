@@ -11,16 +11,22 @@ import ErrorBoundary from '@components/ErrorBoundary.tsx';
 import LastNightChip from './LastNightChip.tsx';
 import LastNightSummary from './LastNightSummary.tsx';
 import PageContainer from '../PageContainer.tsx';
-import PowerDock from './PowerDock.tsx';
+import PowerRow from './PowerRow.tsx';
 import ScheduleOverrideBanner from './ScheduleOverrideBanner.tsx';
 import SideControl from '../../components/SideControl.tsx';
-import Slider from './Slider.tsx';
+import TemperatureDial from './TemperatureDial.tsx';
 import WaterNotification from './WaterNotification.tsx';
 import { useAppStore } from '@state/appStore.tsx';
 import { useControlTempStore } from './controlTempStore.tsx';
 import { useLastNight } from './useLastNight.ts';
 import { useDeviceStatus } from '@api/deviceStatus';
+import { media } from '@design/tokens';
 import { useSettings } from '@api/settings.ts';
+
+const pageSx = { [media.short]: { gap: 1, pt: 1 }, [media.tight]: { gap: 0.5, pt: 0.5 } } as const;
+const controlColumnSx = {
+  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, [media.short]: { gap: 1 }, [media.tight]: { gap: 0.5 },
+} as const;
 
 export default function ControlTempPage() {
   const { isError, refetch, data: deviceStatus } = useDeviceStatus();
@@ -51,7 +57,7 @@ export default function ControlTempPage() {
   }, [deviceStatus, syncFromServer]);
 
   return (
-    <PageContainer>
+    <PageContainer sx={ pageSx }>
       <PageHeader title="Bed" status={ deviceStatus?.isPriming ? 'Priming' : undefined }/>
       <BedTabs />
       { settingsError && <Alert severity="warning">
@@ -66,7 +72,7 @@ export default function ControlTempPage() {
           alignItems: 'start',
         } }
       >
-        <Box sx={ { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 } }>
+        <Box sx={ controlColumnSx }>
           <SideControl compact={ false } />
           { !sideStatus && !isError && (
             <Typography role="status">
@@ -74,12 +80,10 @@ export default function ControlTempPage() {
             </Typography>
           ) }
           { sideStatus && (
-            <Slider
-              isOn={ isOn }
+            <TemperatureDial
+              status={ sideStatus }
               statusUnavailable={ isError }
-              currentTargetTemp={ sideStatus.targetTemperatureF }
               refetch={ refetch }
-              currentTemperatureF={ sideStatus.currentTemperatureF }
               format={ settings?.temperatureFormat ?? 'fahrenheit' }
               whenOff={ <ErrorBoundary componentName="Last night summary">
                 <LastNightSummary lastNight={ lastNight } />
@@ -93,7 +97,7 @@ export default function ControlTempPage() {
               Try again
             </Button>
           ) : (
-            sideStatus && <PowerDock isOn={ sideStatus.isOn } refetch={ refetch } />
+            sideStatus && <PowerRow isOn={ sideStatus.isOn } refetch={ refetch } />
           ) }
           { commandError && <Alert severity="error" sx={ { width: '100%' } }>{ commandError }</Alert> }
         </Box>

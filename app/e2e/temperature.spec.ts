@@ -8,7 +8,7 @@ test('adjusting the temperature updates the displayed target', async ({ page }) 
   await expect(target).toBeVisible();
   const before = (await target.textContent())?.trim();
 
-  await page.getByRole('button', { name: 'Increase temperature' }).click();
+  await page.getByRole('button', { name: 'Warmer' }).click();
 
   // The label updates optimistically, before the mocked POST resolves.
   await expect(target).not.toHaveText(before ?? '');
@@ -19,7 +19,7 @@ test('rapid + taps clamp the level at the maximum', async ({ page }) => {
   const target = page.getByRole('heading', { level: 2 }).first();
   await expect(target).toBeVisible();
 
-  const plus = page.getByRole('button', { name: 'Increase temperature' });
+  const plus = page.getByRole('button', { name: 'Warmer' });
   await plus.evaluate(button => {
     for (let i = 0; i < 20; i++) (button as HTMLElement).click();
   });
@@ -33,7 +33,7 @@ test('rapid - taps clamp the level at the minimum', async ({ page }) => {
   const target = page.getByRole('heading', { level: 2 }).first();
   await expect(target).toBeVisible();
 
-  const minus = page.getByRole('button', { name: 'Decrease temperature' });
+  const minus = page.getByRole('button', { name: 'Cooler' });
   await minus.evaluate(button => {
     for (let i = 0; i < 20; i++) (button as HTMLElement).click();
   });

@@ -335,7 +335,7 @@ test('"When I get up" saves, and Bed says when it turns off at the latest', asyn
   await nav(page).getByRole('link', { name: 'Bed', exact: true }).click();
   const caption = page.getByText('Turns off when you get up, today by 9:45 AM');
   await expect(caption).toBeVisible();
-  // At most two lines, inside the dock.
+  // At most two lines.
   const box = (await caption.boundingBox())!;
   expect(box.height).toBeLessThan(2.6 * parseFloat(await caption.evaluate(node => getComputedStyle(node).lineHeight)));
 });

@@ -10,7 +10,7 @@ import { getSettings } from '../../mocks/mockData';
 import type { BedSleeps } from './useBedSleeps';
 import { useControlTempStore } from './controlTempStore';
 import UpcomingNight from './UpcomingNight';
-import DockCaption from './DockCaption';
+import CaptionSlot from './CaptionSlot';
 import PowerButton from './PowerButton';
 import AlarmNotification from './AlarmNotification';
 
@@ -97,9 +97,9 @@ it('shows no schedule text while it cannot tell which engine runs', async () => 
   expect(screen.queryByRole('heading', { name: 'Upcoming' })).not.toBeInTheDocument();
 });
 
-it('names the resolved power-off beside the power control', async () => {
+it('names the resolved power-off in the caption slot', async () => {
   vi.setSystemTime(new Date('2026-09-29T08:00:00Z'));
-  renderWithProviders(<DockCaption isOn/>);
+  renderWithProviders(<CaptionSlot isOn/>);
   expect(await screen.findByText('Turns off today at 6:45 AM')).toBeInTheDocument();
 });
 

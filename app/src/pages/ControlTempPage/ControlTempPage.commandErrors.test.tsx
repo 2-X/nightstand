@@ -51,7 +51,7 @@ describe('Bed control errors', () => {
     const { user } = renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
     await screen.findByRole('heading', { name: '+1' });
     server.use(http.post('*/deviceStatus', notConnected));
-    await user.click(screen.getByRole('button', { name: 'Increase temperature' }));
+    await user.click(screen.getByRole('button', { name: 'Warmer' }));
     expect(await screen.findByText('Pod hardware is not connected. Try again in a moment.', undefined, { timeout: 5000 })).toBeInTheDocument();
     await waitFor(() => expect(useAppStore.getState().isUpdating).toBe(false), { timeout: 5000 });
   });

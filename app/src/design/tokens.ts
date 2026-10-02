@@ -21,31 +21,19 @@ export const palette = {
   // A warm dark for the selected tile, the selected tab and Turn off.
   ember: '#2A251F',
   dial: {
-    track: '#15171A',
+    // A 6 px track needs more presence than the old 18 px band's colour.
+    trackOff: '#2A2F35',
     tick: '#2E3338',
     tickMajor: '#4E545B',
     tickZero: '#6E757C',
     tickOff: '#22262A',
     tickMajorOff: '#30353A',
-    ghostOpacity: 0.18,
+    ghostOpacity: 0.22,
+    haloOpacity: 0.4,
   },
-  step: { fill: '#0B0B0C', cool: '#3E6A92', warm: '#8F673A', disabled: '#2E3338' },
-  dock: { bg: '#13110F', border: '#25211C' },
+  step: { cool: '#3E6A92', warm: '#8F673A', disabled: '#2E3338' },
   power: { offBorder: '#3A332A', nightBg: '#1C1915' },
   tile: { selectedBorder: 'rgba(233,227,213,0.7)' },
-  strip: {
-    line: '#2A2E33',
-    sleep: '#23272C',
-    done: '#5A574F',
-    dot: '#15171A',
-    dotRing: '#30353B',
-    chipText: '#1A1712',
-    pastDot: '#111316',
-    pastRing: '#24282D',
-    pastChip: '#3B3832',
-    latest: '#4A5058',
-    pausedDash: '#363B41',
-  },
   status: { ok: '#6CCB8E', warn: '#E8C95A', error: '#FF7A8A', info: '#A3AAB2' },
   stage: { awake: '#E9E3D5', rem: '#C3B5FF', light: '#8E80F0', deep: '#6A58E6' },
 };
@@ -59,15 +47,14 @@ export const radius = {
   pill: 9999,
 };
 
-// Numerals and headings on Bed ask for the rounded system face where there is one.
-export const fonts = {
-  rounded: 'ui-rounded, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-};
-
-// Bed's two extra breakpoints: phones under 360 px, and the two column desktop.
+// Bed's extra breakpoints: phones under 360 px, the two column desktop, and two steps of screens too short for
+// the full layout to keep the power row above the bottom bar or the window's edge.
 export const media = {
   narrow: '@media (max-width: 359.95px)',
   desktop: '@media (min-width: 900px)',
+  short: '@media (max-height: 840px)',
+  tight: '@media (max-height: 620px)',
+  desktopShort: '@media (min-width: 900px) and (max-height: 840px)',
 };
 
 export const typography = {
@@ -139,7 +126,6 @@ export const sx = {
     minWidth: 0,
     px: '10px',
     color: palette.lamp,
-    fontFamily: fonts.rounded,
     fontSize: 15,
     fontWeight: 600,
     textTransform: 'none' as const,

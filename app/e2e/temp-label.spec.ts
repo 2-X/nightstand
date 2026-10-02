@@ -6,7 +6,7 @@ test('topTitle reflects the target-vs-current derivation on load and after a nud
   const topTitle = page.getByRole('heading', { level: 2 }).first().locator('xpath=preceding-sibling::p[1]');
   await expect(topTitle).toHaveText('Warming to');
 
-  await page.getByRole('button', { name: 'Increase temperature' }).click();
+  await page.getByRole('button', { name: 'Warmer' }).click();
 
   // After nudging the target above the current temperature, the label
   // switches to the actively-adjusting branch.

@@ -54,7 +54,7 @@ describe('last night on the Bed page', () => {
     renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
 
     expect(await screen.findByRole('button', { name: /^Last night's sleep estimate: 86 ?View sleep$/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Increase temperature' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Warmer' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'View last night\'s sleep' })).not.toBeInTheDocument();
     expect(screen.queryByText('7h 12m asleep')).not.toBeInTheDocument();
   });
