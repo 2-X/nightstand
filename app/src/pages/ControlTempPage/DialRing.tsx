@@ -5,7 +5,7 @@ import {
   radialLine, ticks,
 } from './dialGeometry';
 
-type DialRingProps = { isOn: boolean; targetLevel: number; currentLevel: number };
+type DialRingProps = { isOn: boolean; targetLevel: number; currentLevel: number; pending?: boolean };
 
 const tickColor = (level: number, major: boolean, isOn: boolean) => isOn
   ? level === 0 ? palette.dial.tickZero : major ? palette.dial.tickMajor : palette.dial.tick
@@ -25,7 +25,7 @@ const svgStyle = {
 } as const;
 
 // Every mark is a state: the faint scale, the span to the target, the notch for now, the dot for the target.
-export default function DialRing({ isOn, targetLevel, currentLevel }: DialRingProps) {
+export default function DialRing({ isOn, targetLevel, currentLevel, pending = false }: DialRingProps) {
   const target = clampLevel(targetLevel);
   const current = clampLevel(currentLevel);
   const fill = fillRange(target);
@@ -65,7 +65,10 @@ export default function DialRing({ isOn, targetLevel, currentLevel }: DialRingPr
           stroke={ colour }
           strokeWidth="1.5"
           opacity={ palette.dial.haloOpacity }/>
-        <circle data-target cx={ dot.x } cy={ dot.y } r="8.5" fill={ colour } stroke={ palette.bg.base } strokeWidth="2.5"/>
+        { /* Hollow until the Pod reports the new target, then filled. */ }
+        { pending
+          ? <circle data-target data-pending cx={ dot.x } cy={ dot.y } r="7.5" fill={ palette.bg.base } stroke={ colour } strokeWidth="2.5"/>
+          : <circle data-target cx={ dot.x } cy={ dot.y } r="8.5" fill={ colour } stroke={ palette.bg.base } strokeWidth="2.5"/> }
       </> }
       { endLabels().map(({ level, x, y }) => <text
         key={ level }

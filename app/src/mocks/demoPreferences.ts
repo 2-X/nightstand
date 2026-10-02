@@ -32,3 +32,18 @@ export function demoPresence(): 'fresh' | 'fresh-short' | undefined {
     return undefined;
   }
 }
+
+const readDemoKey = (key: string): string | undefined => {
+  try {
+    return globalThis.localStorage?.getItem(key) ?? undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+export const DEMO_WRITES_KEY = 'nightstand-demo-writes';
+
+// The Bed specs hold a temperature change unanswered, to draw a target the Pod has not confirmed.
+export function demoWritesHang(): boolean {
+  return readDemoKey(DEMO_WRITES_KEY) === 'hang';
+}

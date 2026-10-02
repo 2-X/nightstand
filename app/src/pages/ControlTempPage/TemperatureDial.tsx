@@ -55,9 +55,15 @@ export default function TemperatureDial({ status, statusUnavailable, away = fals
   const isOn = !!status?.isOn;
   const target = stored ?? status?.targetTemperatureF ?? 0;
   const targetLevel = fahrenheitToLevel(target);
+  // An edit the Pod has not reported back yet.
+  const pending = isOn && !!status && target !== status.targetTemperatureF;
   return <Box sx={ columnSx }>
     <Box data-dial sx={ dialSx }>
-      <DialRing isOn={ isOn } targetLevel={ targetLevel } currentLevel={ fahrenheitToLevel(status?.currentTemperatureF ?? target) }/>
+      <DialRing
+        isOn={ isOn }
+        targetLevel={ targetLevel }
+        currentLevel={ fahrenheitToLevel(status?.currentTemperatureF ?? target) }
+        pending={ pending }/>
       { status && <TemperatureLabel
         isOn={ isOn }
         sliderTemp={ target }

@@ -1,6 +1,7 @@
-import { expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import TemperatureDial from './TemperatureDial';
+import { useControlTempStore } from './controlTempStore';
 
 const post = vi.hoisted(() => vi.fn());
 vi.mock('@api/deviceStatus.ts', () => ({ postDeviceStatus: post, useDeviceStatus: () => ({ data: undefined }) }));
@@ -10,6 +11,8 @@ vi.mock('./TemperatureButtons', () => ({ default: () => <button>Temperature step
 vi.mock('./useBedCaption', () => ({
   useBedCaption: (isOn: boolean) => [isOn ? 'Turns off tomorrow at 6:45 AM' : 'Turns on tonight at 10:00 PM'],
 }));
+
+beforeEach(() => useControlTempStore.setState({ deviceStatus: undefined }));
 
 const on = { isOn: true, targetTemperatureF: 83, currentTemperatureF: 75 };
 
@@ -88,4 +91,11 @@ it('writes °F at the smaller numeral size', () => {
 it('says Off in the large light face while off', () => {
   render(<TemperatureDial status={ { ...on, isOn: false } } refetch={ vi.fn() } format="level"/>);
   expect(screen.getByText('Off')).toHaveStyle({ fontSize: '84px', fontWeight: '300' });
+});
+
+it('says "Set to" and draws a hollow dot while an edit waits for the Pod', () => {
+  useControlTempStore.setState({ deviceStatus: { left: { ...on, targetTemperatureF: 86 } } } as never);
+  const { container } = render(<TemperatureDial status={ on } refetch={ vi.fn() } format="level"/>);
+  expect(screen.getByText('Set to')).toBeInTheDocument();
+  expect(container.querySelector('circle[data-pending]')).not.toBeNull();
 });

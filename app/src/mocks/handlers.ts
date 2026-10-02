@@ -1,5 +1,5 @@
 import { http, HttpResponse, delay, sse } from 'msw';
-import { demoPresence } from './demoPreferences';
+import { demoPresence, demoWritesHang } from './demoPreferences';
 import type { SleepRecord } from '@api/sleepSchema.ts';
 import type { Jobs } from '@api/jobs.ts';
 import type { BasePosition } from '@api/baseControl.ts';
@@ -137,6 +137,7 @@ export const handlers = [
     return HttpResponse.json(status);
   }),
   http.post('/api/deviceStatus', async ({ request }) => {
+    if (demoWritesHang()) await delay('infinite');
     const body = (await request.json()) as Partial<ReturnType<typeof getDeviceStatus>>;
     updateDeviceStatus(body);
     await delay(120);

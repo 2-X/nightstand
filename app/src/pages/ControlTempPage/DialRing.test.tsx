@@ -79,3 +79,13 @@ it('keeps an out of range target on the scale', () => {
 it('marks the target with a flat halo, never a blur', () => {
   expect(ring(true, 3).querySelector('filter')).toBeNull();
 });
+
+it('draws the dot hollow until the Pod confirms the target', () => {
+  const container = render(<DialRing isOn pending targetLevel={ 3 } currentLevel={ 1 }/>).container;
+  const dot = container.querySelector('circle[data-target]');
+  expect(dot).toHaveAttribute('data-pending');
+  expect(dot).toHaveAttribute('r', '7.5');
+  expect(dot).toHaveAttribute('fill', palette.bg.base);
+  expect(dot).toHaveAttribute('stroke', temperatureColor(3));
+  expect(ring(true, 3, 1).querySelector('circle[data-pending]')).toBeNull();
+});
