@@ -8,7 +8,7 @@ test('turning a side off keeps the power button in place and shows last night un
   const turnOff = page.getByRole('button', { name: 'Turn off' });
   await expect(turnOff).toBeVisible();
   // While on, last night stays in the card below the controls.
-  await expect(page.getByRole('button', { name: /^Last night estimate \d+/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Last night's sleep estimate: \d+/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Increase temperature' })).toBeVisible();
   const onTop = (await turnOff.boundingBox())!.y;
 
@@ -17,8 +17,8 @@ test('turning a side off keeps the power button in place and shows last night un
   await expect(turnOn).toBeVisible();
   const viewSleep = page.getByRole('link', { name: 'View last night\'s sleep' });
   await expect(viewSleep).toBeVisible();
-  await expect(page.getByText(/^Last night estimate \d+$/)).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Last night estimate/ })).toHaveCount(0);
+  await expect(page.getByText(/^Last night's sleep estimate: \d+$/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Last night's sleep estimate/ })).toHaveCount(0);
 
   const offTop = (await turnOn.boundingBox())!.y;
   expect(Math.abs(offTop - onTop)).toBeLessThanOrEqual(1);

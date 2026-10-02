@@ -17,9 +17,9 @@ export default function LastNightSummary({ lastNight }: { lastNight?: LastNight 
         textAlign: 'center',
       } }>
       <Typography variant="body2" color="text.secondary">
-        <Box component="span" sx={ { whiteSpace: 'nowrap' } }>Last night estimate { lastNight.score }</Box>
+        <Box component="span" sx={ { whiteSpace: 'nowrap' } }>Last night's sleep estimate: { lastNight.score }</Box>
         { lastNight.duration && <>
-          <span aria-hidden="true"> · </span>
+          { ', ' }
           <Box component="span" sx={ { whiteSpace: 'nowrap' } }>{ lastNight.duration }</Box>
         </> }
       </Typography>

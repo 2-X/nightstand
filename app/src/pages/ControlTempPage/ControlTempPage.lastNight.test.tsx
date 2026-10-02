@@ -39,11 +39,13 @@ describe('last night on the Bed page', () => {
     const link = await screen.findByRole('link', { name: 'View last night\'s sleep' });
     expect(link).toHaveAttribute('href', '/sleep');
     expect(link).toHaveTextContent('View sleep');
-    expect(screen.getByText('Last night estimate 86')).toBeInTheDocument();
+    expect(screen.getByText("Last night's sleep estimate: 86")).toBeInTheDocument();
     expect(screen.getByText('7h 12m asleep')).toBeInTheDocument();
+    expect(screen.getByText("Last night's sleep estimate: 86").parentElement)
+      .toHaveTextContent("Last night's sleep estimate: 86, 7h 12m asleep");
     expect(screen.getByRole('button', { name: 'Turn on' })).toBeInTheDocument();
     // The card below is not shown as well.
-    expect(screen.getAllByText(/Last night estimate/)).toHaveLength(1);
+    expect(screen.getAllByText(/Last night's sleep estimate/)).toHaveLength(1);
     expect(screen.queryByRole('button', { name: /View sleep/ })).not.toBeInTheDocument();
   });
 
@@ -51,7 +53,7 @@ describe('last night on the Bed page', () => {
     leftSide(true);
     renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
 
-    expect(await screen.findByRole('button', { name: /^Last night estimate 86 ?View sleep$/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^Last night's sleep estimate: 86 ?View sleep$/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Increase temperature' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'View last night\'s sleep' })).not.toBeInTheDocument();
     expect(screen.queryByText('7h 12m asleep')).not.toBeInTheDocument();
@@ -72,7 +74,7 @@ describe('last night on the Bed page', () => {
     await screen.findByRole('button', { name: 'Turn on' });
     await waitFor(() => expect(answered).toBe(records.length ? 2 : 1));
     await new Promise(resolve => setTimeout(resolve, 50));
-    expect(screen.queryByText(/Last night estimate/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Last night's sleep estimate/)).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'View last night\'s sleep' })).not.toBeInTheDocument();
   });
 
@@ -83,7 +85,7 @@ describe('last night on the Bed page', () => {
     })));
     renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
 
-    expect(await screen.findByText('Last night estimate 86')).toBeInTheDocument();
-    expect(screen.queryByText(/·/)).not.toBeInTheDocument();
+    expect(await screen.findByText("Last night's sleep estimate: 86")).toBeInTheDocument();
+    expect(screen.getByText("Last night's sleep estimate: 86").parentElement).toHaveTextContent(/^Last night's sleep estimate: 86$/);
   });
 });

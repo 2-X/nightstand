@@ -14,8 +14,12 @@ export default function LastNightChip({ lastNight }: { lastNight?: LastNight }) 
       // Same surface and text inset as the Tonight card above it.
       sx={ { justifyContent: 'space-between', gap: 1, px: 2, minHeight: 48, color: 'text.secondary', bgcolor: 'background.paper',
         border: 1, borderColor: 'divider' } }>
-      <Typography component="span" variant="body2" sx={ { whiteSpace: 'nowrap' } }>Last night estimate { lastNight.score }</Typography>
-      <Typography component="span" variant="body2" color="primary" sx={ { whiteSpace: 'nowrap', fontWeight: 500 } }>View sleep</Typography>
+      <Typography component="span" variant="body2" sx={ { textAlign: 'left' } }>
+        Last night's sleep estimate: { lastNight.score }
+      </Typography>
+      <Typography component="span" variant="body2" color="primary" sx={ { whiteSpace: 'nowrap', flexShrink: 0, fontWeight: 500 } }>
+        View sleep
+      </Typography>
     </Button>
   );
 }

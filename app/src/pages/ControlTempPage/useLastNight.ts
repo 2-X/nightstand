@@ -13,7 +13,7 @@ export type LastNight = {
   duration?: string;
 };
 
-// The selected side's last night estimate, or undefined while loading, when
+// The selected side's last night's sleep estimate, or undefined while loading, when
 // there is no night, or when sleep score is off.
 export function useLastNight(): LastNight | undefined {
   const { side } = useAppStore();
