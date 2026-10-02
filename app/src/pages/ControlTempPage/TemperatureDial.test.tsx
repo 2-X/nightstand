@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { palette } from '@design/tokens';
+import { getDeviceStatus } from '../../mocks/mockData';
 import TemperatureDial from './TemperatureDial';
 import { useControlTempStore } from './controlTempStore';
 
@@ -105,7 +106,8 @@ it('says Off in the large light face while off', () => {
 });
 
 it('says "Set to" and draws a hollow dot while an edit waits for the Pod', () => {
-  useControlTempStore.setState({ deviceStatus: { left: { ...on, targetTemperatureF: 86 } } } as never);
+  const status = getDeviceStatus();
+  useControlTempStore.setState({ deviceStatus: { ...status, left: { ...status.left, ...on, targetTemperatureF: 86 } } });
   const { container } = render(<TemperatureDial status={ on } refetch={ vi.fn() } format="level"/>);
   expect(screen.getByText('Set to')).toBeInTheDocument();
   expect(container.querySelector('circle[data-pending]')).not.toBeNull();
