@@ -38,7 +38,7 @@ import {
 } from './mockData';
 import type { RhythmsUpdate } from '@api/rhythms';
 import {
-  disableMockRhythms, enableMockRhythms, getMockRhythmsResponse, listMockSleeps, scheduledSecondsRemaining, updateMockRhythms,
+  disableMockRhythms, enableMockRhythms, getMockRhythmsResponse, listMockSleeps, mockLive, scheduledSecondsRemaining, updateMockRhythms,
 } from './rhythmsMock';
 
 type Side = 'left' | 'right';
@@ -109,10 +109,11 @@ export const handlers = [
     await delay(120);
     return HttpResponse.json(disableMockRhythms(body));
   }),
-  // The demo has no Smart Schedule controller, so no night is live.
-  http.get('/api/rhythms/live', async () => {
+  // The demo has no presence, so only a "When I get up" sleep is live.
+  http.get('/api/rhythms/live', async ({ request }) => {
+    const side = new URL(request.url).searchParams.get('side') === 'right' ? 'right' : 'left';
     await delay(120);
-    return HttpResponse.json(null);
+    return HttpResponse.json(mockLive(side));
   }),
   http.get('/api/settings', async () => {
     await delay(120);

@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from 'vitest';
 import type { Schedules } from '@api/schedulesSchema';
 import { getDeviceStatus, getSchedules, updateDeviceStatus, updateSchedules } from './mockData';
-import { createDemoRhythms, disableMockRhythms, resetMockRhythms, scheduledSecondsRemaining } from './rhythmsMock';
+import { createDemoRhythms, disableMockRhythms, mockLive, resetMockRhythms, scheduledSecondsRemaining } from './rhythmsMock';
 
 const TUESDAY_MORNING = new Date('2026-09-29T17:00:00Z');
 const MONDAY_NOON = new Date('2026-09-28T19:00:00Z');
@@ -48,4 +48,19 @@ it('runs a side\'s firmware timer until its next scheduled turn-off', () => {
   expect(scheduledSecondsRemaining('left', MONDAY_NOON)).toBe((Date.parse('2026-09-29T13:45:00Z') - MONDAY_NOON.getTime()) / 1000);
   resetMockRhythms(createDemoRhythms(MONDAY_NOON), false);
   expect(scheduledSecondsRemaining('left', MONDAY_NOON)).toBe((Date.parse('2026-09-29T14:00:00Z') - MONDAY_NOON.getTime()) / 1000);
+});
+
+it('serves a live "When I get up" sleep with its latest off, and nothing for other sleeps', () => {
+  const db = createDemoRhythms(new Date('2026-09-28T19:00:00Z'));
+  db.left.rhythms.workday.smart = { ...db.left.rhythms.workday.smart, offWhenUp: true };
+  resetMockRhythms(db, true);
+  try {
+    // Tuesday 3:00 AM in Los Angeles, inside Monday's Workday sleep (6:45 AM off).
+    const live = mockLive('left', new Date('2026-09-29T10:00:00Z'));
+    expect(live?.date).toBe('2026-09-28');
+    expect(live?.offWhenUp?.by).toBe('2026-09-29T16:45:00.000Z');
+    expect(mockLive('right', new Date('2026-09-29T10:00:00Z'))).toBeNull();
+  } finally {
+    resetMockRhythms();
+  }
 });

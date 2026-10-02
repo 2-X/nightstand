@@ -322,3 +322,16 @@ test('the Rhythms screen and editor fit 320px without sideways scrolling', async
   await expect(page.getByRole('spinbutton', { name: 'Base temperature' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
 });
+
+test('"When I get up" saves, and Bed says when it turns off at the latest', async ({ page }) => {
+  // Tuesday 3:00 AM, inside Monday's Workday sleep, which turns off at 6:45 AM.
+  await open(page, '/schedules', new Date('2026-09-29T10:00:00Z'));
+  await page.getByRole('button', { name: 'Edit Workday' }).click();
+  await page.getByRole('combobox', { name: /^Turn off/ }).click();
+  await page.getByRole('option', { name: 'When I get up' }).click();
+  await expect(page.getByLabel('Usually off at', { exact: true })).toHaveValue('06:45');
+  await expect(page.getByText(/^After your wake time, it turns off once you've been out of bed for 10 minutes/)).toBeVisible();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await nav(page).getByRole('link', { name: 'Bed', exact: true }).click();
+  await expect(page.getByText('Turns off when you get up, today by 9:45 AM')).toBeVisible();
+});

@@ -232,3 +232,11 @@ it('says a kept evening sleep holds its temperature and its alarms still ring', 
   expect(previewLines(right, moment.utc(now))[0])
     .toBe("Stays on at its current temperature until 11:00 AM, and its alarms still ring. The rest of tonight's plan stops.");
 });
+
+it('reads a sleep kept on past its set off to its actual off', () => {
+  // The Pod resolves a "When I get up" sleep kept on for someone in bed to its latest off.
+  const [, right] = preview('2026-09-29T16:00:00Z', [sleep('2026-09-29T08:00:00.000Z', '2026-09-29T18:30:00.000Z')]);
+  expect(keepOnLabel(right)).toBe("Keep Sam's side on until 6:30 PM");
+  expect(previewLines(right, moment.utc('2026-09-29T16:00:00Z'))[0])
+    .toBe("Stays on at its current temperature until 6:30 PM. The rest of this sleep's plan stops.");
+});

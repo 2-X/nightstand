@@ -1,11 +1,12 @@
 import moment from 'moment-timezone';
 import { DEFAULT_SMART, RHYTHMS_FILE_VERSION, type Rhythm, type RhythmsDB, type SideRhythms } from '@api/rhythmsSchema';
 import { MAX_TEMPERATURES_PER_DAY, type AlarmSchedule, type DailySchedule, type DayOfWeek, type Schedules } from '@api/schedulesSchema';
-import type { HandoffReport, ResolvedSleepResponse, RhythmsResponse, SleepEvent } from '@api/rhythmsResponse';
+import type { HandoffReport, ResolvedSleepResponse, RhythmsLive, RhythmsResponse, SleepEvent } from '@api/rhythmsResponse';
 import type { RhythmsUpdate } from '@api/rhythms';
 import { conversionName } from '@api/rhythmDays';
 import { wakeFromNight } from '@api/rhythmWake';
-import { buildCurve, isDaySleep } from '@api/smartCurve';
+import { buildCurve, isDaySleep, phaseAt } from '@api/smartCurve';
+import { latestOff } from '@api/smartOff';
 import { levelToFahrenheit } from '@lib/temperatureConversions';
 import { getDeviceStatus, getSchedules, getSettings, updateSettings } from './mockData';
 import { demoRhythmsDefault } from './demoPreferences';
@@ -141,6 +142,24 @@ export function resolveMockSleeps(db: RhythmsDB, side: Side, timeZone: string, f
 
 export function listMockSleeps(side: Side, from: Date, to: Date) {
   return rhythms ? resolveMockSleeps(rhythms, side, getSettings().timeZone, from, to) : [];
+}
+
+// The demo has no controller and no presence stream, so it acts as if presence
+// were fresh: only a "When I get up" sleep is live, to say when it turns off at
+// the latest. The demo has no daily restart.
+export function mockLive(side: Side, now = new Date()): RhythmsLive | null {
+  const day = 24 * 60 * 60 * 1000;
+  const sleeps = listMockSleeps(side, new Date(now.getTime() - day), new Date(now.getTime() + 2 * day));
+  const index = sleeps.findIndex(sleep => Date.parse(sleep.start) <= now.getTime() && now.getTime() < Date.parse(sleep.end));
+  const sleep = sleeps[index];
+  if (!sleep?.smart?.offWhenUp || !sleep.smartCurve) return null;
+  const next = sleeps.slice(index + 1).find(item => Date.parse(item.start) >= Date.parse(sleep.end));
+  const by = latestOff({ setOff: new Date(sleep.end), nextStart: next ? new Date(next.start) : null });
+  const points = sleep.smartCurve.points.flatMap(({ at, level, phase }) => (phase ? [{ at: new Date(at), level, phase }] : []));
+  return {
+    side, date: sleep.date, phase: phaseAt(points, now), waiting: false, coolStart: sleep.smartCurve.coolStart,
+    hold: null, baseSince: null, nextChange: null, offWhenUp: { by: by.toISOString() },
+  };
 }
 
 export function findMockOverlaps(db: RhythmsDB, side: Side, timeZone: string, from: Date, to: Date) {
