@@ -36,7 +36,7 @@ it('silently discards the edited time and copied days after leaving and returnin
   await screen.findByText('Bed controls');
   await user.click(screen.getByRole('link', { name: 'Schedule' }));
   await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
-  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(screen.queryByRole('status', { name: /^Unsaved/ })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   expect(useScheduleStore.getState().selectedDays.wednesday).toBe(false);
   act(() => useScheduleStore.getState().selectDay(1));
@@ -65,14 +65,14 @@ it('discards edits from both sides when leaving the page', async () => {
   act(() => useAppStore.getState().setSide('left'));
   await user.click(screen.getByRole('link', { name: 'Schedule' }));
   await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
-  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(screen.queryByRole('status', { name: /^Unsaved/ })).not.toBeInTheDocument();
   act(() => useScheduleStore.getState().selectDay(2));
   expect(useScheduleStore.getState().selectedSchedule?.alarm.time).toBe('07:00');
   await user.click(screen.getByRole('link', { name: 'Bed' }));
   act(() => useAppStore.getState().setSide('right'));
   await user.click(screen.getByRole('link', { name: 'Schedule' }));
   await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
-  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(screen.queryByRole('status', { name: /^Unsaved/ })).not.toBeInTheDocument();
   act(() => useScheduleStore.getState().selectDay(4));
   expect(useScheduleStore.getState().selectedSchedule?.alarm.time).toBe('06:30');
 });
@@ -88,7 +88,7 @@ it('shows the saved schedule on the next visit', async () => {
   await user.click(screen.getByRole('link', { name: 'Bed' }));
   await user.click(screen.getByRole('link', { name: 'Schedule' }));
   await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
-  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(screen.queryByRole('status', { name: /^Unsaved/ })).not.toBeInTheDocument();
   expect(useScheduleStore.getState().changesPresent).toBe(false);
   act(() => useScheduleStore.getState().selectDay(savedDayIndex));
   expect(useScheduleStore.getState().selectedSchedule?.alarm.time).toBe('03:33');
@@ -111,7 +111,7 @@ it('does not restore submitted edits when navigation happens during the save', a
   await waitFor(() => expect(useAppStore.getState().isUpdating).toBe(false), { timeout: 3000 });
   await user.click(screen.getByRole('link', { name: 'Schedule' }));
   await screen.findByRole('switch', { name: /^Schedule \w+ night$/ });
-  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(screen.queryByRole('status', { name: /^Unsaved/ })).not.toBeInTheDocument();
   expect(useScheduleStore.getState().changesPresent).toBe(false);
 });
 
@@ -136,6 +136,6 @@ it.each(['left', 'right'] as const)('preserves newer %s side edits when an earli
   finishSave();
   await waitFor(() => expect(useAppStore.getState().isUpdating).toBe(false), { timeout: 3000 });
   expect(useScheduleStore.getState().selectedDays.saturday).toBe(true);
-  expect(screen.getByRole('status')).toHaveTextContent(side === 'left' ? 'Alex' : 'Sam');
+  expect(screen.getByRole('status', { name: /^Unsaved/ })).toHaveTextContent(side === 'left' ? 'Alex' : 'Sam');
   expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
 });

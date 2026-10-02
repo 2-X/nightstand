@@ -20,7 +20,7 @@ it('keeps copied days visible when the edited night is disabled', async () => {
   });
   fireEvent.click(screen.getByRole('switch', { name: /^Schedule \w+ night$/ }));
   expect(screen.getByText('Apply settings to other days')).toBeInTheDocument();
-  const draft = screen.getByRole('status');
+  const draft = screen.getByRole('status', { name: /^Unsaved/ });
   expect(draft).toHaveTextContent('Unsaved: Alex, Mon +1');
   expect(draft).toHaveAttribute('title', 'Unsaved: Alex, Monday, Wednesday');
   expect(draft).toHaveAccessibleName('Unsaved: Alex, Monday, Wednesday');
@@ -37,8 +37,8 @@ it('leads the draft summary with the side and one short day', async () => {
     useScheduleStore.getState().selectDay(2);
     useScheduleStore.getState().updateSelectedSchedule({ power: { onTemperature: 84 } });
   });
-  expect(screen.getByRole('status')).toHaveTextContent('Unsaved: Alex, Tue');
-  expect(screen.getByRole('status')).toHaveAccessibleName('Unsaved: Alex, Tuesday');
+  expect(screen.getByRole('status', { name: /^Unsaved/ })).toHaveTextContent('Unsaved: Alex, Tue');
+  expect(screen.getByRole('status', { name: /^Unsaved/ })).toHaveAccessibleName('Unsaved: Alex, Tuesday');
 });
 
 it('formats the summary day with the locale short day name', async () => {
@@ -51,7 +51,7 @@ it('formats the summary day with the locale short day name', async () => {
       useScheduleStore.getState().selectDay(2);
       useScheduleStore.getState().updateSelectedSchedule({ power: { onTemperature: 84 } });
     });
-    expect(screen.getByRole('status')).toHaveTextContent(/Unsaved: Alex, Tu$/);
+    expect(screen.getByRole('status', { name: /^Unsaved/ })).toHaveTextContent(/Unsaved: Alex, Tu$/);
   } finally {
     moment.updateLocale('en', { weekdaysShort: original });
   }

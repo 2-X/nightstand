@@ -34,3 +34,12 @@ it('shows a plain status in the secondary text colour', () => {
   render(<ThemeProvider theme={ theme }><PageHeader title="Bed" status="Priming"/></ThemeProvider>);
   expect(screen.getByRole('status')).toHaveStyle({ color: palette.text.secondary });
 });
+
+it('keeps one status region in the header, empty until there is something to say', () => {
+  const { rerender } = render(<PageHeader title="Bed"/>);
+  const region = screen.getByRole('status');
+  expect(region).toBeEmptyDOMElement();
+  rerender(<PageHeader title="Bed" status="Not responding" tone="warn"/>);
+  expect(screen.getByRole('status')).toBe(region);
+  expect(region).toHaveTextContent('Not responding');
+});

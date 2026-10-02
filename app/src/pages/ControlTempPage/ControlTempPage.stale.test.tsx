@@ -44,7 +44,7 @@ it('keeps the dial and greys the last known values with their time when the Pod 
   await user.click(screen.getByRole('button', { name: 'Try again' }));
   expect(await screen.findByRole('button', { name: 'Turn off' })).toBeInTheDocument();
   expect(screen.queryByText('Last known')).not.toBeInTheDocument();
-  expect(header().queryByRole('status')).not.toBeInTheDocument();
+  expect(header().getByRole('status')).toBeEmptyDOMElement();
 });
 
 it('draws the frame with what it means and Try again when the first load fails', async () => {

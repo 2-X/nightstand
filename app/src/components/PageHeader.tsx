@@ -9,10 +9,11 @@ export default function PageHeader({ title, status, tone }: { title: string; sta
   const detail = warning ? status : reconnecting ? 'Reconnecting' : status;
   return <Box sx={ { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 } }>
     <Typography component="h1" variant="h1">{ title }</Typography>
-    { detail && <Typography
+    { /* Always there, so a screen reader announces a status when it arrives. */ }
+    <Typography
       role="status"
       variant="body2"
       color={ warning || reconnecting ? 'warning.main' : 'text.secondary' }
-      sx={ { textAlign: 'right' } }>{ detail }</Typography> }
+      sx={ { textAlign: 'right' } }>{ detail }</Typography>
   </Box>;
 }

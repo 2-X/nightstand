@@ -61,7 +61,7 @@ test('two minutes without a status shows the last known values, greyed, with the
   await page.evaluate(() => localStorage.removeItem('nightstand-demo-reads'));
   await retry.click();
   await expect(turnOff).toBeVisible();
-  await expect(headerStatus(page)).toHaveCount(0);
+  await expect(headerStatus(page)).toBeEmpty();
 });
 
 test('a first load that fails says so in the same frame, with Try again', async ({ page }) => {
