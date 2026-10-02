@@ -72,8 +72,8 @@ export default function ReleaseRow({ release, runningVersion, offerReinstall = f
                 : isDowngrade
                   ? `This downgrades from v${runningVersion} to v${release.version}. Your data is kept. ` +
                   'Database migrations are not reversed. The running installation becomes the rollback slot.'
-                  : `The Pod will download v${release.version}, back itself up, install, and verify its own ` +
-                  'health. It attempts rollback if the new build fails health checks.' }
+                  : `Nightstand will download v${release.version}, back itself up, install, and check its own ` +
+                  'health. If the new version fails those checks, it tries to go back to the previous one.' }
               { ' ' }The app, schedules, and alarms pause during restart. Recovery may require SSH.
             </DialogContentText>
           ) }
@@ -85,7 +85,7 @@ export default function ReleaseRow({ release, runningVersion, offerReinstall = f
             <Stack spacing={ 2 } alignItems="center" sx={ { py: 2 } }>
               <CircularProgress/>
               <Typography variant="body2" color="text.secondary">
-                Installing v{ release.version }. This page reloads by itself when the Pod comes back.
+                Installing v{ release.version }. This page reloads by itself when Nightstand comes back.
               </Typography>
             </Stack>
           ) }
@@ -94,7 +94,7 @@ export default function ReleaseRow({ release, runningVersion, offerReinstall = f
               <DialogContentText>
                 { isReinstall ? `Reinstallation and database changes for v${release.version} are not confirmed`
                   : `Installation of v${release.version} is not confirmed` }
-                { ' ' }after 10 minutes. The Pod may still be working or may have rolled back.
+                { ' ' }after 10 minutes. Nightstand may still be working or may have gone back to the previous version.
               </DialogContentText>
               <Typography variant="body2">
                 Last reported running version: { runningVersion ? `v${runningVersion}` : 'unavailable' }.

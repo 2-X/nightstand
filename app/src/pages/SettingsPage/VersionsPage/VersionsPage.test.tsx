@@ -58,7 +58,7 @@ it('surfaces a rejected update on Software after closing the dialog', async () =
   await user.click(await screen.findByRole('button', { name: 'Update to v3.2.0' }));
   await user.click(await screen.findByRole('button', { name: 'Update now' }));
   await user.click(await screen.findByRole('button', { name: 'Close' }));
-  expect(await screen.findByText(/The Pod did not accept the update request. Nothing was installed./)).toBeVisible();
+  expect(await screen.findByText(/Nightstand did not accept the update request. Nothing was installed./)).toBeVisible();
   expect(await screen.findByRole('button', { name: 'Try again' })).toBeVisible();
   expect(screen.queryByRole('button', { name: /Go back/ })).not.toBeInTheDocument();
   expect(await screen.findByRole('link', { name: 'Open update logs' })).toHaveAttribute('href', '/settings/logs?file=free-sleep-update.log');
@@ -83,12 +83,12 @@ it('keeps a known failure and the Settings badge when navigating away and back',
   const settingsLinks = await screen.findAllByRole('link', { name: 'Settings, update needs attention' });
   await user.click(settingsLinks[0]);
   expect(await screen.findByRole('heading', { name: 'Settings', level: 1 })).toBeVisible();
-  expect(screen.queryByText(/The Pod did not accept the update request. Nothing was installed./)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Nightstand did not accept the update request. Nothing was installed./)).not.toBeInTheDocument();
   await user.click(await screen.findByRole('link', { name: /Software/ }));
-  expect(await screen.findByText(/The Pod did not accept the update request. Nothing was installed./)).toBeVisible();
+  expect(await screen.findByText(/Nightstand did not accept the update request. Nothing was installed./)).toBeVisible();
   await user.click(screen.getByRole('button', { name: 'Dismiss update notice' }));
   expect(screen.queryByRole('link', { name: 'Settings, update needs attention' })).not.toBeInTheDocument();
-  expect(screen.queryByText(/The Pod did not accept the update request. Nothing was installed./)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Nightstand did not accept the update request. Nothing was installed./)).not.toBeInTheDocument();
 });
 
 it('clears known update attention only when a retry actually starts', async () => {

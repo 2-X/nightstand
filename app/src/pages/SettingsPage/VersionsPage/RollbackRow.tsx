@@ -62,7 +62,7 @@ export default function RollbackRow({ runningVersion, rollbackVersion }: Props) 
           { phase === 'idle' && <InUseConfirm reasons={ inUse }/> }
           { phase === 'idle' && (
             <DialogContentText>
-              The Pod switches back to the version it kept. Settings and sleep data stay.
+              Nightstand switches back to the version it kept. Settings and sleep data stay.
               Schedules and alarms pause for about 2 minutes.
             </DialogContentText>
           ) }

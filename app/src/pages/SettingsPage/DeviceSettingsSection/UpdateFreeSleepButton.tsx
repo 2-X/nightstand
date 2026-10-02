@@ -78,7 +78,7 @@ export default function UpdateFreeSleepButton({ runningVersion, onProblem, onSta
         </DialogTitle>
         <DialogContent>
           { phase === 'failed' && <Alert severity="error">
-            The Pod did not accept the update request. Nothing was installed.
+            Nightstand did not accept the update request. Nothing was installed.
             { error && <Typography variant="body2">{ error }</Typography> }
           </Alert> }
           { phase === 'idle' && (
@@ -88,7 +88,7 @@ export default function UpdateFreeSleepButton({ runningVersion, onProblem, onSta
                 Nightstand restarts to finish, and schedules and alarms pause for up to five minutes.
               </DialogContentText>
               <DialogContentText>
-                If the checks fail, it attempts to go back to v{ runningVersion } on its own.
+                If the checks fail, Nightstand tries to go back to v{ runningVersion } on its own.
               </DialogContentText>
               <Accordion>
                 <AccordionSummary expandIcon={ <ExpandMoreIcon/> }>If it doesn't come back</AccordionSummary>
@@ -103,15 +103,15 @@ export default function UpdateFreeSleepButton({ runningVersion, onProblem, onSta
               <CircularProgress/>
               <Typography variant="body2" color="text.secondary">
                 Installing { targetVersion }. This page reloads by itself
-                when the Pod comes back on the new version.
+                when Nightstand comes back on the new version.
               </Typography>
             </Stack>
           ) }
           { phase === 'timed_out' && (
             <Stack spacing={ 1.5 }>
               <DialogContentText>
-                  Installation of v{ targetVersion } is not confirmed after 10 minutes. The Pod may
-                  still be updating or may have rolled back. Check its logs and current status.
+                  Installation of v{ targetVersion } is not confirmed after 10 minutes. Nightstand may
+                  still be updating or may have gone back to the previous version. Check its logs and current status.
               </DialogContentText>
               <DialogContentText>Until this page loads again, schedules and alarms are not running.</DialogContentText>
               <Typography variant="body2">

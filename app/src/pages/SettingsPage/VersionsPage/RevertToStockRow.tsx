@@ -87,7 +87,7 @@ export default function RevertToStockRow({ runningVersion }: Props) {
               </Alert>
               <Typography variant="body2">
                 Returning to Nightstand requires the migration tool from a computer with SSH access.
-                If installation checks fail, the Pod attempts rollback. Recovery may require SSH.
+                If installation checks fail, Nightstand tries to go back. Recovery may require SSH.
               </Typography>
             </DialogContentText>
           ) }

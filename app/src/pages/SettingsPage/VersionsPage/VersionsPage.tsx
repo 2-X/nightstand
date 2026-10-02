@@ -124,7 +124,7 @@ export default function VersionsPage() {
             retry={ updateProblem && updateOutcome === 'failed' }
           />
           <Typography variant="body2" color="text.secondary" sx={ { mt: 1 } }>
-            2 to 5 minutes. Schedules and alarms pause while the Pod restarts.
+            Up to five minutes. Schedules and alarms pause while Nightstand restarts.
           </Typography>
         </Section>
       ) }
@@ -137,7 +137,7 @@ export default function VersionsPage() {
         <Button disabled={ isFetching } sx={ { ml: -1 } } onClick={ () => void checkReleases() }>Check again</Button>
       </Section> }
       { updateProblem && <Alert severity="warning">
-        { updateOutcome === 'failed' ? 'The Pod did not accept the update request. Nothing was installed.'
+        { updateOutcome === 'failed' ? 'Nightstand did not accept the update request. Nothing was installed.'
           : 'The last update did not finish. Check its progress before trying recovery.' }
         <Button onClick={ () => setUpdateProblem(false) }>Dismiss update notice</Button>
         <Button component={ Link } to="/settings/logs?file=free-sleep-update.log">Open update logs</Button>
