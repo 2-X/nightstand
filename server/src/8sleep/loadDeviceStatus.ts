@@ -36,7 +36,7 @@ const RawDeviceData = z.object({
 type RawDeviceDataType = z.infer<typeof RawDeviceData>;
 
 // Reads & validates the raw response data from socket and converts it to an object
-const parseRawDeviceData = (response: string): RawDeviceDataType => {
+export const parseRawDeviceData = (response: string): RawDeviceDataType => {
   const rawDeviceData = Object.fromEntries(response.split('\n').map(l => l.split(' = ')));
 
   try {
@@ -57,7 +57,7 @@ const parseRawDeviceData = (response: string): RawDeviceDataType => {
 // This mapping comes from the pod firmware's fixed level scale, not a
 // setting of ours, so 82.5/27.5 cannot change without the firmware itself
 // changing what a "level" means.
-const calculateTempInF = (value: string): number => {
+export const calculateTempInF = (value: string): number => {
   const level = Number(value);
   if (level === 0) {
     // Technically 0 is 82.5, rounding the temperature simplifies everything though...
