@@ -54,7 +54,7 @@ from presence.sensors import TYPE_NAME_LENGTH, printable_type, read_cap, unknown
 from stream_processor import LatestCap, StreamProcessor
 from load_raw_files import load_piezo_row, _read_raw_record
 from service_health import update_health, update_sensor_temps, update_pump_health
-from vitals2_stream import PumpSpeed
+from pump_speed import PumpSpeed
 
 # Global queue for processing decoded biometric data
 piezo_record_queue = queue.Queue()
@@ -63,6 +63,8 @@ latest_cap = LatestCap()
 # When the pump ran fast, from frzHealth frames, for the newer vitals.
 pump_speed = PumpSpeed()
 _pump_frame_warned = False
+# A vitals switch that fails is retried every refresh; only the first failure is an error.
+_vitals_switch_failed = False
 # Capacitance presence runs only while capacitance records keep arriving, so a
 # Pod without them keeps piezo presence with the switch on.
 CAP_FRESH_SECONDS = 60
@@ -235,10 +237,16 @@ def _refresh_presence_mode(stream_processor) -> None:
 
 def _refresh_vitals_mode(stream_processor) -> None:
     # biometrics_v2_enabled reads as off on any error, the same answer presence gets.
+    global _vitals_switch_failed
     try:
         stream_processor.use_vitals_v2(biometrics_v2_enabled())
     except Exception as error:
-        logger.error(f'Could not switch the vitals path, keeping the current one: {error}')
+        if not _vitals_switch_failed:
+            _vitals_switch_failed = True
+            logger.error(f'Could not switch the vitals path, keeping the current one; retried each minute, '
+                         f'later failures are not reported: {error}')
+        else:
+            logger.debug(f'Could not switch the vitals path, keeping the current one: {error}')
 
 
 def _note_pump_speed(frame) -> None:

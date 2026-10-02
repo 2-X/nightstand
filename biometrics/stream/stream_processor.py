@@ -16,7 +16,7 @@ Instantiate `StreamProcessor` with an initial piezo record and call `process_pie
 with new sensor data to continuously track and analyze biometric trends.
 """
 import sys
-from typing import Dict, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 from get_logger import get_logger
 from biometric_processor import BiometricProcessor
 from buffer import Buffer
@@ -27,8 +27,10 @@ from presence.detector import FRAME_GAP_SECONDS, DetectorParams, PresenceDetecto
 from presence.guard import UnexplainedUseGuard
 from presence.piezo import CadenceCheck, keep_layout, piezo_layout
 from presence.sensors import CAPSENSE2, CapFormat
-from vitals2_stream import CLOCK_STEP_BACK_SECONDS, PumpSpeed, Vitals2Stream
 import numpy as np
+
+if TYPE_CHECKING:
+    from pump_speed import PumpSpeed
 
 logger = get_logger()
 
@@ -95,7 +97,7 @@ class StreamProcessor:
             piezo_record,
             debug=False,
             cap_source: Optional[LatestCap] = None,
-            pump: Optional[PumpSpeed] = None,
+            pump: Optional['PumpSpeed'] = None,
     ):
         if 'left2' in piezo_record:
             self.sensor_count = 2
@@ -127,8 +129,10 @@ class StreamProcessor:
         # telling the server who is in bed while capacitance gates the vitals.
         self._piezo_presence: Optional[Tuple[BiometricProcessor, BiometricProcessor]] = None
         self.pump = pump
-        # Set through use_vitals_v2. Off leaves vitals to the legacy processors.
-        self.vitals2 = Vitals2Stream(pump=pump)
+        # Set through use_vitals_v2. Off leaves vitals to the legacy processors, and the newer
+        # estimators are not loaded until the switch is first on.
+        self._vitals2_lib = None
+        self.vitals2 = None
         self.vitals2_enabled = False
         # Whether the newer estimators wrote the last record's vitals, and the first minute they may write.
         self._vitals2_running = False
@@ -185,6 +189,11 @@ class StreamProcessor:
         """Let the newer estimators take vitals while capacitance presence is in charge (True), or never (False)."""
         if enabled == self.vitals2_enabled:
             return
+        if enabled and self._vitals2_lib is None:
+            import vitals2_stream
+            self._vitals2_lib = vitals2_stream
+        if enabled and self.vitals2 is None:
+            self.vitals2 = self._new_vitals2()
         logger.info('Newer vitals estimators switched ' + ('on; they take vitals while capacitance presence '
                                                            'is in charge' if enabled else 'off'))
         self.vitals2_enabled = enabled
@@ -202,18 +211,21 @@ class StreamProcessor:
         self._vitals2_running = wanted
         if wanted:
             logger.info('Vitals now from the newer estimators')
-            self.vitals2 = Vitals2Stream(pump=self.pump)
+            self.vitals2 = self._new_vitals2()
             # The legacy path may already have written this minute.
             self._vitals2_from = epoch // 60 * 60 + 60
         else:
             logger.info('Vitals now from the legacy estimators')
             # Minutes before this one; the legacy path writes from here on.
             self._insert_vitals2(self.vitals2.flush(epoch, self.piezo_layout))
-            self.vitals2 = Vitals2Stream(pump=self.pump)
+            self.vitals2 = self._new_vitals2() if self.vitals2_enabled else None
             # Measurements from before the newer estimators ran must not be written now.
             self.left_processor.reset()
             self.right_processor.reset()
         return wanted
+
+    def _new_vitals2(self):
+        return self._vitals2_lib.Vitals2Stream(pump=self.pump)
 
     def _insert_vitals2(self, rows) -> None:
         for row in rows:
@@ -239,7 +251,7 @@ class StreamProcessor:
     def _process_vitals2(self, piezo_record) -> None:
         epoch = int(piezo_record['ts'])
         last = self.vitals2.last_epoch
-        if last is not None and last - epoch > CLOCK_STEP_BACK_SECONDS:
+        if last is not None and last - epoch > self._vitals2_lib.CLOCK_STEP_BACK_SECONDS:
             # The estimators start over on the new clock, so rows count from its next minute as at a hand-over.
             self._vitals2_from = epoch // 60 * 60 + 60
         self._insert_vitals2(self.vitals2.step(epoch, self.piezo_layout, self.buffer, self._present_sides(),
@@ -290,7 +302,7 @@ class StreamProcessor:
             right.reset()
         if right_swap:
             left.reset()
-        if left_swap or right_swap:
+        if (left_swap or right_swap) and self.vitals2 is not None:
             self.vitals2.reset_side('left')
             self.vitals2.reset_side('right')
         left.apply_presence(states['left'], epoch, reset_state=left_swap)

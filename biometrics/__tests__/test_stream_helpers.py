@@ -535,8 +535,20 @@ class TestVitalsMode(unittest.TestCase):
         processor = unittest.mock.Mock()
         processor.use_vitals_v2.side_effect = RuntimeError('boom')
         with unittest.mock.patch.object(stream, 'biometrics_v2_enabled', return_value=True), \
+                unittest.mock.patch.object(stream, '_vitals_switch_failed', False), \
                 self.assertLogs(stream.logger, 'ERROR'):
             stream._refresh_vitals_mode(processor)
+
+    def test_a_switch_that_keeps_failing_is_reported_once(self):
+        processor = unittest.mock.Mock()
+        processor.use_vitals_v2.side_effect = ImportError('no module')
+        with unittest.mock.patch.object(stream, 'biometrics_v2_enabled', return_value=True), \
+                unittest.mock.patch.object(stream, '_vitals_switch_failed', False), \
+                self.assertLogs(stream.logger, 'DEBUG') as logs:
+            for _ in range(3):
+                stream._refresh_vitals_mode(processor)
+        self.assertEqual([record.levelname for record in logs.records], ['ERROR', 'DEBUG', 'DEBUG'])
+        self.assertEqual(processor.use_vitals_v2.call_count, 3)
 
 
 def pump_frame(rpm=3000):

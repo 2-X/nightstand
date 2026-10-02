@@ -367,8 +367,10 @@ class PumpTest(unittest.TestCase):
         self.assertFalse(pump.high_during(START - 100, START - 20))
 
     def test_frame_stamps_are_read_by_the_public_service_health_reader(self):
+        import pump_speed
         import service_health
-        self.assertIs(vitals2_stream.frz_record_epoch, service_health.frz_record_epoch)
+        self.assertIs(pump_speed.frz_record_epoch, service_health.frz_record_epoch)
+        self.assertIs(vitals2_stream.PumpSpeed, pump_speed.PumpSpeed)
         self.assertEqual(service_health.frz_record_epoch({'ts': '2026-09-28 13:00:00'}), START)
 
     def test_a_pump_nobody_feeds_is_reported_once_and_does_not_gate(self):

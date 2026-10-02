@@ -125,8 +125,9 @@ class VitalsSwitchTest(unittest.TestCase):
 
     def test_the_newer_path_needs_the_switch_and_capacitance_presence_and_starts_cold(self):
         processor = self._processor()
-        before = processor.vitals2
+        self.assertIsNone(processor.vitals2)
         processor.use_vitals_v2(True)
+        before = processor.vitals2
         self.assertFalse(processor._use_vitals2(stream_fixture.START))
         self.assertIs(processor.vitals2, before)
         processor.use_presence_v2((stream_fixture.PARAMS, stream_fixture.BASELINES))
@@ -137,17 +138,19 @@ class VitalsSwitchTest(unittest.TestCase):
         self.assertIs(processor.vitals2, running)
         processor.use_vitals_v2(False)
         self.assertFalse(processor._use_vitals2(stream_fixture.START + 2))
-        self.assertIsNot(processor.vitals2, running)
+        # Switched off, nothing is kept for the newer path.
+        self.assertIsNone(processor.vitals2)
 
     def test_every_estimator_reads_the_pump_it_was_given(self):
         pump = PumpSpeed()
         processor = self._processor(pump=pump)
-        self.assertIs(processor.vitals2.pump, pump)
         processor.use_vitals_v2(True)
+        self.assertIs(processor.vitals2.pump, pump)
         processor.use_presence_v2((stream_fixture.PARAMS, stream_fixture.BASELINES))
         self.assertTrue(processor._use_vitals2(stream_fixture.START))
         self.assertIs(processor.vitals2.pump, pump)
-        processor.use_vitals_v2(False)
+        # Presence handed back to piezo with the switch still on: a fresh estimator, same pump.
+        processor.use_presence_v2(None)
         self.assertFalse(processor._use_vitals2(stream_fixture.START + 1))
         self.assertIs(processor.vitals2.pump, pump)
 
