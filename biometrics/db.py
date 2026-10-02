@@ -59,10 +59,33 @@ def convert_timestamps(data: List[SleepRecord]) -> List[SleepRecord]:
     return formatted_data
 
 
+V2_VITALS_SQL = """
+INSERT INTO vitals (side, timestamp, heart_rate, hrv, breathing_rate,
+    hr_quality, rmssd, sdnn, hrv_coverage, resp_rate, resp_quality, estimator)
+VALUES (:side, :timestamp, :heart_rate, :hrv, :breathing_rate,
+    :hr_quality, :rmssd, :sdnn, :hrv_coverage, :resp_rate, :resp_quality, :estimator)
+ON CONFLICT(side, timestamp) DO NOTHING;
+"""
+
+
+def _insert_v2_vitals(data: dict):
+    cursor = conn.cursor()
+    try:
+        cursor.execute(V2_VITALS_SQL, data)
+    except sqlite3.Error as error:
+        logger.error(error)
+    finally:
+        cursor.close()
+
+
 def insert_vitals(data: dict):
     """
     Inserts a record into the 'vitals' table. If a conflict occurs, it skips the insertion.
+    Rows from the v2 estimators arrive already rounded, with the legacy columns filled.
     """
+    if data.get('estimator') == 2:
+        _insert_v2_vitals(data)
+        return
     cursor = conn.cursor()
 
     sql = """
