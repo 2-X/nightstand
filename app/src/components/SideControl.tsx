@@ -97,7 +97,9 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
           sx={ compact
             ? { position: 'absolute', top: 10, right: 10, fontSize: 18, color: palette.lamp, pointerEvents: 'none' }
             : { fontSize: 17, color: palette.lamp, flex: 'none' } }/>;
-        return <Box component="label" key={ key } sx={ compact ? compactTileSx(selected) : bedTileSx(selected) }>
+        // The Bed tiles cut long lines short; a hover shows them in full.
+        const full = compact ? undefined : [title, shown, occupancy].filter(Boolean).join('\n');
+        return <Box component="label" key={ key } title={ full } sx={ compact ? compactTileSx(selected) : bedTileSx(selected) }>
           <Radio
             value={ key }
             checked={ selected }

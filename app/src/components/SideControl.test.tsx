@@ -39,6 +39,15 @@ it('shows both named side states and exposes selection as radios', () => {
   expect(screen.getByRole('radio', { name: 'Alex. Off. In bed 12 min.' })).toBeChecked();
   expect(screen.getByRole('radio', { name: 'Sam. Off.' })).not.toBeChecked();
 });
+it('shows a Bed tile\'s lines in full on hover, since they may be cut short', () => {
+  fixture.settings.right.scheduleOverrides.pause = { active: true, expiresAt: '' };
+  fixture.status = { left: { isOn: false }, right: { isOn: true, targetTemperatureF: 86, currentTemperatureF: 80 } };
+  render(<SideControl compact={ false }/>);
+  expect(screen.getByRole('radio', { name: /^Alex\./ }).closest('label')).toHaveAttribute('title', 'Alex\nOff\nIn bed 12 min');
+  expect(screen.getByRole('radio', { name: /^Sam\./ }).closest('label')).toHaveAttribute('title', 'Sam\nPaused · 86°F');
+  render(<SideControl/>);
+  expect(screen.getAllByRole('radio', { name: /^Alex\./ })[1].closest('label')).not.toHaveAttribute('title');
+});
 it('leaves uncertain and disabled presence out of the tiles', () => {
   vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-29T05:00:00Z'));
   const view = render(<SideControl compact={ false }/>);
