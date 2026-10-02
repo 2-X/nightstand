@@ -381,6 +381,55 @@ wait $!
     assert.ok(phases.indexOf('RESULT_PHASE=restored', secondMove) < phases.indexOf('fail "swap failed; fork restored"'));
   });
 
+  // Runs the swap section of a script with the moves stubbed, then returns what the exit trap recorded.
+  function swapRecord(file: string, operation: string, from: string, failMove: 'live' | 'stage') {
+    const src = read(file);
+    const start = src.indexOf(from);
+    assert.ok(start >= 0, `missing ${from}`);
+    const section = src.slice(start, src.indexOf('RESULT_PHASE=swapped\nMOVED_MODULES', start));
+    const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-swap-'));
+    try {
+      copyFileSync(path.join(repoRoot, 'scripts/write_result.py'), path.join(dir, 'write_result.py'));
+      writeFileSync(path.join(dir, 'harness.sh'), `set -uo pipefail
+say() { echo "$*"; }
+RESULT_OPERATION=${operation}
+${resultBlock(src).replaceAll('/persistent/free-sleep-data', dir)}
+fail() { say "FATAL: $*"; [ -n "\${RESULT_REASON:-}" ] || RESULT_REASON="$*"; exit 1; }
+trap 'record_result $?' EXIT
+CUR_VERSION=3.5.1; EXPECTED_VERSION=3.6.0; STAGED_VERSION=1.0.0; TARGET_VERSION=3.6.0
+LIVE=live; PREV=prev; STAGE=stage; BK=bk; IS_DOWNGRADE=no; STREAM_WAS_ACTIVE=no
+RESULT_PHASE=swapping
+systemctl() { :; }; rm() { :; }; curl() { :; }; restore_switch_data_or_fail() { :; }
+mv() { [ "$1" = ${failMove === 'live' ? 'live' : 'stage'} ] && return 1; return 0; }
+${section}
+`);
+      spawnSync('bash', [path.join(dir, 'harness.sh')], { encoding: 'utf8' });
+      return JSON.parse(readFileSync(path.join(dir, 'update-result.json'), 'utf8')) as Record<string, string>;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  const swapCases: [string, string, string, string][] = [
+    [
+      'scripts/update.sh', 'update', 'RESULT_PHASE=swapping\nSTREAM_WAS_ACTIVE',
+      'the new version could not be put in place, so it never started',
+    ],
+    [
+      'scripts/revert-to-stock.sh', 'switch', 'rm -rf "$PREV"\nmv "$LIVE" "$PREV" || {',
+      'upstream free-sleep could not be put in place, so it never started',
+    ],
+  ];
+  for (const [file, operation, from, reason] of swapCases) {
+    for (const move of ['live', 'stage'] as const) {
+      it(`${operation}: a swap that failed and was put back says it never started (${move} move)`, () => {
+        const record = swapRecord(file, operation, from, move);
+        assert.equal(record.outcome, 'rolled-back');
+        assert.equal(record.message, reason);
+      });
+    }
+  }
+
   it('ships the writer in the overlay for stock installs', () => {
     const entry = AGENT_MANIFEST.find(item => item.path === 'scripts/write_result.py');
     assert.ok(entry, 'scripts/write_result.py is not in the agent manifest');

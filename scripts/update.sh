@@ -476,6 +476,7 @@ mv "$LIVE" "$PREV" || {
   if [ "$STREAM_WAS_ACTIVE" = active ]; then
     systemctl restart free-sleep-stream 2>/dev/null || true
   fi
+  RESULT_REASON="the new version could not be put in place, so it never started"
   fail "swap failed moving live aside"
 }
 mv "$STAGE" "$LIVE" || {
@@ -485,6 +486,7 @@ mv "$STAGE" "$LIVE" || {
   if [ "$STREAM_WAS_ACTIVE" = active ]; then
     systemctl restart free-sleep-stream 2>/dev/null || true
   fi
+  RESULT_REASON="the new version could not be put in place, so it never started"
   fail "swap failed; previous version restored"
 }
 RESULT_PHASE=swapped

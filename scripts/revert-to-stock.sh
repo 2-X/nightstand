@@ -354,6 +354,7 @@ mv "$LIVE" "$PREV" || {
     systemctl restart free-sleep-stream 2>/dev/null || true
   fi
   RESULT_PHASE=restored
+  RESULT_REASON="upstream free-sleep could not be put in place, so it never started"
   fail "swap failed moving live aside"
 }
 mv "$STAGE" "$LIVE" || {
@@ -364,6 +365,7 @@ mv "$STAGE" "$LIVE" || {
     systemctl restart free-sleep-stream 2>/dev/null || true
   fi
   RESULT_PHASE=restored
+  RESULT_REASON="upstream free-sleep could not be put in place, so it never started"
   fail "swap failed; fork restored"
 }
 RESULT_PHASE=swapped
