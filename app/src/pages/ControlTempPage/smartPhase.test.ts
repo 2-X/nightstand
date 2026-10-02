@@ -26,8 +26,8 @@ const line = (date: string, time: string, extra: Partial<Parameters<typeof smart
 
 it('describes the pre-warm and the cool-down with its target and time', () => {
   expect(line('2026-09-28', '22:20')).toBe('Warming to +2 for bedtime at 10:45 PM');
-  expect(line('2026-09-28', '22:50')).toBe('Cooling step by step to -2 by 12:10 AM');
-  expect(line('2026-09-28', '23:30')).toBe('Cooling step by step to -2 by 12:10 AM');
+  expect(line('2026-09-28', '22:50')).toBe('Cooling step by step to \u22122 by 12:10 AM');
+  expect(line('2026-09-28', '23:30')).toBe('Cooling step by step to \u22122 by 12:10 AM');
 });
 
 it('announces the warm-up before it starts and while it runs', () => {
@@ -38,7 +38,7 @@ it('announces the warm-up before it starts and while it runs', () => {
 
 it('waits for bed entry while the server holds the cool-down for confirmed presence', () => {
   expect(line('2026-09-28', '23:00', { waiting: true })).toBe("Starts cooling once you've settled in bed");
-  expect(line('2026-09-28', '23:30', { waiting: false })).toBe('Cooling step by step to -2 by 12:10 AM');
+  expect(line('2026-09-28', '23:30', { waiting: false })).toBe('Cooling step by step to \u22122 by 12:10 AM');
 });
 
 it('shows a manual hold until the next phase starts', () => {
@@ -47,7 +47,7 @@ it('shows a manual hold until the next phase starts', () => {
   expect(held('2026-09-28', '22:20', at('2026-09-28', '23:25'))).toBe('Holding +1 until the cool-down at 11:25 PM');
   expect(held('2026-09-28', '22:50', at('2026-09-29', '00:55'), true))
     .toBe("Holding +1 until the cool-down, which starts once you've settled in bed");
-  expect(held('2026-09-28', '23:30', at('2026-09-29', '00:10'))).toBe('Holding +1 until 12:10 AM, then -2 for the night');
+  expect(held('2026-09-28', '23:30', at('2026-09-29', '00:10'))).toBe('Holding +1 until 12:10 AM, then \u22122 for the night');
   expect(held('2026-09-29', '05:30', at('2026-09-29', '05:45'))).toBe('Holding +1 until the warm-up at 5:45 AM');
   expect(held('2026-09-29', '06:00', at('2026-09-29', '06:30'))).toBe('Holding +1 until your 6:30 AM wake-up');
   // The bedtime point belongs to the pre-warm stretch, so its hold also ends at the cool-down.
@@ -64,7 +64,7 @@ it('says when the curve went back to the base', () => {
 
 it('holds without a warm-up when it is off, and says nothing outside the curve', () => {
   expect(smartPhaseLine({ ...base, points: points.filter(point => point.phase !== 'warmup'), now: at('2026-09-29', '03:00') }))
-    .toBe('Holding -2 until 6:30 AM');
+    .toBe('Holding \u22122 until 6:30 AM');
   expect(line('2026-09-28', '21:00')).toBeUndefined();
   expect(line('2026-09-29', '07:30')).toBeUndefined();
 });
@@ -82,7 +82,7 @@ it('builds the line for a resolved Smart Schedule sleep from the shared curve', 
   expect(smartLineForSleep(sleep, { ...options, now: at('2026-09-29', '03:00') })).toMatch(/^Warm-up starts at .* for your 6:30 AM wake-up$/);
   expect(smartLineForSleep({ ...sleep, mode: 'manual' }, { ...options, now: at('2026-09-29', '03:00') })).toBeUndefined();
   // A cool-down the server delayed from 22:30 to 23:00 reaches the hold 30 minutes later than the clock curve.
-  expect(smartLineForSleep(sleep, { ...options, now: at('2026-09-28', '23:05') })).toBe('Cooling step by step to -2 by 11:40 PM');
+  expect(smartLineForSleep(sleep, { ...options, now: at('2026-09-28', '23:05') })).toBe('Cooling step by step to \u22122 by 11:40 PM');
   expect(smartLineForSleep(sleep, { ...options, now: at('2026-09-28', '23:05'), coolStart: at('2026-09-28', '23:00') }))
-    .toBe('Cooling step by step to -2 by 12:10 AM');
+    .toBe('Cooling step by step to \u22122 by 12:10 AM');
 });

@@ -1,8 +1,17 @@
 import { expect, it } from 'vitest';
-import { fahrenheitToLevel, levelToFahrenheit, formatTemperature } from './temperatureConversions';
+import { displayTemperature, fahrenheitToLevel, levelToFahrenheit, formatTemperature } from './temperatureConversions';
 it('round trips each supported level through the stored Fahrenheit value', () => {
   for (let level = -10; level <= 10; level++) {
     expect(fahrenheitToLevel(levelToFahrenheit(level))).toBe(level);
   }
   expect(formatTemperature(83, 'level')).toBe('0');
+});
+
+it('shows a true minus sign for negative levels on display text', () => {
+  expect(displayTemperature(levelToFahrenheit(-3), 'level')).toBe('\u22123');
+  expect(displayTemperature(levelToFahrenheit(-10), 'level')).toBe('\u221210');
+  expect(displayTemperature(levelToFahrenheit(2), 'level')).toBe('+2');
+  expect(displayTemperature(levelToFahrenheit(0), 'level')).toBe('0');
+  expect(displayTemperature(82, 'fahrenheit')).toBe('82°F');
+  expect(displayTemperature(82, 'celsius')).toBe('28°C');
 });

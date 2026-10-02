@@ -7,7 +7,7 @@ import { useRhythmsLive } from '@api/rhythms';
 import { isSchedulePaused, pauseEndsAt } from '@api/schedulePause';
 import { useSchedules } from '@api/schedules';
 import { useSettings } from '@api/settings';
-import { formatTemperature, TemperatureFormat } from '@lib/temperatureConversions.ts';
+import { displayTemperature, TemperatureFormat } from '@lib/temperatureConversions.ts';
 import { typography } from '@design/tokens';
 import { CONTROLS_OVERLAP_PX } from './controlsSlot';
 import { nextBedEvent } from './bedEvents';
@@ -88,8 +88,8 @@ export default function TemperatureLabel({
           sx={ {
             ...typography.hero, color: sliderColor, whiteSpace: 'nowrap',
             fontSize: format === 'level' ? typography.hero.fontSize : 'clamp(2.5rem, 13vw, 3.5rem)',
-          } }>{ formatTemperature(sliderTemp, format) }</Typography>
-        <Typography variant="body2" color="text.secondary">Currently at { formatTemperature(currentTemperatureF, format) }</Typography>
+          } }>{ displayTemperature(sliderTemp, format) }</Typography>
+        <Typography variant="body2" color="text.secondary">Currently at { displayTemperature(currentTemperatureF, format) }</Typography>
       </> : <Typography sx={ typography.hero } color="text.secondary">Off</Typography> }
     </Box>
     <Box sx={ { height: captionSlotHeight, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 } }>

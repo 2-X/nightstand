@@ -66,3 +66,8 @@ export function formatDisplayValue(value: number, format: TemperatureFormat): st
 export function formatTemperature(temperature: number, format: TemperatureFormat): string {
   return formatDisplayValue(fahrenheitToDisplay(temperature, format), format);
 }
+
+// For text people read, on Bed and in the side tiles other pages share: a negative level takes a true minus sign (U+2212).
+export function displayTemperature(temperature: number, format: TemperatureFormat): string {
+  return formatTemperature(temperature, format).replace(/^-/, '\u2212');
+}

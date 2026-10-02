@@ -38,6 +38,6 @@ test('rapid - taps clamp the level at the minimum', async ({ page }) => {
     for (let i = 0; i < 20; i++) (button as HTMLElement).click();
   });
 
-  await expect(target).toHaveText('-10');
+  await expect(target).toHaveText('\u221210');
   await expect(minus).toBeDisabled();
 });

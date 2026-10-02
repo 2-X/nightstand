@@ -7,7 +7,7 @@ import { useSchedules } from '@api/schedules.ts';
 import { useSettings } from '@api/settings.ts';
 import { isSchedulePaused, pauseEndsAt } from '@api/schedulePause.ts';
 import { useAppStore } from '@state/appStore.tsx';
-import { formatTemperature } from '@lib/temperatureConversions.ts';
+import { displayTemperature } from '@lib/temperatureConversions.ts';
 import { nextBedEvent } from './bedEvents';
 import AlarmNotification from './AlarmNotification';
 import PauseScheduleSheet from './PauseScheduleSheet';
@@ -69,7 +69,7 @@ export default function UpcomingNight({ isOn }: { isOn?: boolean }) {
   };
   const rhythmLabel = event ? nameOf(event.at) : undefined;
   const temperature =
-    event && event.temperature !== undefined ? formatTemperature(event.temperature, settings.temperatureFormat) : '';
+    event && event.temperature !== undefined ? displayTemperature(event.temperature, settings.temperatureFormat) : '';
   const override = settings[side].scheduleOverrides.temperatureSchedules;
   const paused = override.disabled && moment(override.expiresAt).isAfter(moment());
   const eventPaused = paused && !!event && moment(override.expiresAt).isAfter(event.at);

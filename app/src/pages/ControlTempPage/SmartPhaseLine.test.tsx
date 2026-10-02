@@ -32,7 +32,7 @@ afterEach(() => vi.useRealTimers());
 it('shows a hold the server keeps in memory, with the level the manual change set', () => {
   fixture.live = live({ hold: { until: '2026-09-29T12:00:00.000Z' } });
   render(<SmartPhaseLine sleep={ sleep } side="left"/>);
-  expect(screen.getByText('Holding -1 until 5:00 AM')).toBeInTheDocument();
+  expect(screen.getByText('Holding \u22121 until 5:00 AM')).toBeInTheDocument();
 });
 
 it('says the cool-down waits for bed entry while the server waits', () => {
@@ -52,7 +52,7 @@ it('follows a cool-down the server delayed', () => {
   fixture.live = live({ phase: 'bedtime', coolStart: '2026-09-29T06:30:00.000Z' });
   render(<SmartPhaseLine sleep={ sleep } side="left"/>);
   // An hour later than the clock curve's 11:40 PM.
-  expect(screen.getByText('Cooling step by step to -2 by 12:40 AM')).toBeInTheDocument();
+  expect(screen.getByText('Cooling step by step to \u22122 by 12:40 AM')).toBeInTheDocument();
 });
 
 it('says when the server went back to the base', () => {

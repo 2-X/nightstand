@@ -1,7 +1,7 @@
 import moment from 'moment-timezone';
 import { buildCurve, type CurvePoint } from '@api/smartCurve';
 import type { ResolvedSleepResponse } from '@api/rhythmsResponse';
-import { formatTemperature, levelToFahrenheit, type TemperatureFormat } from '@lib/temperatureConversions';
+import { displayTemperature, levelToFahrenheit, type TemperatureFormat } from '@lib/temperatureConversions';
 
 export type PhaseLineInput = {
   points: CurvePoint[];
@@ -18,7 +18,7 @@ export type PhaseLineInput = {
 export function smartPhaseLine(input: PhaseLineInput): string | undefined {
   const { points, now, wake, timeZone, format, waiting, hold, base } = input;
   const time = (date: Date) => moment.tz(date, timeZone).format('h:mm A');
-  const temperature = (level: number) => formatTemperature(levelToFahrenheit(level), format);
+  const temperature = (level: number) => displayTemperature(levelToFahrenheit(level), format);
   const warmUp = points.find(point => point.phase === 'warmup');
   // A manual change holds until the curve's next phase starts, at most 3 hours.
   if (hold) {

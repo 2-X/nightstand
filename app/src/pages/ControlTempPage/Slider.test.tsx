@@ -13,7 +13,7 @@ vi.mock('./TemperatureButtons', () => ({ default: () => <button>Temperature step
 it('shows the target and current temperature without a draggable control', () => {
   render(<Slider isOn currentTargetTemp={ 83 } currentTemperatureF={ 75 } refetch={ vi.fn() } format="level"/>);
   expect(screen.getByRole('heading', { level: 2, name: '0' })).toBeInTheDocument();
-  expect(screen.getByText('Currently at -3')).toBeInTheDocument();
+  expect(screen.getByText('Currently at \u22123')).toBeInTheDocument();
   expect(screen.queryByRole('slider')).not.toBeInTheDocument();
   fireEvent.pointerDown(screen.getByText('0'));
   fireEvent.pointerMove(screen.getByText('0'));
