@@ -113,6 +113,15 @@ it('draws a last known target as a grey dot on the off track, with no span, notc
   expect(container.querySelector('text[data-end-label]')).toHaveAttribute('fill', palette.text.disabled);
 });
 
+it('draws an away side that is on grey, on the off track, as its tile is', () => {
+  const container = render(<DialRing isOn away targetLevel={ 3 } currentLevel={ 1 }/>).container;
+  expect(container.querySelector('path[data-band="off"]')).not.toBeNull();
+  for (const selector of ['g[data-band="ghost"]', 'g[data-band="fill"]', 'line[data-notch]', 'circle[data-halo]', 'circle[data-stale]'])
+    expect(container.querySelector(selector)).toBeNull();
+  expect(container.querySelector('circle[data-target]')).toHaveAttribute('fill', palette.text.tertiary);
+  expect(container.querySelector('line[data-tick="major"]')).toHaveAttribute('stroke', palette.dial.tickMajorOff);
+});
+
 it('draws no dot for a side last known to be off', () => {
   expect(render(<DialRing isOn={ false } stale targetLevel={ 3 } currentLevel={ 1 }/>).container.querySelector('circle[data-target]'))
     .toBeNull();

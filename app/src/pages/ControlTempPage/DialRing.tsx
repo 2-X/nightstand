@@ -5,7 +5,7 @@ import {
   radialLine, ticks,
 } from './dialGeometry';
 
-type DialRingProps = { isOn: boolean; targetLevel: number; currentLevel: number; pending?: boolean; stale?: boolean };
+type DialRingProps = { isOn: boolean; targetLevel: number; currentLevel: number; pending?: boolean; stale?: boolean; away?: boolean };
 
 const tickColor = (level: number, major: boolean, isOn: boolean) => isOn
   ? level === 0 ? palette.dial.tickZero : major ? palette.dial.tickMajor : palette.dial.tick
@@ -34,9 +34,9 @@ const svgStyle = {
 } as const;
 
 // Every mark is a state: the faint scale, the span to the target, the notch for now, the dot for the target.
-export default function DialRing({ isOn, targetLevel, currentLevel, pending = false, stale = false }: DialRingProps) {
-  // Colour means live: a last known target is drawn grey on the off track.
-  const live = isOn && !stale;
+export default function DialRing({ isOn, targetLevel, currentLevel, pending = false, stale = false, away = false }: DialRingProps) {
+  // Colour means live: a last known target, or an away side's, is drawn grey on the off track.
+  const live = isOn && !stale && !away;
   const target = clampLevel(targetLevel);
   const current = clampLevel(currentLevel);
   const fill = fillRange(target);
@@ -81,9 +81,9 @@ export default function DialRing({ isOn, targetLevel, currentLevel, pending = fa
           ? <circle data-target data-pending cx={ dot.x } cy={ dot.y } r="7.5" fill={ palette.bg.base } stroke={ colour } strokeWidth="2.5"/>
           : <circle data-target cx={ dot.x } cy={ dot.y } r="8.5" fill={ colour } stroke={ palette.bg.base } strokeWidth="2.5"/> }
       </> }
-      { stale && isOn && <circle
+      { isOn && !live && <circle
         data-target
-        data-stale
+        data-stale={ stale || undefined }
         cx={ dot.x }
         cy={ dot.y }
         r="8.5"

@@ -70,6 +70,7 @@ export default function TemperatureDial({ status, staleSince, loading = false, a
       <DialRing
         isOn={ isOn }
         stale={ stale }
+        away={ away }
         pending={ pending }
         targetLevel={ targetLevel }
         currentLevel={ fahrenheitToLevel(status?.currentTemperatureF ?? target) }/>
@@ -79,7 +80,7 @@ export default function TemperatureDial({ status, staleSince, loading = false, a
       { status && <TemperatureLabel
         isOn={ isOn }
         sliderTemp={ target }
-        sliderColor={ temperatureColor(targetLevel) }
+        sliderColor={ away ? palette.text.secondary : temperatureColor(targetLevel) }
         currentTargetTemp={ status.targetTemperatureF }
         currentTemperatureF={ status.currentTemperatureF }
         format={ format }

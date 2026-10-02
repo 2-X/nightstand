@@ -52,6 +52,13 @@ it('shows last night, not the steppers, for an away side that is on', () => {
   expect(screen.getByText('Last night')).toBeInTheDocument();
 });
 
+it('draws an away side that is on in grey, ring and numeral', () => {
+  const { container } = render(<TemperatureDial status={ on } away refetch={ vi.fn() } format="level"/>);
+  expect(container.querySelector('[data-dial] path[data-band="off"]')).not.toBeNull();
+  expect(container.querySelector('[data-dial] g[data-band="fill"]')).toBeNull();
+  expect(screen.getByRole('heading', { level: 2, name: '0' })).toHaveStyle({ color: palette.text.secondary });
+});
+
 it('says Loading in the dial and leaves every slot empty while the status loads', () => {
   const { container } = render(<TemperatureDial loading refetch={ vi.fn() } format="level"/>);
   const dial = within(container.querySelector<HTMLElement>('[data-dial]')!);
