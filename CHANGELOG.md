@@ -23,6 +23,9 @@ is a hard fork; for the history of the projects it descends from, see
 - HRV is no longer shown in the app. Checked against chest-strap recordings,
   the stored estimate was no more accurate than a fixed guess. It is still
   stored and returned by the API.
+- Settings > Software now says when you are running a beta while your update
+  channel is Stable, and offers to switch. Releases are marked Stable or Beta
+  in the version list and the release notes, and installing a beta says so.
 - A new install now installs a tagged release and saves that release's
   channel, so a Pod installed on a beta keeps getting beta fixes. A reinstall
   follows the channel already saved. Installing a release older than the

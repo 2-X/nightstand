@@ -1,5 +1,5 @@
 import SectionHeading from '@components/SectionHeading';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useUpdateAttentionStore, type UpdateOutcome } from '@state/updateAttentionStore';
 import {
   Accordion, AccordionDetails, AccordionSummary,
@@ -14,6 +14,7 @@ import { SubpageShell } from '../../DataPage/Header.tsx';
 import Section from '../Section.tsx';
 import MarkdownBody from '@components/MarkdownBody.tsx';
 import UpdateFreeSleepButton from '../DeviceSettingsSection/UpdateFreeSleepButton.tsx';
+import BetaOnStableNotice from './BetaOnStableNotice.tsx';
 import ReleaseRow from './ReleaseRow.tsx';
 import RollbackRow from './RollbackRow.tsx';
 import RevertToStockRow from './RevertToStockRow.tsx';
@@ -42,6 +43,7 @@ export default function VersionsPage() {
   const { data: settings, isError: settingsError, refetch: refetchSettings } = useSettings();
   const { data: releases, isError: releasesFailed, refetch: checkReleases, dataUpdatedAt, isFetching } = useReleases();
   const [channelOpen, setChannelOpen] = useState(false);
+  const channelRow = useRef<HTMLDivElement>(null);
   const updateProblem = useUpdateAttentionStore(state => state.updateAttention);
   const setUpdateProblem = useUpdateAttentionStore(state => state.setUpdateAttention);
   const updateOutcome = useUpdateAttentionStore(state => state.updateOutcome);
@@ -88,6 +90,13 @@ export default function VersionsPage() {
   return (
     <SubpageShell title="Software">
 
+      { savedChannel !== undefined && (
+        <BetaOnStableNotice
+          running={ running }
+          releases={ releases?.releases }
+          saved={ savedChannel }
+          onSwitched={ () => channelRow.current?.focus() }/>
+      ) }
       { releasesFailed && <Alert severity="warning">Release information is unavailable. Try checking again.</Alert> }
       { updateAvailable && (
         <Section title={ `Version ${latestVersion} is ready` }>
@@ -146,7 +155,10 @@ export default function VersionsPage() {
         ) }
       </Alert> }
       <List disablePadding sx={ { bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' } }>
-        <ListItemButton onClick={ () => setChannelOpen(true) } sx={ { minHeight: 44, borderBottom: 1, borderColor: 'divider' } }>
+        <ListItemButton
+          ref={ channelRow }
+          onClick={ () => setChannelOpen(true) }
+          sx={ { minHeight: 44, borderBottom: 1, borderColor: 'divider' } }>
           <ListItemText primary="Update channel" secondary={ channelLabel } />
           <ChevronRightIcon />
         </ListItemButton>
@@ -157,8 +169,8 @@ export default function VersionsPage() {
           <Box sx={ { p: 3, width: '100%', maxWidth: 720, mx: 'auto' } }>
             <Typography variant="h2">Update channel</Typography>
             <Typography variant="body2" color="text.secondary" sx={ { my: 2 } }>
-            Stable updates less often, with releases that have been in use for a while.
-            Beta gets each release as soon as it is out, with less testing.
+            Stable changes less often. A release moves to stable once the maintainer has used it for a while
+            without problems. Beta gets each release as soon as it is out, with less testing.
             </Typography>
             <RadioGroup
               aria-label="Update channel"

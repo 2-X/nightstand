@@ -98,6 +98,42 @@ describe('ReleaseRow', () => {
   });
 });
 
+describe('ReleaseRow channel', () => {
+  const beta = { kind: 'agent', version: '3.6.0', channel: 'beta', date: '2026-10-01' } as const;
+
+  it('marks a release Stable or Beta', () => {
+    const { unmount } = renderWithProviders(<ReleaseRow release={ release } runningVersion="3.3.0" body={ undefined }/>);
+    expect(screen.getByText('Stable')).toBeInTheDocument();
+    unmount();
+    renderWithProviders(<ReleaseRow release={ beta } runningVersion="3.3.0" body={ undefined }/>);
+    expect(screen.getByText('Beta')).toBeInTheDocument();
+  });
+
+  it('says so when installing a beta, and not for a stable release', async () => {
+    const view = renderWithProviders(<ReleaseRow release={ beta } runningVersion="3.3.0" body={ undefined }/>);
+    await view.user.click(screen.getByRole('button', { name: 'Install' }));
+    expect(await screen.findByText('v3.6.0 is a beta release. It has had less testing than stable.')).toBeInTheDocument();
+    view.unmount();
+    const stable = renderWithProviders(<ReleaseRow release={ release } runningVersion="3.3.0" body={ undefined }/>);
+    await stable.user.click(screen.getByRole('button', { name: 'Install' }));
+    await screen.findByRole('dialog');
+    expect(screen.queryByText(/is a beta release/)).not.toBeInTheDocument();
+  });
+
+  it('shows no summary line for notes that are only a heading', () => {
+    renderWithProviders(<ReleaseRow release={ release } runningVersion="3.3.0" body="## Notes"/>);
+    expect(screen.queryByText('Release notes')).not.toBeInTheDocument();
+  });
+
+  it('summarises the release notes under the version', () => {
+    renderWithProviders(<ReleaseRow
+      release={ release }
+      runningVersion="3.3.0"
+      body={ 'Sleep data loads again. Updates are safer.\n\n- Detail.' }/>);
+    expect(screen.getByText('Sleep data loads again.')).toBeInTheDocument();
+  });
+});
+
 describe('ReleaseRow when the bed may be in use', () => {
   const open = async () => {
     const view = renderWithProviders(<ReleaseRow release={ release } runningVersion="3.3.0" body={ undefined }/>);

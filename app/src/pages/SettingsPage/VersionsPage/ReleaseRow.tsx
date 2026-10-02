@@ -8,6 +8,7 @@ import semver from 'semver';
 import { postUpdate } from '@api/update.ts';
 import { migrationsApplied, useUpdateProgress } from '@api/useUpdateProgress.ts';
 import type { Release } from '@api/releases.ts';
+import { summary } from '@api/releaseSummary.ts';
 import { downgradeWarnings } from './downgradeWarnings';
 import InUseConfirm from '../../../components/InUseConfirm';
 import RhythmsLeaveNote from './RhythmsLeaveNote';
@@ -22,9 +23,10 @@ type Props = {
   offerReinstall?: boolean;
 };
 
-export default function ReleaseRow({ release, runningVersion, offerReinstall = false }: Props) {
+export default function ReleaseRow({ release, runningVersion, body, offerReinstall = false }: Props) {
   const [open, setOpen] = useState(false);
   const titleId = useId();
+  const notes = body ? summary(body) : undefined;
   const isRunning = release.version === runningVersion;
   const isReinstall = isRunning && offerReinstall;
   // A reinstall never changes the running version, so it is done when the
@@ -44,7 +46,7 @@ export default function ReleaseRow({ release, runningVersion, offerReinstall = f
       <Box sx={ { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, mb: 0 } }>
         <Typography sx={ { fontWeight: 600 } }>v{ release.version }</Typography>
         <Typography variant="caption" color="text.secondary">{ release.date }</Typography>
-        <Chip label={ release.channel } size="small" variant="outlined"/>
+        <Chip label={ release.channel === 'beta' ? 'Beta' : 'Stable' } size="small" variant="outlined"/>
         { isRunning && <Chip label="Running" size="small" color="success"/> }
         <Box sx={ { flex: 1 } }/>
         { (!isRunning || isReinstall) && (
@@ -53,6 +55,7 @@ export default function ReleaseRow({ release, runningVersion, offerReinstall = f
           </Button>
         ) }
       </Box>
+      { notes && <Typography variant="body2" color="text.secondary" sx={ { overflowWrap: 'anywhere' } }>{ notes }</Typography> }
 
       <Dialog aria-labelledby={ titleId } open={ open } onClose={ () => { if (phase !== 'updating') { reset(); setOpen(false); } } }>
         <DialogTitle id={ titleId }>
@@ -64,6 +67,11 @@ export default function ReleaseRow({ release, runningVersion, offerReinstall = f
         <DialogContent>
           { phase === 'failed' && <Alert severity="error">{ error }</Alert> }
           { phase === 'idle' && <InUseConfirm reasons={ inUse }/> }
+          { phase === 'idle' && release.channel === 'beta' && (
+            <Alert severity="info" sx={ { mb: 2 } }>
+              { `v${release.version} is a beta release. It has had less testing than stable.` }
+            </Alert>
+          ) }
           { phase === 'idle' && (
             <DialogContentText>
               { isReinstall

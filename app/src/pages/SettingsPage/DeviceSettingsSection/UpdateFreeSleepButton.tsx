@@ -12,6 +12,7 @@ import { useEffect, useState, useId, useRef, forwardRef, type ReactElement, type
 import InUseConfirm from '../../../components/InUseConfirm';
 import { postUpdate } from '@api/update.ts';
 import { useLatestVersion } from '@api/useLatestVersion.ts';
+import { useReleases } from '@api/releases.ts';
 import { useUpdateProgress } from '@api/useUpdateProgress.ts';
 import { UpdateOutcome } from '@state/updateAttentionStore';
 import semver from 'semver';
@@ -37,7 +38,9 @@ export default function UpdateFreeSleepButton({ runningVersion, onProblem, onSta
   const titleId = useId();
   const startVersion = useRef(runningVersion);
   const latestVersion = useLatestVersion();
+  const { data: manifest } = useReleases();
   const [targetVersion, setTargetVersion] = useState<string>();
+  const targetIsBeta = manifest?.releases.find(release => release.version === targetVersion)?.channel === 'beta';
   const { phase, error, inUse, recordedOutcome, start, reset } = useUpdateProgress(runningVersion);
 
   // The notice is for a refused request, a timeout, or an update that ran and
@@ -91,6 +94,11 @@ export default function UpdateFreeSleepButton({ runningVersion, onProblem, onSta
           { phase === 'idle' && (
             <>
               <InUseConfirm reasons={ inUse }/>
+              { targetIsBeta && (
+                <Alert severity="info" sx={ { mb: 2 } }>
+                  { `v${targetVersion} is a beta release. It has had less testing than stable.` }
+                </Alert>
+              ) }
               <DialogContentText>
                 Nightstand restarts to finish, and schedules and alarms pause for up to five minutes.
               </DialogContentText>

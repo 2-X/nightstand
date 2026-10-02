@@ -9,18 +9,10 @@ import { useChangelog, useRemoteChangelog, entriesNewerThan } from '@api/changel
 import type { ChangelogEntry } from '@api/changelogSchema';
 import { useDeviceStatus } from '@api/deviceStatus.ts';
 import { useSettings } from '@api/settings';
+import { useReleases } from '@api/releases.ts';
+import { summary } from '@api/releaseSummary.ts';
 import { useLatestVersion } from '@api/useLatestVersion.ts';
 import { palette } from '@design/tokens';
-
-// The first sentence of the notes: a release's one-line summary when it has
-// one, otherwise its first note. Note lines wrap mid-sentence, so join them.
-function summary(body: string) {
-  const first = body.split(/\n\s*\n/).map(block => block.trim()).find(block => block && !block.startsWith('#'));
-  if (!first) return 'Release notes';
-  const text = first.replace(/^[-*]\s+/, '').replace(/\s*\n\s*/g, ' ')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[*`]/g, '');
-  return (text.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? text).slice(0, 180);
-}
 
 export default function ChangelogPage() {
   const { data: localEntries, isError, isPending, refetch } = useChangelog();
@@ -28,6 +20,8 @@ export default function ChangelogPage() {
   const { data: deviceStatus } = useDeviceStatus();
   const latest = useLatestVersion();
   const { data: settings } = useSettings();
+  const { data: releases } = useReleases();
+  const channelOf = new Map((releases?.releases ?? []).map(release => [release.version, release.channel]));
   const running = deviceStatus?.freeSleep?.version;
   const { hash } = useLocation();
   useEffect(() => {
@@ -65,6 +59,10 @@ export default function ChangelogPage() {
                 <Box sx={ { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 } }>
                   <Typography component="span" variant="subtitle1" sx={ { fontWeight: 600 } }>v{ entry.version }</Typography>
                   <Typography variant="caption" color="text.secondary">{ entry.date }</Typography>
+                  { channelOf.has(entry.version) && <Chip
+                    label={ channelOf.get(entry.version) === 'beta' ? 'Beta' : 'Stable' }
+                    size="small"
+                    variant="outlined"/> }
                   { entry.version === running && <Chip label="Running" size="small" variant="outlined"/> }
                   { entry.version === latest && <Chip
                     label={ settings?.updateChannel === 'beta' ? 'Latest beta' : 'Latest stable' }
@@ -76,7 +74,7 @@ export default function ChangelogPage() {
                   color="text.secondary"
                   sx={ { mt: 0.5, overflowWrap: 'anywhere', display: '-webkit-box',
                     WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } }>
-                  { summary(entry.body) }
+                  { summary(entry.body) ?? 'Release notes' }
                 </Typography>
               </Box>
             </AccordionSummary>

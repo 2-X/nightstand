@@ -4,6 +4,7 @@ import { act, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import UpdateFreeSleepButton from './UpdateFreeSleepButton';
+import { getSettings } from '../../../mocks/mockData';
 
 const manifestUrl = 'https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json';
 const manifest = { channels: ['stable', 'beta'], releases: [
@@ -127,5 +128,26 @@ describe('when the update records how it ended', () => {
     expect(alert).not.toHaveTextContent('did not accept the update request');
     expect(problems).toEqual([['timed_out', '3.0.0']]);
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+  });
+});
+
+describe('UpdateFreeSleepButton to a beta', () => {
+  it('says the target is a beta, and says nothing for a stable target', async () => {
+    server.use(http.get(manifestUrl, () => HttpResponse.json({ channels: ['stable', 'beta'], releases: manifest.releases })));
+    server.use(http.get('*/settings', () => HttpResponse.json({ ...getSettings(), updateChannel: 'beta' })));
+    const { user } = renderWithProviders(<UpdateFreeSleepButton runningVersion="3.0.0"/>);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Update to v3.3.0' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Update to v3.3.0' }));
+    const note = await screen.findByText('v3.3.0 is a beta release. It has had less testing than stable.');
+    expect(note.closest('.MuiAlert-root')).not.toBeNull();
+  });
+
+  it('adds no beta note for a stable target', async () => {
+    server.use(http.get(manifestUrl, () => HttpResponse.json(manifest)));
+    const { user } = renderWithProviders(<UpdateFreeSleepButton runningVersion="3.0.0"/>);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Update to v3.2.0' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Update to v3.2.0' }));
+    await screen.findByText('Update to v3.2.0?');
+    expect(screen.queryByText(/is a beta release/)).not.toBeInTheDocument();
   });
 });

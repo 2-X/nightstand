@@ -142,3 +142,78 @@ it('disables update channel selection when the server omits the setting', async 
   await user.click(await screen.findByRole('button', { name: /Update channel Unavailable/ }));
   expect(await screen.findByRole('radio', { name: 'Beta' })).toBeDisabled();
 });
+
+it('describes the channels in the channel drawer', async () => {
+  const { user } = renderWithProviders(<VersionsPage />);
+  await user.click(await screen.findByRole('button', { name: /Update channel Stable/ }));
+  expect(await screen.findByText(
+    'Stable changes less often. A release moves to stable once the maintainer has used it for a while without problems. ' +
+    'Beta gets each release as soon as it is out, with less testing.'
+  )).toBeInTheDocument();
+});
+
+it('tells someone running a beta on the stable channel, and switches them', async () => {
+  let posted: unknown;
+  server.use(
+    http.get('*/api/deviceStatus', () => HttpResponse.json({
+      ...getDeviceStatus(), freeSleep: { ...getDeviceStatus().freeSleep, version: '3.5.1' },
+    })),
+    http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json', () => HttpResponse.json({
+      channels: ['stable', 'beta'],
+      releases: [
+        { kind: 'agent', version: '3.5.1', channel: 'beta', date: '2026-10-01' },
+        { kind: 'agent', version: '3.3.2', channel: 'stable', date: '2026-09-29' },
+      ],
+    })),
+    http.post('*/settings', async ({ request }) => { posted = await request.json(); return HttpResponse.json({}); }),
+  );
+  const { user } = renderWithProviders(<VersionsPage />);
+  expect(await screen.findByText(/You are running v3.5.1, a beta release/)).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Switch to Beta' }));
+  await waitFor(() => expect(posted).toEqual({ updateChannel: 'beta' }));
+});
+
+describe('beta on stable notice waits for the saved channel', () => {
+  const betaRunning = (settings: Parameters<typeof http.get>[1]) => server.use(
+    http.get('*/api/deviceStatus', () => HttpResponse.json({
+      ...getDeviceStatus(), freeSleep: { ...getDeviceStatus().freeSleep, version: '3.5.1' },
+    })),
+    http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json', () => HttpResponse.json({
+      channels: ['stable', 'beta'],
+      releases: [{ kind: 'agent', version: '3.5.1', channel: 'beta', date: '2026-10-01' }],
+    })),
+    http.get('*/api/settings', settings),
+  );
+
+  it('shows nothing while settings are loading', async () => {
+    betaRunning(() => new Promise(() => undefined));
+    renderWithProviders(<VersionsPage />);
+    await screen.findByRole('button', { name: /Update channel Loading/ });
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(screen.queryByText(/a beta release/)).not.toBeInTheDocument();
+  });
+
+  it('shows nothing when settings fail to load', async () => {
+    betaRunning(() => new HttpResponse(null, { status: 500 }));
+    renderWithProviders(<VersionsPage />);
+    await screen.findByRole('button', { name: /Update channel Unavailable/ });
+    expect(screen.queryByText(/a beta release/)).not.toBeInTheDocument();
+  });
+
+  it('shows nothing when the server omits the channel', async () => {
+    betaRunning(() => HttpResponse.json({ ...getSettings(), updateChannel: undefined }));
+    renderWithProviders(<VersionsPage />);
+    await screen.findByRole('button', { name: /Update channel Unavailable/ });
+    expect(screen.queryByText(/a beta release/)).not.toBeInTheDocument();
+  });
+
+  it('moves focus to the Update channel row after the switch', async () => {
+    let channel = 'stable';
+    betaRunning(() => HttpResponse.json({ ...getSettings(), updateChannel: channel }));
+    server.use(http.post('*/settings', () => { channel = 'beta'; return HttpResponse.json({}); }));
+    const { user } = renderWithProviders(<VersionsPage />);
+    await user.click(await screen.findByRole('button', { name: 'Switch to Beta' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Switch to Beta' })).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /Update channel Beta/ })).toHaveFocus();
+  });
+});

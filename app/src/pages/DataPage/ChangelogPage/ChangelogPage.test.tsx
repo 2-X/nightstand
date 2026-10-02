@@ -81,3 +81,23 @@ it('keeps the heading outline to h1 then one h2 per release', async () => {
   expect(levels.filter(level => level > 2)).toEqual([]);
   expect(levels.filter(level => level === 2).length).toBeGreaterThan(0);
 });
+
+it('marks each release Stable or Beta from the release list', async () => {
+  server.use(
+    http.get('*/changelog', () => HttpResponse.json({ entries: [
+      { version: '3.5.1', date: '2026-10-01', body: 'Newer release.' },
+      { version: '3.3.2', date: '2026-09-29', body: 'Older release.' },
+    ] })),
+    http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json', () => HttpResponse.json({
+      channels: ['stable', 'beta'],
+      releases: [
+        { kind: 'agent', version: '3.5.1', channel: 'beta', date: '2026-10-01' },
+        { kind: 'agent', version: '3.3.2', channel: 'stable', date: '2026-09-29' },
+      ],
+    })),
+  );
+  renderWithProviders(<ChangelogPage />);
+  const newer = await screen.findByRole('button', { name: /^v3.5.1/ });
+  await waitFor(() => expect(newer).toHaveTextContent('Beta'));
+  expect(screen.getByRole('button', { name: /^v3.3.2/ })).toHaveTextContent('Stable');
+});
