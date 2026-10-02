@@ -161,14 +161,14 @@ function save(): void {
   }
 }
 
-function upcomingAlarms(now: Date): Upcoming[] {
+function upcomingAlarms(now: Date, horizonMs = HORIZON_MS): Upcoming[] {
   for (const name of suppressions.keys()) {
     if (!schedule.scheduledJobs[name]) suppressions.delete(name);
   }
   return Object.values(schedule.scheduledJobs).flatMap(job => {
     if (!isAlarmJobName(job.name)) return [];
     const next = job.nextInvocation()?.getTime();
-    if (next === undefined || next <= now.getTime() || next > now.getTime() + HORIZON_MS) return [];
+    if (next === undefined || next <= now.getTime() || next > now.getTime() + horizonMs) return [];
     if (guard('suppression check', false, () => suppressions.get(job.name)?.(new Date(next)) === true)) return [];
     return [{ side: sideOf(job.name), at: new Date(next).toISOString(), jobName: job.name }];
   });
@@ -199,6 +199,21 @@ function unstarted(items: Upcoming[], now: Date): MissedAlarm[] {
   add(found, now);
   for (const item of found) logger.warn(`Missed the ${item.side} alarm due ${item.at}: the server was not running`);
   return found;
+}
+
+// The alarms due within windowMs from now. known is false when the live job
+// list says nothing about what is due: the ledger is not running, jobs are not
+// planned yet, or they are being re-planned. The alarms saved at the last plan
+// then stand in for it.
+export function alarmsDueWithin(now: Date, windowMs: number): { alarms: { side: Side; at: string }[]; known: boolean } {
+  const known = running && planned && !isRebuilding();
+  const live = upcomingAlarms(now, windowMs).map(({ side, at }) => ({ side, at }));
+  if (known) return { alarms: live, known };
+  const t = now.getTime();
+  const saved = [...ledger.upcoming, ...pending]
+    .filter(item => Date.parse(item.at) > t && Date.parse(item.at) <= t + windowMs)
+    .map(({ side, at }) => ({ side, at }));
+  return { alarms: [...live, ...saved], known };
 }
 
 function beat(now: Date, jobsPlanned: boolean): void {

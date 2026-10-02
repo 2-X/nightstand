@@ -5,7 +5,8 @@ import logger from '../../logger.js';
 import { triggerUpdateService } from '../../jobs/update.js';
 import { triggerRollbackService } from '../../jobs/rollback.js';
 import { triggerRevertToStockService } from '../../jobs/revertToStock.js';
-import { UpdateRequestSchema, RollbackInfo } from './updateSchema.js';
+import { UpdateRequestSchema, OperationRequestSchema, RollbackInfo } from './updateSchema.js';
+import { inUseText, type InUseReasonText } from './inUseText.js';
 
 import { PrivilegedCommandError, privilegedErrorStatus } from '../../jobs/privilegedCommand.js';
 
@@ -29,6 +30,38 @@ let leaveHook: LeaveHook | undefined;
 // no Rhythms, so the server registers the handoff here at startup.
 export function setLeaveHook(hook: LeaveHook): void {
   leaveHook = hook;
+}
+
+type InUseCheck = () => Promise<InUseReasonText[]>;
+// Without a registered check the bed cannot be read, which counts as in use.
+let inUseCheck: InUseCheck = async () => ['status-unknown'];
+
+// This file also ships in the updater overlay for stock installs, which
+// cannot read the bed or its alarms, so the server registers the check at
+// startup too.
+export function setInUseCheck(check: InUseCheck): void {
+  inUseCheck = check;
+}
+
+async function currentInUseReasons(): Promise<InUseReasonText[]> {
+  try {
+    return await inUseCheck();
+  } catch (error) {
+    logger.warn('The in-use check failed, treating the bed as possibly in use', error);
+    return ['status-unknown'];
+  }
+}
+
+// Answers 409 and returns true when the bed may be in use and the request
+// did not confirm it. Enforced here so a stale page cannot skip the check.
+// The message copy is for pages that only read that field.
+export async function refusedWhileInUse(res: express.Response, confirmInUse: boolean | undefined): Promise<boolean> {
+  if (confirmInUse === true) return false;
+  const reasons = await currentInUseReasons();
+  if (reasons.length === 0) return false;
+  const text = inUseText(reasons);
+  res.status(409).json({ error: text, message: text, reasons });
+  return true;
 }
 
 export function isLoopbackAddress(address: string | undefined): boolean {
@@ -59,6 +92,10 @@ router.post('/prepare-to-stop', async (req, res) => {
   res.status(204).end();
 });
 
+router.get('/in-use', async (_req, res) => {
+  res.json({ reasons: await currentInUseReasons() });
+});
+
 router.post('/', async (req, res) => {
   const parsed = UpdateRequestSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -67,7 +104,8 @@ router.post('/', async (req, res) => {
     return;
   }
 
-  const { targetVersion, allowDowngrade } = parsed.data;
+  const { targetVersion, allowDowngrade, confirmInUse } = parsed.data;
+  if (await refusedWhileInUse(res, confirmInUse)) return;
   let ownsTarget = false;
   try {
     await triggerUpdateService({
@@ -107,7 +145,19 @@ router.get('/rollback-info', async (_req, res) => {
   }
 });
 
-router.post('/rollback', async (_req, res) => {
+// Parses the optional body of rollback and switch, and answers 400 or 409
+// itself, returning false, when the request must not go ahead.
+async function admitted(req: express.Request, res: express.Response): Promise<boolean> {
+  const parsed = OperationRequestSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid request data', details: parsed.error.errors });
+    return false;
+  }
+  return !(await refusedWhileInUse(res, parsed.data.confirmInUse));
+}
+
+router.post('/rollback', async (req, res) => {
+  if (!(await admitted(req, res))) return;
   try {
     await triggerRollbackService();
     res.status(204).end();
@@ -122,7 +172,8 @@ router.post('/rollback', async (_req, res) => {
 // Switch the app to upstream free-sleep. System configuration and backups can remain.
 // Reversible only by re-adopting via scripts/migrate/switch-to-this-fork.sh
 // afterward. There's no in-app way back once upstream free-sleep is running.
-router.post('/revert-to-stock', async (_req, res) => {
+router.post('/revert-to-stock', async (req, res) => {
+  if (!(await admitted(req, res))) return;
   try {
     await triggerRevertToStockService();
     res.status(204).end();

@@ -61,6 +61,7 @@ before(async () => {
   app.use(express.json());
   const update = await import('./update.js');
   update.setLeaveHook((await import('../../jobs/rhythms/handoff.js')).prepareToLeaveRhythms);
+  update.setInUseCheck(async () => []);
   app.use('/update', update.default);
   app.use((await import('../services/services.js')).default);
   server = app.listen(0);

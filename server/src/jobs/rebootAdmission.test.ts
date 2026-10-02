@@ -31,7 +31,8 @@ const { default: reboot } = await import('./reboot.js');
 const { triggerUpdateService } = await import('./update.js');
 const { triggerRollbackService } = await import('./rollback.js');
 const { default: jobsRouter } = await import('../routes/jobs/jobs.js');
-const { default: updateRouter } = await import('../routes/update/update.js');
+const { default: updateRouter, setInUseCheck } = await import('../routes/update/update.js');
+setInUseCheck(async () => []);
 
 const app = express();
 app.use(express.json(), jobsRouter);

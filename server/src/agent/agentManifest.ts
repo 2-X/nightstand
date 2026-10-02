@@ -129,6 +129,7 @@ export const AGENT_MANIFEST: AgentEntry[] = [
   { path: 'server/src/jobs/revertToStock.ts', mode: 'add', why: 'runs revert-to-stock.sh via its unit' },
   { path: 'server/src/routes/update/update.ts', mode: 'add', why: 'POST /api/update and the rollback availability read' },
   { path: 'server/src/routes/update/updateSchema.ts', mode: 'add', why: 'validates the update target' },
+  { path: 'server/src/routes/update/inUseText.ts', mode: 'add', why: 'says why an update waits while the bed may be in use' },
   { path: 'server/src/serverInfo.json', mode: 'copy', why: 'identifies the build: version, branch, fork, upstream base' },
   {
     path: 'server/package.json',

@@ -4,6 +4,11 @@ import { z } from 'zod';
 export const UpdateRequestSchema = z.object({
   targetVersion: z.string().regex(/^\d+\.\d+\.\d+$/).optional(),
   allowDowngrade: z.boolean().optional(),
+  confirmInUse: z.boolean().optional(),
+}).strict();
+
+export const OperationRequestSchema = z.object({
+  confirmInUse: z.boolean().optional(),
 }).strict();
 
 export const RollbackInfoSchema = z.object({
@@ -11,5 +16,6 @@ export const RollbackInfoSchema = z.object({
   version: z.string().nullable(),
 });
 
+export type OperationRequest = z.infer<typeof OperationRequestSchema>;
 export type UpdateRequest = z.infer<typeof UpdateRequestSchema>;
 export type RollbackInfo = z.infer<typeof RollbackInfoSchema>;
