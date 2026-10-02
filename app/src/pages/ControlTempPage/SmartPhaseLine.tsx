@@ -1,4 +1,5 @@
-import { Typography } from '@mui/material';
+import { Fragment } from 'react';
+import { Box, Typography } from '@mui/material';
 import { useDeviceStatus } from '@api/deviceStatus';
 import { useRhythmsLive } from '@api/rhythms';
 import { useSettings } from '@api/settings';
@@ -6,6 +7,7 @@ import type { ResolvedSleepResponse } from '@api/rhythmsResponse';
 import type { Side } from '@state/appStore';
 import { fahrenheitToLevel } from '@lib/temperatureConversions';
 import { smartLineForSleep } from './smartPhase';
+import { tonightLineSx } from './tonightStyles';
 
 // A Smart Schedule hold lives in the server's memory, not in settings, so the
 // hold and the delayed cool-down come from GET /rhythms/live.
@@ -27,5 +29,13 @@ export default function SmartPhaseLine({ sleep, side }: { sleep: ResolvedSleepRe
     hold: until && until > now && target !== undefined ? { level: fahrenheitToLevel(target), until } : undefined,
     base: night?.baseSince && sleep.smart ? { level: sleep.smart.baseLevel, since: new Date(night.baseSince) } : undefined,
   });
-  return line ? <Typography variant="body2" sx={ { mb: 1.5 } }>{ line }</Typography> : null;
+  if (!line) return null;
+  // "wake-up" never breaks at its hyphen.
+  const parts = line.split('wake-up');
+  return <Typography sx={ tonightLineSx }>
+    { parts.map((part, index) => <Fragment key={ index }>
+      { index > 0 && <Box component="span" sx={ { whiteSpace: 'nowrap' } }>wake-up</Box> }
+      { part }
+    </Fragment>) }
+  </Typography>;
 }

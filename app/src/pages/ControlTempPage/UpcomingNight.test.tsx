@@ -36,23 +36,14 @@ it('explains that an active manual override keeps the manual target at power-on'
   expect(screen.getByText('Turns on tonight at 9:00 PM and keeps your manual temperature')).toBeInTheDocument();
 });
 
-it('places the power-on time before the target temperature', () => {
+it('leads with the next start while the side is off', () => {
   vi.spyOn(moment, 'now').mockReturnValue(Date.parse('2026-09-28T20:00:00Z'));
   fixture.on = '21:00';
   fixture.expiresAt = '2026-09-28T19:00:00Z';
   render(<MemoryRouter><UpcomingNight/></MemoryRouter>);
   expect(screen.getByText('Turns on tonight at 9:00 PM, set to 82°F')).toBeInTheDocument();
+  expect(screen.queryByText(/Changes to/)).not.toBeInTheDocument();
 });
-
-it('shows the following temperature event when power-on is already shown in the off readout', () => {
-  vi.spyOn(moment, 'now').mockReturnValue(Date.parse('2026-09-28T20:00:00Z'));
-  fixture.on = '21:00';
-  fixture.expiresAt = '2026-09-28T19:00:00Z';
-  render(<MemoryRouter><UpcomingNight isOn={ false }/></MemoryRouter>);
-  expect(screen.getByText('Changes to 70°F tonight at 10:00 PM')).toBeInTheDocument();
-  expect(screen.queryByText(/Turns on/)).not.toBeInTheDocument();
-});
-
 
 it('uses the shared section hierarchy for upcoming events', () => {
   vi.spyOn(moment, 'now').mockReturnValue(Date.parse('2026-09-28T12:00:00Z'));
@@ -60,4 +51,14 @@ it('uses the shared section hierarchy for upcoming events', () => {
   render(<ThemeProvider theme={ theme }><MemoryRouter><UpcomingNight/></MemoryRouter></ThemeProvider>);
   expect(screen.getByRole('heading', { level: 2, name: 'Upcoming' }))
     .toHaveStyle({ fontSize: '1.125rem', fontWeight: 600 });
+});
+
+it('draws the card at the shared 16 px radius with its actions as 44 px lamp links', () => {
+  vi.spyOn(moment, 'now').mockReturnValue(Date.parse('2026-09-28T20:00:00Z'));
+  fixture.on = '21:00';
+  fixture.expiresAt = '2026-09-28T19:00:00Z';
+  const { container } = render(<ThemeProvider theme={ theme }><MemoryRouter><UpcomingNight/></MemoryRouter></ThemeProvider>);
+  expect(container.querySelector('[data-tonight]')).toHaveStyle({ borderRadius: '16px' });
+  expect(screen.getByRole('link', { name: 'Edit schedule' })).toHaveStyle({ minHeight: '44px', fontSize: '15px' });
+  expect(screen.getByText('Turns on tonight at 9:00 PM, set to 82°F')).toHaveStyle({ fontSize: '15px' });
 });

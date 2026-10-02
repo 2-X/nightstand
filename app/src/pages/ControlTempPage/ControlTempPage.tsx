@@ -110,7 +110,7 @@ export default function ControlTempPage() {
           </ErrorBoundary>
           <WaterNotification />
           <ErrorBoundary componentName="Alarm notification">
-            <UpcomingNight isOn={ isOn } />
+            <UpcomingNight />
           </ErrorBoundary>
           { !lastNightUnderDial && <ErrorBoundary componentName="Last night chip">
             <LastNightChip lastNight={ lastNight } />

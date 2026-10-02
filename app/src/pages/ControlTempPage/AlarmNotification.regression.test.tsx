@@ -131,3 +131,13 @@ it('shows upstream recurring alarms when the optional alarmsEnabled flag is abse
   renderWithProviders(<AlarmNotification />);
   expect(await screen.findByText('Alarm today at 11:00 PM')).toBeInTheDocument();
 });
+
+it('puts the alarm and its actions on one row, with 44 px actions', async () => {
+  alarms([['23:00', true]]);
+  renderWithProviders(<AlarmNotification />);
+  const line = await screen.findByText('Alarm today at 11:00 PM');
+  const change = screen.getByRole('button', { name: 'Change' });
+  expect(change).toHaveStyle({ minHeight: '44px', fontSize: '15px' });
+  expect(line.parentElement!.parentElement).toContainElement(change);
+  expect(change.parentElement).toHaveStyle({ marginLeft: 'auto' });
+});

@@ -271,3 +271,13 @@ test('on a desktop the controls take a 440 px column and Tonight starts level wi
   expect(Math.abs(card.y - tiles.y)).toBeLessThanOrEqual(1);
   expect(card.x - (tiles.x + tiles.width)).toBeGreaterThanOrEqual(47);
 });
+
+test('an off side\'s Tonight card leads with when it starts', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  // Monday 9:41 PM in the demo's time zone, before the Workday sleep starts.
+  await page.clock.install({ time: new Date('2026-09-29T04:41:00Z') });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Turn off' }).click();
+  await expect(page.getByRole('button', { name: 'Turn on' })).toBeVisible();
+  await expect(page.locator('[data-tonight]')).toContainText(/(Starts warming|Turns on) tonight at 10:\d\d PM/);
+});

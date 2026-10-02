@@ -62,7 +62,7 @@ afterEach(() => vi.useRealTimers());
 it('says the schedule is unavailable when Rhythms cannot load, and tries again', async () => {
   const retry = vi.fn();
   bed.value = { state: 'error', retry };
-  const { user } = renderWithProviders(<UpcomingNight isOn/>);
+  const { user } = renderWithProviders(<UpcomingNight/>);
   expect(await screen.findByText('Schedule unavailable.')).toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'Try again' }));
   expect(retry).toHaveBeenCalled();
@@ -78,7 +78,7 @@ it('keeps the Bed page error when a power command fails under Rhythms', async ()
 });
 
 it('fills the Tonight card and the alarm line from the resolved sleep', async () => {
-  renderWithProviders(<UpcomingNight isOn/>);
+  renderWithProviders(<UpcomingNight/>);
   expect(await screen.findByText(/Turns on tonight at 10:30 PM, set to \+2/)).toBeInTheDocument();
   expect(await screen.findByText('Alarm tomorrow at 6:30 AM')).toBeInTheDocument();
 });
@@ -86,13 +86,13 @@ it('fills the Tonight card and the alarm line from the resolved sleep', async ()
 it('shows the Smart Schedule line during a Smart Schedule sleep', async () => {
   vi.setSystemTime(new Date('2026-09-29T08:00:00Z'));
   bed.value = { state: 'rhythms', sleeps: [tonight('smart')] };
-  renderWithProviders(<UpcomingNight isOn/>);
+  renderWithProviders(<UpcomingNight/>);
   expect(await screen.findByText('Smart phase line')).toBeInTheDocument();
 });
 
 it('shows no schedule text while it cannot tell which engine runs', async () => {
   bed.value = { state: 'loading' };
-  renderWithProviders(<UpcomingNight isOn/>);
+  renderWithProviders(<UpcomingNight/>);
   await waitFor(() => expect(screen.queryByText(/Turns on/)).not.toBeInTheDocument());
   expect(screen.queryByRole('heading', { name: 'Upcoming' })).not.toBeInTheDocument();
 });
@@ -133,18 +133,18 @@ it('skips tonight\'s alarms until the resolved sleep ends, the bound the server 
 
 it('says the bed starts warming only when the pre-warm is above neutral', async () => {
   bed.value = { state: 'rhythms', sleeps: [smartTonight({ base: 0, prewarm: 2 })] };
-  const { unmount } = renderWithProviders(<UpcomingNight isOn/>);
+  const { unmount } = renderWithProviders(<UpcomingNight/>);
   expect(await screen.findByText('Starts warming tonight at 10:00 PM for a 10:30 PM bedtime, set to +2')).toBeInTheDocument();
   unmount();
 
   bed.value = { state: 'rhythms', sleeps: [smartTonight({ base: 0 })] };
-  const second = renderWithProviders(<UpcomingNight isOn/>);
+  const second = renderWithProviders(<UpcomingNight/>);
   expect(await screen.findByText('Turns on tonight at 10:30 PM, set to 0')).toBeInTheDocument();
   second.unmount();
 
   // A cool sleeper's pre-warm stays below neutral, so the bed only turns on early.
   bed.value = { state: 'rhythms', sleeps: [smartTonight({ base: -7, prewarm: -5 })] };
-  renderWithProviders(<UpcomingNight isOn/>);
+  renderWithProviders(<UpcomingNight/>);
   expect(await screen.findByText('Turns on tonight at 10:00 PM, set to \u22125')).toBeInTheDocument();
   expect(screen.queryByText(/Starts warming/)).not.toBeInTheDocument();
 });
@@ -152,7 +152,7 @@ it('says the bed starts warming only when the pre-warm is above neutral', async 
 it('shows the pre-warm line, not a start in the past, when a sleep turns on late', async () => {
   vi.setSystemTime(new Date('2026-09-29T05:15:00Z'));
   bed.value = { state: 'rhythms', sleeps: [smartTonight({ base: 0, prewarm: 2 })] };
-  renderWithProviders(<UpcomingNight isOn={ false }/>);
+  renderWithProviders(<UpcomingNight/>);
   expect(await screen.findByText('Smart phase line')).toBeInTheDocument();
   expect(screen.queryByText(/Turns on|Starts warming/)).not.toBeInTheDocument();
 });
@@ -163,7 +163,7 @@ it('names a day sleep in progress "This sleep"', async () => {
     ...tonight('manual'), date: '2026-09-29', start: '2026-09-29T16:00:00.000Z', end: '2026-09-29T22:00:00.000Z',
     events: [{ kind: 'power-on', at: '2026-09-29T16:00:00.000Z', temperatureF: 82 }, { kind: 'power-off', at: '2026-09-29T22:00:00.000Z' }],
   }] };
-  renderWithProviders(<UpcomingNight isOn/>);
+  renderWithProviders(<UpcomingNight/>);
   expect(await screen.findByRole('heading', { name: 'This sleep' })).toBeInTheDocument();
   expect(screen.getByText('Turns off today at 3:00 PM')).toBeInTheDocument();
 });
@@ -178,7 +178,7 @@ it('says when a paused schedule comes back, and with which rhythm', async () => 
     ...next, date: '2026-09-29', start: '2026-09-30T05:30:00.000Z', end: '2026-09-30T13:45:00.000Z',
     events: [{ kind: 'power-on', at: '2026-09-30T05:30:00.000Z', temperatureF: 88 }, { kind: 'power-off', at: '2026-09-30T13:45:00.000Z' }],
   }] };
-  renderWithProviders(<UpcomingNight isOn/>);
+  renderWithProviders(<UpcomingNight/>);
   expect(await screen.findByText('Back on schedule tomorrow at 10:30 PM (Workday)')).toBeInTheDocument();
 });
 
@@ -186,7 +186,7 @@ it('says when a paused schedule comes back, and with which rhythm', async () => 
 it('says an away side follows the present side\'s schedule under Rhythms', async () => {
   const settings = getSettings();
   server.use(http.get('*/settings', () => HttpResponse.json({ ...settings, left: { ...settings.left, awayMode: true } })));
-  renderWithProviders(<UpcomingNight isOn/>);
+  renderWithProviders(<UpcomingNight/>);
   expect(await screen.findByText((_, element) => element?.tagName === 'P'
     && element.textContent === `Away mode is on, so this side follows ${settings.right.name}'s schedule.`)).toBeInTheDocument();
   expect(screen.queryByText(/No sleep scheduled/)).not.toBeInTheDocument();
@@ -194,6 +194,6 @@ it('says an away side follows the present side\'s schedule under Rhythms', async
 
 it('says no sleep is scheduled across the whole loaded window', async () => {
   bed.value = { state: 'rhythms', sleeps: [] };
-  renderWithProviders(<UpcomingNight isOn/>);
+  renderWithProviders(<UpcomingNight/>);
   expect(await screen.findByText('No sleep scheduled in the next 14 days.')).toBeInTheDocument();
 });

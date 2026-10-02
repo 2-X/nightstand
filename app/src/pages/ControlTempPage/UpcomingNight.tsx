@@ -7,6 +7,7 @@ import { useSchedules } from '@api/schedules.ts';
 import { useSettings } from '@api/settings.ts';
 import { isSchedulePaused, pauseEndsAt } from '@api/schedulePause.ts';
 import { useAppStore } from '@state/appStore.tsx';
+import { sx as shared } from '@design/tokens';
 import { displayTemperature } from '@lib/temperatureConversions.ts';
 import { nextBedEvent } from './bedEvents';
 import AlarmNotification from './AlarmNotification';
@@ -16,8 +17,9 @@ import SchedulePauseNotice from './SchedulePauseNotice';
 import SmartPhaseLine from './SmartPhaseLine';
 import { currentSleep, isEveningSleep, nextSleepEvent, sleepAt, warmStartBedtime, withArticle } from './sleepEvents';
 import { useBedSleeps } from './useBedSleeps';
+import { cardSx, headingSx, tonightLineSx } from './tonightStyles';
 
-export default function UpcomingNight({ isOn }: { isOn?: boolean }) {
+export default function UpcomingNight() {
   const { side } = useAppStore();
   const { data: schedules, isError: schedulesError, refetch: refetchSchedules } = useSchedules();
   const { data: settings, isError: settingsError, refetch: refetchSettings } = useSettings();
@@ -47,18 +49,18 @@ export default function UpcomingNight({ isOn }: { isOn?: boolean }) {
   if (!settings || bed.state === 'loading' || bed.state === 'error' || (legacy && !schedules)) {
     if (!settingsError && bed.state !== 'error' && !(legacy && schedulesError)) return null;
     return (
-      <Box data-tonight sx={ { width: '100%', bgcolor: 'background.paper', borderRadius: '12px', border: 1, borderColor: 'divider', p: 2 } }>
-        <SectionHeading>Tonight</SectionHeading>
-        <Typography variant="body2" color="text.secondary" role="status">Schedule unavailable.</Typography>
-        <Button size="small" sx={ { ml: -1 } } onClick={ retry }>Try again</Button>
+      <Box data-tonight sx={ cardSx }>
+        <SectionHeading sx={ headingSx }>Tonight</SectionHeading>
+        <Typography sx={ tonightLineSx } role="status">Schedule unavailable.</Typography>
+        <Button sx={ { ...shared.lampLink, ml: '-10px' } } onClick={ retry }>Try again</Button>
       </Box>
     );
   }
   const upcoming = (after?: moment.Moment, kind?: 'on' | 'off') => bed.state === 'rhythms'
     ? nextSleepEvent(bed.sleeps, settings.timeZone, after, kind)
     : schedules ? nextBedEvent(schedules[side], settings.timeZone, after, kind) : undefined;
-  const next = !settings[side].awayMode && upcoming();
-  const event = isOn === false && next && next.kind === 'on' ? upcoming(next.at.clone().add(1, 'millisecond')) : next;
+  // The sentence leads with the next event, a start included, whether the side is on or off.
+  const event = !settings[side].awayMode && upcoming();
   const current = bed.state === 'rhythms' && !settings[side].awayMode ? currentSleep(bed.sleeps, new Date()) : undefined;
   const smartSleep = current?.mode === 'smart' ? current : undefined;
   // Name the rhythm the next change belongs to, so a date change or weekday pick is easy to confirm.
@@ -105,26 +107,23 @@ export default function UpcomingNight({ isOn }: { isOn?: boolean }) {
     + (event.kind === 'temperature' && eventPaused ? ' (currently paused)' : '')
     + (rhythmLabel ? ` (${rhythmLabel})` : '');
   return (
-    <Box
-      ref={ cardRef }
-      data-tonight
-      sx={ { width: '100%', bgcolor: 'background.paper', borderRadius: '12px', border: 1, borderColor: 'divider', p: 2 } }>
-      <Box sx={ { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' } }>
-        <SectionHeading>
+    <Box ref={ cardRef } data-tonight sx={ cardSx }>
+      <Box sx={ { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: 1 } }>
+        <SectionHeading sx={ headingSx }>
           { heading }
         </SectionHeading>
-        { /* The labels line up with the card's text edges, on the heading's row or wrapped below it. */ }
-        <Box sx={ { display: 'flex', flexWrap: 'wrap', gap: 0.5, mx: '-5px' } }>
-          { canPause && <Button size="small" data-pause-control onClick={ () => setPauseOpen(true) }>
+        { /* Right-aligned on the heading's row; under it when the row is too narrow. */ }
+        <Box sx={ { display: 'flex', ml: 'auto', mr: '-10px' } }>
+          { canPause && <Button sx={ shared.lampLink } data-pause-control onClick={ () => setPauseOpen(true) }>
             Pause schedule
           </Button> }
-          <Button component={ Link } to="/schedules" size="small">
+          <Button component={ Link } to="/schedules" sx={ shared.lampLink }>
             Edit schedule
           </Button>
         </Box>
       </Box>
       { schedulePaused ? <SchedulePauseNotice detail={ backOnText || undefined } onResumed={ () => setFocusWhenPaused(false) }/> : <>
-        { !(smartSleep && event && event.kind === 'temperature') && <Typography variant="body2" sx={ { mb: 1.5 } }>
+        { !(smartSleep && event && event.kind === 'temperature') && <Typography sx={ tonightLineSx }>
           { event
             ? eventText
             : bed.state !== 'rhythms' ? 'No upcoming power or temperature changes.'

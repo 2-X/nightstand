@@ -1,5 +1,7 @@
 import moment from 'moment-timezone';
 import { Alert, Box, Button, Typography } from '@mui/material';
+import NotificationsNone from '@mui/icons-material/NotificationsNone';
+import { palette, sx as shared } from '@design/tokens';
 import { useAppStore } from '@state/appStore.tsx';
 import { useSchedules } from '@api/schedules.ts';
 import { useSettings } from '@api/settings.ts';
@@ -70,13 +72,19 @@ export default function AlarmNotification() {
         alarmDisabled={ disabled }
         nightEnd={ night.end.format() }
         scope={ scope } />
-      <Box display="flex" flexDirection="column" alignItems="flex-start" gap={ 1 }>
-        { disabled ? <Typography variant="body2">Recurring alarms skipped</Typography>
-          : replacementFinished ? <Typography variant="body2">Recurring alarms replaced for this night</Typography>
-            : <Typography variant="body2">Alarm { alarmDay } at { moment(time, 'HH:mm').format('h:mm A') }</Typography> }
-        <Box sx={ { display: 'flex', gap: 1, ml: '-5px', '& .MuiButton-root': { justifyContent: 'flex-start' } } }>
-          { !disabled && !replacementFinished && <Button size="small" onClick={ () => setOverrideOpen(true) }>Change</Button> }
-          <Button size="small" onClick={ () => setDisabledOpen(true) }>{ disabled ? 'Restore alarm' : 'Skip' }</Button>
+      <Box sx={ { display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 1, borderTop: 1, borderColor: 'divider', pt: '4px' } }>
+        <Box sx={ { display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 auto', minHeight: 44 } }>
+          <NotificationsNone aria-hidden sx={ { fontSize: 18, color: palette.text.tertiary, flex: 'none' } }/>
+          <Typography component="span" sx={ { fontSize: 15, color: 'text.secondary' } }>
+            { disabled ? 'Recurring alarms skipped'
+              : replacementFinished ? 'Recurring alarms replaced for this night'
+                : <>Alarm { alarmDay } at { moment(time, 'HH:mm').format('h:mm A') }</> }
+          </Typography>
+        </Box>
+        { /* Stays at the right edge when it wraps under the alarm line. */ }
+        <Box sx={ { display: 'flex', ml: 'auto', mr: '-10px' } }>
+          { !disabled && !replacementFinished && <Button sx={ shared.lampLink } onClick={ () => setOverrideOpen(true) }>Change</Button> }
+          <Button sx={ shared.lampLink } onClick={ () => setDisabledOpen(true) }>{ disabled ? 'Restore alarm' : 'Skip' }</Button>
         </Box>
       </Box>
     </Alert>

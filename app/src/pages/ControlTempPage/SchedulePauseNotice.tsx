@@ -4,6 +4,7 @@ import { Alert, Box, Button, Typography } from '@mui/material';
 import { postSettings, useSettings } from '@api/settings.ts';
 import { isSchedulePaused, pauseEndsAt } from '@api/schedulePause.ts';
 import { serverMessage } from '@lib/requestError';
+import { sx as shared } from '@design/tokens';
 import { useAppStore } from '@state/appStore.tsx';
 import { formatPauseEnd } from './pauseTimes';
 
@@ -58,11 +59,10 @@ export default function SchedulePauseNotice({ note, detail, framed = false, onRe
       { error && <Alert severity="error" sx={ { width: '100%' } }>{ error }</Alert> }
       { /* aria-disabled, not disabled, so keyboard focus stays on the button */ }
       <Button
-        size="small"
         data-pause-control
         onClick={ resume }
         aria-disabled={ resuming || undefined }
-        sx={ { ml: -1, minHeight: 44, ...(resuming ? { opacity: 0.6 } : {}) } }>
+        sx={ { ...shared.lampLink, ml: '-10px', ...(resuming ? { opacity: 0.6 } : {}) } }>
         Resume schedule
       </Button>
     </Box>

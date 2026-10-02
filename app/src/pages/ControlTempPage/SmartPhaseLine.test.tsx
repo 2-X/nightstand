@@ -42,9 +42,10 @@ it('says the cool-down waits for bed entry while the server waits', () => {
   expect(screen.getByText("Starts cooling once you've settled in bed")).toBeInTheDocument();
 });
 
-it('follows the clock curve when no night is live', () => {
-  render(<SmartPhaseLine sleep={ sleep } side="left"/>);
-  expect(screen.getByText('Warm-up starts at 5:45 AM for your 6:30 AM wake-up')).toBeInTheDocument();
+it('follows the clock curve when no night is live, keeping "wake-up" in one piece', () => {
+  const { container } = render(<SmartPhaseLine sleep={ sleep } side="left"/>);
+  expect(container.querySelector('p')).toHaveTextContent('Warm-up starts at 5:45 AM for your 6:30 AM wake-up');
+  expect(screen.getByText('wake-up')).toHaveStyle({ whiteSpace: 'nowrap' });
 });
 
 it('follows a cool-down the server delayed', () => {
