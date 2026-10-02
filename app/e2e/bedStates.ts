@@ -31,7 +31,8 @@ const PREFS: Partial<Record<BedState, Record<string, string>>> = {
   loading: { 'nightstand-demo-reads': 'hang' },
 };
 
-export const viewportFor = (width: number) => ({ width, height: width === 320 ? 740 : width === 390 ? 844 : 800 });
+// The sizes every Bed state is checked at: small and short phones, a tablet and a laptop.
+export const BED_SIZES = [[320, 740], [360, 640], [375, 560], [375, 667], [390, 844], [768, 1024], [1280, 800]] as const;
 
 const nav = (page: Page) => page.locator('nav[aria-label^="Primary"]:visible');
 const lead = (page: Page) => page.locator('[data-dial] p').first();
@@ -51,9 +52,11 @@ async function postSettings(page: Page, body: object) {
   await nav(page).getByRole('link', { name: 'Bed', exact: true }).click();
 }
 
-export async function openBedState(context: BrowserContext, state: BedState, width: number, { verify = true } = {}): Promise<Page> {
+export async function openBedState(
+  context: BrowserContext, state: BedState, viewport: { width: number; height: number }, { verify = true } = {},
+): Promise<Page> {
   const page = await context.newPage();
-  await page.setViewportSize(viewportFor(width));
+  await page.setViewportSize(viewport);
   await page.addInitScript(entries => {
     for (const [key, value] of Object.entries(entries)) localStorage.setItem(key, value);
   }, PREFS[state] ?? {});

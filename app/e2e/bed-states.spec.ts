@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { test, expect, type Page } from '@playwright/test';
-import { BED_STATES, openBedState } from './bedStates';
+import { BED_SIZES, BED_STATES, openBedState } from './bedStates';
 
 type Box = { x: number; y: number; width: number; height: number } | null;
 
@@ -39,14 +39,14 @@ const expectSameBox = (actual: Box, expected: Box, name: string) => {
   }
 };
 
-for (const width of [320, 390, 1280]) {
+for (const [width, height] of BED_SIZES) {
   for (const state of BED_STATES) {
-    test(`${state} at ${width}px keeps every slot where the on state has it`, async ({ context }) => {
-      const reference = await openBedState(context, 'on', width);
+    test(`${state} at ${width}x${height} keeps every slot where the on state has it`, async ({ context }) => {
+      const reference = await openBedState(context, 'on', { width, height });
       const expected = await measure(reference);
       await reference.close();
 
-      const page = await openBedState(context, state, width);
+      const page = await openBedState(context, state, { width, height });
       const actual = await measure(page);
       expectSameBox(actual.powerRow, expected.powerRow, 'power row');
       expectSameBox(actual.caption, expected.caption, 'caption slot');
