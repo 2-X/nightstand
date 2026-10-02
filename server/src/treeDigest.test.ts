@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { AGENT_MANIFEST } from './agent/agentManifest.js';
+import { fakeDiskEnv, writeFakeDiskTools } from './testing/fakeDisk.js';
 
 // scripts/tree_digest.py is what a release's published checksum is computed
 // with, on the Mac at release time and on the Pod before an install. Both
@@ -71,5 +74,174 @@ describe('tree_digest.py', () => {
     const entry = AGENT_MANIFEST.find(item => item.path === 'scripts/tree_digest.py');
     assert.ok(entry, 'scripts/tree_digest.py is not in the agent manifest');
     assert.equal(entry.mode, 'add');
+  });
+});
+
+const CHECKSUM_MISMATCH = (version: string) => `the download of v${version} does not match its published checksum; live install untouched`;
+
+describe('update.sh checks the staged tree', () => {
+  const src = readFileSync(path.join(repoRoot, 'scripts/update.sh'), 'utf8');
+
+  it('verifies before installing dependencies or handing off', () => {
+    const verify = src.indexOf('\nverify_tree\n');
+    assert.ok(verify > src.indexOf('mv "$STAGED_DIR" "$STAGE"'));
+    assert.ok(verify < src.indexOf('run_limited 900 sudo -u dac'));
+    assert.ok(verify < src.indexOf('exec bash "$STAGE/scripts/update.sh"'));
+  });
+
+  it('uses the installed copy of the digest script, not the downloaded one', () => {
+    assert.match(src, /python3 "\$LIVE\/scripts\/tree_digest\.py" "\$STAGE"/);
+    assert.doesNotMatch(src, /python3 "\$STAGE\/scripts\/tree_digest\.py"/);
+  });
+
+  it('reports a checksum mismatch without changing the live install', () => {
+    assert.match(src, /does not match its published checksum; live install untouched/);
+  });
+});
+
+// Runs a script from its start up to `marker` with the Pod's paths moved into
+// a temp folder, the firewall, ownership and disk tools faked, and curl
+// answering with a fixture manifest and a fixture archive.
+function runStaging(script: string, marker: string, options: {
+  manifest?: object | string; archiveTop: string; tree: Record<string, string>; liveDigest?: boolean | 'broken'; target?: string;
+}) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-verify-'));
+  const podHome = path.join(dir, 'home');
+  const data = path.join(dir, 'persistent/free-sleep-data');
+  mkdirSync(path.join(podHome, 'free-sleep/server/src'), { recursive: true });
+  mkdirSync(path.join(podHome, 'free-sleep/scripts'), { recursive: true });
+  mkdirSync(data, { recursive: true });
+  writeFileSync(path.join(podHome, 'free-sleep/server/src/serverInfo.json'), '{"version":"3.5.1"}');
+  if (options.liveDigest === 'broken') {
+    writeFileSync(path.join(podHome, 'free-sleep/scripts/tree_digest.py'), 'raise SystemExit(1)\n');
+  } else if (options.liveDigest !== false) {
+    copyFileSync(path.join(repoRoot, 'scripts/tree_digest.py'), path.join(podHome, 'free-sleep/scripts/tree_digest.py'));
+  }
+  if (options.target) writeFileSync(path.join(data, 'update-target.json'), JSON.stringify({ version: options.target }));
+
+  const source = path.join(dir, 'source');
+  for (const [name, content] of Object.entries(options.tree)) {
+    mkdirSync(path.dirname(path.join(source, options.archiveTop, name)), { recursive: true });
+    writeFileSync(path.join(source, options.archiveTop, name), content);
+  }
+  const zip = path.join(dir, 'fixture.zip');
+  execFileSync('python3', ['-c', `import os, sys, zipfile
+with zipfile.ZipFile(sys.argv[1], "w") as archive:
+    for base, _, names in os.walk(sys.argv[2]):
+        for name in names:
+            full = os.path.join(base, name)
+            archive.write(full, os.path.relpath(full, sys.argv[2]))`, zip, source]);
+
+  const bin = path.join(dir, 'bin');
+  writeFakeDiskTools(bin);
+  for (const tool of ['iptables', 'ip6tables', 'chown']) writeFileSync(path.join(bin, tool), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  writeFileSync(path.join(bin, 'curl'), `#!/bin/sh
+out=; url=
+while [ $# -gt 0 ]; do
+  case $1 in
+    -o|--max-time) [ "$1" = -o ] && out=$2; shift 2 ;;
+    -*) shift ;;
+    *) url=$1; shift ;;
+  esac
+done
+echo "$url" >> "$FAKE_CURL_LOG"
+if [ -n "$out" ]; then cp "$FAKE_ZIP" "$out"; exit; fi
+[ -f "$FAKE_MANIFEST" ] || exit 22
+cat "$FAKE_MANIFEST"
+`, { mode: 0o755 });
+  const manifest = path.join(dir, 'manifest.json');
+  if (options.manifest !== undefined) {
+    writeFileSync(manifest, typeof options.manifest === 'string' ? options.manifest : JSON.stringify(options.manifest));
+  }
+
+  const scriptDir = path.join(dir, 'scripts');
+  mkdirSync(scriptDir);
+  copyFileSync(path.join(repoRoot, 'scripts/write_result.py'), path.join(scriptDir, 'write_result.py'));
+  const end = script.indexOf(marker);
+  assert.ok(end > 0, `missing ${marker}`);
+  const file = path.join(scriptDir, 'run.sh');
+  writeFileSync(file, script.slice(0, end)
+    .replaceAll('/persistent/free-sleep-data', data)
+    .replaceAll('/home/dac', podHome));
+  const curlLog = path.join(dir, 'curl.log');
+  const result = spawnSync('bash', [file], {
+    encoding: 'utf8',
+    timeout: 20_000,
+    env: {
+      ...fakeDiskEnv(bin, { rootFreeMb: 100_000, persFreeMb: 100_000 }),
+      NIGHTSTAND_OPERATION_LOCK: path.join(dir, 'lock'),
+      FAKE_ZIP: zip, FAKE_MANIFEST: manifest, FAKE_CURL_LOG: curlLog,
+    },
+  });
+  const resultFile = path.join(data, 'update-result.json');
+  const output = {
+    status: result.status,
+    out: `${result.stdout}${result.stderr}`,
+    record: existsSync(resultFile) ? JSON.parse(readFileSync(resultFile, 'utf8')) as Record<string, string> : {},
+    urls: existsSync(curlLog) ? readFileSync(curlLog, 'utf8').trim().split('\n') : [],
+    liveVersion: readFileSync(path.join(podHome, 'free-sleep/server/src/serverInfo.json'), 'utf8'),
+    staged: existsSync(path.join(podHome, 'free-sleep-staging')) || existsSync(path.join(podHome, 'free-sleep-revert-staging')),
+    digest: digest(path.join(source, options.archiveTop)),
+  };
+  rmSync(dir, { recursive: true, force: true });
+  return output;
+}
+
+describe('update.sh with a published checksum', () => {
+  const src = readFileSync(path.join(repoRoot, 'scripts/update.sh'), 'utf8');
+  const release = {
+    'server/src/serverInfo.json': '{"version":"3.6.0"}',
+    'server/dist/server.js': 'server',
+    'server/public/index.html': 'app',
+    'scripts/update.sh': '#!/bin/bash\n',
+    'releases.json': '{"from":"the download"}',
+  };
+  const expected = digest(tree(Object.fromEntries(Object.entries(release).filter(([name]) => name !== 'releases.json'))));
+  const manifest = (treeSha256?: string) => ({
+    channels: ['stable', 'beta'],
+    releases: [{ kind: 'bundle', version: '3.6.0', channel: 'stable', date: '2026-10-02', ...(treeSha256 ? { treeSha256 } : {}) }],
+  });
+  const update = (treeSha256: string | undefined, extra: { liveDigest?: boolean | 'broken'; target?: string } = {}) => runStaging(
+    src, '# the pod runs prebuilt code', { manifest: manifest(treeSha256), archiveTop: 'nightstand-3.6.0', tree: release, ...extra });
+
+  it('installs a download that matches, and says so', () => {
+    const result = update(expected);
+    assert.equal(result.status, 0, result.out);
+    assert.equal(result.digest, expected);
+    assert.match(result.out, /v3\.6\.0 matches its published checksum/);
+  });
+
+  for (const [what, extra] of [['the newest release', {}], ['a requested version', { target: '3.6.0' }]] as const) {
+    it(`refuses ${what} whose download does not match, before anything changes`, () => {
+      const result = update('0'.repeat(64), extra);
+      assert.equal(result.status, 1, result.out);
+      assert.match(result.out, new RegExp(`FATAL: ${CHECKSUM_MISMATCH('3.6.0').replaceAll('.', '\\.')}`));
+      assert.equal(result.record.outcome, 'stopped');
+      assert.equal(result.record.message, CHECKSUM_MISMATCH('3.6.0'));
+      assert.equal(result.record.to, '3.6.0');
+      assert.equal(result.liveVersion, '{"version":"3.5.1"}');
+      assert.equal(result.staged, false);
+      assert.equal(result.urls.length, 2, 'fetches the manifest once and the archive once');
+    });
+  }
+
+  it('installs a release published before checksums, with a log line', () => {
+    const result = update(undefined);
+    assert.equal(result.status, 0, result.out);
+    assert.match(result.out, /No published checksum for v3\.6\.0; installing without one/);
+  });
+
+  it('stops before anything changes when the checksum cannot be computed', () => {
+    const result = update(expected, { liveDigest: 'broken' });
+    assert.equal(result.status, 1, result.out);
+    assert.equal(result.record.outcome, 'stopped');
+    assert.equal(result.record.message, 'could not compute the checksum of v3.6.0; live install untouched');
+    assert.equal(result.liveVersion, '{"version":"3.5.1"}');
+  });
+
+  it('installs without a check when the installed version has no digest script yet', () => {
+    const result = update('0'.repeat(64), { liveDigest: false });
+    assert.equal(result.status, 0, result.out);
+    assert.match(result.out, /This install cannot check checksums yet; installing without one/);
   });
 });

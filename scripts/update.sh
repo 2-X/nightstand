@@ -168,6 +168,30 @@ cleanup() { local status=$?; trap '' HUP INT TERM; close_wan; rm -rf "$STAGE" "$
 
 fail() { say "FATAL: $*"; [ -n "${RESULT_REASON:-}" ] || RESULT_REASON="$*"; exit 1; }
 
+# Compares the staged tree with the digest releases.json publishes for it,
+# using the installed copy of the digest script, never the downloaded one. A
+# release published before digests existed has none, and installs as before.
+verify_tree() {
+  local expected actual
+  expected=$(printf '%s' "${RELEASES_JSON:-}" | python3 -c '
+import json, sys
+for release in json.load(sys.stdin).get("releases", []):
+    if release.get("version") == sys.argv[1]:
+        print(release.get("treeSha256") or "")
+        break' "$EXPECTED_VERSION" 2>/dev/null) || expected=""
+  if [ -z "$expected" ]; then
+    say "No published checksum for v$EXPECTED_VERSION; installing without one"
+    return 0
+  fi
+  if [ ! -f "$LIVE/scripts/tree_digest.py" ]; then
+    say "This install cannot check checksums yet; installing without one"
+    return 0
+  fi
+  actual=$(python3 "$LIVE/scripts/tree_digest.py" "$STAGE") || fail "could not compute the checksum of v$EXPECTED_VERSION; live install untouched"
+  [ "$actual" = "$expected" ] || fail "the download of v$EXPECTED_VERSION does not match its published checksum; live install untouched"
+  say "v$EXPECTED_VERSION matches its published checksum"
+}
+
 # Free-space helpers, kept identical in update.sh, revert-to-stock.sh,
 # migrate/pod-installer.sh, migrate/switch-to-this-fork.sh and ops/deploy.sh.
 # Sizes are whole MB, rounded up, and a missing path counts as 0.
@@ -343,7 +367,9 @@ print("yes" if parts(sys.argv[1]) < parts(sys.argv[2]) else "no")' "$TARGET_VERS
   EXPECTED_VERSION="$TARGET_VERSION"
 else
   say "Checking GitHub for the newest $UPDATE_CHANNEL release..."
-  REMOTE_VERSION=$(curl -fsSL --max-time 20 "$RELEASES_URL" | python3 -c '
+  # Kept for the checksum check once the release is staged.
+  RELEASES_JSON=$(curl -fsSL --max-time 20 "$RELEASES_URL") || RELEASES_JSON=""
+  REMOTE_VERSION=$(printf '%s' "$RELEASES_JSON" | python3 -c '
 import json, re, sys
 channel = sys.argv[1]
 releases = json.load(sys.stdin)["releases"]
@@ -386,6 +412,7 @@ STAGED_DIR=$(find "$STAGE.unzip" -mindepth 1 -maxdepth 1 -type d | head -n1)
 mv "$STAGED_DIR" "$STAGE" && rm -rf "$STAGE.unzip"
 rm -f "$ZIP"
 chown -R dac:dac "$STAGE"
+verify_tree
 fi
 
 # the pod runs prebuilt code; refuse anything missing its build output
