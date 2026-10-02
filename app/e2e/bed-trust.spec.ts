@@ -84,3 +84,30 @@ test('while the status loads every slot is drawn, empty, at its full size', asyn
   expect((await page.locator('[data-power-row]').boundingBox())!.height).toBeGreaterThanOrEqual(54);
   await expect(page.getByRole('button', { name: /^Turn o/ })).toHaveCount(0);
 });
+
+test('with presence stale, the get-up caption keeps only the latest turn-off', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('nightstand-demo-presence', 'stale'));
+  // Monday 11:00 PM, inside the Workday sleep, so its turn-off is tomorrow morning.
+  await page.clock.install({ time: new Date('2026-09-29T06:00:00Z') });
+  await page.goto('/schedules');
+  await page.getByRole('button', { name: 'Edit Workday' }).click();
+  await page.getByRole('combobox', { name: /^Turn off/ }).click();
+  await page.getByRole('option', { name: 'When I get up' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Primary mobile' }).getByRole('link', { name: 'Bed', exact: true }).click();
+  await expect(page.locator('[data-caption-slot]')).toHaveText(/^Turns off tomorrow by\s9:45\sAM$/);
+  await expect(page.getByText(/^In bed/)).toHaveCount(0);
+
+  const positions = () => page.evaluate(() => {
+    const top = (selector: string) => document.querySelector(selector)!.getBoundingClientRect().top + window.scrollY;
+    return {
+      tiles: Array.from(document.querySelectorAll('[aria-label="Bed side"] label')).map(tile => tile.getBoundingClientRect().height),
+      dial: top('[data-dial]'), caption: top('[data-caption-slot]'), controls: top('[data-controls-row]'), power: top('[data-power-row]'),
+    };
+  });
+  const stale = await positions();
+  await page.evaluate(() => localStorage.setItem('nightstand-demo-presence', 'fresh-short'));
+  await page.clock.fastForward(11_000);
+  await expect(page.locator('[data-caption-slot]')).toHaveText(/^Turns off when you get up, tomorrow by\s9:45\sAM$/);
+  expect(await positions()).toEqual(stale);
+});

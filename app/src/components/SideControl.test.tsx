@@ -14,7 +14,10 @@ const fixture = vi.hoisted(() => ({
 vi.mock('@state/appStore.tsx', () => ({ useAppStore: () => ({ side: 'left', setSide: fixture.setSide }) }));
 vi.mock('@api/settings.ts', () => ({ useSettings: () => ({ data: fixture.settings }) }));
 vi.mock('@api/deviceStatus.ts', () => ({ useDeviceStatus: () => ({ data: fixture.status }) }));
-vi.mock('@api/presence.ts', () => ({ usePresence: () => ({ data: fixture.presence }) }));
+vi.mock('@api/presence.ts', async importOriginal => ({
+  ...(await importOriginal<typeof import('@api/presence.ts')>()),
+  usePresence: () => ({ data: fixture.presence }),
+}));
 vi.mock('@api/services.ts', () => ({
   useServices: () => ({ data: { biometrics: { enabled: fixture.enabled, jobs: { calibrateLeft: { status: 'healthy' } } } } }),
 }));

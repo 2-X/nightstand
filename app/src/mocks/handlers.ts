@@ -1,5 +1,5 @@
 import { http, HttpResponse, delay, sse } from 'msw';
-import { demoPresence, demoReads, demoWritesHang } from './demoPreferences';
+import { demoPresence, demoPresenceStale, demoReads, demoWritesHang } from './demoPreferences';
 import type { SleepRecord } from '@api/sleepSchema.ts';
 import type { Jobs } from '@api/jobs.ts';
 import type { BasePosition } from '@api/baseControl.ts';
@@ -263,9 +263,17 @@ export const handlers = [
     return HttpResponse.json(filtered);
   }),
   http.get('/api/metrics/presence', () => {
+    if (demoPresenceStale()) return HttpResponse.json(presence);
     const seated = demoPresence();
-    if (!seated) return HttpResponse.json(presence);
     const now = Date.now();
+    // The demo acts as if presence were fresh, as its live state does; a spec can make it stale.
+    if (!seated) {
+      const reported = new Date(now).toISOString();
+      return HttpResponse.json({
+        left: { ...presence.left, lastUpdatedAt: reported, stateChangedAt: reported },
+        right: { ...presence.right, lastUpdatedAt: reported, stateChangedAt: reported },
+      });
+    }
     const since = now - (seated === 'fresh' ? 12 * 60_000 : 20_000);
     return HttpResponse.json({
       ...presence,

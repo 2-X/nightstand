@@ -6,17 +6,21 @@ import type { BedSleeps } from './useBedSleeps';
 
 const fixture = vi.hoisted(() => ({
   pause: { active: false, expiresAt: '' }, status: undefined as unknown, away: false, bed: { state: 'legacy' } as BedSleeps,
-  live: null as unknown,
+  live: null as unknown, presence: undefined as unknown, partnerAway: false,
 }));
 vi.mock('@state/appStore', () => ({ useAppStore: () => ({ side: 'left' }) }));
 vi.mock('@api/settings', () => ({ useSettings: () => ({ data: {
-  timeZone: 'UTC', left: { awayMode: fixture.away, scheduleOverrides: { pause: fixture.pause } },
+  timeZone: 'UTC', left: { awayMode: fixture.away, scheduleOverrides: { pause: fixture.pause } }, right: { awayMode: fixture.partnerAway },
 } }) }));
 const night = (on: string) => ({ power: { enabled: true, on, off: '07:00', onTemperature: 82 }, temperatures: {} });
 vi.mock('@api/schedules', () => ({ useSchedules: () => ({ data: { left: { monday: night('21:00'), tuesday: night('22:00') } } }) }));
 vi.mock('@api/deviceStatus', () => ({ useDeviceStatus: () => ({ data: fixture.status }) }));
 vi.mock('./useBedSleeps', () => ({ useBedSleeps: () => fixture.bed }));
 vi.mock('@api/rhythms', () => ({ useRhythmsLive: () => ({ data: fixture.live }) }));
+vi.mock('@api/presence', async importOriginal => ({
+  ...(await importOriginal<typeof import('@api/presence')>()),
+  usePresence: () => ({ data: fixture.presence }),
+}));
 
 function Caption({ isOn }: { isOn: boolean }) {
   return <>{ useBedCaption(isOn).map(line => <p key={ line }>{ line }</p>) }</>;
@@ -32,6 +36,8 @@ beforeEach(() => {
   fixture.away = false;
   fixture.bed = { state: 'legacy' };
   fixture.live = null;
+  fixture.presence = undefined;
+  fixture.partnerAway = false;
 });
 
 const alarm = { time: '06:30', enabled: false, vibrationIntensity: 30, vibrationPattern: 'rise' as const, duration: 30, alarmTemperature: 83 };
@@ -142,6 +148,7 @@ it('says a "When I get up" sleep turns off when they get up, by its latest off',
   fixture.status = { left: { isOn: true, secondsRemaining: 8 * 3600 } };
   fixture.bed = { state: 'rhythms', sleeps: [sleep('2026-09-28', '2026-09-29')] };
   fixture.live = { side: 'left', date: '2026-09-28', offWhenUp: { by: '2026-09-29T09:45:00.000Z' } };
+  fixture.presence = { left: { present: true, lastUpdatedAt: '2026-09-28T22:59:00.000Z' } };
   const { unmount } = label(true);
   expect(screen.getByText('Turns off when you get up, tomorrow by 9:45 AM')).toBeInTheDocument();
   unmount();
@@ -149,6 +156,42 @@ it('says a "When I get up" sleep turns off when they get up, by its latest off',
   fixture.live = null;
   label(true);
   expect(screen.getByText('Turns off tomorrow at 6:45 AM')).toBeInTheDocument();
+});
+
+it('keeps only the latest turn-off while presence is stale or unknown', () => {
+  fixture.pause = { active: false, expiresAt: '' };
+  vi.setSystemTime(new Date('2026-09-28T23:00:00Z'));
+  fixture.status = { left: { isOn: true, secondsRemaining: 8 * 3600 } };
+  fixture.bed = { state: 'rhythms', sleeps: [sleep('2026-09-28', '2026-09-29')] };
+  fixture.live = { side: 'left', date: '2026-09-28', offWhenUp: { by: '2026-09-29T09:45:00.000Z' } };
+  fixture.presence = { left: { present: true, lastUpdatedAt: '2026-09-28T22:50:00.000Z' } };
+  const { unmount } = label(true);
+  const line = screen.getByText('Turns off tomorrow by 9:45 AM');
+  expect(line.textContent).toBe('Turns off tomorrow by\u00a09:45\u00a0AM');
+  unmount();
+
+  fixture.presence = undefined;
+  label(true);
+  expect(screen.getByText('Turns off tomorrow by 9:45 AM')).toBeInTheDocument();
+});
+
+it('reads the other side\'s presence too while that side is away, as the server does', () => {
+  fixture.pause = { active: false, expiresAt: '' };
+  vi.setSystemTime(new Date('2026-09-28T23:00:00Z'));
+  fixture.status = { left: { isOn: true, secondsRemaining: 8 * 3600 } };
+  fixture.bed = { state: 'rhythms', sleeps: [sleep('2026-09-28', '2026-09-29')] };
+  fixture.live = { side: 'left', date: '2026-09-28', offWhenUp: { by: '2026-09-29T09:45:00.000Z' } };
+  fixture.presence = {
+    left: { present: false, lastUpdatedAt: '2026-09-28T22:50:00.000Z' },
+    right: { present: true, lastUpdatedAt: '2026-09-28T22:59:00.000Z' },
+  };
+  const { unmount } = label(true);
+  expect(screen.getByText('Turns off tomorrow by 9:45 AM')).toBeInTheDocument();
+  unmount();
+
+  fixture.partnerAway = true;
+  label(true);
+  expect(screen.getByText('Turns off when you get up, tomorrow by 9:45 AM')).toBeInTheDocument();
 });
 
 it('leaves "when you get up" out during a pause', () => {

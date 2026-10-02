@@ -23,3 +23,13 @@ export const usePresence = (refetchInterval: number = 10_000) => {
     refetchInterval,
   });
 };
+
+// The server stops trusting presence after five minutes without a report, and so does the app.
+export const PRESENCE_STALE_MS = 5 * 60_000;
+// The report carries the Pod's clock and the phone's may run behind it; further ahead is not trusted.
+const CLOCK_SKEW_MS = 60_000;
+
+export function isPresenceFresh(observation: PresenceSide | undefined, now = Date.now()): boolean {
+  const age = now - Date.parse(observation?.lastUpdatedAt ?? '');
+  return Number.isFinite(age) && age >= -CLOCK_SKEW_MS && age <= PRESENCE_STALE_MS;
+}

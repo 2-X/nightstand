@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import moment from 'moment-timezone';
 import { useAppStore } from '@state/appStore';
 import { useDeviceStatus } from '@api/deviceStatus';
+import { isPresenceFresh, usePresence } from '@api/presence';
 import { useRhythmsLive } from '@api/rhythms';
 import { isSchedulePaused, pauseEndsAt } from '@api/schedulePause';
 import { useSchedules } from '@api/schedules';
@@ -21,6 +22,7 @@ export function useBedCaption(isOn: boolean): string[] {
   const { data: deviceStatus } = useDeviceStatus();
   const bed = useBedSleeps(side);
   const { data: live } = useRhythmsLive(side, bed.state === 'rhythms');
+  const { data: presence } = usePresence();
   const [, tick] = useState(0);
   useEffect(() => { const timer = setInterval(() => tick(value => value + 1), 30_000); return () => clearInterval(timer); }, []);
   const kind = isOn ? 'off' : 'on';
@@ -57,7 +59,12 @@ export function useBedCaption(isOn: boolean): string[] {
     : shownAt.isSame(now.clone().add(1, 'day'), 'day') ? ' tomorrow' : ` ${shownAt.format('ddd')}`);
   const lines: string[] = [];
   if (shownAt) {
-    lines.push(upBy ? `Turns off when you get up,${eventDay} by${NBSP}${clock(upBy)}`
+    // Only fresh presence can move the turn-off, so without it the line keeps just the latest time. While the
+    // other side is away the server reads both sides' presence, and either fresh one will do.
+    const other = side === 'left' ? 'right' : 'left';
+    const watched = settings?.[other]?.awayMode ? [side, other] as const : [side] as const;
+    const whenUp = watched.some(key => isPresenceFresh(presence?.[key])) ? ' when you get up,' : '';
+    lines.push(upBy ? `Turns off${whenUp}${eventDay} by${NBSP}${clock(upBy)}`
       : `${isOn ? 'Turns off' : warming ? 'Starts warming' : 'Turns on'}${eventDay} at${NBSP}${clock(shownAt)}`);
   }
   if (paused && isOn) lines.push(timerOff ? `Turns off at${NBSP}${clock(timerOff)}` : 'Stays on until you turn it off');

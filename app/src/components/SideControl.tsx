@@ -5,16 +5,15 @@ import { useAppStore } from '@state/appStore.tsx';
 import { useSettings } from '@api/settings.ts';
 import { useDeviceStatus } from '@api/deviceStatus.ts';
 import { useServices } from '@api/services.ts';
-import { usePresence, PresenceSide } from '@api/presence.ts';
+import { isPresenceFresh, usePresence, PresenceSide } from '@api/presence.ts';
 import { isSchedulePaused } from '@api/schedulePause.ts';
 import { displayTemperature, fahrenheitToLevel } from '@lib/temperatureConversions.ts';
 import { temperatureColor } from '@lib/temperatureColor';
 import { media, palette, radius } from '@design/tokens';
 
 function presenceLabel(observation: PresenceSide | undefined): string | undefined {
-  const age = Date.now() - Date.parse(observation?.lastUpdatedAt ?? '');
   const elapsed = Date.now() - Date.parse(observation?.stateChangedAt ?? '');
-  if (!observation?.present || !Number.isFinite(age) || age < 0 || age > 5 * 60_000 || !Number.isFinite(elapsed) || elapsed < 0) return;
+  if (!observation?.present || !isPresenceFresh(observation) || !Number.isFinite(elapsed) || elapsed < 0) return;
   const minutes = Math.floor(elapsed / 60_000);
   return minutes < 1 ? 'In bed less than a minute' : `In bed ${minutes} min`;
 }

@@ -23,7 +23,8 @@ export function demoOffersUpdate(): boolean {
 
 export const DEMO_PRESENCE_KEY = 'nightstand-demo-presence';
 
-// The demo has nobody in bed. Specs can seat the left side: 'fresh' for twelve minutes, 'fresh-short' for just now.
+// The demo has nobody in bed, reported just now. Specs can seat the left side: 'fresh' for twelve minutes,
+// 'fresh-short' for just now.
 export function demoPresence(): 'fresh' | 'fresh-short' | undefined {
   try {
     const value = globalThis.localStorage?.getItem(DEMO_PRESENCE_KEY);
@@ -40,6 +41,11 @@ const readDemoKey = (key: string): string | undefined => {
     return undefined;
   }
 };
+
+// The Bed specs make presence stale, to draw the turn-off a stale presence still allows.
+export function demoPresenceStale(): boolean {
+  return readDemoKey(DEMO_PRESENCE_KEY) === 'stale';
+}
 
 export const DEMO_WRITES_KEY = 'nightstand-demo-writes';
 
