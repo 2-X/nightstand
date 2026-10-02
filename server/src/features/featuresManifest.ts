@@ -384,6 +384,26 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     upstream_offer: false,
     rationale: 'Always on, as a safety measure. Switching to upstream free-sleep removes the limits.',
   },
+  {
+    id: 'health-restart',
+    title: 'Restart a server that stops answering',
+    description: 'A one-minute timer restarts the server after three failed status checks in a row, '
+      + 'except while an update, rollback or switch is running or the server has just started.',
+    category: 'safety',
+    version: 'n/a',
+    flag: null,
+    default: true,
+    touchpoints: [
+      'scripts/health_check.sh', 'scripts/systemd/free-sleep-health.service', 'scripts/systemd/free-sleep-health.timer',
+      'scripts/setup_services.sh', 'scripts/revert-to-stock.sh',
+    ],
+    depends_on: ['agent'],
+    reversible: true,
+    tests: ['server/src/healthCheckScript.test.ts', 'server/src/setupServicesScript.test.ts'],
+    upstream_offer: false,
+    rationale: 'Safety: restarts a server that stops answering, since schedules and alarms run in it. '
+      + 'Switching to upstream free-sleep removes the timer; an older release leaves it installed as a no-op.',
+  },
 
   {
     id: 'primary-navigation',

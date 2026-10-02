@@ -370,9 +370,11 @@ if [ "$HEALTHY" = yes ]; then
   systemctl disable --now free-sleep-archive-raw.timer >/dev/null 2>&1 || true
   say "SUCCESS: pod is serving upstream free-sleep v$STAGED_VERSION. This fork kept at $PREV (no in-app way back; re-adopt via scripts/migrate/switch-to-this-fork.sh). Backup at $BK"
   # These units point at scripts that no longer exist in $LIVE.
-  say "Removing fork-only systemd units (instant rollback, this revert service)"
+  say "Removing fork-only systemd units (instant rollback, this revert service, the health check)"
+  systemctl disable --now free-sleep-health.timer >/dev/null 2>&1 || true
   rm -f /etc/systemd/system/free-sleep-rollback.service /etc/systemd/system/free-sleep-revert.service \
-    /etc/systemd/system/free-sleep-archive-raw.service /etc/systemd/system/free-sleep-archive-raw.timer
+    /etc/systemd/system/free-sleep-archive-raw.service /etc/systemd/system/free-sleep-archive-raw.timer \
+    /etc/systemd/system/free-sleep-health.service /etc/systemd/system/free-sleep-health.timer
   # Upstream free-sleep never installs these. They take effect at the next service start.
   rm -f /etc/systemd/system/free-sleep.service.d/10-nightstand-limits.conf \
     /etc/systemd/system/free-sleep.service.d/20-nightstand-restart.conf \

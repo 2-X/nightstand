@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const SCRIPT = path.join(repoRoot, 'scripts/setup_services.sh');
 
-function sandbox(opts: { existingSudoers?: string; visudoFails?: boolean } = {}) {
+function sandbox(opts: { existingSudoers?: string; visudoFails?: boolean; withoutHealthCheck?: boolean } = {}) {
   const root = mkdtempSync(path.join(tmpdir(), 'nightstand-services-'));
   const bin = path.join(root, 'bin');
   const systemd = path.join(root, 'systemd');
@@ -22,7 +22,12 @@ function sandbox(opts: { existingSudoers?: string; visudoFails?: boolean } = {})
   const calls = path.join(root, 'systemctl-calls');
   const sudoers = path.join(root, 'sudoers');
   for (const dir of [bin, systemd, path.join(repo, 'scripts', 'systemd')]) mkdirSync(dir, { recursive: true });
-  for (const unit of ['free-sleep-rollback.service', 'free-sleep-revert.service']) {
+  const units = ['free-sleep-rollback.service', 'free-sleep-revert.service'];
+  if (!opts.withoutHealthCheck) {
+    units.push('free-sleep-health.service', 'free-sleep-health.timer');
+    copyFileSync(path.join(repoRoot, 'scripts/health_check.sh'), path.join(repo, 'scripts/health_check.sh'));
+  }
+  for (const unit of units) {
     copyFileSync(path.join(repoRoot, 'scripts/systemd', unit), path.join(repo, 'scripts/systemd', unit));
   }
   writeFileSync(path.join(bin, 'systemctl'), `#!/bin/sh\necho "$@" >> "${calls}"\n`);
@@ -74,7 +79,38 @@ describe('setup_services.sh', () => {
     for (const unit of ['free-sleep-update.service', 'free-sleep-rollback.service', 'free-sleep-revert.service']) {
       assert.ok(box.read(path.join(box.systemd, unit)).length > 0, `${unit} was not installed`);
     }
+    const calls = box.read(box.calls).trim().split('\n');
+    assert.deepEqual(calls, ['daemon-reload', 'enable --now free-sleep-health.timer']);
+  });
+
+  it('installs and starts the health check timer after the reload', () => {
+    const box = sandbox();
+    const first = box.run();
+    assert.equal(first.status, 0, first.stdout + first.stderr);
+    for (const unit of ['free-sleep-health.service', 'free-sleep-health.timer']) {
+      assert.equal(
+        box.read(path.join(box.systemd, unit)),
+        readFileSync(path.join(repoRoot, 'scripts/systemd', unit), 'utf8'),
+        `${unit} was not installed`,
+      );
+    }
+    const second = box.run();
+    assert.equal(second.status, 0, second.stdout + second.stderr);
+    const calls = box.read(box.calls).trim().split('\n');
+    assert.deepEqual(calls, [
+      'daemon-reload', 'enable --now free-sleep-health.timer',
+      'daemon-reload', 'enable --now free-sleep-health.timer',
+    ]);
+  });
+
+  it('skips the health check on a tree that does not carry it', () => {
+    // The agent overlay installs this script onto upstream free-sleep without
+    // the health check, and must not fail for it.
+    const box = sandbox({ withoutHealthCheck: true });
+    const result = box.run();
+    assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.equal(box.read(box.calls).trim(), 'daemon-reload');
+    assert.equal(existsSync(path.join(box.systemd, 'free-sleep-health.timer')), false);
   });
 
   it('grants a sudoers rule for every command the server runs through sudo', () => {

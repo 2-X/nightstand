@@ -23,6 +23,8 @@ is a hard fork; for the history of the projects it descends from, see
 - HRV is no longer shown in the app. Checked against chest-strap recordings,
   the stored estimate was no more accurate than a fixed guess. It is still
   stored and returned by the API.
+- Nightstand now restarts its server if it is running but stops answering for
+  three minutes, except while an update, rollback or switch is in progress.
 - Updates no longer turn the firewall off while downloading. They allow only
   HTTPS and name lookups out for the download and keep blocking the
   firmware's upload port, and a stalled dependency install now gives up after

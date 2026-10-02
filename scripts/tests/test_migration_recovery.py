@@ -23,7 +23,7 @@ class MigrationRecovery(unittest.TestCase):
         end = source.index('\n}\n', start) + 3
         with tempfile.TemporaryDirectory() as folder:
             systemd = Path(folder)
-            names = ['free-sleep-archive-raw.service', 'free-sleep-archive-raw.timer', 'free-sleep.service.d/10-nightstand-limits.conf', 'free-sleep-stream.service.d/10-nightstand-limits.conf', 'free-sleep.service.d/user.conf']
+            names = ['free-sleep-archive-raw.service', 'free-sleep-archive-raw.timer', 'free-sleep-health.service', 'free-sleep-health.timer', 'free-sleep.service.d/10-nightstand-limits.conf', 'free-sleep-stream.service.d/10-nightstand-limits.conf', 'free-sleep.service.d/user.conf']
             for name in names:
                 file = systemd / name
                 file.parent.mkdir(exist_ok=True)

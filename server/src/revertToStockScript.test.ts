@@ -84,6 +84,9 @@ describe('revert-to-stock.sh', () => {
     assert.match(rest, /free-sleep\.service\.d\/10-nightstand-limits\.conf/);
     assert.match(rest, /free-sleep-stream\.service\.d\/10-nightstand-limits\.conf/);
     assert.match(rest, /free-sleep\.service\.d\/20-nightstand-restart\.conf/);
+    assert.match(rest, /systemctl disable --now free-sleep-health\.timer/);
+    assert.match(rest, /\/etc\/systemd\/system\/free-sleep-health\.service/);
+    assert.match(rest, /\/etc\/systemd\/system\/free-sleep-health\.timer/);
   });
 
   it('never rewrites /persistent/free-sleep-data other than a backup copy', () => {

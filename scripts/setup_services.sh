@@ -9,7 +9,8 @@
 # warning, since a pod without these still controls the bed.
 #
 # The rollback and revert units are on-demand oneshots. This only installs
-# them; starting either one runs the action.
+# them; starting either one runs the action. The health timer is the one
+# unit this starts.
 set -u
 
 REPO_DIR="${1:-/home/dac/free-sleep}"
@@ -51,7 +52,20 @@ for unit in free-sleep-rollback.service free-sleep-revert.service; do
   cp "$REPO_DIR/scripts/systemd/$unit" "$SYSTEMD_DIR/" || warn "could not install $unit"
 done
 
+# The health check restarts a server that is running but not answering. The
+# agent overlay does not carry it, so a tree without the script skips it.
+HEALTH=no
+if [ -f "$REPO_DIR/scripts/health_check.sh" ]; then
+  HEALTH=yes
+  for unit in free-sleep-health.service free-sleep-health.timer; do
+    cp "$REPO_DIR/scripts/systemd/$unit" "$SYSTEMD_DIR/" || { warn "could not install $unit"; HEALTH=no; }
+  done
+fi
+
 systemctl daemon-reload || warn "systemctl daemon-reload failed"
+if [ "$HEALTH" = yes ]; then
+  systemctl enable --now free-sleep-health.timer >/dev/null 2>&1 || warn "could not start free-sleep-health.timer"
+fi
 
 RULES=(
   "$USERNAME ALL=(ALL) NOPASSWD: /sbin/reboot"
