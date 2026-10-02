@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { after, afterEach, before, describe, it } from 'node:test';
+import { after, afterEach, before, describe, it, mock } from 'node:test';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -21,10 +21,14 @@ const { applySmartCurve } = await import('../../jobs/rhythms/smartSleep.js');
 const { startCurveController, stopCurveController } = await import('../../jobs/rhythms/curveController.js');
 
 const MINUTE = 60_000;
+// Smart Schedule curves differ for a sleep whose midpoint falls in daytime, so a wall clock that
+// moves the fixture's night into the day changes the next change the route reports.
+const NOW = Date.parse('2026-09-29T23:00:00Z');
 let server: Server;
 let baseUrl: string;
 
 before(async () => {
+  mock.timers.enable({ apis: ['Date'], now: NOW });
   const app = express();
   app.use(express.json());
   app.use(router);
@@ -34,6 +38,7 @@ before(async () => {
 });
 
 after(async () => {
+  mock.timers.reset();
   stopCurveController();
   await new Promise<void>(resolve => {
     server.closeAllConnections();
