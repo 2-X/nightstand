@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, existsSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -295,6 +296,53 @@ describe('fork-switch tool scripts', () => {
         'systemctl start free-sleep',
         'systemctl start free-sleep-stream',
       ], 'pod-installer.sh stream restart');
+    });
+
+    // A fork moving here has no update channel yet; the server would default
+    // to stable and offer a Pod on a beta nothing until a stable passed it.
+    it('saves the installed release\'s channel after the swap, before the server starts', () => {
+      assert.match(src, /read -r TARGET_VERSION TARGET_CHANNEL <<< "\$PICK"/);
+      assertOrder(src, [
+        'mv "$STAGE" "$LIVE"',
+        '# A fork moving here has no update channel yet',
+        '/persistent/free-sleep-data/lowdb/settingsDB.json "$TARGET_CHANNEL"',
+        'systemctl start free-sleep ||',
+      ], 'pod-installer.sh channel save');
+      const block = src.slice(src.indexOf('# A fork moving here has no update channel yet'), src.indexOf('systemctl start free-sleep ||'));
+      assert.match(block, /if "updateChannel" in data:\n\s+sys\.exit\(0\)/, 'keeps a channel the carried-over settings already have');
+      assert.match(block, /\|\| say "WARNING: could not save the update channel"/, 'never fails the migration over it');
+    });
+
+    it('adds the channel only where the carried-over settings have none, keeping the file mode', () => {
+      const block = src.slice(src.indexOf('# A fork moving here has no update channel yet'), src.indexOf('systemctl start free-sleep ||'));
+      const run = (existing: string | null, channel: string, failWrite = false) => {
+        const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-migrate-'));
+        const settings = path.join(dir, 'settingsDB.json');
+        if (existing !== null) {
+          writeFileSync(settings, existing);
+          chmodSync(settings, 0o660);
+        }
+        let section = block.replaceAll('/persistent/free-sleep-data/lowdb/settingsDB.json', settings);
+        if (failWrite) section = section.replace('os.replace(tmp, path)', 'raise OSError("simulated")');
+        const result = spawnSync('bash', ['-c', `say() { echo "$*"; }\nTARGET_CHANNEL="$TEST_CHANNEL"\n${section}`], {
+          env: { ...process.env, TEST_CHANNEL: channel }, encoding: 'utf8',
+        });
+        const saved = existsSync(settings) ? JSON.parse(readFileSync(settings, 'utf8')) : null;
+        const mode = existsSync(settings) ? statSync(settings).mode & 0o777 : null;
+        const tmpKept = existsSync(`${settings}.tmp`);
+        rmSync(dir, { recursive: true, force: true });
+        assert.equal(result.status, 0, result.stderr);
+        assert.doesNotMatch(result.stderr, /Traceback/);
+        return { saved, mode, tmpKept, out: result.stdout };
+      };
+      assert.deepEqual(run(null, 'beta').saved, { updateChannel: 'beta' });
+      const added = run('{"timeZone":"UTC"}', 'beta');
+      assert.deepEqual([added.saved, added.mode], [{ timeZone: 'UTC', updateChannel: 'beta' }, 0o660]);
+      const failed = run('{"timeZone":"UTC"}', 'beta', true);
+      assert.deepEqual([failed.saved, failed.tmpKept], [{ timeZone: 'UTC' }, false]);
+      assert.match(failed.out, /WARNING: could not save the update channel/);
+      assert.deepEqual(run('{"updateChannel":"stable"}', 'beta').saved, { updateChannel: 'stable' });
+      assert.equal(run(null, 'nightly').saved, null);
     });
   });
 

@@ -124,11 +124,13 @@ write_status "resolve" "in_progress" "resolving the newest release"
 say "Resolving the newest release from releases.json..."
 RELEASES_JSON=$(curl -fsSL --max-time 20 "$RELEASES_URL") \
   || fail "could not fetch releases.json, check the pod's WAN access"
-TARGET_VERSION=$(printf '%s' "$RELEASES_JSON" | python3 -c "
+PICK=$(printf '%s' "$RELEASES_JSON" | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
-print(data['releases'][0]['version'] if data['releases'] else '')
+if data['releases']:
+    print(data['releases'][0]['version'], data['releases'][0].get('channel', 'stable'))
 ") || fail "could not parse releases.json"
+read -r TARGET_VERSION TARGET_CHANNEL <<< "$PICK"
 [ -n "$TARGET_VERSION" ] || fail "no release found in releases.json"
 say "Target: v$TARGET_VERSION (newest release)"
 write_status "resolve" "ok" "target v$TARGET_VERSION"
@@ -355,6 +357,35 @@ sudo -u dac bash -c "cd '$LIVE/server' && '$NPX' dotenv -e .env.pod -- npx prism
   || { restore_and_report "prisma migration or client generation failed"; exit 1; }
 sudo -u dac bash -c "cd '$LIVE/server' && '$NPX' dotenv -e .env.pod -- npx prisma migrate status" \
   || { restore_and_report "database migration status failed; compare the migration histories of both forks and resolve compatibility before retrying. Do not reset the database"; exit 1; }
+
+# A fork moving here has no update channel yet; follow the release installed.
+# The file keeps its owner and mode, since the server runs as dac.
+python3 - /persistent/free-sleep-data/lowdb/settingsDB.json "$TARGET_CHANNEL" <<'PY' || say "WARNING: could not save the update channel"
+import json, os, sys
+path, channel = sys.argv[1], sys.argv[2]
+if channel not in ("stable", "beta"):
+    sys.exit(0)
+tmp = path + ".tmp"
+try:
+    data = {}
+    if os.path.exists(path):
+        with open(path) as handle:
+            data = json.load(handle)
+        if "updateChannel" in data:
+            sys.exit(0)
+    info = os.stat(path if os.path.exists(path) else os.path.dirname(path))
+    data["updateChannel"] = channel
+    with open(tmp, "w") as handle:
+        json.dump(data, handle, indent=2)
+    os.chown(tmp, info.st_uid, info.st_gid)
+    if os.path.exists(path):
+        os.chmod(tmp, info.st_mode & 0o7777)
+    os.replace(tmp, path)
+except Exception:
+    if os.path.exists(tmp):
+        os.remove(tmp)
+    sys.exit(1)
+PY
 
 systemctl start free-sleep || { restore_and_report "our service failed to start"; exit 1; }
 # The swap above stopped free-sleep-stream (its ExecStart lives inside the tree
