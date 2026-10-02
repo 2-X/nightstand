@@ -1,5 +1,5 @@
 /// <reference lib="dom" />
-import { expect, type BrowserContext, type Page } from '@playwright/test';
+import { expect, type BrowserContext, type Page, type Request } from '@playwright/test';
 
 export const BED_STATES = [
   'on', 'off', 'cooling', 'limit', 'zero', 'getup', 'upstale', 'paused', 'away', 'unit', 'pending', 'stale', 'loading',
@@ -43,6 +43,18 @@ async function tap(page: Page, name: 'Cooler' | 'Warmer', times: number) {
   }, times);
 }
 
+// Starts counting device status reads in flight; the returned function waits until none is. A read that answers after a
+// jump in time would make the status fresh again, and the network going quiet does not mean none is pending.
+export function watchDeviceStatus(page: Page) {
+  let inFlight = 0;
+  const isRead = (request: Request) => request.method() === 'GET' && new URL(request.url()).pathname === '/api/deviceStatus';
+  const settled = (request: Request) => { if (isRead(request)) inFlight--; };
+  page.on('request', request => { if (isRead(request)) inFlight++; });
+  page.on('requestfinished', settled);
+  page.on('requestfailed', settled);
+  return () => expect.poll(() => inFlight, { message: 'device status reads in flight' }).toBe(0);
+}
+
 // Saves settings in the demo, then visits Schedule and comes back so Bed reads them again.
 async function postSettings(page: Page, body: object) {
   await page.evaluate(async payload => {
@@ -60,6 +72,7 @@ export async function openBedState(
   await page.addInitScript(entries => {
     for (const [key, value] of Object.entries(entries)) localStorage.setItem(key, value);
   }, PREFS[state] ?? {});
+  const statusReadsDone = watchDeviceStatus(page);
   const inSleep = state === 'getup' || state === 'upstale';
   await page.clock.install({ time: inSleep ? IN_SLEEP : EVENING });
   const settle = async (check: () => Promise<void>) => {
@@ -131,9 +144,8 @@ export async function openBedState(
     await settle(() => expect(lead(page)).toHaveText('Set to'));
     break;
   case 'stale':
-    // A refresh still in flight would answer after the jump and make the status fresh again.
-    await page.waitForLoadState('networkidle');
     await page.evaluate(() => localStorage.setItem('nightstand-demo-reads', 'fail'));
+    await statusReadsDone();
     await page.clock.fastForward('02:05');
     await settle(() => expect(page.getByRole('heading', { level: 1, name: 'Bed' }).locator('xpath=..').getByRole('status'))
       .toHaveText('Not responding'));

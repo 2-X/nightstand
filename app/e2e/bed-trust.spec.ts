@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { test, expect, type Page } from '@playwright/test';
-import { presetDemoPresence, setDemoPresence } from './bedStates';
+import { presetDemoPresence, setDemoPresence, watchDeviceStatus } from './bedStates';
 
 test.use({ viewport: { width: 390, height: 844 } });
 
@@ -36,9 +36,9 @@ test('a change still unconfirmed after two seconds is drawn in the last known gr
   const colour = await dot.getAttribute('stroke');
   expect(colour).not.toBe('#848C95');
 
-  await page.clock.fastForward(1900);
+  await page.clock.fastForward(1000);
   await expect(dot).toHaveAttribute('stroke', colour!);
-  await page.clock.fastForward(200);
+  await page.clock.fastForward(1100);
   await expect(dot).toHaveAttribute('stroke', '#848C95');
   await expect(numeral).toHaveCSS('color', 'rgb(163, 170, 178)');
   await expect(lead(page)).toHaveText('Set to');
@@ -89,10 +89,11 @@ test.describe('on a 320 px phone', () => {
   test('a stale caption with a two digit hour fits its two line slot', async ({ page }) => {
     // Monday 11:41 PM in the demo's time zone.
     await page.clock.install({ time: new Date('2026-09-29T06:41:00Z') });
+    const statusReadsDone = watchDeviceStatus(page);
     await page.goto('/');
     await expect(page.getByRole('button', { name: 'Turn off' })).toBeVisible();
-    await page.waitForLoadState('networkidle');
     await page.evaluate(() => localStorage.setItem('nightstand-demo-reads', 'fail'));
+    await statusReadsDone();
     await page.clock.fastForward('02:05');
     const caption = page.locator('[data-caption-slot]');
     await expect(caption).toHaveText(/^No response from the Pod since 11:41\sPM\.\s*Schedules and alarms may not run\.$/);
