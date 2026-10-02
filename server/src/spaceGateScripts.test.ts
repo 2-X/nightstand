@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statfsSync, writeFileSync
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Disk, INSTALL, MB, fakeDiskEnv, writeFakeDiskTools } from './testing/fakeDisk.js';
 
 // The free-space checks that run before an update, a revert, a deploy and a
 // fork switch. They are sized from what each one writes, so they run here
@@ -34,9 +35,6 @@ function helpers(src: string) {
   return src.slice(start, src.indexOf('\n}\n', src.indexOf('node_fetch_mb() {', start)) + 3);
 }
 
-const MB = 1024;
-// What 3.5.1 measures: 47 MB unpacked, 330 MB of node_modules on arm64.
-const INSTALL: { tree: number; modules: number; db: number; wal?: number } = { tree: 48 * MB, modules: 330 * MB, db: 40 * MB };
 const DB_HINT = /old snapshots in \/persistent\/free-sleep-database-backups\/ can be removed/;
 
 let root: string;
@@ -44,62 +42,16 @@ let live: string;
 let stage: string;
 let volta: string;
 
-// df and du answer only the exact flags the scripts use, so a change of units
-// or flags shows up as a refusal rather than passing quietly.
-function writeFakes() {
-  const bin = path.join(root, 'bin');
-  mkdirSync(bin);
-  writeFileSync(path.join(bin, 'df'), `#!/bin/sh
-if [ "$#" -ne 2 ] || [ "$1" != -kP ]; then echo "fake df: unexpected arguments: $*" >&2; exit 2; fi
-[ -z "\${FAKE_DF_SILENT:-}" ] || exit 1
-case $2 in
-  */persistent) avail=$FAKE_PERS_AVAIL_KB ;;
-  *) avail=$FAKE_ROOT_AVAIL_KB ;;
-esac
-echo 'Filesystem 1024-blocks Used Available Capacity Mounted on'
-echo "fake 99999999 1 $avail 1% $2"
-`, { mode: 0o755 });
-  writeFileSync(path.join(bin, 'du'), `#!/bin/sh
-if [ "$#" -lt 2 ] || [ "$1" != -sk ]; then echo "fake du: unexpected arguments: $*" >&2; exit 2; fi
-shift
-for arg in "$@"; do
-  case $arg in
-    -*) echo "fake du: unexpected argument: $arg" >&2; exit 2 ;;
-    */node_modules) kb=$FAKE_MODULES_KB ;;
-    */free-sleep.db) kb=$FAKE_DB_KB ;;
-    */free-sleep.db-wal) kb=\${FAKE_WAL_KB:-0} ;;
-    */lowdb) kb=200 ;;
-    *) kb=$((FAKE_TREE_KB + FAKE_MODULES_KB)) ;;
-  esac
-  printf '%s\\t%s\\n' "$kb" "$arg"
-done
-`, { mode: 0o755 });
-  writeFileSync(path.join(bin, 'systemctl'), '#!/bin/sh\nexit 3\n', { mode: 0o755 });
-}
-
 function pinNode(tree: string, version: string) {
   mkdirSync(path.join(tree, 'server'), { recursive: true });
   writeFileSync(path.join(tree, 'server/package.json'), JSON.stringify({ volta: { node: version } }));
 }
 
-interface Disk { rootFreeMb: number; persFreeMb: number; install?: typeof INSTALL; silentDf?: boolean }
-
 function run(script: string, disk: Disk) {
-  const install = disk.install ?? INSTALL;
   const result = spawnSync('bash', ['-c', script.replaceAll('/home/dac/.volta', volta)], {
     encoding: 'utf8',
     timeout: 20_000,
-    env: {
-      ...process.env,
-      PATH: `${path.join(root, 'bin')}:${process.env.PATH}`,
-      FAKE_ROOT_AVAIL_KB: String(disk.rootFreeMb * MB),
-      FAKE_PERS_AVAIL_KB: String(disk.persFreeMb * MB),
-      FAKE_TREE_KB: String(install.tree),
-      FAKE_MODULES_KB: String(install.modules),
-      FAKE_DB_KB: String(install.db),
-      FAKE_WAL_KB: String(install.wal ?? 0),
-      FAKE_DF_SILENT: disk.silentDf ? '1' : '',
-    },
+    env: fakeDiskEnv(path.join(root, 'bin'), disk),
   });
   return { status: result.status, out: `${result.stdout}${result.stderr}` };
 }
@@ -171,7 +123,7 @@ describe('free-space checks before an update, revert, deploy or switch', () => {
     pinNode(live, '24.11.0');
     pinNode(stage, '24.11.0');
     mkdirSync(path.join(volta, 'tools/image/node/24.11.0'), { recursive: true });
-    writeFakes();
+    writeFakeDiskTools(path.join(root, 'bin'));
   });
   after(() => rmSync(root, { recursive: true, force: true }));
 
