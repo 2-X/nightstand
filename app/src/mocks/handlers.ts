@@ -3,6 +3,7 @@ import { demoPresence, demoPresenceStale, demoReads, demoWritesHang } from './de
 import type { SleepRecord } from '@api/sleepSchema.ts';
 import type { Jobs } from '@api/jobs.ts';
 import type { BasePosition } from '@api/baseControl.ts';
+import type { MissedAlarm } from '@api/missedAlarms.ts';
 import {
   getServices,
   updateServices,
@@ -43,6 +44,18 @@ import {
 } from './rhythmsMock';
 
 type Side = 'left' | 'right';
+
+// The demo shows no missed alarms unless it is opened with ?missed-alarms, so
+// the other pages stay as they were. The list is read once, when the first
+// request arrives, because navigating drops the query string.
+let demoMissedAlarms: MissedAlarm[] | undefined;
+const missedAlarmsForDemo = (): MissedAlarm[] => {
+  demoMissedAlarms ??= new URLSearchParams(globalThis.location?.search).has('missed-alarms') ? [
+    { id: 'demo-left-late', side: 'left', at: '2026-10-05T13:30:00.000Z', reason: 'late', recordedAt: '2026-10-05T13:40:00.000Z' },
+    { id: 'demo-right-off', side: 'right', at: '2026-10-05T14:00:00.000Z', reason: 'side-off', recordedAt: '2026-10-05T14:10:00.000Z' },
+  ] : [];
+  return demoMissedAlarms;
+};
 
 type Filters = {
   startTime?: string;
@@ -304,6 +317,12 @@ export const handlers = [
   http.post('/api/alarm', async () => {
     await delay(150);
     return HttpResponse.json(deepClone(getSchedules()));
+  }),
+  http.get('/api/alarms/missed', () => HttpResponse.json({ missed: missedAlarmsForDemo() })),
+  http.post('/api/alarms/missed/dismiss', async ({ request }) => {
+    const { ids } = await request.json() as { ids: string[] };
+    demoMissedAlarms = missedAlarmsForDemo().filter(item => !ids.includes(item.id));
+    return new HttpResponse(null, { status: 204 });
   }),
   http.post('/api/update/revert-to-stock', () => HttpResponse.json({ success: true })),
   http.post('/api/update/rollback', () => HttpResponse.json({ success: true })),

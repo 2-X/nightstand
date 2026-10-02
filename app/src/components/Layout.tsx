@@ -5,6 +5,7 @@ import { useScheduleStore } from '../pages/SchedulePage/scheduleStore';
 import { Outlet, useLocation } from 'react-router-dom';
 import Navbar from './Navbar';
 import Box from '@mui/material/Box';
+import MissedAlarmBanner from './MissedAlarmBanner';
 
 
 export default function Layout() {
@@ -60,6 +61,7 @@ export default function Layout() {
         tabIndex={ -1 }
         sx={ { display: 'flex', flexDirection: 'column', flexGrow: 1, alignItems: 'center', gap: 2, width: '100%', outline: 'none' } }
       >
+        <MissedAlarmBanner/>
         <ErrorBoundary key={ pathname } componentName={ pageName }>
           <Suspense fallback={ <RouteFallback/> }><Outlet/></Suspense>
         </ErrorBoundary>

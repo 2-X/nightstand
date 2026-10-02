@@ -43,6 +43,11 @@ is a hard fork; for the history of the projects it descends from, see
   and always starts Nightstand again. Before, on a Pod 4 or Pod 5 it could
   leave Nightstand running but unable to reach the bed, and on an
   up-to-date Pod it left the server stopped.
+- The app now says when an alarm did not ring and why: Nightstand was not
+  running, the Pod did not answer in time, the alarm could not be sent to the
+  Pod, that side was off, or Nightstand hit an error. If the Pod did not
+  confirm an alarm, the message says it may not have rung. The message shows
+  at the top of every page until you dismiss it or a week passes.
 
 ## [3.5.1] - 2026-10-01
 
