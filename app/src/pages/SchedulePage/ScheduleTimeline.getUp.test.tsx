@@ -52,11 +52,43 @@ it('keeps the set off as the usual one and explains the choice', () => {
 it('needs Biometrics: the choice is disabled, and a saved one says the set time applies', () => {
   const { unmount } = timeline({ on: false, tracking: false, onChange: vi.fn() });
   fireEvent.mouseDown(screen.getByLabelText('Turn off'));
-  expect(screen.getByRole('option', { name: 'When I get up' })).toHaveAttribute('aria-disabled', 'true');
+  const option = screen.getByRole('option', { name: /^When I get up/ });
+  expect(option).toHaveAttribute('aria-disabled', 'true');
+  expect(option).toHaveTextContent('Needs Biometrics');
   unmount();
 
   timeline({ on: true, tracking: false, onChange: vi.fn() });
   expect(screen.getByText('Needs Biometrics. Until it is on, the bed turns off at 8:30 AM.')).toBeInTheDocument();
+});
+
+it('links the note to the Turn off control and announces it', () => {
+  timeline({ on: true, tracking: true, onChange: vi.fn() });
+  const note = screen.getByRole('status');
+  expect(note).toHaveTextContent(HELPER);
+  expect(screen.getByLabelText('Turn off')).toHaveAccessibleDescription(HELPER);
+});
+
+it('gives the Biometrics note the same link and role', () => {
+  timeline({ on: true, tracking: false, onChange: vi.fn() });
+  const text = 'Needs Biometrics. Until it is on, the bed turns off at 8:30 AM.';
+  expect(screen.getByRole('status')).toHaveTextContent(text);
+  expect(screen.getByLabelText('Turn off')).toHaveAccessibleDescription(text);
+});
+
+it('has no note, and no description, until the choice is made', () => {
+  timeline({ on: false, tracking: true, onChange: vi.fn() });
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Turn off')).not.toHaveAttribute('aria-describedby');
+});
+
+it('only gives the reason on the disabled item', () => {
+  const { unmount } = timeline({ on: false, tracking: true, onChange: vi.fn() });
+  fireEvent.mouseDown(screen.getByLabelText('Turn off'));
+  expect(screen.getByRole('option', { name: 'When I get up' })).not.toHaveTextContent('Needs Biometrics');
+  unmount();
+  timeline({ on: true, tracking: false, onChange: vi.fn() });
+  fireEvent.mouseDown(screen.getByLabelText('Turn off'));
+  expect(screen.getByRole('option', { name: 'When I get up' })).not.toHaveAttribute('aria-disabled', 'true');
 });
 
 it('switches back to a time after the wake', () => {

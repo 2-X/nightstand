@@ -333,5 +333,10 @@ test('"When I get up" saves, and Bed says when it turns off at the latest', asyn
   await expect(page.getByText(/^After your wake time, it turns off once you've been out of bed for 10 minutes/)).toBeVisible();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await nav(page).getByRole('link', { name: 'Bed', exact: true }).click();
-  await expect(page.getByText('Turns off when you get up, today by 9:45 AM')).toBeVisible();
+  const caption = page.getByText('Turns off when you get up today by 9:45 AM');
+  await expect(caption).toBeVisible();
+  // Two deliberate lines, and the second stays inside the dial.
+  await expect(caption.locator('br')).toHaveCount(1);
+  const box = (await caption.boundingBox())!;
+  expect(box.height).toBeLessThan(2.6 * parseFloat(await caption.evaluate(node => getComputedStyle(node).lineHeight)));
 });

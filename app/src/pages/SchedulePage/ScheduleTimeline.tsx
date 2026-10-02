@@ -1,7 +1,9 @@
 import SectionHeading from '@components/SectionHeading';
 import moment from 'moment-timezone';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Alert, Box, Button, FormControlLabel, IconButton, MenuItem, Paper, Stack, Switch, TextField, Typography } from '@mui/material';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import {
+  Alert, Box, Button, FormControlLabel, IconButton, ListItemText, MenuItem, Paper, Stack, Switch, TextField, Typography,
+} from '@mui/material';
 import DeleteOutline from '@mui/icons-material/DeleteOutline';
 import ChevronRight from '@mui/icons-material/ChevronRight';
 import { useAppStore } from '@state/appStore';
@@ -106,6 +108,7 @@ export default function ScheduleTimeline({ format, risePattern = false, hideTemp
   const wakeInvalid = !!wake && schedule.power.enabled && !timeInPowerWindow(wake.time, schedule.power);
   const followDelay = rejectedDelay ?? delay;
   const upMode = !!getUp?.on;
+  const upNoteId = useId();
   const offClock = moment(schedule.power.off, 'HH:mm').format('h:mm A');
   const upNote = getUp?.tracking
     ? "After your wake time, it turns off once you've been out of bed for 10 minutes and your alarms are done."
@@ -415,6 +418,7 @@ export default function ScheduleTimeline({ format, risePattern = false, hideTemp
             size="small"
             disabled={ disabled }
             value={ upMode ? 'up' : customOff || followDelay === undefined ? 'custom' : followDelay }
+            slotProps={ upMode ? { htmlInput: { 'aria-describedby': upNoteId } } : undefined }
             sx={ { width: manyAlarms ? 215 : 145 } }
             onChange={ event => {
               const value = event.target.value;
@@ -428,7 +432,10 @@ export default function ScheduleTimeline({ format, risePattern = false, hideTemp
             <MenuItem value={ 30 }>30 min after{ afterLabel }</MenuItem>
             <MenuItem value={ 60 }>1 hour after{ afterLabel }</MenuItem>
             <MenuItem value="custom">At a set time</MenuItem>
-            { getUp && <MenuItem value="up" disabled={ !getUp.tracking && !upMode }>When I get up</MenuItem> }
+            { getUp && <MenuItem value="up" disabled={ !getUp.tracking && !upMode }>
+              { getUp.tracking || upMode ? 'When I get up'
+                : <ListItemText primary="When I get up" secondary="Needs Biometrics"/> }
+            </MenuItem> }
           </TextField> }
           { (!offAt || customOff || followDelay === undefined || upMode) && <TextField
             label={ upMode ? 'Usually off at' : offAt ? undefined : 'Turn off at' }
@@ -452,7 +459,7 @@ export default function ScheduleTimeline({ format, risePattern = false, hideTemp
         { offWarning && <Typography variant="caption" color="error" sx={ { display: 'block', mt: 1 } }>
           Wake time is before bedtime, so turn off was not moved.
         </Typography> }
-        { upMode && <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mt: 1 } }>
+        { upMode && <Typography id={ upNoteId } role="status" variant="caption" color="text.secondary" sx={ { display: 'block', mt: 1 } }>
           { upNote }
         </Typography> }
         { customOff && delay !== undefined && <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mt: 1 } }>

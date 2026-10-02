@@ -84,7 +84,7 @@ export default function TemperatureLabel({
       <Typography variant="body2" color="text.secondary">Currently at { formatTemperature(currentTemperatureF, format) }</Typography>
     </> : <Typography sx={ typography.hero } color="text.secondary">Off</Typography> }
     { shownAt && <Typography variant="caption" color="text.secondary" sx={ { mt: 1 } }>
-      { upBy ? `Turns off when you get up,${eventDay} by ${upBy.format('h:mm A')}`
+      { upBy ? <>{ 'Turns off when you get up ' }<br/>{ `${(eventDay ?? '').trim()} by ${upBy.format('h:mm A')}` }</>
         : `${isOn ? 'Turns off' : warming ? 'Starts warming' : 'Turns on'}${eventDay} at ${shownAt.format('h:mm A')}` }
     </Typography> }
     { paused && isOn && <Typography variant="caption" color="text.secondary" sx={ { mt: 1 } }>
