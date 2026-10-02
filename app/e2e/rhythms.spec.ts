@@ -335,8 +335,7 @@ test('"When I get up" saves, and Bed says when it turns off at the latest', asyn
   await nav(page).getByRole('link', { name: 'Bed', exact: true }).click();
   const caption = page.getByText('Turns off when you get up today by 9:45 AM');
   await expect(caption).toBeVisible();
-  // Two deliberate lines, and the second stays inside the dial.
-  await expect(caption.locator('br')).toHaveCount(1);
+  // At most two lines, inside the dial.
   const box = (await caption.boundingBox())!;
   expect(box.height).toBeLessThan(2.6 * parseFloat(await caption.evaluate(node => getComputedStyle(node).lineHeight)));
 });

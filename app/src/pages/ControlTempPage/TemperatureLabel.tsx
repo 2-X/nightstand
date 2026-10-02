@@ -13,6 +13,11 @@ import { nextBedEvent } from './bedEvents';
 import { currentSleep, nextSleepEvent, sleepAt, warmStartBedtime } from './sleepEvents';
 import { useBedSleeps } from './useBedSleeps';
 
+// The ring is open at the bottom: a caption wider than this runs into the arc ends.
+const captionSx = { mt: 1, maxWidth: '70%', textWrap: 'balance' } as const;
+// Two caption lines plus their margin; the slot is always this tall so the caption never moves with the value above it.
+const CAPTION_SLOT_PX = 48;
+
 type TemperatureLabelProps = {
   isOn: boolean;
   sliderTemp: number;
@@ -71,24 +76,28 @@ export default function TemperatureLabel({
   return <Box
     sx={ {
       position: 'absolute', inset: '18% 5% 15%', textAlign: 'center', display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', gap: 0.5,
+      alignItems: 'center', pointerEvents: 'none',
     } }>
-    { isOn ? <>
-      <Typography variant="body2" color="text.secondary">{ topTitle }</Typography>
-      <Typography
-        component="h2"
-        sx={ {
-          ...typography.hero, color: sliderColor, whiteSpace: 'nowrap',
-          fontSize: format === 'level' ? typography.hero.fontSize : 'clamp(2.5rem, 13vw, 3.5rem)',
-        } }>{ formatTemperature(sliderTemp, format) }</Typography>
-      <Typography variant="body2" color="text.secondary">Currently at { formatTemperature(currentTemperatureF, format) }</Typography>
-    </> : <Typography sx={ typography.hero } color="text.secondary">Off</Typography> }
-    { shownAt && <Typography variant="caption" color="text.secondary" sx={ { mt: 1 } }>
-      { upBy ? <>{ 'Turns off when you get up ' }<br/>{ `${(eventDay ?? '').trim()} by ${upBy.format('h:mm A')}` }</>
-        : `${isOn ? 'Turns off' : warming ? 'Starts warming' : 'Turns on'}${eventDay} at ${shownAt.format('h:mm A')}` }
-    </Typography> }
-    { paused && isOn && <Typography variant="caption" color="text.secondary" sx={ { mt: 1 } }>
-      { timerOff ? `Turns off at ${timerOff.format('h:mm A')}` : 'Stays on until you turn it off' }
-    </Typography> }
+    <Box sx={ { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.5 } }>
+      { isOn ? <>
+        <Typography variant="body2" color="text.secondary">{ topTitle }</Typography>
+        <Typography
+          component="h2"
+          sx={ {
+            ...typography.hero, color: sliderColor, whiteSpace: 'nowrap',
+            fontSize: format === 'level' ? typography.hero.fontSize : 'clamp(2.5rem, 13vw, 3.5rem)',
+          } }>{ formatTemperature(sliderTemp, format) }</Typography>
+        <Typography variant="body2" color="text.secondary">Currently at { formatTemperature(currentTemperatureF, format) }</Typography>
+      </> : <Typography sx={ typography.hero } color="text.secondary">Off</Typography> }
+    </Box>
+    <Box sx={ { height: CAPTION_SLOT_PX, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' } }>
+      { shownAt && <Typography variant="caption" color="text.secondary" sx={ captionSx }>
+        { upBy ? `Turns off when you get up${eventDay} by ${upBy.format('h:mm A')}`
+          : `${isOn ? 'Turns off' : warming ? 'Starts warming' : 'Turns on'}${eventDay} at ${shownAt.format('h:mm A')}` }
+      </Typography> }
+      { paused && isOn && <Typography variant="caption" color="text.secondary" sx={ captionSx }>
+        { timerOff ? `Turns off at ${timerOff.format('h:mm A')}` : 'Stays on until you turn it off' }
+      </Typography> }
+    </Box>
   </Box>;
 }
