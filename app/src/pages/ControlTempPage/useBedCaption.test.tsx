@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { ResolvedSleepResponse } from '@api/rhythmsResponse';
-import TemperatureLabel from './TemperatureLabel';
+import { useBedCaption } from './useBedCaption';
 import type { BedSleeps } from './useBedSleeps';
 
 const fixture = vi.hoisted(() => ({
@@ -18,13 +18,10 @@ vi.mock('@api/deviceStatus', () => ({ useDeviceStatus: () => ({ data: fixture.st
 vi.mock('./useBedSleeps', () => ({ useBedSleeps: () => fixture.bed }));
 vi.mock('@api/rhythms', () => ({ useRhythmsLive: () => ({ data: fixture.live }) }));
 
-const label = (isOn: boolean) => render(<TemperatureLabel
-  isOn={ isOn }
-  sliderTemp={ 82 }
-  sliderColor="#ffffff"
-  currentTargetTemp={ 82 }
-  currentTemperatureF={ 82 }
-  format="level"/>);
+function Caption({ isOn }: { isOn: boolean }) {
+  return <>{ useBedCaption(isOn).map(line => <p key={ line }>{ line }</p>) }</>;
+}
+const label = (isOn: boolean) => render(<Caption isOn={ isOn }/>);
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -146,7 +143,7 @@ it('says a "When I get up" sleep turns off when they get up, by its latest off',
   fixture.bed = { state: 'rhythms', sleeps: [sleep('2026-09-28', '2026-09-29')] };
   fixture.live = { side: 'left', date: '2026-09-28', offWhenUp: { by: '2026-09-29T09:45:00.000Z' } };
   const { unmount } = label(true);
-  expect(screen.getByText('Turns off when you get up tomorrow by 9:45 AM')).toBeInTheDocument();
+  expect(screen.getByText('Turns off when you get up, tomorrow by 9:45 AM')).toBeInTheDocument();
   unmount();
 
   fixture.live = null;
@@ -163,4 +160,12 @@ it('leaves "when you get up" out during a pause', () => {
   label(true);
   expect(screen.queryByText(/when you get up/)).not.toBeInTheDocument();
   expect(screen.getByText('Stays on until you turn it off')).toBeInTheDocument();
+});
+
+it('keeps "at" and the time together on one line', () => {
+  fixture.pause = { active: false, expiresAt: '' };
+  fixture.status = { left: { isOn: false, secondsRemaining: 0 } };
+  label(false);
+  const line = screen.getByText('Turns on tonight at 9:00 PM');
+  expect(line.textContent).toBe('Turns on tonight at\u00a09:00\u00a0PM');
 });

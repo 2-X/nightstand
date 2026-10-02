@@ -333,7 +333,7 @@ test('"When I get up" saves, and Bed says when it turns off at the latest', asyn
   await expect(page.getByText(/^After your wake time, it turns off once you've been out of bed for 10 minutes/)).toBeVisible();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await nav(page).getByRole('link', { name: 'Bed', exact: true }).click();
-  const caption = page.getByText('Turns off when you get up today by 9:45 AM');
+  const caption = page.getByText('Turns off when you get up, today by 9:45 AM');
   await expect(caption).toBeVisible();
   // At most two lines, inside the dial.
   const box = (await caption.boundingBox())!;
