@@ -3,6 +3,7 @@ import moment from 'moment-timezone';
 import { Box, Typography } from '@mui/material';
 import { useAppStore } from '@state/appStore';
 import { useDeviceStatus } from '@api/deviceStatus';
+import { useRhythmsLive } from '@api/rhythms';
 import { isSchedulePaused, pauseEndsAt } from '@api/schedulePause';
 import { useSchedules } from '@api/schedules';
 import { useSettings } from '@api/settings';
@@ -29,6 +30,7 @@ export default function TemperatureLabel({
   const { data: schedules } = useSchedules();
   const { data: deviceStatus } = useDeviceStatus();
   const bed = useBedSleeps(side);
+  const { data: live } = useRhythmsLive(side, bed.state === 'rhythms');
   const [, tick] = useState(0);
   useEffect(() => { const timer = setInterval(() => tick(value => value + 1), 30_000); return () => clearInterval(timer); }, []);
   const pending = sliderTemp !== currentTargetTemp;
@@ -60,7 +62,10 @@ export default function TemperatureLabel({
   const turnsOff = timerEnd && betweenNights && (!nextStart || timerEnd.isBefore(nextStart.at)) ? timerEnd : event?.at;
   const warming = !isOn && !!event && bed.state === 'rhythms' && !!settings
     && !!warmStartBedtime(sleepAt(bed.sleeps, event.at.toDate()), settings.timeZone);
-  const shownAt = isOn ? turnsOff : event?.at;
+  // A "When I get up" sleep turns off when the person gets up, by its latest off.
+  const upBy = isOn && !paused && !!settings && !settings[side].awayMode && live?.offWhenUp
+    ? moment.tz(live.offWhenUp.by, settings.timeZone) : undefined;
+  const shownAt = upBy ?? (isOn ? turnsOff : event?.at);
   const eventDay = shownAt && (shownAt.isSame(now, 'day') ? shownAt.hour() >= 17 ? ' tonight' : ' today'
     : shownAt.isSame(now.clone().add(1, 'day'), 'day') ? ' tomorrow' : ` ${shownAt.format('ddd')}`);
   return <Box
@@ -79,7 +84,8 @@ export default function TemperatureLabel({
       <Typography variant="body2" color="text.secondary">Currently at { formatTemperature(currentTemperatureF, format) }</Typography>
     </> : <Typography sx={ typography.hero } color="text.secondary">Off</Typography> }
     { shownAt && <Typography variant="caption" color="text.secondary" sx={ { mt: 1 } }>
-      { isOn ? 'Turns off' : warming ? 'Starts warming' : 'Turns on' }{ eventDay } at { shownAt.format('h:mm A') }
+      { upBy ? `Turns off when you get up,${eventDay} by ${upBy.format('h:mm A')}`
+        : `${isOn ? 'Turns off' : warming ? 'Starts warming' : 'Turns on'}${eventDay} at ${shownAt.format('h:mm A')}` }
     </Typography> }
     { paused && isOn && <Typography variant="caption" color="text.secondary" sx={ { mt: 1 } }>
       { timerOff ? `Turns off at ${timerOff.format('h:mm A')}` : 'Stays on until you turn it off' }

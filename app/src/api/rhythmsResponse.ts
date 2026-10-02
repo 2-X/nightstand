@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { AlarmScheduleSchema, DailyScheduleSchema } from './schedulesSchema';
 import {
-  ACTIVATION_REASONS, CURVE_PHASES, IsoDateSchema, RhythmsDBSchema, RhythmsLiveSchema, RhythmsResponseSchema, RhythmsStatusSchema,
-  SmartScheduleSchema,
+  ACTIVATION_REASONS, CURVE_PHASES, IsoDateSchema, OffWhenUpLiveSchema, RhythmsDBSchema, RhythmsLiveSchema,
+  RhythmsResponseSchema, RhythmsStatusSchema, SmartScheduleSchema,
 } from './rhythmsSchema';
 import { responseSchema } from './responseSchema';
 
@@ -65,6 +65,7 @@ export const RhythmsResponseReadSchema = responseSchema(RhythmsResponseSchema).e
 export const RhythmsLiveReadSchema = responseSchema(RhythmsLiveSchema).extend({
   phase,
   nextChange: responseSchema(RhythmsLiveSchema.shape.nextChange.unwrap()).nullable().catch(null),
+  offWhenUp: responseSchema(OffWhenUpLiveSchema).nullable().optional().catch(null),
 }).nullable();
 
 // deviceUpdateFailed: the flag and settings were saved, but the Pod did not take that side's device write.

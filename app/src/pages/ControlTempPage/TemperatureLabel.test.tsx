@@ -6,6 +6,7 @@ import type { BedSleeps } from './useBedSleeps';
 
 const fixture = vi.hoisted(() => ({
   pause: { active: false, expiresAt: '' }, status: undefined as unknown, away: false, bed: { state: 'legacy' } as BedSleeps,
+  live: null as unknown,
 }));
 vi.mock('@state/appStore', () => ({ useAppStore: () => ({ side: 'left' }) }));
 vi.mock('@api/settings', () => ({ useSettings: () => ({ data: {
@@ -15,6 +16,7 @@ const night = (on: string) => ({ power: { enabled: true, on, off: '07:00', onTem
 vi.mock('@api/schedules', () => ({ useSchedules: () => ({ data: { left: { monday: night('21:00'), tuesday: night('22:00') } } }) }));
 vi.mock('@api/deviceStatus', () => ({ useDeviceStatus: () => ({ data: fixture.status }) }));
 vi.mock('./useBedSleeps', () => ({ useBedSleeps: () => fixture.bed }));
+vi.mock('@api/rhythms', () => ({ useRhythmsLive: () => ({ data: fixture.live }) }));
 
 const label = (isOn: boolean) => render(<TemperatureLabel
   isOn={ isOn }
@@ -32,6 +34,7 @@ beforeEach(() => {
   fixture.status = undefined;
   fixture.away = false;
   fixture.bed = { state: 'legacy' };
+  fixture.live = null;
 });
 
 const alarm = { time: '06:30', enabled: false, vibrationIntensity: 30, vibrationPattern: 'rise' as const, duration: 30, alarmTemperature: 83 };
@@ -134,4 +137,30 @@ it('keeps the sleep\'s turn-off under Rhythms while a sleep runs', () => {
   fixture.status = { left: { isOn: true, secondsRemaining: 3600 } };
   label(true);
   expect(screen.getByText('Turns off tomorrow at 6:45 AM')).toBeInTheDocument();
+});
+
+it('says a "When I get up" sleep turns off when they get up, by its latest off', () => {
+  fixture.pause = { active: false, expiresAt: '' };
+  vi.setSystemTime(new Date('2026-09-28T23:00:00Z'));
+  fixture.status = { left: { isOn: true, secondsRemaining: 8 * 3600 } };
+  fixture.bed = { state: 'rhythms', sleeps: [sleep('2026-09-28', '2026-09-29')] };
+  fixture.live = { side: 'left', date: '2026-09-28', offWhenUp: { by: '2026-09-29T09:45:00.000Z' } };
+  const { unmount } = label(true);
+  expect(screen.getByText('Turns off when you get up, tomorrow by 9:45 AM')).toBeInTheDocument();
+  unmount();
+
+  fixture.live = null;
+  label(true);
+  expect(screen.getByText('Turns off tomorrow at 6:45 AM')).toBeInTheDocument();
+});
+
+it('leaves "when you get up" out during a pause', () => {
+  vi.setSystemTime(new Date('2026-09-28T23:00:00Z'));
+  fixture.pause = { active: true, expiresAt: '' };
+  fixture.status = { left: { isOn: true, secondsRemaining: 0 } };
+  fixture.bed = { state: 'rhythms', sleeps: [sleep('2026-09-28', '2026-09-29')] };
+  fixture.live = { side: 'left', date: '2026-09-28', offWhenUp: { by: '2026-09-29T09:45:00.000Z' } };
+  label(true);
+  expect(screen.queryByText(/when you get up/)).not.toBeInTheDocument();
+  expect(screen.getByText('Stays on until you turn it off')).toBeInTheDocument();
 });

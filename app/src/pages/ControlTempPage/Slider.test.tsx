@@ -6,6 +6,7 @@ vi.mock('@api/deviceStatus.ts', () => ({ postDeviceStatus: post, useDeviceStatus
 vi.mock('@api/settings.ts', () => ({ useSettings: () => ({ data: { timeZone: 'UTC', left: { awayMode: false } } }) }));
 vi.mock('@api/schedules', () => ({ useSchedules: () => ({ data: undefined }) }));
 vi.mock('./useBedSleeps', () => ({ useBedSleeps: () => ({ state: 'legacy' }) }));
+vi.mock('@api/rhythms', () => ({ useRhythmsLive: () => ({ data: undefined }) }));
 vi.mock('@state/appStore', () => ({ useAppStore: () => ({ side: 'left', setIsUpdating: vi.fn() }) }));
 vi.mock('./TemperatureButtons', () => ({ default: () => <button>Temperature stepper</button> }));
 
