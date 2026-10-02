@@ -20,6 +20,8 @@ export const centreSx = {
 const smallDial = '@container (max-width: 259.95px)';
 const tinyDial = '@container (max-width: 219.95px)';
 const lineSx = { fontSize: 15, lineHeight: 1.3, color: 'text.secondary', [smallDial]: { fontSize: 14 }, [tinyDial]: { fontSize: 13 } } as const;
+// The third line is the longest ("Currently at 21.5°C"), so it steps down once more on the smallest dial.
+const currentSx = { ...lineSx, [tinyDial]: { fontSize: 12 } } as const;
 const signSx = { fontSize: '0.5em', fontWeight: 300, verticalAlign: '0.55em', mr: '0.02em', letterSpacing: 0 } as const;
 const offSx = {
   color: 'text.secondary', fontWeight: 300, letterSpacing: '-0.03em', lineHeight: 0.95,
@@ -56,7 +58,7 @@ export default function TemperatureLabel({
         { sign && <Box component="span" sx={ signSx }>{ sign }</Box> }
         { value.slice(sign.length) }
       </Typography>
-      <Typography sx={ lineSx }>Currently at { displayTemperature(currentTemperatureF, format) }</Typography>
+      <Typography sx={ currentSx }>Currently at { displayTemperature(currentTemperatureF, format) }</Typography>
     </> : <Typography sx={ offSx }>Off</Typography> }
   </Box>;
 }

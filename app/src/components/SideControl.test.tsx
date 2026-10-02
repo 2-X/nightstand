@@ -8,13 +8,12 @@ const fixture = vi.hoisted(() => ({
     left: { name: 'Alex', awayMode: false, scheduleOverrides: { pause: { active: false, expiresAt: '' } } },
     right: { name: 'Sam', awayMode: false, scheduleOverrides: { pause: { active: false, expiresAt: '' } } },
   },
+  status: { left: { isOn: false }, right: { isOn: false } } as Record<string, unknown>,
   presence: { left: { present: true, lastUpdatedAt: '2026-09-28T05:00:00Z', stateChangedAt: '2026-09-28T04:48:00Z' } },
 }));
 vi.mock('@state/appStore.tsx', () => ({ useAppStore: () => ({ side: 'left', setSide: fixture.setSide }) }));
 vi.mock('@api/settings.ts', () => ({ useSettings: () => ({ data: fixture.settings }) }));
-vi.mock('@api/deviceStatus.ts', () => ({
-  useDeviceStatus: () => ({ data: { left: { isOn: false }, right: { isOn: false } } }),
-}));
+vi.mock('@api/deviceStatus.ts', () => ({ useDeviceStatus: () => ({ data: fixture.status }) }));
 vi.mock('@api/presence.ts', () => ({ usePresence: () => ({ data: fixture.presence }) }));
 vi.mock('@api/services.ts', () => ({
   useServices: () => ({ data: { biometrics: { enabled: fixture.enabled, jobs: { calibrateLeft: { status: 'healthy' } } } } }),
@@ -25,6 +24,7 @@ beforeEach(() => {
   fixture.settings.right.awayMode = false;
   fixture.settings.left.scheduleOverrides.pause = { active: false, expiresAt: '' };
   fixture.settings.right.scheduleOverrides.pause = { active: false, expiresAt: '' };
+  fixture.status = { left: { isOn: false }, right: { isOn: false } };
   fixture.setSide.mockClear();
   vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-28T05:00:00Z'));
 });
@@ -80,7 +80,7 @@ it('uses the selected night captions instead of live bed states when supplied', 
 it('marks a paused side without touching the partner', () => {
   fixture.settings.left.scheduleOverrides.pause = { active: true, expiresAt: '' };
   render(<SideControl compact={ false }/>);
-  expect(screen.getByRole('radio', { name: 'Alex. Paused, off. In bed 12 min.' })).toBeChecked();
+  expect(screen.getByRole('radio', { name: 'Alex. Paused, Off. In bed 12 min.' })).toBeChecked();
   expect(screen.getByRole('radio', { name: 'Sam. Off.' })).toBeInTheDocument();
 });
 
@@ -95,4 +95,21 @@ it('shows away rather than paused for a side that is both', () => {
   fixture.settings.left.scheduleOverrides.pause = { active: true, expiresAt: '' };
   render(<SideControl compact={ false } mergeAwaySides={ false }/>);
   expect(screen.getByRole('radio', { name: 'Alex. Away.' })).toBeChecked();
+});
+
+it('names the level of a paused side that is on, on the Bed tiles and the compact ones', () => {
+  fixture.settings.left.scheduleOverrides.pause = { active: true, expiresAt: '' };
+  fixture.status = { left: { isOn: true, targetTemperatureF: 84, currentTemperatureF: 82 }, right: { isOn: false } };
+  const view = render(<SideControl compact={ false }/>);
+  expect(screen.getByRole('radio', { name: 'Alex. Paused, 84°F. In bed 12 min.' })).toBeChecked();
+  view.unmount();
+  render(<SideControl/>);
+  expect(screen.getByText('Paused · 84°F')).toBeInTheDocument();
+});
+
+it('draws the selected Bed tile warm, from the top, with room for three lines', () => {
+  render(<SideControl compact={ false }/>);
+  const selected = screen.getByRole('radio', { name: /^Alex/ }).closest('label')!;
+  expect(selected).toHaveStyle({ backgroundColor: '#2A251F', minHeight: '84px', borderRadius: '16px', justifyContent: 'flex-start' });
+  expect(screen.getByRole('radio', { name: /^Sam/ }).closest('label')).toHaveStyle({ backgroundColor: '#121518' });
 });

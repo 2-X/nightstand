@@ -20,3 +20,15 @@ export function demoOffersUpdate(): boolean {
     return false;
   }
 }
+
+export const DEMO_PRESENCE_KEY = 'nightstand-demo-presence';
+
+// The demo has nobody in bed. Specs can seat the left side: 'fresh' for twelve minutes, 'fresh-short' for just now.
+export function demoPresence(): 'fresh' | 'fresh-short' | undefined {
+  try {
+    const value = globalThis.localStorage?.getItem(DEMO_PRESENCE_KEY);
+    return value === 'fresh' || value === 'fresh-short' ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}

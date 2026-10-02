@@ -1,4 +1,5 @@
 import { http, HttpResponse, delay, sse } from 'msw';
+import { demoPresence } from './demoPreferences';
 import type { SleepRecord } from '@api/sleepSchema.ts';
 import type { Jobs } from '@api/jobs.ts';
 import type { BasePosition } from '@api/baseControl.ts';
@@ -253,7 +254,16 @@ export const handlers = [
     await delay(120);
     return HttpResponse.json(filtered);
   }),
-  http.get('/api/metrics/presence', () => HttpResponse.json(presence)),
+  http.get('/api/metrics/presence', () => {
+    const seated = demoPresence();
+    if (!seated) return HttpResponse.json(presence);
+    const now = Date.now();
+    const since = now - (seated === 'fresh' ? 12 * 60_000 : 20_000);
+    return HttpResponse.json({
+      ...presence,
+      left: { present: true, lastUpdatedAt: new Date(now).toISOString(), stateChangedAt: new Date(since).toISOString() },
+    });
+  }),
   http.get('/api/calibration', () => HttpResponse.json(mockCalibration)),
   http.get('/api/metrics/vitals/summary', async () => {
     await delay(120);
