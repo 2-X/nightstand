@@ -18,7 +18,7 @@ import { Settings } from '../db/settingsSchema.js';
 import { nightBounds } from './nightBounds.js';
 import { emitJobEvent } from './jobEvents.js';
 import { describePause, isAlarmPaused } from './schedulePause.js';
-import { trackAlarm } from './alarmActivity.js';
+import { ALARM_LATE_LIMIT_MS, trackAlarm } from './alarmActivity.js';
 import { alarmPatternFor } from './alarmPattern.js';
 
 
@@ -27,10 +27,6 @@ const activeAlarms = new Map<Side, symbol>();
 // Overrides that have already run, so a rebuild cannot ring them again.
 const overrideRuns = new Map<string, number>();
 const OCCURRENCE_RETENTION_MS = 48 * 60 * 60 * 1000;
-// A scheduled alarm may wait out a hardware reconnect, but one that would
-// start more than this after its due time is dropped rather than
-// vibrating long after it.
-const ALARM_LATE_LIMIT_MS = 3 * 60_000;
 
 // Resolves to how long the alarm rings in milliseconds, or 0 if it did not ring.
 export const executeAlarm = async (

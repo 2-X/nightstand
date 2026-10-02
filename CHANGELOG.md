@@ -23,6 +23,12 @@ is a hard fork; for the history of the projects it descends from, see
 - HRV is no longer shown in the app. Checked against chest-strap recordings,
   the stored estimate was no more accurate than a fixed guess. It is still
   stored and returned by the API.
+- A side turned on by the weekly schedule now turns itself off a few minutes
+  after its scheduled off time if Nightstand stops, instead of 12 hours after
+  it was turned on. This also applies when a pause skips the scheduled off,
+  as it already did for Rhythms. Editing tonight's off time moves this timer
+  too. A power-on that cannot reach the Pod before those few minutes after
+  the off time is skipped and shown as a power schedule error.
 
 ## [3.5.1] - 2026-10-01
 

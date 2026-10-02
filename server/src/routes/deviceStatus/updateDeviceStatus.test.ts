@@ -20,7 +20,7 @@ process.env.ENV = 'local';
 // dropped an explicit `0` (a valid Fahrenheit target), since `0` is falsy.
 // executeFunction talks to the Franken hardware socket, so it's mocked here
 // rather than exercised for real.
-const executeFunctionMock = mock.fn(async (...args: [string, string?, object?]) => { void args; });
+const executeFunctionMock = mock.fn(async (...args: [string, (string | (() => string))?, object?]) => { void args; });
 mock.module('../../8sleep/deviceApi.js', {
   namedExports: { executeFunction: executeFunctionMock },
 });
@@ -93,6 +93,47 @@ describe('updateDeviceStatus', () => {
       ['TEMP_LEVEL_LEFT', '-9'], ['TEMP_LEVEL_RIGHT', '-9'],
       ['LEFT_TEMP_DURATION', '29100'], ['RIGHT_TEMP_DURATION', '29100'],
     ]);
+  });
+
+  it('turns a side on until a set time in one duration write, counted when it is sent', async (t) => {
+    const now = Date.parse('2026-10-05T21:00:00Z');
+    t.mock.timers.enable({ apis: ['Date'], now });
+    const onUntil = new Date(now + 10 * 3600_000);
+    const sent: [string, string][] = [];
+    executeFunctionMock.mock.resetCalls();
+    executeFunctionMock.mock.mockImplementation(async (command, arg) => {
+      // The Pod answers 15 minutes late.
+      t.mock.timers.tick(15 * 60_000);
+      sent.push([command, typeof arg === 'function' ? arg() : String(arg)]);
+    });
+    try {
+      await updateDeviceStatus({ left: { isOn: true, targetTemperatureF: 80 } }, { background: true, onUntil });
+    } finally {
+      executeFunctionMock.mock.restore();
+    }
+    assert.deepEqual(sent, [['LEFT_TEMP_DURATION', String(10 * 3600 - 15 * 60)], ['TEMP_LEVEL_LEFT', '-9']]);
+    const options = executeFunctionMock.mock.calls[0].arguments[2] as { latest?: boolean; notAfter?: number; onUntil?: Date };
+    assert.equal(options.latest, true);
+    assert.equal(options.notAfter, onUntil.getTime(), 'a power-on that can only go out after its end is not sent');
+    assert.equal(options.onUntil, undefined);
+  });
+
+  it('caps a set end at the firmware maximum', async () => {
+    executeFunctionMock.mock.resetCalls();
+    const onUntil = new Date(Date.now() + 13 * 3600_000);
+    await updateDeviceStatus({ right: { isOn: true } }, { background: true, onUntil });
+    const [command, arg] = executeFunctionMock.mock.calls[0].arguments;
+    assert.equal(command, 'RIGHT_TEMP_DURATION');
+    assert.equal(typeof arg === 'function' ? arg() : arg, '43200');
+    assert.equal(executeFunctionMock.mock.callCount(), 1);
+  });
+
+  it('treats an end that is not a time as a plain power-on', async () => {
+    executeFunctionMock.mock.resetCalls();
+    await updateDeviceStatus({ left: { isOn: true } }, { background: true, onUntil: new Date(Number.NaN) });
+    assert.deepEqual(executeFunctionMock.mock.calls.map(call => call.arguments.slice(0, 2)), [['LEFT_TEMP_DURATION', '43200']]);
+    const options = executeFunctionMock.mock.calls[0].arguments[2] as { notAfter?: number };
+    assert.equal(options.notAfter, undefined);
   });
 
   it('forgets the kept alarms of a side that is turned off', async () => {

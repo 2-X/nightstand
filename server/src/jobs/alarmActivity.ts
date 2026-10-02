@@ -10,6 +10,10 @@ import { isRebuilding } from './rebuildState.js';
 // first. Without this, whichever job node-schedule ran first won: a power-off
 // that ran first left the alarm to find the side off and skip.
 
+// A scheduled alarm may wait out a hardware reconnect, but one that would
+// start more than this after its due time is dropped rather than
+// vibrating long after it.
+export const ALARM_LATE_LIMIT_MS = 3 * 60_000;
 // A due alarm job normally starts within milliseconds of the power-off.
 const ALARM_START_WAIT_MS = 60_000;
 // Longest a power-off waits for ringing alarms: the 300 s alarm maximum plus
@@ -49,6 +53,11 @@ function dueJobs(endsThisNight: (name: string) => boolean, from: number, to: num
     const next = job.nextInvocation()?.getTime();
     return next !== undefined && next >= from && next < to;
   });
+}
+
+// Whether an alarm job of this side next runs within [from, to].
+export function alarmDueBetween(side: Side, from: Date, to: Date): boolean {
+  return dueJobs(name => isAlarmJob(side, name), from.getTime(), to.getTime() + 1).length > 0;
 }
 
 // Waits for the alarms of the night ending now, on this side, that are due in

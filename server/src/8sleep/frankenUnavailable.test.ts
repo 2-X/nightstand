@@ -190,3 +190,47 @@ test('only the newest waiting state command for a setting is applied on reconnec
   assert.ok(await onOutcome instanceof FrankenSupersededError);
   assert.deepEqual([...received].sort(), ['11\n10\n\n', '9\n0\n\n']);
 });
+
+test('a deferred state command is worked out when it is finally sent', async t => {
+  let clock = Date.now();
+  t.mock.method(Date, 'now', () => clock);
+  const until = clock + 3_600_000;
+  const pending = executeFunction('LEFT_TEMP_DURATION', () => String(Math.ceil((until - Date.now()) / 1000)), {
+    background: true, latest: true, notAfter: until,
+  });
+  await pause(50);
+  clock += 600_000;
+  const received = await connectFirmware();
+  await pending;
+  assert.deepEqual(received, ['9\n3000\n\n']);
+});
+
+test('a deferred state command is not sent once its end has passed', async t => {
+  let clock = Date.now();
+  t.mock.method(Date, 'now', () => clock);
+  const until = clock + 3_600_000;
+  let worked = false;
+  const sending = executeFunction('LEFT_TEMP_DURATION', () => { worked = true; return '1'; }, {
+    background: true, latest: true, notAfter: until,
+  });
+  const outcome = sending.then(() => undefined, (error: unknown) => error);
+  await pause(50);
+  clock = until + 1;
+  const received = await connectFirmware();
+  assert.ok(await outcome instanceof FrankenUnavailableError);
+  await pause(50);
+  assert.deepEqual(received, []);
+  assert.equal(worked, false);
+});
+
+test('a deferred argument that throws fails the command and sends nothing', async () => {
+  const sending = executeFunction('LEFT_TEMP_DURATION', () => { throw new Error('no end'); }, { background: true, latest: true });
+  const outcome = sending.then(() => undefined, (error: unknown) => error);
+  await pause(20);
+  const received = await connectFirmware();
+  assert.match(String(await outcome), /no end/);
+  await pause(50);
+  assert.deepEqual(received, []);
+  await executeFunction('LEFT_TEMP_DURATION', '0', { background: true, latest: true });
+  assert.deepEqual(received, ['9\n0\n\n']);
+});

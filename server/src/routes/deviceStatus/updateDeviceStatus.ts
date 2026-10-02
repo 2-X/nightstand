@@ -11,6 +11,13 @@ import settingsDB from '../../db/settings.js';
 import memoryDB from '../../db/memoryDB.js';
 import { INVERTED_SETTINGS_KEY_MAPPING } from '../../8sleep/loadDeviceStatus.js';
 import { forgetKeptAlarms } from '../../jobs/rhythms/keptAlarms.js';
+import { firmwareSecondsUntil } from '../../jobs/firmwareTimer.js';
+
+export type DeviceUpdateOptions = CommandOptions & {
+  // Turns a side on until this time in one duration write, counted when the
+  // command is sent. Not sent at all once this time has passed.
+  onUntil?: Date;
+};
 
 // Inverse of loadDeviceStatus.ts's calculateTempInF. Same fixed firmware
 // level scale, so the two files must be changed together.
@@ -19,7 +26,7 @@ const calculateLevelFromF = (temperatureF: number) => {
   return Math.round(level).toString();
 };
 
-const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideStatus>, options: CommandOptions) => {
+const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideStatus>, options: CommandOptions, onUntil?: Date) => {
   await settingsDB.read();
   const settings = settingsDB.data;
   if (side === 'left') {
@@ -44,7 +51,17 @@ const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideSt
     logger.debug('One side is in away mode, updating both sides...');
   }
 
-  if (isOn !== undefined) {
+  if (onUntil && !Number.isFinite(onUntil.getTime())) {
+    logger.warn(`Ignoring an invalid end for the ${side} side, using the ${MAX_ON_DURATION_SECONDS} s default`);
+    onUntil = undefined;
+  }
+  if (isOn && onUntil) {
+    const until = onUntil.getTime();
+    const onDuration = () => String(firmwareSecondsUntil(onUntil, new Date()));
+    const timedOptions = { ...stateOptions, notAfter: Math.min(until, stateOptions.notAfter ?? until) };
+    if (updateLeft) await executeFunction('LEFT_TEMP_DURATION', onDuration, timedOptions);
+    if (updateRight) await executeFunction('RIGHT_TEMP_DURATION', onDuration, timedOptions);
+  } else if (isOn !== undefined) {
     const onDuration = isOn ? String(MAX_ON_DURATION_SECONDS) : '0';
     if (updateLeft) await executeFunction('LEFT_TEMP_DURATION', onDuration, stateOptions);
     if (updateRight) await executeFunction('RIGHT_TEMP_DURATION', onDuration, stateOptions);
@@ -85,14 +102,15 @@ const updateSettings = async (settings: Partial<DeviceStatus['settings']>, optio
 };
 
 // Scheduled callers pass { background: true } to wait longer for the hardware.
-export const updateDeviceStatus = async (deviceStatus: DeepPartial<DeviceStatus>, options: CommandOptions = {}) => {
+export const updateDeviceStatus = async (deviceStatus: DeepPartial<DeviceStatus>, updateOptions: DeviceUpdateOptions = {}) => {
   logger.info(`Updating device status..`);
+  const { onUntil, ...options } = updateOptions;
 
   try {
     if (deviceStatus.isPriming === true) await executeFunction('PRIME', 'empty', options);
     else if (deviceStatus.isPriming === false) await executeFunction('STOP_PRIME', 'empty', options);
-    if (deviceStatus?.left) await updateSide('left', deviceStatus.left, options);
-    if (deviceStatus?.right) await updateSide('right', deviceStatus.right, options);
+    if (deviceStatus?.left) await updateSide('left', deviceStatus.left, options, onUntil);
+    if (deviceStatus?.right) await updateSide('right', deviceStatus.right, options, onUntil);
     if (deviceStatus?.settings) await updateSettings(deviceStatus.settings, options);
   } catch (error) {
     if (!(error instanceof FrankenSupersededError)) throw error;

@@ -14,6 +14,7 @@ import { isTempScheduleOverridden } from './scheduleOverride.js';
 import { describePause, isSchedulePaused } from './schedulePause.js';
 import { SLEEP_ANALYSIS_HOUR, SLEEP_ANALYSIS_MINUTE } from '../sleepAnalysisSchedule.js';
 import { letAlarmsFinish } from './alarmActivity.js';
+import { nextScheduledOff, noteWeeklyArmed, weeklyFirmwareEnd } from './firmwareTimer.js';
 
 
 
@@ -36,6 +37,7 @@ export const schedulePowerOn = (settingsData: Settings, side: Side, day: DayOfWe
   if (!power.enabled) return;
   if (settingsData[side].awayMode) return;
   if (settingsData.timeZone === null) return;
+  const timeZone = settingsData.timeZone;
 
   const onRule = new schedule.RecurrenceRule();
   const dayOfWeekIndex = getDayOfWeekIndex(day);
@@ -66,11 +68,16 @@ export const schedulePowerOn = (settingsData: Settings, side: Side, day: DayOfWe
         logJob('Temperature schedule overridden, powering on without setting temperature', side, day, dayOfWeekIndex, time);
       }
 
+      // The firmware turns the side off by itself at this time if this server
+      // stops, instead of 12 hours after the power-on.
+      const firedAt = fireDate ?? new Date();
+      const onUntil = weeklyFirmwareEnd(side, nextScheduledOff(firedAt, power.off, timeZone));
       await updateDeviceStatus({
         [side]: overridden
           ? { isOn: true }
           : { isOn: true, targetTemperatureF: power.onTemperature },
-      }, { background: true });
+      }, { background: true, onUntil });
+      noteWeeklyArmed(side, day, firedAt, onUntil);
       serverStatus.status.powerSchedule.status = 'healthy';
       serverStatus.status.powerSchedule.message = '';
     } catch (error: unknown) {

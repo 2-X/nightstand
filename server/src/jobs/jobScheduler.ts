@@ -13,6 +13,7 @@ import { isSystemDateValid } from './isSystemDateValid.js';
 import { scheduleAlarm, scheduleAlarmOverride, scheduleOneOffAlarm } from './alarmScheduler.js';
 import { schedulePowerOff, schedulePowerOn, scheduleSleepAnalysis } from './powerScheduler.js';
 import { schedulePrimingRebootAndCalibration } from './primeScheduler.js';
+import { scheduleWeeklyRearm } from './weeklyRearm.js';
 import { scheduleTemperatures } from './temperatureScheduler.js';
 import { schedulePauseResume } from './pauseResume.js';
 import eventBus from '../events/eventBus.js';
@@ -111,6 +112,12 @@ async function rebuildJobs() {
             logger.error(`Failed to schedule ${side} ${day}, skipping it: ${message}`);
           }
         });
+        // The firmware end was set at power-on; an edit to tonight moves it.
+        try {
+          scheduleWeeklyRearm(settingsData, schedulesData, side);
+        } catch (error: unknown) {
+          logger.error(`Failed to plan the ${side} off time: ${error instanceof Error ? error.message : String(error)}`);
+        }
       });
     }
     // A sleep left running when Rhythms was turned off keeps its alarms until
