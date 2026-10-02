@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
-import { screen, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import { useAppStore } from '@state/appStore.tsx';
@@ -57,4 +57,18 @@ it('draws the frame with what it means and Try again when the first load fails',
   expect(screen.queryByRole('button', { name: /^Turn o/ })).not.toBeInTheDocument();
   expect(container.querySelector('[data-dial] h2')).toBeNull();
   expect(container.querySelector('[data-dial] path[data-band="off"]')).not.toBeNull();
+});
+
+it('drops "Set to" when the Pod answers again with the target it kept', async () => {
+  const { queryClient } = renderWithProviders(<ControlTempPage/>);
+  await screen.findByRole('button', { name: 'Turn off' });
+  const status = useControlTempStore.getState().deviceStatus!;
+  // A change the Pod ignored: the app still shows it, and the next answer is the same as the last.
+  act(() => useControlTempStore.setState({ deviceStatus: { ...status, left: { ...status.left, targetTemperatureF: 90 } } }));
+  expect(screen.getByText('Set to')).toBeInTheDocument();
+  const before = queryClient.getQueryData(['useDeviceStatus']);
+  vi.setSystemTime(Date.now() + 60_000);
+  await act(() => queryClient.refetchQueries({ queryKey: ['useDeviceStatus'] }));
+  expect(queryClient.getQueryData(['useDeviceStatus'])).toBe(before);
+  await waitFor(() => expect(screen.queryByText('Set to')).not.toBeInTheDocument());
 });

@@ -42,7 +42,7 @@ const controlColumnSx = {
 } as const;
 
 export default function ControlTempPage() {
-  const { refetch, data: deviceStatus, frame } = useBedFrame();
+  const { refetch, data: deviceStatus, dataUpdatedAt, frame } = useBedFrame();
   const syncFromServer = useControlTempStore((state) => state.syncFromServer);
   const { data: settings, isError: settingsError } = useSettings();
   const { side } = useAppStore();
@@ -68,10 +68,12 @@ export default function ControlTempPage() {
     return () => setCommandError(undefined);
   }, [side, setCommandError]);
 
+  // Every answer, even one equal to the last: a write the Pod ignored leaves the data unchanged, and only the
+  // resync clears the edit it still shows as pending.
   useEffect(() => {
     if (!deviceStatus) return;
     syncFromServer(deviceStatus);
-  }, [deviceStatus, syncFromServer]);
+  }, [deviceStatus, dataUpdatedAt, syncFromServer]);
 
   return (
     <PageContainer sx={ pageSx }>
