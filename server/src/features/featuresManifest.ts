@@ -405,6 +405,28 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
       + 'Switching to upstream free-sleep removes the timer; an older release leaves it installed as a no-op.',
   },
   {
+    id: 'snapshot-pruning',
+    title: 'Prune old database snapshots',
+    description: 'Updates, switches, installs and database resets keep the newest three database snapshots and any '
+      + 'from the last week, then remove more, oldest first, only while free space on /persistent is under 512 MB. '
+      + 'Only files named like Nightstand\'s own snapshots are ever removed.',
+    category: 'safety',
+    version: 'n/a',
+    flag: null,
+    default: true,
+    touchpoints: [
+      'scripts/prune_db_snapshots.sh', 'scripts/update.sh', 'scripts/revert-to-stock.sh', 'scripts/install.sh',
+      'scripts/reset_db.sh',
+    ],
+    depends_on: ['agent'],
+    reversible: true,
+    tests: ['server/src/pruneSnapshotsScript.test.ts'],
+    upstream_offer: false,
+    rationale: 'Safety: every update, switch, install and reset adds a full database copy, and /persistent also holds '
+      + 'firmware data and Wi-Fi settings. Always on, since the space floor is what protects the Pod. Older releases '
+      + 'and upstream free-sleep do not prune; migration snapshots are never removed.',
+  },
+  {
     id: 'hardware-watchdog',
     title: 'Hardware watchdog',
     description: 'After a successful install or update, sets systemd\'s RuntimeWatchdogSec to 30 seconds through a drop-in, '

@@ -23,6 +23,9 @@ is a hard fork; for the history of the projects it descends from, see
 - HRV is no longer shown in the app. Checked against chest-strap recordings,
   the stored estimate was no more accurate than a fixed guess. It is still
   stored and returned by the API.
+- Nightstand now removes old database snapshots, keeping the newest three and
+  any from the last week, so they cannot fill a Pod's storage. It removes more,
+  oldest first, only when space runs low.
 - When an update stops or rolls back, the app now says so within seconds, with
   the reason, instead of waiting ten minutes.
 - Nightstand now restarts its server if it is running but stops answering for

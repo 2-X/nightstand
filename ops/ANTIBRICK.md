@@ -113,8 +113,11 @@ prerequisite. A successful update installs the missing rules and units.
 
 In-app updates and switches save consistent SQLite snapshots, including
 committed WAL data, under `/persistent/free-sleep-database-backups/`.
-Code-backup rotation does not delete these snapshots. Check their disk usage
-and remove older copies yourself once you have a verified recovery copy.
+Code-backup rotation does not delete these snapshots. Nightstand keeps the
+newest three and any from the last week, and removes the rest on every run.
+Only while free space on `/persistent` is under 512 MB does it remove more,
+oldest first. It never removes the newest, or snapshots made by the migration
+tool; remove those yourself once you have a verified recovery copy.
 Older code backups can contain incomplete databases if data was still in WAL;
 check their contents before relying on them.
 

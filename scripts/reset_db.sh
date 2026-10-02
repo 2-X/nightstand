@@ -28,6 +28,7 @@ if [[ "$confirm" =~ ^[Yy]$ ]]; then
     python3 "$SCRIPT_DIR/sqlite-safety.py" checkpoint "$DATABASE"
     python3 "$SCRIPT_DIR/sqlite-safety.py" backup "$DATABASE" "$BACKUP"
     echo "Database backup saved to $BACKUP"
+    bash "$SCRIPT_DIR/prune_db_snapshots.sh" /persistent/free-sleep-database-backups "$BACKUP" || true
   fi
   rm -f /persistent/free-sleep-data/free-sleep.db-shm \
         /persistent/free-sleep-data/free-sleep.db-wal \

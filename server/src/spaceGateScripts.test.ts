@@ -65,13 +65,13 @@ fail() { echo "FATAL: $*"; exit 1; }
 const CHECKS: Record<string, (handoff?: boolean) => string> = {
   'update.sh': (handoff = false) => {
     const src = read('scripts/update.sh');
-    return `${PRELUDE}LIVE='${live}'; HANDOFF=${handoff ? 1 : "''"}
+    return `${PRELUDE}LIVE='${live}'; PRUNE_SNAPSHOTS='${live}/prune_db_snapshots.sh'; HANDOFF=${handoff ? 1 : "''"}
 ${helpers(src)}${between(src, '# --- preflight', 'if [ "$HANDOFF" = 1 ]; then')}
 echo "PASSED / $ROOT_NEED /persistent $PERS_NEED"`;
   },
   'revert-to-stock.sh': () => {
     const src = read('scripts/revert-to-stock.sh');
-    return `${PRELUDE}LIVE='${live}'
+    return `${PRELUDE}LIVE='${live}'; PRUNE_SNAPSHOTS='${live}/prune_db_snapshots.sh'
 ${helpers(src)}${between(src, '# --- preflight', '# --- download + stage')}
 echo "PASSED / $ROOT_NEED /persistent $PERS_NEED"`;
   },

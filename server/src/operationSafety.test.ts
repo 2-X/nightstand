@@ -71,7 +71,9 @@ with tempfile.TemporaryDirectory() as folder:
  block=block.replace('/persistent/free-sleep-database-backups', str(root/'database-backups'))
  setup='''set -uo pipefail
 BACKUPS="'''+str(root/'code-backups')+'''"; DATABASE_BACKUPS="'''+str(root/'database-backups')+'''"
-SQLITE_SAFETY="'''+sys.argv[2]+'''"; KEEP_BACKUPS=5; CUR_VERSION=3.3.1
+SQLITE_SAFETY="'''+sys.argv[2]+'''"
+PRUNE_SNAPSHOTS="'''+str(pathlib.Path(sys.argv[2]).parent/'prune_db_snapshots.sh')+'''"
+KEEP_BACKUPS=5; CUR_VERSION=3.3.1
 say() { echo "$*"; }; fail() { echo "$*"; exit 1; }; tar() { :; }
 '''
  run=subprocess.run(['bash','-c',setup+block],capture_output=True,text=True)

@@ -44,6 +44,7 @@ ZIP=/home/dac/free-sleep-update.zip
 BACKUPS=/persistent/free-sleep-backups
 DATABASE_BACKUPS=/persistent/free-sleep-database-backups
 SQLITE_SAFETY="$(dirname "${BASH_SOURCE[0]}")/sqlite-safety.py"
+PRUNE_SNAPSHOTS="$(dirname "${BASH_SOURCE[0]}")/prune_db_snapshots.sh"
 KEEP_BACKUPS=5
 NPM=/home/dac/.volta/bin/npm
 NPX=/home/dac/.volta/bin/npx
@@ -249,6 +250,8 @@ CUR_VERSION=$(python3 -c 'import json;print(json.load(open("'"$LIVE"'/server/src
 # /persistent: the code backup (counted unpacked), the database snapshot and
 # the settings copy, plus half the database again for migrations, which only
 # ever add.
+# Old snapshots must not be what blocks this run.
+if [ -f "$PRUNE_SNAPSHOTS" ]; then bash "$PRUNE_SNAPSHOTS" "$DATABASE_BACKUPS" || true; fi
 MODULES_MB=$(size_mb "$LIVE/server/node_modules")
 TREE_MB=$(( $(size_mb "$LIVE") - MODULES_MB ))
 DB_MB=$(size_mb /persistent/free-sleep-data/free-sleep.db /persistent/free-sleep-data/free-sleep.db-wal)
@@ -448,6 +451,7 @@ if [ -f /persistent/free-sleep-data/free-sleep.db ]; then
   python3 "$SQLITE_SAFETY" backup /persistent/free-sleep-data/free-sleep.db "$DB_BACKUP" \
     || fail "database backup failed; live install untouched"
   say "Database snapshot kept separately at $DB_BACKUP"
+  if [ -f "$PRUNE_SNAPSHOTS" ]; then bash "$PRUNE_SNAPSHOTS" "$DATABASE_BACKUPS" "$DB_BACKUP" || true; fi
 fi
 cp -r /persistent/free-sleep-data/lowdb "$BK/lowdb" || fail "settings backup failed; live install untouched"
 ls -1dt "$BACKUPS"/*/ | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -rf

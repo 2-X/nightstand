@@ -62,6 +62,7 @@ if [ -f "$SRC" ]; then
   DEST="/persistent/free-sleep-database-backups/$(date -u +%Y%m%dT%H%M%SZ)-$$-install.db"
   python3 "$SRC_DIR/scripts/sqlite-safety.py" backup "$SRC" "$DEST"
   echo "Database backup saved to $DEST"
+  bash "$SRC_DIR/scripts/prune_db_snapshots.sh" /persistent/free-sleep-database-backups "$DEST" || true
 fi
 rm -rf "$REPO_DIR"
 mv "$SRC_DIR" "$REPO_DIR"
