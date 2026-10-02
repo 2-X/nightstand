@@ -4,8 +4,6 @@ set -euo pipefail
 
 # --------------------------------------------------------------------------------
 # Variables
-# main only moves at a release, so its tip is always the newest release.
-REPO_URL="https://github.com/LTimothy/nightstand/archive/refs/heads/main.zip"
 ZIP_FILE="free-sleep.zip"
 UNZIP_DIR="free-sleep-unzip"
 REPO_DIR="/home/dac/free-sleep"
@@ -13,9 +11,77 @@ SERVER_DIR="$REPO_DIR/server"
 USERNAME="dac"
 
 # --------------------------------------------------------------------------------
+# Which release to install: the newest release on NIGHTSTAND_CHANNEL, else on
+# the channel a reinstall has saved, else the newest release on its own
+# channel. As in the updater, beta also includes stable releases. The channel
+# is saved below so updates follow what was installed.
+#
+# MIN_INSTALL_VERSION is the oldest release this script can install, since
+# older trees lack scripts it calls. Raise it to the coming release whenever
+# this script starts to need something only that release ships. The release
+# commit turns [Unreleased] in CHANGELOG.md into the version, and from then
+# on installScript.test.ts fails while this is newer than the version in
+# server/src/serverInfo.json.
+MIN_INSTALL_VERSION="3.6.0"
+WANTED_CHANNEL="${NIGHTSTAND_CHANNEL:-}"
+case "$WANTED_CHANNEL" in
+  ""|stable|beta) ;;
+  *) echo "NIGHTSTAND_CHANNEL must be stable or beta"; exit 1 ;;
+esac
+if [ -z "$WANTED_CHANNEL" ]; then
+  # The old settings path wins, as it is moved over the new one below.
+  WANTED_CHANNEL=$(python3 - /home/dac/free-sleep-database/settingsDB.json /persistent/free-sleep-data/lowdb/settingsDB.json <<'PY' || true
+import json, os, sys
+for path in sys.argv[1:]:
+    if os.path.exists(path):
+        try:
+            with open(path) as handle:
+                channel = json.load(handle).get("updateChannel")
+        except (OSError, ValueError, AttributeError):
+            channel = None
+        if channel in ("stable", "beta"):
+            print(channel)
+        break
+PY
+)
+fi
+RELEASES_URL="https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json"
+RELEASES_JSON=$(curl -fsSL --max-time 20 "$RELEASES_URL") \
+  || { echo "Could not choose a release from releases.json"; exit 1; }
+PICK=$(printf '%s' "$RELEASES_JSON" | python3 -c '
+import json, re, sys
+wanted = sys.argv[1]
+try:
+    for release in json.load(sys.stdin)["releases"]:
+        channel = release.get("channel")
+        if channel == "stable" or (wanted != "stable" and channel == "beta"):
+            version = release["version"]
+            if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+                sys.exit("invalid release version")
+            print(version, wanted or channel, release.get("treeSha256") or "")
+            break
+    else:
+        sys.exit("no release on the selected channel")
+except (KeyError, TypeError, ValueError, AttributeError):
+    sys.exit(1)' "$WANTED_CHANNEL") \
+  || { echo "Could not choose a release from releases.json"; exit 1; }
+read -r VERSION CHANNEL EXPECTED_DIGEST <<< "$PICK"
+EXPECTED_DIGEST="${EXPECTED_DIGEST:-}"
+if ! python3 -c '
+import sys
+parse = lambda version: tuple(int(part) for part in version.split("."))
+sys.exit(parse(sys.argv[1]) < parse(sys.argv[2]))' "$VERSION" "$MIN_INSTALL_VERSION"; then
+  echo "v$VERSION is older than this installer supports. To install the newest release, run the command again with NIGHTSTAND_CHANNEL=beta in front of it."
+  exit 1
+fi
+REPO_URL="https://github.com/LTimothy/nightstand/archive/refs/tags/v${VERSION}.zip"
+echo "Installing Nightstand v$VERSION from the $CHANNEL channel"
+
+# --------------------------------------------------------------------------------
 # Download the repository
 echo "Downloading the repository..."
-curl -fL -o "$ZIP_FILE" "$REPO_URL"
+curl -fL -o "$ZIP_FILE" "$REPO_URL" \
+  || { rm -f "$ZIP_FILE"; echo "Could not download v$VERSION from GitHub. Nothing was installed."; exit 1; }
 
 echo ""
 echo "Unzipping the repository..."
@@ -30,6 +96,32 @@ echo "Setting up the installation directory..."
 # rather than hardcoding it.
 SRC_DIR=$(find "$UNZIP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)
 [ -d "$SRC_DIR" ] || { echo "unexpected zip layout"; exit 1; }
+# Checks the download against the digest releases.json publishes. A fresh
+# install has no installed copy of the digest script, so the one from this
+# download does the check: that catches corruption, not tampering. The
+# updater checks with the installed copy instead.
+if [ -z "$EXPECTED_DIGEST" ]; then
+  echo "No published checksum for v$VERSION; installing without one"
+elif [ ! -f "$SRC_DIR/scripts/tree_digest.py" ]; then
+  echo "v$VERSION was released before checksum checks; installing without one"
+else
+  ACTUAL_DIGEST=$(python3 "$SRC_DIR/scripts/tree_digest.py" "$SRC_DIR") || ACTUAL_DIGEST=""
+  if [ "$ACTUAL_DIGEST" != "$EXPECTED_DIGEST" ]; then
+    rm -rf "$UNZIP_DIR"
+    echo "The download of v$VERSION does not match its published checksum. Nothing was installed."
+    exit 1
+  fi
+  echo "v$VERSION matches its published checksum"
+fi
+# Like the updater, refuses a tree whose own version is not the one chosen.
+STAGED_VERSION=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' \
+  "$SRC_DIR/server/src/serverInfo.json" 2>/dev/null) \
+  || { rm -rf "$UNZIP_DIR"; echo "staged tree has no readable serverInfo.json"; exit 1; }
+if [ "$STAGED_VERSION" != "$VERSION" ]; then
+  rm -rf "$UNZIP_DIR"
+  echo "staged tree reports v$STAGED_VERSION but releases.json lists v$VERSION; refusing a mislabeled release"
+  exit 1
+fi
 # Stop both database writers before replacing any files. Missing units are
 # normal on a first install; a failed stop for an existing unit is fatal.
 # Restart services on any refusal after stopping writers, including set -e exits.
@@ -115,6 +207,36 @@ for entry in "${FILES_TO_MOVE[@]}"; do
     echo "Moved $SOURCE_FILE to $DESTINATION"
   fi
 done
+
+# Save the update channel: on a fresh install, when the settings carried over
+# have none, or when NIGHTSTAND_CHANNEL was given. Otherwise an owner's
+# earlier choice stands. Runs after old settings are moved into place, so
+# that move cannot overwrite it.
+python3 - /persistent/free-sleep-data/lowdb/settingsDB.json "$CHANNEL" "${NIGHTSTAND_CHANNEL:+given}" <<'PY' \
+  || echo "WARNING: could not save the update channel"
+import json, os, sys
+path, channel, given = sys.argv[1], sys.argv[2], sys.argv[3] == "given"
+tmp = path + ".tmp"
+try:
+    data = {}
+    if os.path.exists(path):
+        with open(path) as handle:
+            data = json.load(handle)
+        if "updateChannel" in data and not given:
+            sys.exit(0)
+    data["updateChannel"] = channel
+    with open(tmp, "w") as handle:
+        json.dump(data, handle, indent=2)
+    if os.path.exists(path):
+        info = os.stat(path)
+        os.chown(tmp, info.st_uid, info.st_gid)
+        os.chmod(tmp, info.st_mode & 0o7777)
+    os.replace(tmp, path)
+except Exception:
+    if os.path.exists(tmp):
+        os.remove(tmp)
+    sys.exit(1)
+PY
 
 if [ -d /persistent/deviceinfo/ ]; then
   chown -R "$USERNAME":"$USERNAME" /persistent/deviceinfo/

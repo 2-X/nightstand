@@ -23,6 +23,10 @@ is a hard fork; for the history of the projects it descends from, see
 - HRV is no longer shown in the app. Checked against chest-strap recordings,
   the stored estimate was no more accurate than a fixed guess. It is still
   stored and returned by the API.
+- A new install now installs a tagged release and saves that release's
+  channel, so a Pod installed on a beta keeps getting beta fixes. A reinstall
+  follows the channel already saved. Installing a release older than the
+  installer itself is refused with a message saying what to do.
 - Updates now check a downloaded release against a checksum published in
   the release list before installing it. This catches a corrupted or swapped
   download, not a compromised GitHub account. Switching to upstream installs

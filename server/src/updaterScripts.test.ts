@@ -64,17 +64,16 @@ describe('updater shell scripts', () => {
   // install.sh is the from-scratch bootstrap, and it installs this fork. The
   // units and sudoers rules it goes on to wire up (rollback, revert to stock)
   // name scripts that exist only here, so pointing it at the stock upstream
-  // archive would install a tree those rules do not match.
-  // main only moves at a release, so its tip is the newest release. The units
-  // and sudoers rules install.sh wires up name scripts that exist only in this
-  // fork, so the stock upstream archive would not match them.
-  it('install.sh installs the tip of this fork\'s main branch', () => {
+  // archive would install a tree those rules do not match. It installs a
+  // tagged release, never the tip of a branch.
+  it('install.sh installs a tagged release of this fork', () => {
     const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
-    assert.match(src, /REPO_URL="https:\/\/github\.com\/LTimothy\/nightstand\/archive\/refs\/heads\/main\.zip"/);
+    assert.match(src, /REPO_URL="https:\/\/github\.com\/LTimothy\/nightstand\/archive\/refs\/tags\/v\$\{VERSION\}\.zip"/);
+    assert.doesNotMatch(src, /refs\/heads\//);
   });
 
-  // GitHub names an archive's top directory after the repo and ref, so it is
-  // nightstand-main today. Hardcoding a name breaks on a rename.
+  // GitHub names an archive's top directory after the repo and ref, such as
+  // nightstand-3.5.1 for a tag. Hardcoding a name breaks on a rename.
   it('install.sh resolves the unpacked archive directory instead of hardcoding it', () => {
     const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
     assert.match(src, /SRC_DIR=\$\(find "\$UNZIP_DIR" -mindepth 1 -maxdepth 1 -type d/);
