@@ -51,7 +51,10 @@ export default function AlarmNotification() {
     <Alert
       icon={ false }
       severity="info"
-      sx={ { width: '100%', p: 0, background: 'transparent', border: 0, color: 'text.primary', '& .MuiAlert-message': { width: '100%' } } }>
+      sx={ {
+        width: '100%', p: 0, background: 'transparent', border: 0, color: 'text.secondary',
+        '& .MuiAlert-message': { width: '100%', py: 0 },
+      } }>
       <AlarmOverride
         open={ overrideOpen }
         setOverrideOpen={ setOverrideOpen }
@@ -71,7 +74,7 @@ export default function AlarmNotification() {
         { disabled ? <Typography variant="body2">Recurring alarms skipped</Typography>
           : replacementFinished ? <Typography variant="body2">Recurring alarms replaced for this night</Typography>
             : <Typography variant="body2">Alarm { alarmDay } at { moment(time, 'HH:mm').format('h:mm A') }</Typography> }
-        <Box sx={ { display: 'flex', gap: 1, ml: -1 } }>
+        <Box sx={ { display: 'flex', gap: 1, ml: '-5px', '& .MuiButton-root': { justifyContent: 'flex-start' } } }>
           { !disabled && !replacementFinished && <Button size="small" onClick={ () => setOverrideOpen(true) }>Change</Button> }
           <Button size="small" onClick={ () => setDisabledOpen(true) }>{ disabled ? 'Restore alarm' : 'Skip' }</Button>
         </Box>

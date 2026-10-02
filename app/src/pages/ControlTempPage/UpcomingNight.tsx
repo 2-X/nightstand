@@ -110,7 +110,8 @@ export default function UpcomingNight({ isOn }: { isOn?: boolean }) {
         <SectionHeading>
           { heading }
         </SectionHeading>
-        <Box sx={ { display: 'flex', flexWrap: 'wrap', gap: 0.5 } }>
+        { /* The labels line up with the card's text edges, on the heading's row or wrapped below it. */ }
+        <Box sx={ { display: 'flex', flexWrap: 'wrap', gap: 0.5, mx: '-5px' } }>
           { canPause && <Button size="small" data-pause-control onClick={ () => setPauseOpen(true) }>
             Pause schedule
           </Button> }
@@ -120,7 +121,7 @@ export default function UpcomingNight({ isOn }: { isOn?: boolean }) {
         </Box>
       </Box>
       { schedulePaused ? <SchedulePauseNotice detail={ backOnText || undefined } onResumed={ () => setFocusWhenPaused(false) }/> : <>
-        { !(smartSleep && event && event.kind === 'temperature') && <Typography variant="body2" color="text.secondary" sx={ { mb: 1 } }>
+        { !(smartSleep && event && event.kind === 'temperature') && <Typography variant="body2" sx={ { mb: 1.5 } }>
           { event
             ? eventText
             : bed.state !== 'rhythms' ? 'No upcoming power or temperature changes.'

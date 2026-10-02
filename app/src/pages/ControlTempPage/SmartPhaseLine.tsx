@@ -27,5 +27,5 @@ export default function SmartPhaseLine({ sleep, side }: { sleep: ResolvedSleepRe
     hold: until && until > now && target !== undefined ? { level: fahrenheitToLevel(target), until } : undefined,
     base: night?.baseSince && sleep.smart ? { level: sleep.smart.baseLevel, since: new Date(night.baseSince) } : undefined,
   });
-  return line ? <Typography variant="body2" sx={ { mb: 1 } }>{ line }</Typography> : null;
+  return line ? <Typography variant="body2" sx={ { mb: 1.5 } }>{ line }</Typography> : null;
 }
