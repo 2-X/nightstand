@@ -11,6 +11,10 @@
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FLTimothy%2Fnightstand%2Fmain%2Fserver%2Fsrc%2FserverInfo.json&query=%24.version&label=version" alt="Version"></a>
 </p>
 
+<p align="center">
+  <img src="docs/hero.png" width="800" alt="The Bed, Schedule and Sleep screens of the Nightstand app">
+</p>
+
 Nightstand runs on the Linux computer inside compatible Eight Sleep Pods,
 providing local temperature controls, schedules and optional sleep estimates.
 It is a personal fork of free-sleep through jmew's fork, maintained on a Pod 5.
