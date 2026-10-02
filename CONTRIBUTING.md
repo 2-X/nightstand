@@ -214,7 +214,7 @@ older reader against a copy of the resulting database before release.
    the entry below it: `kind` (always `bundle`), `version`, `date`, and
    `channel` (`beta` unless there is a reason to ship straight to `stable`).
    A bundle also carries its own `upstreamBase`, the release it was built
-   from, and its `features` list.
+   from, and its `features` list. Its `treeSha256` is added in step 7.
 4. Add a matching entry at the top of `CHANGELOG.md` (the `## [Unreleased]`
    notes become `## [<version>] - <date>`), starting with a one-sentence
    summary on its own line before the notes. The app shows it as the
@@ -223,11 +223,13 @@ older reader against a copy of the resulting database before release.
    `server/` and `app/`), remove any files `scripts/check-bundles.sh` lists,
    and commit the output. The release commit is the last commit before the
    tag.
-6. Commit everything together on `dev`, fast-forward `main` to it
-   (`git switch main && git merge --ff-only dev`), then tag:
-   `git tag -a v<version> -m "..."`.
-7. Push both branches and the tag: `git push origin main dev v<version>`.
-8. Create the GitHub Release: `gh release create v<version> --title
+6. Commit everything together on `dev`.
+7. Run `scripts/release_digest.sh`, which writes the release's checksum into
+   `releases.json` and amends the release commit. Then tag. To tag,
+   fast-forward `main` to `dev` (`git switch main && git merge --ff-only
+   dev`) and run `git tag -a v<version> -m "..."`.
+8. Push both branches and the tag: `git push origin main dev v<version>`.
+9. Create the GitHub Release: `gh release create v<version> --title
    "v<version>" --notes-file <path>`, with that version's `CHANGELOG.md`
    section as the notes. Add `-R LTimothy/nightstand` if `gh` picks the
    wrong default repository (this clone has several other forks configured
