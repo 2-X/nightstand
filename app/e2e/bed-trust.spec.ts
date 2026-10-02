@@ -65,6 +65,27 @@ test('two minutes without a status shows the last known values, greyed, with the
   await expect(headerStatus(page)).toBeEmpty();
 });
 
+test.describe('on a 320 px phone', () => {
+  test.use({ viewport: { width: 320, height: 740 } });
+
+  test('a stale caption with a two digit hour fits its two line slot', async ({ page }) => {
+    // Monday 11:41 PM in the demo's time zone.
+    await page.clock.install({ time: new Date('2026-09-29T06:41:00Z') });
+    await page.goto('/');
+    await expect(page.getByRole('button', { name: 'Turn off' })).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    await page.evaluate(() => localStorage.setItem('nightstand-demo-reads', 'fail'));
+    await page.clock.fastForward('02:05');
+    const caption = page.locator('[data-caption-slot]');
+    await expect(caption).toHaveText(/^No response from the Pod since 11:41\sPM\.\s*Schedules and alarms may not run\.$/);
+    const { slot, lines } = await caption.evaluate(node => ({
+      slot: node.getBoundingClientRect().height,
+      lines: Array.from(node.querySelectorAll('span'), line => line.getBoundingClientRect().height).reduce((sum, height) => sum + height, 0),
+    }));
+    expect(lines).toBeLessThanOrEqual(slot + 1);
+  });
+});
+
 test('a first load that fails says so in the same frame, with Try again', async ({ page }) => {
   await open(page, { 'nightstand-demo-reads': 'fail' });
   await expect(headerStatus(page)).toHaveText('Not responding');
