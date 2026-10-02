@@ -80,8 +80,8 @@ function rememberedBaseConfigured(): boolean | undefined {
   }
 }
 
-// Undefined until known. The last answer stands in while the check runs, so
-// a reload does not show the tabs late.
+// Undefined until known. The last answer stands in while the check runs, and
+// when it fails, so a reload or a Pod that is not answering does not move the tabs.
 export const useBaseConfigured = (): boolean | undefined => {
   const { data, isError } = useQuery({
     queryKey: ['baseConfigured'],
@@ -98,7 +98,7 @@ export const useBaseConfigured = (): boolean | undefined => {
     retry: retryUpTo(1),
   });
   if (data) return data.isConfigured === true;
-  if (isError) return false;
+  if (isError) return rememberedBaseConfigured() ?? false;
   return rememberedBaseConfigured();
 };
 

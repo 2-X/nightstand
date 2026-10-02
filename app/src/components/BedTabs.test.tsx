@@ -73,3 +73,18 @@ it('marks the open tab with the primary text and a 48 px target', () => {
   expect(open).toHaveStyle({ color: palette.text.primary, minHeight: '48px' });
   expect(screen.getByRole('link', { name: 'Elevation' })).toHaveStyle({ color: palette.text.secondary });
 });
+
+it('keeps the remembered tabs when the base check fails', async () => {
+  localStorage.setItem('baseConfigured', 'true');
+  server.use(http.get('/api/base-control', () => new HttpResponse(null, { status: 503 })));
+  const { queryClient } = renderWithProviders(<BedTabs/>);
+  await waitFor(() => expect(queryClient.getQueryState(['baseConfigured'])?.status).toBe('error'));
+  expect(screen.getByRole('link', { name: 'Elevation' })).toBeVisible();
+});
+
+it('leaves the tabs out when the check fails and nothing is remembered', async () => {
+  server.use(http.get('/api/base-control', () => new HttpResponse(null, { status: 503 })));
+  const { container, queryClient } = renderWithProviders(<BedTabs/>);
+  await waitFor(() => expect(queryClient.getQueryState(['baseConfigured'])?.status).toBe('error'));
+  expect(container.querySelector('nav')).not.toBeInTheDocument();
+});
