@@ -17,9 +17,9 @@ export default defineConfig({
     environment: 'jsdom',
     globals: false,
     css: false,
-    // e2e/ holds Playwright specs (a separate test() from @playwright/test),
-    // run via `npx playwright test`, not vitest.
-    exclude: [...configDefaults.exclude, 'e2e/**'],
+    // e2e/ and e2e-live/ hold Playwright specs (a separate test() from
+    // @playwright/test), run via `npx playwright test`, not vitest.
+    exclude: [...configDefaults.exclude, 'e2e/**', 'e2e-live/**'],
     setupFiles: ['./src/test/setup.ts'],
     // The app skips its WebSocket when VITE_ENV is 'demo' (see
     // src/api/eventStream.ts), so the harness runs on the React Query polling
