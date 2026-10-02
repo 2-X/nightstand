@@ -1,4 +1,6 @@
 import { Box } from '@mui/material';
+import { useSettings } from '@api/settings.ts';
+import { staleCaption } from './bedText';
 import { useBedCaption } from './useBedCaption';
 
 // Two lines tall whatever it says, and top-aligned, so a short caption starts where a long one does
@@ -8,9 +10,22 @@ export const captionSlotSx = {
   textWrap: 'balance',
 } as const;
 
-export default function CaptionSlot({ isOn }: { isOn: boolean }) {
+const line = (text: string) => <Box component="span" key={ text } sx={ { display: 'block' } }>{ text }</Box>;
+
+type CaptionSlotProps = {
+  isOn: boolean;
+  // While the Pod does not answer, the caption says so instead of promising a schedule.
+  staleSince?: Date;
+  // Nothing to say yet: the slot keeps its height.
+  empty?: boolean;
+};
+
+export default function CaptionSlot({ isOn, staleSince, empty = false }: CaptionSlotProps) {
   const lines = useBedCaption(isOn);
+  const { data: settings } = useSettings();
   return <Box data-caption-slot sx={ captionSlotSx }>
-    { lines.map(line => <Box component="span" key={ line } sx={ { display: 'block' } }>{ line }</Box>) }
+    { empty ? null
+      : staleSince ? <Box role="status">{ staleCaption(staleSince, settings?.timeZone).map(line) }</Box>
+        : lines.map(line) }
   </Box>;
 }

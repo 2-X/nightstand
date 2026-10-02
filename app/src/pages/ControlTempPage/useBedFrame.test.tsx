@@ -40,3 +40,34 @@ it('is loading before the first answer', () => {
   render(<Probe/>);
   expect(screen.getByText('loading')).toBeInTheDocument();
 });
+
+it('goes stale, live while a refresh is under way, stale when it fails, then live and stale again on new data', () => {
+  const settled = { isError: false, isFetching: false, failureCount: 0, errorUpdateCount: 0 };
+  fixture.query = { ...settled, data: { left: status }, dataUpdatedAt: T };
+  const { rerender } = render(<Probe/>);
+  act(() => { vi.advanceTimersByTime(121_000); });
+  expect(screen.getByText(`stale since ${new Date(T).toISOString()}`)).toBeInTheDocument();
+
+  fixture.query = { ...fixture.query, isFetching: true };
+  rerender(<Probe/>);
+  expect(screen.getByText('live')).toBeInTheDocument();
+
+  fixture.query = { ...fixture.query, isFetching: false, isError: true, failureCount: 1, errorUpdateCount: 1 };
+  rerender(<Probe/>);
+  expect(screen.getByText(`stale since ${new Date(T).toISOString()}`)).toBeInTheDocument();
+
+  const fresh = Date.now();
+  fixture.query = { ...settled, data: { left: { ...status } }, dataUpdatedAt: fresh, errorUpdateCount: 1 };
+  rerender(<Probe/>);
+  expect(screen.getByText('live')).toBeInTheDocument();
+  act(() => { vi.advanceTimersByTime(119_000); });
+  expect(screen.getByText('live')).toBeInTheDocument();
+  act(() => { vi.advanceTimersByTime(2_000); });
+  expect(screen.getByText(`stale since ${new Date(fresh).toISOString()}`)).toBeInTheDocument();
+});
+
+it('keeps a failed first load stale while it is asked again', () => {
+  fixture.query = { data: undefined, dataUpdatedAt: 0, isError: false, isFetching: true, failureCount: 0, errorUpdateCount: 1 };
+  render(<Probe/>);
+  expect(screen.getByText(`stale since ${new Date(T).toISOString()}`)).toBeInTheDocument();
+});

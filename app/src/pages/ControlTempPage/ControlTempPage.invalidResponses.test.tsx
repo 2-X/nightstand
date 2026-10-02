@@ -25,7 +25,7 @@ describe('Invalid API data in bed controls', () => {
       http.post('*/api/deviceStatus', () => { writes++; return HttpResponse.json({}); }),
     );
     renderWithProviders(<ControlTempPage/>);
-    expect(await screen.findByText('Could not load bed status.')).toBeVisible();
+    expect(await screen.findByText('Schedules and alarms may not run.')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Warmer' })).not.toBeInTheDocument();
     expect(writes).toBe(0);
   });
@@ -56,7 +56,7 @@ it('disables cached controls after a malformed status refresh', async () => {
       left: { ...getDeviceStatus().left,
         targetTemperatureF: '84' } })));
   await queryClient.refetchQueries({ queryKey: ['useDeviceStatus'] });
-  expect(await screen.findByText('Could not load bed status.')).toBeVisible();
+  expect(await screen.findByText('Schedules and alarms may not run.')).toBeVisible();
   expect(increase).toHaveAttribute('aria-disabled', 'true');
   fireEvent.click(increase);
   expect(writes).toBe(0);

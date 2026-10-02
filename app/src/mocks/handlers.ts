@@ -1,5 +1,5 @@
 import { http, HttpResponse, delay, sse } from 'msw';
-import { demoPresence, demoWritesHang } from './demoPreferences';
+import { demoPresence, demoReads, demoWritesHang } from './demoPreferences';
 import type { SleepRecord } from '@api/sleepSchema.ts';
 import type { Jobs } from '@api/jobs.ts';
 import type { BasePosition } from '@api/baseControl.ts';
@@ -127,6 +127,9 @@ export const handlers = [
     return HttpResponse.json(deepClone(updated));
   }),
   http.get('/api/deviceStatus', async () => {
+    if (demoReads() === 'fail') {
+      return HttpResponse.json({ error: { message: 'Pod did not respond in time, retrying connection' } }, { status: 503 });
+    }
     await delay(120);
     const status = deepClone(getDeviceStatus());
     // The demo's timers follow the schedule; unit tests keep a fixed status so refetches change nothing.

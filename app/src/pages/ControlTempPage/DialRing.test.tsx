@@ -89,3 +89,20 @@ it('draws the dot hollow until the Pod confirms the target', () => {
   expect(dot).toHaveAttribute('stroke', temperatureColor(3));
   expect(ring(true, 3, 1).querySelector('circle[data-pending]')).toBeNull();
 });
+
+it('draws a last known target as a grey dot on the off track, with no span, notch or halo', () => {
+  const container = render(<DialRing isOn stale targetLevel={ 3 } currentLevel={ 1 }/>).container;
+  expect(container.querySelector('path[data-band="off"]')).not.toBeNull();
+  for (const selector of ['g[data-band="ghost"]', 'g[data-band="fill"]', 'line[data-notch]', 'circle[data-halo]'])
+    expect(container.querySelector(selector)).toBeNull();
+  const dot = container.querySelector('circle[data-target]');
+  expect(dot).toHaveAttribute('data-stale');
+  expect(dot).toHaveAttribute('fill', palette.text.tertiary);
+  expect(container.querySelector('line[data-tick="major"]')).toHaveAttribute('stroke', palette.dial.tickMajorOff);
+  expect(container.querySelector('text[data-end-label]')).toHaveAttribute('fill', palette.text.disabled);
+});
+
+it('draws no dot for a side last known to be off', () => {
+  expect(render(<DialRing isOn={ false } stale targetLevel={ 3 } currentLevel={ 1 }/>).container.querySelector('circle[data-target]'))
+    .toBeNull();
+});

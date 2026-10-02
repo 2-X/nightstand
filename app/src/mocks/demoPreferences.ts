@@ -47,3 +47,11 @@ export const DEMO_WRITES_KEY = 'nightstand-demo-writes';
 export function demoWritesHang(): boolean {
   return readDemoKey(DEMO_WRITES_KEY) === 'hang';
 }
+
+export const DEMO_READS_KEY = 'nightstand-demo-reads';
+
+// The Bed specs make the bed status fail, or never answer, to draw the stale and loading states.
+export function demoReads(): 'fail' | 'hang' | undefined {
+  const value = readDemoKey(DEMO_READS_KEY);
+  return value === 'fail' || value === 'hang' ? value : undefined;
+}

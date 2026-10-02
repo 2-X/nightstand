@@ -43,3 +43,9 @@ it('keeps control boundaries at 3:1', () => {
   expect(ratio(palette.tile.selectedBorder, palette.bg.base)).toBeGreaterThanOrEqual(3);
   expect(ratio(palette.tile.selectedBorder, palette.power.nightBg)).toBeGreaterThanOrEqual(3);
 });
+
+it('keeps the not responding state readable', () => {
+  expect(ratio(palette.status.warn, palette.bg.base)).toBeGreaterThanOrEqual(4.5);
+  expect(ratio(palette.text.secondary, palette.bg.base)).toBeGreaterThanOrEqual(4.5);
+  expect(ratio(palette.text.secondary, palette.ember)).toBeGreaterThanOrEqual(4.5);
+});

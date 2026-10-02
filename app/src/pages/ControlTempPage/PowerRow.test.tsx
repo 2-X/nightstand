@@ -1,4 +1,4 @@
-import { beforeEach, expect, it } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { renderWithProviders } from '@test/renderWithProviders';
@@ -45,4 +45,14 @@ it('keeps the power control focusable while a change saves', async () => {
   const power = await screen.findByRole('button', { name: 'Turn off' });
   expect(power).not.toBeDisabled();
   expect(power).toHaveAttribute('aria-disabled', 'true');
+});
+
+it('puts Try again in the calm pill while the Pod does not answer', async () => {
+  const retry = vi.fn();
+  const { user } = renderWithProviders(<PowerRow isOn refetch={ refetch } onRetry={ retry }/>);
+  const button = await screen.findByRole('button', { name: 'Try again' });
+  expect(button).toHaveStyle({ backgroundColor: '#1C1915', color: '#E9E3D5', width: '100%' });
+  expect(screen.queryByRole('button', { name: 'Turn off' })).not.toBeInTheDocument();
+  await user.click(button);
+  expect(retry).toHaveBeenCalledOnce();
 });

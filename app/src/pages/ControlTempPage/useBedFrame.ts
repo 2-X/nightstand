@@ -19,7 +19,8 @@ export function useBedFrame() {
   const frame = bedFrame({
     status: data?.[side],
     hasData: !!data,
-    isError: query.isError,
+    // A first load that failed stays failed while it is asked again, so the frame does not fall back to loading.
+    isError: query.isError || (!data && query.errorUpdateCount > 0),
     isFetching: query.isFetching,
     failureCount: query.failureCount,
     dataUpdatedAt,

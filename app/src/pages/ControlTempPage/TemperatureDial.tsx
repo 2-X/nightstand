@@ -1,19 +1,22 @@
 import type { ReactNode } from 'react';
 import { Box } from '@mui/material';
 import { useAppStore } from '@state/appStore';
+import { useSettings } from '@api/settings.ts';
 import { media } from '@design/tokens';
 import { fahrenheitToLevel, type TemperatureFormat } from '@lib/temperatureConversions.ts';
 import { temperatureColor } from '@lib/temperatureColor';
-import { useControlTempStore } from './controlTempStore.tsx';
+import { lastKnownAt } from './bedText';
 import CaptionSlot from './CaptionSlot';
+import { useControlTempStore } from './controlTempStore.tsx';
 import DialRing from './DialRing';
 import { DIAL_HEIGHT, DIAL_WIDTH } from './dialGeometry';
 import TemperatureButtons from './TemperatureButtons.tsx';
 import TemperatureLabel from './TemperatureLabel.tsx';
 
 type TemperatureDialProps = {
+  // The side's status: live, or the last known one while staleSince is set.
   status?: { isOn: boolean; targetTemperatureF: number; currentTemperatureF: number };
-  statusUnavailable?: boolean;
+  staleSince?: Date;
   // An away side that is on follows the other side; it shows last night instead of steppers.
   away?: boolean;
   refetch: () => unknown;
@@ -49,35 +52,40 @@ const controlsRowSx = {
   [media.tight]: { height: 67, mt: '2px' },
 } as const;
 
-export default function TemperatureDial({ status, statusUnavailable, away = false, refetch, format, whenOff }: TemperatureDialProps) {
+export default function TemperatureDial({ status, staleSince, away = false, refetch, format, whenOff }: TemperatureDialProps) {
   const { side } = useAppStore();
+  const { data: settings } = useSettings();
   const stored = useControlTempStore(state => state.deviceStatus?.[side]?.targetTemperatureF);
+  const stale = !!staleSince;
   const isOn = !!status?.isOn;
-  const target = stored ?? status?.targetTemperatureF ?? 0;
+  // A last known target is the Pod's own, never an edit it did not take.
+  const target = (stale ? undefined : stored) ?? status?.targetTemperatureF ?? 0;
   const targetLevel = fahrenheitToLevel(target);
   // An edit the Pod has not reported back yet.
-  const pending = isOn && !!status && target !== status.targetTemperatureF;
+  const pending = isOn && !stale && !!status && target !== status.targetTemperatureF;
   return <Box sx={ columnSx }>
     <Box data-dial sx={ dialSx }>
       <DialRing
         isOn={ isOn }
+        stale={ stale }
+        pending={ pending }
         targetLevel={ targetLevel }
-        currentLevel={ fahrenheitToLevel(status?.currentTemperatureF ?? target) }
-        pending={ pending }/>
+        currentLevel={ fahrenheitToLevel(status?.currentTemperatureF ?? target) }/>
       { status && <TemperatureLabel
         isOn={ isOn }
         sliderTemp={ target }
         sliderColor={ temperatureColor(targetLevel) }
         currentTargetTemp={ status.targetTemperatureF }
         currentTemperatureF={ status.currentTemperatureF }
-        format={ format }/> }
+        format={ format }
+        lastKnownAt={ staleSince && lastKnownAt(staleSince, settings?.timeZone) }/> }
     </Box>
-    <CaptionSlot isOn={ isOn }/>
+    <CaptionSlot isOn={ isOn } staleSince={ staleSince } empty={ !status && !stale }/>
     <Box data-controls-row sx={ controlsRowSx }>
       { status && (isOn && !away
         ? <TemperatureButtons
           key={ side }
-          statusUnavailable={ statusUnavailable }
+          statusUnavailable={ stale }
           refetch={ refetch }
           currentTargetTemp={ status.targetTemperatureF }/>
         : whenOff && <Box sx={ { width: '100%', height: '100%' } }>{ whenOff }</Box>) }

@@ -1,5 +1,5 @@
 import { Box, Typography } from '@mui/material';
-import { media } from '@design/tokens';
+import { media, palette } from '@design/tokens';
 import { displayTemperature, type TemperatureFormat } from '@lib/temperatureConversions.ts';
 
 type TemperatureLabelProps = {
@@ -9,6 +9,8 @@ type TemperatureLabelProps = {
   currentTargetTemp: number;
   currentTemperatureF: number;
   format: TemperatureFormat;
+  // Set while the status is stale: "at 9:41 PM".
+  lastKnownAt?: string;
 };
 
 // Over the ring's square, nudged up so the numeral sits in the ring's optical centre.
@@ -39,10 +41,10 @@ const numeralSize = (format: TemperatureFormat) => format === 'level'
   };
 
 export default function TemperatureLabel({
-  isOn, sliderTemp, sliderColor, currentTargetTemp, currentTemperatureF, format,
+  isOn, sliderTemp, sliderColor, currentTargetTemp, currentTemperatureF, format, lastKnownAt,
 }: TemperatureLabelProps) {
   const pending = sliderTemp !== currentTargetTemp;
-  const topTitle = pending ? 'Set to' : currentTemperatureF < currentTargetTemp ? 'Warming to'
+  const topTitle = lastKnownAt ? 'Last known' : pending ? 'Set to' : currentTemperatureF < currentTargetTemp ? 'Warming to'
     : currentTemperatureF > currentTargetTemp ? 'Cooling to' : 'Holding at';
   const value = displayTemperature(sliderTemp, format);
   const sign = /^[+\u2212]/.test(value) ? value[0] : '';
@@ -53,12 +55,17 @@ export default function TemperatureLabel({
         component="h2"
         sx={ {
           fontWeight: 300, letterSpacing: '-0.04em', lineHeight: 0.95, m: '4px 0 6px', whiteSpace: 'nowrap',
-          fontVariantNumeric: 'tabular-nums', color: sliderColor, ...numeralSize(format),
+          fontVariantNumeric: 'tabular-nums', color: lastKnownAt ? palette.text.secondary : sliderColor, ...numeralSize(format),
         } }>
         { sign && <Box component="span" sx={ signSx }>{ sign }</Box> }
         { value.slice(sign.length) }
       </Typography>
-      <Typography sx={ currentSx }>Currently at { displayTemperature(currentTemperatureF, format) }</Typography>
-    </> : <Typography sx={ offSx }>Off</Typography> }
+      { lastKnownAt ? <Typography sx={ lineSx }>{ lastKnownAt }</Typography>
+        : <Typography sx={ currentSx }>Currently at { displayTemperature(currentTemperatureF, format) }</Typography> }
+    </> : <>
+      { lastKnownAt && <Typography sx={ lineSx }>Last known</Typography> }
+      <Typography sx={ offSx }>Off</Typography>
+      { lastKnownAt && <Typography sx={ { ...lineSx, mt: '6px' } }>{ lastKnownAt }</Typography> }
+    </> }
   </Box>;
 }

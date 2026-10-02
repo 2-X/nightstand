@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { palette } from '@design/tokens';
 import TemperatureDial from './TemperatureDial';
 import { useControlTempStore } from './controlTempStore';
 
@@ -98,4 +99,32 @@ it('says "Set to" and draws a hollow dot while an edit waits for the Pod', () =>
   const { container } = render(<TemperatureDial status={ on } refetch={ vi.fn() } format="level"/>);
   expect(screen.getByText('Set to')).toBeInTheDocument();
   expect(container.querySelector('circle[data-pending]')).not.toBeNull();
+});
+
+const since = new Date('2026-09-29T04:41:00Z');
+
+it('greys a last known status, dates it, and says what that means for tonight', () => {
+  const { container } = render(<TemperatureDial status={ on } staleSince={ since } refetch={ vi.fn() } format="level"/>);
+  expect(screen.getByText('Last known')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { level: 2, name: '0' })).toHaveStyle({ color: palette.text.secondary });
+  expect(screen.getByText('at 4:41 AM')).toBeInTheDocument();
+  const slot = container.querySelector('[data-caption-slot]')!;
+  expect(slot).toHaveTextContent('No response from the Pod since 4:41 AM.Schedules and alarms may not run.');
+  expect(slot.querySelector('[role="status"]')).not.toBeNull();
+  expect(container.querySelector('circle[data-stale]')).not.toBeNull();
+  expect(screen.getByText('Temperature stepper')).toBeInTheDocument();
+});
+
+it('says Off with its time for a side last known to be off', () => {
+  render(<TemperatureDial status={ { ...on, isOn: false } } staleSince={ since } refetch={ vi.fn() } format="level"/>);
+  expect(screen.getByText('Last known')).toBeInTheDocument();
+  expect(screen.getByText('Off')).toBeInTheDocument();
+  expect(screen.getByText('at 4:41 AM')).toBeInTheDocument();
+});
+
+it('draws an empty frame with the stale caption when nothing ever loaded', () => {
+  const { container } = render(<TemperatureDial staleSince={ since } refetch={ vi.fn() } format="level"/>);
+  expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+  expect(container.querySelector('[data-caption-slot]')).toHaveTextContent('Schedules and alarms may not run.');
+  expect(container.querySelector('[data-controls-row]')).toBeEmptyDOMElement();
 });

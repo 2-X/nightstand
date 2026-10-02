@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import Button from '@mui/material/Button';
 import { Alert, Box, Typography } from '@mui/material';
 
 import AlarmDismissal from './AlarmDismissal.tsx';
@@ -19,10 +18,11 @@ import WaterNotification from './WaterNotification.tsx';
 import { useAppStore } from '@state/appStore.tsx';
 import { useControlTempStore } from './controlTempStore.tsx';
 import { useLastNight } from './useLastNight.ts';
-import { useDeviceStatus } from '@api/deviceStatus';
+import { useBedFrame } from './useBedFrame';
 import { media } from '@design/tokens';
 import { useSettings } from '@api/settings.ts';
 
+const NOT_RESPONDING = 'Not responding';
 const pageSx = {
   [media.short]: { gap: 1, pt: 1 },
   [media.tight]: { gap: 0.5, pt: 0.5 },
@@ -40,15 +40,17 @@ const controlColumnSx = {
 } as const;
 
 export default function ControlTempPage() {
-  const { isError, refetch, data: deviceStatus } = useDeviceStatus();
+  const { refetch, data: deviceStatus, frame } = useBedFrame();
   const syncFromServer = useControlTempStore((state) => state.syncFromServer);
   const { data: settings, isError: settingsError } = useSettings();
-  const { isUpdating, side } = useAppStore();
+  const { side } = useAppStore();
   const commandError = useControlTempStore((state) => state.commandError);
   const setCommandError = useControlTempStore((state) => state.setCommandError);
 
-  const sideStatus = deviceStatus?.[side];
-  const isOn = sideStatus?.isOn || false;
+  // Stale keeps the last known values; the page never drops the dial.
+  const staleSince = frame.kind === 'stale' ? frame.since : undefined;
+  const sideStatus = frame.kind === 'loading' ? undefined : frame.status;
+  const isOn = sideStatus?.isOn ?? false;
   const lastNight = useLastNight();
   const away = !!settings?.[side]?.awayMode;
   // While off or away, last night moves up into the steppers' row under the dial.
@@ -70,40 +72,29 @@ export default function ControlTempPage() {
 
   return (
     <PageContainer sx={ pageSx }>
-      <PageHeader title="Bed" status={ deviceStatus?.isPriming ? 'Priming' : undefined }/>
+      <PageHeader
+        title="Bed"
+        status={ staleSince ? NOT_RESPONDING : deviceStatus?.isPriming ? 'Priming' : undefined }
+        tone={ staleSince ? 'warn' : undefined }/>
       <Box sx={ tabsSx }><BedTabs /></Box>
       { settingsError && <Alert severity="warning">
         Bed preferences are unavailable. { settings ? 'Using the last known preferences.' : 'Temperatures are shown in Fahrenheit.' }
       </Alert> }
       <Box sx={ gridSx }>
         <Box data-bed-controls sx={ controlColumnSx }>
-          <SideControl compact={ false } />
-          { !sideStatus && !isError && (
-            <Typography role="status">
-              { deviceStatus ? 'Bed status unavailable. Refresh to try again.' : 'Loading bed status...' }
-            </Typography>
-          ) }
-          { sideStatus && (
+          <SideControl compact={ false } captions={ staleSince ? { left: NOT_RESPONDING, right: NOT_RESPONDING } : undefined }/>
+          { frame.kind === 'loading' ? <Typography role="status">Loading bed status...</Typography> : <>
             <TemperatureDial
               status={ sideStatus }
+              staleSince={ staleSince }
               away={ away }
-              statusUnavailable={ isError }
               refetch={ refetch }
               format={ settings?.temperatureFormat ?? 'fahrenheit' }
               whenOff={ <ErrorBoundary componentName="Last night summary">
                 <LastNightSummary lastNight={ lastNight } />
-              </ErrorBoundary> }
-            />
-          ) }
-
-          { isError && <Alert severity="error">Could not load bed status.</Alert> }
-          { isError || (deviceStatus && !sideStatus) ? (
-            <Button variant="contained" onClick={ () => refetch() } disabled={ isUpdating }>
-              Try again
-            </Button>
-          ) : (
-            sideStatus && <PowerRow isOn={ sideStatus.isOn } refetch={ refetch } />
-          ) }
+              </ErrorBoundary> }/>
+            <PowerRow isOn={ isOn } refetch={ refetch } onRetry={ staleSince ? () => void refetch() : undefined }/>
+          </> }
           { commandError && <Alert severity="error" sx={ { width: '100%' } }>{ commandError }</Alert> }
         </Box>
         <Box sx={ { display: 'flex', flexDirection: 'column', gap: 2, width: '100%' } }>

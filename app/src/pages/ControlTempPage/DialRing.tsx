@@ -5,7 +5,7 @@ import {
   radialLine, ticks,
 } from './dialGeometry';
 
-type DialRingProps = { isOn: boolean; targetLevel: number; currentLevel: number; pending?: boolean };
+type DialRingProps = { isOn: boolean; targetLevel: number; currentLevel: number; pending?: boolean; stale?: boolean };
 
 const tickColor = (level: number, major: boolean, isOn: boolean) => isOn
   ? level === 0 ? palette.dial.tickZero : major ? palette.dial.tickMajor : palette.dial.tick
@@ -25,7 +25,9 @@ const svgStyle = {
 } as const;
 
 // Every mark is a state: the faint scale, the span to the target, the notch for now, the dot for the target.
-export default function DialRing({ isOn, targetLevel, currentLevel, pending = false }: DialRingProps) {
+export default function DialRing({ isOn, targetLevel, currentLevel, pending = false, stale = false }: DialRingProps) {
+  // Colour means live: a last known target is drawn grey on the off track.
+  const live = isOn && !stale;
   const target = clampLevel(targetLevel);
   const current = clampLevel(currentLevel);
   const fill = fillRange(target);
@@ -34,7 +36,7 @@ export default function DialRing({ isOn, targetLevel, currentLevel, pending = fa
   const notch = radialLine(current, NOTCH.inner, NOTCH.outer);
   return (
     <svg viewBox={ `0 0 ${DIAL_WIDTH} ${DIAL_HEIGHT}` } aria-hidden="true" style={ svgStyle }>
-      { isOn ? <>
+      { live ? <>
         <g data-band="ghost" opacity={ palette.dial.ghostOpacity }>{ band(SCALE_MIN, SCALE_MAX) }</g>
         { fill && <g data-band="fill">{ band(fill[0], fill[1]) }</g> }
       </> : <path
@@ -48,14 +50,14 @@ export default function DialRing({ isOn, targetLevel, currentLevel, pending = fa
         key={ level }
         data-tick={ major ? 'major' : 'minor' }
         { ...line }
-        stroke={ tickColor(level, major, isOn) }
+        stroke={ tickColor(level, major, live) }
         strokeWidth={ major ? 1.8 : 1.4 }
         strokeLinecap="round"/>) }
-      { isOn && current !== target && <>
+      { live && current !== target && <>
         <line { ...notch } stroke={ palette.bg.base } strokeWidth="5.5" strokeLinecap="round"/>
         <line data-notch { ...notch } stroke={ palette.lamp } strokeWidth="2.2" strokeLinecap="round" opacity="0.9"/>
       </> }
-      { isOn && <>
+      { live && <>
         <circle
           data-halo
           cx={ dot.x }
@@ -70,6 +72,15 @@ export default function DialRing({ isOn, targetLevel, currentLevel, pending = fa
           ? <circle data-target data-pending cx={ dot.x } cy={ dot.y } r="7.5" fill={ palette.bg.base } stroke={ colour } strokeWidth="2.5"/>
           : <circle data-target cx={ dot.x } cy={ dot.y } r="8.5" fill={ colour } stroke={ palette.bg.base } strokeWidth="2.5"/> }
       </> }
+      { stale && isOn && <circle
+        data-target
+        data-stale
+        cx={ dot.x }
+        cy={ dot.y }
+        r="8.5"
+        fill={ palette.text.tertiary }
+        stroke={ palette.bg.base }
+        strokeWidth="2.5"/> }
       { endLabels().map(({ level, x, y }) => <text
         key={ level }
         data-end-label
@@ -78,7 +89,7 @@ export default function DialRing({ isOn, targetLevel, currentLevel, pending = fa
         textAnchor="middle"
         fontSize="11.5"
         fontFamily="inherit"
-        fill={ isOn ? palette.text.tertiary : palette.text.disabled }>{ endLabel(level) }</text>) }
+        fill={ live ? palette.text.tertiary : palette.text.disabled }>{ endLabel(level) }</text>) }
     </svg>
   );
 }

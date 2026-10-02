@@ -7,11 +7,10 @@ import { isSchedulePaused, pauseEndsAt } from '@api/schedulePause';
 import { useSchedules } from '@api/schedules';
 import { useSettings } from '@api/settings';
 import { nextBedEvent } from './bedEvents';
+import { NBSP } from './bedText';
 import { currentSleep, nextSleepEvent, sleepAt, warmStartBedtime } from './sleepEvents';
 import { useBedSleeps } from './useBedSleeps';
 
-// Non-breaking, so "at 6:45 AM" never splits across lines.
-const NBSP = '\u00a0';
 const clock = (at: moment.Moment) => at.format(`h:mm${NBSP}A`);
 
 // When the side next turns off or on, and while paused, when its own timer ends it.
