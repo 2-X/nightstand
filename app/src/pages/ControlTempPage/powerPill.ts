@@ -24,3 +24,11 @@ export function powerPillSx(kind: PillKind) {
     [media.tight]: { minHeight: 48, borderRadius: '24px' },
   } as const;
 }
+
+// Try again in the calm pill, greyed like a stepper that cannot be used while a change saves.
+export const retryPillSx = {
+  ...powerPillSx('on'),
+  '&[aria-disabled="true"]': {
+    color: palette.text.disabled, boxShadow: `inset 0 0 0 1.5px ${palette.step.disabled}`, cursor: 'default',
+  },
+} as const;

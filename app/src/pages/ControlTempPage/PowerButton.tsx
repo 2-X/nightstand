@@ -10,15 +10,17 @@ import { useControlTempStore } from './controlTempStore.tsx';
 import { scheduledTemperatureFromSleeps } from './sleepEvents';
 import { useBedSleeps } from './useBedSleeps';
 import { bedCommandMessage } from '@lib/requestError.ts';
-import { powerPillSx } from './powerPill';
+import { powerPillSx, retryPillSx } from './powerPill';
 
 
 export type PowerButtonProps = {
   isOn: boolean;
   refetch: any;
+  // Turns the button into Try again while the Pod does not answer. One button for both keeps focus on it.
+  onRetry?: () => void;
 }
 
-export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
+export default function PowerButton({ isOn, refetch, onRetry }: PowerButtonProps) {
   const { isUpdating, setIsUpdating, side } = useAppStore();
   const { data: settings } = useSettings();
   const { data: schedules } = useSchedules();
@@ -90,15 +92,15 @@ export default function PowerButton({ isOn, refetch }: PowerButtonProps) {
       });
   };
 
-  if (isInAwayMode) return null;
+  if (isInAwayMode && !onRetry) return null;
 
   // aria-disabled, not disabled, so a click does not drop focus to the page while it saves.
   return (
     <Button
       aria-disabled={ isUpdating || undefined }
-      onClick={ () => { if (!isUpdating) handleOnClick(!isOn); } }
-      sx={ powerPillSx(isOn ? 'off' : 'on') }>
-      { isOn ? 'Turn off' : 'Turn on' }
+      onClick={ () => { if (isUpdating) return; if (onRetry) onRetry(); else handleOnClick(!isOn); } }
+      sx={ onRetry ? retryPillSx : powerPillSx(isOn ? 'off' : 'on') }>
+      { onRetry ? 'Try again' : isOn ? 'Turn off' : 'Turn on' }
     </Button>
   );
 }

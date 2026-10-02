@@ -1,9 +1,12 @@
+/* eslint-disable react/no-multi-comp */ // Small wrappers drive the row from stale to answering.
 import { beforeEach, expect, it, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { useState, type ReactNode } from 'react';
+import { act, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import { useAppStore } from '@state/appStore.tsx';
+import { palette } from '@design/tokens';
 import { getSettings } from '../../mocks/mockData';
 import PowerRow from './PowerRow';
 
@@ -55,6 +58,63 @@ it('puts Try again in the calm pill while the Pod does not answer', async () => 
   expect(screen.queryByRole('button', { name: 'Turn off' })).not.toBeInTheDocument();
   await user.click(button);
   expect(retry).toHaveBeenCalledOnce();
+});
+
+it('greys Try again while a change saves, and keeps it focusable', async () => {
+  useAppStore.setState({ isUpdating: true });
+  renderWithProviders(<PowerRow isOn refetch={ refetch } onRetry={ vi.fn() }/>);
+  const button = await screen.findByRole('button', { name: 'Try again' });
+  expect(button).not.toBeDisabled();
+  expect(button).toHaveAttribute('aria-disabled', 'true');
+  // The steppers' disabled ring.
+  expect(button).toHaveStyle({ color: palette.text.disabled, boxShadow: `inset 0 0 0 1.5px ${palette.step.disabled.toLowerCase()}` });
+});
+
+it('keeps focus on the button when Turn off and Try again trade places', async () => {
+  let setStale: (stale: boolean) => void = () => {};
+  function Row() {
+    const [stale, set] = useState(false);
+    setStale = set;
+    return <PowerRow isOn refetch={ refetch } onRetry={ stale ? () => {} : undefined }/>;
+  }
+  renderWithProviders(<Row/>);
+  (await screen.findByRole('button', { name: 'Turn off' })).focus();
+  act(() => setStale(true));
+  expect(screen.getByRole('button', { name: 'Try again' })).toHaveFocus();
+  act(() => setStale(false));
+  expect(screen.getByRole('button', { name: 'Turn off' })).toHaveFocus();
+});
+
+// A row for an away side that starts stale; the returned function says whether the Pod answers.
+const renderStaleAwayRow = (before?: ReactNode) => {
+  const settings = getSettings();
+  server.use(http.get('*/api/settings', () => HttpResponse.json({ ...settings, left: { ...settings.left, awayMode: true } })));
+  let setStale: (stale: boolean) => void = () => {};
+  function Row() {
+    const [stale, set] = useState(true);
+    setStale = set;
+    return <PowerRow isOn refetch={ refetch } onRetry={ stale ? () => {} : undefined }/>;
+  }
+  renderWithProviders(<>{ before }<Row/></>);
+  return (stale: boolean) => act(() => setStale(stale));
+};
+
+it('keeps focus in the row when Try again and the away sentence trade places', async () => {
+  const setStale = renderStaleAwayRow();
+  (await screen.findByRole('button', { name: 'Try again' })).focus();
+  setStale(false);
+  expect(await screen.findByRole('link', { name: 'Settings, Bed and sides' })).toHaveFocus();
+  setStale(true);
+  expect(screen.getByRole('button', { name: 'Try again' })).toHaveFocus();
+});
+
+it('leaves focus alone when it was not on Try again', async () => {
+  const setStale = renderStaleAwayRow(<button>Elsewhere</button>);
+  await screen.findByRole('button', { name: 'Try again' });
+  screen.getByRole('button', { name: 'Elsewhere' }).focus();
+  setStale(false);
+  expect(await screen.findByRole('link', { name: 'Settings, Bed and sides' })).not.toHaveFocus();
+  expect(screen.getByRole('button', { name: 'Elsewhere' })).toHaveFocus();
 });
 
 it('stays empty at its full height while the status loads', async () => {
