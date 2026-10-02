@@ -27,7 +27,7 @@ from presence.detector import FRAME_GAP_SECONDS, DetectorParams, PresenceDetecto
 from presence.guard import UnexplainedUseGuard
 from presence.piezo import CadenceCheck, keep_layout, piezo_layout
 from presence.sensors import CAPSENSE2, CapFormat
-from vitals2_stream import PumpSpeed, Vitals2Stream
+from vitals2_stream import CLOCK_STEP_BACK_SECONDS, PumpSpeed, Vitals2Stream
 import numpy as np
 
 logger = get_logger()
@@ -238,6 +238,10 @@ class StreamProcessor:
 
     def _process_vitals2(self, piezo_record) -> None:
         epoch = int(piezo_record['ts'])
+        last = self.vitals2.last_epoch
+        if last is not None and last - epoch > CLOCK_STEP_BACK_SECONDS:
+            # The estimators start over on the new clock, so rows count from its next minute as at a hand-over.
+            self._vitals2_from = epoch // 60 * 60 + 60
         self._insert_vitals2(self.vitals2.step(epoch, self.piezo_layout, self.buffer, self._present_sides(),
                                                cap_age=self._cap_age(epoch)))
 

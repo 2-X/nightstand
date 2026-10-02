@@ -178,6 +178,35 @@ class Vitals2StreamStateTest(unittest.TestCase):
         self.assertEqual(self.stream.sides['left'].hr_windows, {})
 
 
+class ClockStepBackTest(unittest.TestCase):
+    STEP = 1800
+
+    def run_night(self, step_at=400, seconds=1100):
+        left = piezo(seconds, bpm=60, per_minute=15, jitter_ms=20, seed=4)
+        buffer, rows = Buffer(3, 30, 300), []
+        self.stream = stream = Vitals2Stream()
+        for second in range(seconds):
+            window = slice(second * 500, (second + 1) * 500)
+            epoch = START + second - (self.STEP if second >= step_at else 0)
+            buffer.append({'ts': epoch, 'left1': left[window], 'right1': left[window] // 50})
+            rows += [dict(row, written=second) for row in
+                     stream.step(epoch, LAYOUT, buffer, {'left': True, 'right': False}, cap_age=0)]
+        return rows
+
+    def test_the_estimators_start_over_after_a_long_step_back(self):
+        rows = self.run_night()
+        # The last full minute before the step still comes out, when the step is seen.
+        self.assertIn((START + 300, 400), [(row['timestamp'], row['written']) for row in rows])
+        after = [row for row in rows if row['timestamp'] < START]
+        # Rows again within a few minutes of the step, not once the clock has caught up.
+        self.assertGreaterEqual(len(after), 6)
+        self.assertLess(min(row['written'] for row in after), 400 + 240)
+        self.assertTrue(all(abs(row['heart_rate'] - 60) <= 1 for row in after))
+        self.assertTrue(any(row['resp_rate'] is not None for row in after))
+        # The unfed pump grace counts from the new clock.
+        self.assertEqual(self.stream.first_epoch, START + 400 - self.STEP)
+
+
 class CapacitanceGateTest(unittest.TestCase):
     """Only capacitance presence decides a side; without a current reading nothing is written."""
 

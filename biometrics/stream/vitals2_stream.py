@@ -48,6 +48,9 @@ LEARN_MAX_BAD_FRACTION = 0.01
 CAP_MAX_AGE_SECONDS = 10
 # Consecutive records further apart than this many record lengths have a gap between them.
 MAX_RECORD_STEP = 1.5
+# A step back of the record clock longer than this is a clock change: the estimators start over,
+# as the tracker does after a gap this long.
+CLOCK_STEP_BACK_SECONDS = hr.RESET_GAP_SECONDS
 # Records of presence kept per side, enough to judge any window still waiting.
 STATUS_RECORDS = 600
 # Our frzHealth frames show about 1900 to 2000 rpm while circulating and
@@ -182,6 +185,7 @@ class Vitals2Stream:
         self._warned_no_cap = False
         self._warned_no_pump = False
         self.first_epoch: Optional[int] = None
+        self.last_epoch: Optional[int] = None
 
     def reset_side(self, side: str) -> None:
         self.sides[side] = _SideState()
@@ -204,9 +208,10 @@ class Vitals2Stream:
                            f'{CAP_MAX_AGE_SECONDS} s places a side in bed')
         occupied = {side: bool(present.get(side)) and current for side in SIDES}
         minute = _minute(epoch)
+        retired = self._clock_stepped_back(epoch, layout)
         expired = [side for side in SIDES if not occupied[side] and self.sides[side].last_present is not None
                    and not self.sides[side].active(epoch)]
-        retired = self._retire(expired, epoch, layout) if expired else []
+        retired += self._retire(expired, epoch, layout) if expired else []
         for side in SIDES:
             state = self.sides[side]
             if side in expired:
@@ -214,6 +219,7 @@ class Vitals2Stream:
             elif occupied[side]:
                 state.last_present = epoch
             state.status.append((epoch, occupied[side]))
+        self.last_epoch = epoch
         if self.minute is not None and minute != self.minute:
             # A minute's row is kept only for a side present when the minute closed.
             for side in SIDES:
@@ -239,6 +245,21 @@ class Vitals2Stream:
             self.last_resp = epoch
             self._breathing(epoch, clock, buffer)
         return retired + rows
+
+    def _clock_stepped_back(self, epoch: int, layout: Optional[PiezoLayout]) -> List[dict]:
+        """After a long step back of the clock, the rows still held, and every side and schedule started over.
+
+        Without this, each tracker would wait for the clock to pass its last
+        window and the absence reset would never fire.
+        """
+        if self.last_epoch is None or self.last_epoch - epoch <= CLOCK_STEP_BACK_SECONDS:
+            return []
+        logger.info(f'Record clock stepped back {self.last_epoch - epoch} s, newer vitals start over')
+        rows = self._retire(list(SIDES), self.last_epoch + 1, layout)
+        self.sides = {side: _SideState() for side in SIDES}
+        self.minute = self.last_batch = self.last_resp = None
+        self.first_epoch = epoch
+        return rows
 
     def flush(self, epoch: int, layout: Optional[PiezoLayout]) -> List[dict]:
         """Rows for every minute before `epoch`'s that the estimators still hold, for a stream about to stop."""

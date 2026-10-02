@@ -52,7 +52,7 @@ def records(seconds=480, seed=7):
                'left1': left[window].copy(), 'right1': right[window].copy(), 'seq': second}
 
 
-def run_stream(db_module, seconds=480, v2=False, capacitance=False):
+def run_stream(db_module, seconds=480, v2=False, capacitance=False, step_back=None):
     """Feed the fixture through StreamProcessor with the vitals switch as given; return the database module.
 
     Without capacitance, presence is the piezo detector throughout, as on a
@@ -61,6 +61,8 @@ def run_stream(db_module, seconds=480, v2=False, capacitance=False):
     stop) pair of seconds sends readings only in that span, hands presence to
     the capacitance detector at start, and back to piezo once the newest
     reading is more than CAP_FRESH_SECONDS old, as the stream does.
+    step_back=(second, seconds) sets the record clock back that far from
+    that second on.
     """
     span = (0, None) if capacitance is True else capacitance
     biometric_processor._PresenceCoordinator._latest = {'left': 0.0, 'right': 0.0}
@@ -76,6 +78,8 @@ def run_stream(db_module, seconds=480, v2=False, capacitance=False):
         processor = None
         latest = stream_processor.LatestCap() if span else None
         for second, record in enumerate(records(seconds)):
+            if step_back and second >= step_back[0]:
+                record['ts'] -= step_back[1]
             if span and second >= span[0] and (span[1] is None or second < span[1]):
                 latest.update(record['ts'] - 1, LEFT_CHANNELS, BASELINE, CAPSENSE2)
             if processor is None:

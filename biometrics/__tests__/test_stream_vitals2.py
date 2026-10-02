@@ -103,6 +103,17 @@ class HandOverTest(unittest.TestCase):
         self.assertEqual(self.said, ['Vitals now from the newer estimators', 'Vitals now from the legacy estimators'])
 
 
+class ClockStepBackAfterHandOverTest(unittest.TestCase):
+    def test_rows_after_a_long_step_back_are_written(self):
+        start = stream_fixture.START
+        rows = stream_rows('db_for_v2_step_back', seconds=1200, v2=True, capacitance=True, step_back=(600, 1800))
+        before = [row['timestamp'] for row in rows if row['timestamp'] >= start]
+        after = [row['timestamp'] for row in rows if row['timestamp'] < start]
+        self.assertTrue(before)
+        self.assertGreaterEqual(len(after), 5)
+        self.assertTrue(all(row['estimator'] == 2 for row in rows))
+
+
 class VitalsSwitchTest(unittest.TestCase):
     def _processor(self, **options):
         return stream_processor.StreamProcessor(next(stream_fixture.records(1)), **options)
