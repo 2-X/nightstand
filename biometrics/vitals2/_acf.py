@@ -15,9 +15,7 @@ HARMONIC_TOLERANCE = 0.08
 # Between the two the window is ambiguous.
 ALTERNATION_RATIO = 1.15
 NO_ALTERNATION_RATIO = 1.06
-# A previous period settles a choice only when a candidate lies this close to it.
-PREVIOUS_TOLERANCE = 0.10
-# Quality reported for an ambiguous window nothing settles; below every gate.
+# Quality reported for an ambiguous window; below every gate.
 AMBIGUOUS_QUALITY = 0.2
 
 
@@ -37,8 +35,7 @@ def _near(peaks: np.ndarray, heights: np.ndarray, target: float) -> int | None:
     return int(close[np.argmax(heights[close])]) if close.size else None
 
 
-def acf_period(values: np.ndarray, fs: float, min_lag_s: float, max_lag_s: float,
-               previous_period_s: float | None = None) -> tuple[float | None, float]:
+def acf_period(values: np.ndarray, fs: float, min_lag_s: float, max_lag_s: float) -> tuple[float | None, float]:
     """Period in seconds from the autocorrelation peak, and its height as quality.
 
     Peaks are compared on the unbiased autocorrelation, and both end lags can
@@ -47,11 +44,8 @@ def acf_period(values: np.ndarray, fs: float, min_lag_s: float, max_lag_s: float
     the fundamental is the period when it stands clearly above the peaks at one
     and three times the fundamental (a smaller second hump in every period does
     this) and is no lower than the fundamental. With weaker evidence the window
-    is ambiguous: previous_period_s decides when it lies within
-    PREVIOUS_TOLERANCE of either candidate, otherwise the quality is capped at
-    AMBIGUOUS_QUALITY. With no evidence the fundamental stands unless the
-    previous period lies that close to the double, since two equal humps per
-    beat look the same as one beat at twice the rate.
+    is ambiguous and its quality is capped at AMBIGUOUS_QUALITY; with none the
+    fundamental stands.
     """
     acf = normalized_acf(values)
     size = acf.size
@@ -78,13 +72,10 @@ def acf_period(values: np.ndarray, fs: float, min_lag_s: float, max_lag_s: float
     double = _near(peaks, unbiased, fundamental * 2)
     if double is not None and unbiased[double] >= HARMONIC_RATIO * unbiased[fundamental]:
         alternation = _alternation(unbiased, fundamental, double)
-        near = _near_previous((fundamental, double), fs, previous_period_s)
         if alternation >= ALTERNATION_RATIO and unbiased[double] >= unbiased[fundamental]:
             chosen = double
         elif alternation >= NO_ALTERNATION_RATIO:
-            chosen, settled = (near, True) if near is not None else (double, False)
-        elif near is not None:
-            chosen = near
+            chosen, settled = double, False
     left, centre, right = unbiased[chosen - 1], unbiased[chosen], unbiased[chosen + 1]
     curvature = left - 2 * centre + right
     offset = 0.5 * (left - right) / curvature if curvature != 0 else 0.0
@@ -104,12 +95,3 @@ def _alternation(unbiased: np.ndarray, fundamental: int, double: int) -> float:
         third = float(unbiased[fundamental])
     odd = (unbiased[fundamental] + third) / 2
     return float(unbiased[double] / odd) if odd > 0 else float('inf')
-
-
-def _near_previous(lags: tuple[int, int], fs: float, previous_period_s: float | None) -> int | None:
-    """The lag closest to previous_period_s, if within PREVIOUS_TOLERANCE of it."""
-    if previous_period_s is None:
-        return None
-    distances = [abs(np.log(lag / fs / previous_period_s)) for lag in lags]
-    closest = int(np.argmin(distances))
-    return lags[closest] if distances[closest] <= np.log(1.0 + PREVIOUS_TOLERANCE) else None

@@ -47,8 +47,10 @@ class GatesTest(unittest.TestCase):
     def test_gates_are_the_agreed_values(self):
         self.assertEqual(
             (gates.HR_MIN_QUALITY, gates.HR_RANGE, gates.HRV_MIN_COVERAGE, gates.RESP_MIN_QUALITY, gates.RESP_RANGE),
-            (0.5, (35, 140), 0.6, 0.5, (6, 30)),
+            (0.6, (35, 140), 0.6, 0.5, (6, 30)),
         )
+        self.assertEqual((gates.HR_MIN_SUPPORT, gates.HR_MIN_EVIDENCE, gates.HR_MAX_OCTAVE, gates.HR_MAX_MOTION),
+                         (0.4, 0.25, 0.3, 0.2))
 
     def test_the_suite_runs_on_the_real_scipy(self):
         import scipy.signal

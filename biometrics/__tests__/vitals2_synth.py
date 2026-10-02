@@ -22,6 +22,16 @@ def beat_times(seconds: float, bpm: float, jitter_ms: float = 0.0, seed: int = 0
     return np.cumsum(intervals) - intervals[0]
 
 
+def varying_beat_times(seconds: float, bpm_at, jitter_ms: float = 0.0, seed: int = 0) -> np.ndarray:
+    """Beat onsets for a rate that changes over time; bpm_at(t) is the rate at t seconds."""
+    rng = np.random.default_rng(seed)
+    onsets, t = [], 0.0
+    while t < seconds:
+        onsets.append(t)
+        t += 60.0 / bpm_at(t) + rng.normal(0.0, jitter_ms / 1000.0)
+    return np.array(onsets)
+
+
 def _add_beat(out: np.ndarray, onset: float, scale_all: float) -> None:
     first = max(0, int((onset - 0.05) * FS))
     last = min(out.size, int((onset + 0.35) * FS) + 1)
