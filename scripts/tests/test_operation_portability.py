@@ -90,6 +90,7 @@ HEALTHY=yes; LIVE="$1"; STAGED_VERSION=test; PREV=previous; BK=backup; calls=0
 say() { echo "$*"; }
 sh() { calls=$((calls+1)); echo apply >> "$LIVE/calls"; return 0; }
 iptables() { echo "$*" >> "$LIVE/checks"; if [ "$RESET_MISSING" = yes ] && [[ "$*" == *1337* ]]; then return 1; fi; [ "$calls" -ge "$2_SUCCESS" ]; }
+fw4() { iptables -w 5 "$@"; }
 '''.replace('"$2_SUCCESS"', str(succeeds_at)).replace('return 0;', 'return ' + str(script_status) + ';')
                 setup += '\nRESET_MISSING=' + ('yes' if reset_missing else 'no') + '\n'
                 setup += '\nIS_DOWNGRADE=' + ('yes' if old else 'no') + '\n'

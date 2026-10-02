@@ -236,18 +236,101 @@ rm -f "$SHIP_TAR"; trap - EXIT
 SSH "chown -R dac:dac $STAGE"
 
 # --- dependencies (while old server still runs) ------------------------------
+# As in scripts/update.sh, only HTTPS and name lookups go out while npm and
+# Volta download, and the rest of the firewall, including the reset on the
+# firmware's upload port, stays as it is. Volta fetches a newly pinned Node the
+# first time npm runs under it, so that happens here too rather than at the
+# first start after the swap.
+deps_failed() {
+  SSH "bash $STAGE/scripts/close_update_window.sh" ||
+    echo "WARNING: could not reach the pod to close the download window; run scripts/close_update_window.sh on it"
+  SSH "rm -rf $STAGE"
+  die "dependency download failed; staging discarded, live untouched, internet blocked again"
+}
 LOCK_SAME=$(SSH "cmp -s $LIVE/server/package-lock.json $STAGE/server/package-lock.json && echo yes || echo no")
-if [ "$LOCK_SAME" = "no" ]; then
-  say "package-lock.json changed: npm install in staging (temporarily unblocking WAN)"
-  SSH "set -e
-    sh $STAGE/scripts/unblock_internet_access.sh >/dev/null
-    INSTALL_OK=0
-    sudo -u dac bash -c 'cd $STAGE/server && $NPM install --no-audit --no-fund' && INSTALL_OK=1
-    sh $STAGE/scripts/block_internet_access.sh >/dev/null || true
-    [ \"\$INSTALL_OK\" = 1 ]
-  " || { SSH "rm -rf $STAGE"; die "npm install failed - staging discarded, live untouched, WAN re-blocked"; }
+NODE_MISSING=$(SSH "[ -n '$NODE_PIN' ] && [ ! -d /home/dac/.volta/tools/image/node/$NODE_PIN ] && echo yes || echo no")
+if [ "$LOCK_SAME" = "no" ] || [ "$NODE_MISSING" = "yes" ]; then
+  say "Downloading dependencies in staging (HTTPS and DNS allowed out meanwhile)"
+  SSH "bash -s -- $STAGE $NPM $LOCK_SAME" <<'DEPS' || deps_failed
+STAGE=$1; NPM=$2; LOCK_SAME=$3
+WAN_RULES=("-p tcp --dport 443 -j ACCEPT" "-p udp --dport 53 -j ACCEPT" "-p tcp --dport 53 -j ACCEPT")
+WAN_RULE6="-p tcp --dport 443 -j REJECT --reject-with tcp-reset"
+# iptables 1.6.0 added "-w SECONDS"; older builds take a bare -w or no flag.
+IPT_W=
+for IPT_W in "-w 5" "-w" ""; do
+  # shellcheck disable=SC2086
+  iptables $IPT_W -S OUTPUT >/dev/null 2>&1 && break
+done
+# shellcheck disable=SC2086
+fw4() { iptables $IPT_W "$@"; }
+# shellcheck disable=SC2086
+fw6() { ip6tables $IPT_W "$@"; }
+# Removes the given rules only while one of them is the first rule in OUTPUT,
+# so the same rule further down (Tailscale's HTTPS allow) is left alone.
+strip_top() {
+  local tool=$1 first spec match removed=0
+  shift
+  while [ "$removed" -lt 10 ]; do
+    first=$("$tool" -S OUTPUT 2>/dev/null | awk '$1 == "-A" && $2 == "OUTPUT" { $1 = $2 = ""; $0 = $0; $1 = $1; print; exit }')
+    first=${first// -m tcp/}
+    first=${first// -m udp/}
+    match=
+    for spec in "$@"; do
+      [ "$first" = "$spec" ] && match=$spec
+    done
+    [ -n "$match" ] || break
+    # shellcheck disable=SC2086
+    "$tool" -D OUTPUT $match || break
+    removed=$((removed + 1))
+  done
+  echo "$removed"
+}
+# A stalled install must not hold the window open. Busybox builds that only
+# take "timeout -t SECS" fail the probe and get the watchdog instead.
+run_limited() {
+  local seconds=$1 pid watchdog status
+  shift
+  if timeout 1 true 2>/dev/null; then
+    timeout "$seconds" "$@"
+    return
+  fi
+  "$@" &
+  pid=$!
+  (
+    i=0
+    while [ "$i" -lt "$seconds" ]; do sleep 1; i=$((i + 1)); done
+    kill -TERM "$pid" 2>/dev/null
+  ) &
+  watchdog=$!
+  wait "$pid"
+  status=$?
+  kill "$watchdog" 2>/dev/null
+  wait "$watchdog" 2>/dev/null
+  return "$status"
+}
+close_window() {
+  trap '' HUP INT TERM
+  strip_top fw4 "${WAN_RULES[@]}" >/dev/null
+  strip_top fw6 "$WAN_RULE6" >/dev/null
+  sh "$STAGE/scripts/block_internet_access.sh" >/dev/null 2>&1 || echo "WARNING: could not apply the block script again"
+}
+trap close_window EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+for rule in "${WAN_RULES[@]}"; do
+  # shellcheck disable=SC2086
+  fw4 -I OUTPUT 1 $rule || echo "WARNING: could not allow $rule out"
+done
+# shellcheck disable=SC2086
+fw6 -I OUTPUT 1 $WAN_RULE6 2>/dev/null
+if [ "$LOCK_SAME" = no ]; then
+  run_limited 900 sudo -u dac bash -c "cd '$STAGE/server' && '$NPM' install --no-audit --no-fund" || exit 1
+fi
+run_limited 600 sudo -u dac bash -c "cd '$STAGE/server' && '$NPM' --version" >/dev/null || exit 1
+DEPS
 else
-  say "package-lock.json unchanged: will reuse existing node_modules"
+  say "package-lock.json unchanged and Node already present: will reuse existing node_modules"
 fi
 
 # --- atomic swap ------------------------------------------------------------

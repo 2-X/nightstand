@@ -138,6 +138,7 @@ STUB
 chmod +x "$FIXTURE/venv/bin/python"
 stat() { echo fixture_owner; }
 sudo() ( export RUN_AS="$2"; shift 2; "$@"; )
+run_limited() { shift; "$@"; }
 export WRITABLE_STATUS=""" + ('0' if writable else '1')
                 result, _ = self.run_shell(block.replace('/home/dac/venv', '$FIXTURE/venv'), setup)
                 self.assertEqual(result.returncode, 0, result.stderr)

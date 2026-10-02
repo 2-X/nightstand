@@ -5,6 +5,8 @@ After=free-sleep.service
 [Service]
 Type=oneshot
 ExecStart=/bin/bash /home/dac/free-sleep/scripts/revert-to-stock.sh
+# Closes the download window even when the updater was killed outright.
+ExecStopPost=-/bin/bash /home/dac/free-sleep/scripts/close_update_window.sh
 User=root
 Group=root
 KillMode=process

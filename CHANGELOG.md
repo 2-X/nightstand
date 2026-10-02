@@ -23,6 +23,14 @@ is a hard fork; for the history of the projects it descends from, see
 - HRV is no longer shown in the app. Checked against chest-strap recordings,
   the stored estimate was no more accurate than a fixed guess. It is still
   stored and returned by the API.
+- Updates no longer turn the firewall off while downloading. They allow only
+  HTTPS and name lookups out for the download and keep blocking the
+  firmware's upload port, and a stalled dependency install now gives up after
+  15 minutes.
+- If an update or the switch to upstream is killed while downloading, its
+  service now removes the download rules when it stops. A release that pins
+  a different Node now has it fetched during the download, while internet
+  access is still allowed, so the update no longer fails and rolls back.
 - If Nightstand's server crashes repeatedly, systemd now keeps restarting it
   every five seconds instead of giving up until the next reboot.
 - A side turned on by the weekly schedule now turns itself off a few minutes

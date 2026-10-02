@@ -53,16 +53,90 @@ restore_switch_data_or_fail() {
   }
 }
 
+# While downloading, allow only HTTPS and name lookups out, above the rest of
+# the firewall. Nothing is flushed, so the inbound rules, the reset on the
+# firmware's upload port and anything Tailscale added stay in place. IPv6
+# stays blocked, with HTTPS refused rather than dropped so clients move to
+# IPv4 at once.
+WAN_RULES=("-p tcp --dport 443 -j ACCEPT" "-p udp --dport 53 -j ACCEPT" "-p tcp --dport 53 -j ACCEPT")
+WAN_RULE6="-p tcp --dport 443 -j REJECT --reject-with tcp-reset"
 WAN_OPEN=no
-open_wan()  { say "Unblocking internet access (temporary)"; sh "$LIVE/scripts/unblock_internet_access.sh" >/dev/null && WAN_OPEN=yes; }
+# iptables 1.6.0 added "-w SECONDS"; older builds take a bare -w or no flag.
+IPT_W=
+for IPT_W in "-w 5" "-w" ""; do
+  # shellcheck disable=SC2086
+  iptables $IPT_W -S OUTPUT >/dev/null 2>&1 && break
+done
+# shellcheck disable=SC2086
+fw4() { iptables $IPT_W "$@"; }
+# shellcheck disable=SC2086
+fw6() { ip6tables $IPT_W "$@"; }
+# Removes the given rules only while one of them is the first rule in OUTPUT,
+# where the window puts them, so the same rule further down (Tailscale's
+# HTTPS allow) is left alone. Rules are compared with whitespace and the
+# implicit -m tcp/-m udp normalized.
+strip_top() {
+  local tool=$1 first spec match removed=0
+  shift
+  while [ "$removed" -lt 10 ]; do
+    first=$("$tool" -S OUTPUT 2>/dev/null | awk '$1 == "-A" && $2 == "OUTPUT" { $1 = $2 = ""; $0 = $0; $1 = $1; print; exit }')
+    first=${first// -m tcp/}
+    first=${first// -m udp/}
+    match=
+    for spec in "$@"; do
+      [ "$first" = "$spec" ] && match=$spec
+    done
+    [ -n "$match" ] || break
+    # shellcheck disable=SC2086
+    "$tool" -D OUTPUT $match || break
+    removed=$((removed + 1))
+  done
+  echo "$removed"
+}
+open_wan() {
+  say "Allowing HTTPS and DNS out for the download (temporary)"
+  WAN_OPEN=yes
+  local rule
+  for rule in "${WAN_RULES[@]}"; do
+    # shellcheck disable=SC2086
+    fw4 -I OUTPUT 1 $rule || say "WARNING: could not allow $rule out"
+  done
+  # shellcheck disable=SC2086
+  fw6 -I OUTPUT 1 $WAN_RULE6 2>/dev/null || true
+}
 close_wan() {
   [ "$WAN_OPEN" = yes ] || return 0
-  say "Re-blocking internet access"
+  say "Closing internet access again"
+  strip_top fw4 "${WAN_RULES[@]}" >/dev/null
+  strip_top fw6 "$WAN_RULE6" >/dev/null
   sh "$LIVE/scripts/block_internet_access.sh" >/dev/null 2>&1 \
     || sh "$PREV/scripts/block_internet_access.sh" >/dev/null 2>&1 || true
   WAN_OPEN=no
 }
-cleanup() { close_wan; restore_switch_data || say "WARNING: restore settings from $BK/lowdb before restarting"; rm -rf "$STAGE" "$STAGE.unzip" "$STAGE.health" "$ZIP"; }
+# A stalled step must not hold the window open. Busybox builds that only
+# take "timeout -t SECS" fail the probe and get the watchdog instead.
+run_limited() {
+  local seconds=$1 pid watchdog status
+  shift
+  if timeout 1 true 2>/dev/null; then
+    timeout "$seconds" "$@"
+    return
+  fi
+  "$@" &
+  pid=$!
+  (
+    i=0
+    while [ "$i" -lt "$seconds" ]; do sleep 1; i=$((i + 1)); done
+    kill -TERM "$pid" 2>/dev/null
+  ) &
+  watchdog=$!
+  wait "$pid"
+  status=$?
+  kill "$watchdog" 2>/dev/null
+  wait "$watchdog" 2>/dev/null
+  return "$status"
+}
+cleanup() { trap '' HUP INT TERM; close_wan; restore_switch_data || say "WARNING: restore settings from $BK/lowdb before restarting"; rm -rf "$STAGE" "$STAGE.unzip" "$STAGE.health" "$ZIP"; }
 
 fail() { say "FATAL: $*"; exit 1; }
 
@@ -107,6 +181,9 @@ if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
   export NIGHTSTAND_OPERATION_OWNER=$$
 fi
 trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # --- preflight ---------------------------------------------------------------
 [ -d "$LIVE" ] || fail "no live install at $LIVE"
@@ -163,10 +240,17 @@ ROOT_FREE=$(free_mb /)
   || fail "low disk on / (${ROOT_FREE:-unknown}M free, ${DEPS_NEED}M needed for upstream's dependencies); live install untouched"
 if [ "$LOCK_SAME" = no ]; then
   say "package-lock.json differs from upstream's: running npm install in staging"
-  sudo -u dac bash -c "cd '$STAGE/server' && '$NPM' install --no-audit --no-fund" \
-    || fail "npm install failed; live install untouched"
+  run_limited 900 sudo -u dac bash -c "cd '$STAGE/server' && '$NPM' install --no-audit --no-fund" \
+    || fail "npm install failed or took over 15 minutes; live install untouched"
 else
   say "package-lock.json matches: reusing existing node_modules"
+fi
+# Volta fetches a newly pinned Node the first time npm runs under it, which
+# would otherwise be when upstream's server starts after the window closes.
+if [ "$(node_fetch_mb "$(node_pin "$STAGE")" "$(node_pin "$LIVE")")" != 0 ]; then
+  say "Fetching Node $(node_pin "$STAGE") for upstream"
+  run_limited 600 sudo -u dac bash -c "cd '$STAGE/server' && '$NPM' --version" >/dev/null \
+    || fail "could not fetch Node $(node_pin "$STAGE"); live install untouched"
 fi
 # Upstream imports this even when the existing services record says installed.
 if [ -x /home/dac/venv/bin/python ]; then
@@ -178,7 +262,7 @@ if [ -x /home/dac/venv/bin/python ]; then
   else
     say "Venv owner cannot write packages; installing the upstream dependency as root"
   fi
-  "${PIP_RUNNER[@]}" /home/dac/venv/bin/python -m pip install sentry-sdk==2.71.0 \
+  run_limited 600 "${PIP_RUNNER[@]}" /home/dac/venv/bin/python -m pip install sentry-sdk==2.71.0 \
     || fail "could not install the upstream biometrics dependency; live install untouched"
 fi
 close_wan

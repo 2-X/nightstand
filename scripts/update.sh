@@ -4,8 +4,8 @@
 # stage, atomic swap, health check, automatic rollback on failure.
 #
 # Runs on the pod as root, normally via free-sleep-update.service (triggered
-# from the app's Settings page). Internet access is opened only long enough
-# to download, then re-blocked no matter how the script exits.
+# from the app's Settings page). Outbound HTTPS and DNS are allowed only long
+# enough to download, then blocked again no matter how the script exits.
 #
 # Env:
 #   FS_UPDATE_FORCE=1   install even if the published version isn't newer
@@ -50,16 +50,90 @@ NPX=/home/dac/.volta/bin/npx
 
 say() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
+# While downloading, allow only HTTPS and name lookups out, above the rest of
+# the firewall. Nothing is flushed, so the inbound rules, the reset on the
+# firmware's upload port and anything Tailscale added stay in place. IPv6
+# stays blocked, with HTTPS refused rather than dropped so clients move to
+# IPv4 at once.
+WAN_RULES=("-p tcp --dport 443 -j ACCEPT" "-p udp --dport 53 -j ACCEPT" "-p tcp --dport 53 -j ACCEPT")
+WAN_RULE6="-p tcp --dport 443 -j REJECT --reject-with tcp-reset"
 WAN_OPEN=no
-open_wan()  { say "Unblocking internet access (temporary)"; sh "$LIVE/scripts/unblock_internet_access.sh" >/dev/null && WAN_OPEN=yes; }
+# iptables 1.6.0 added "-w SECONDS"; older builds take a bare -w or no flag.
+IPT_W=
+for IPT_W in "-w 5" "-w" ""; do
+  # shellcheck disable=SC2086
+  iptables $IPT_W -S OUTPUT >/dev/null 2>&1 && break
+done
+# shellcheck disable=SC2086
+fw4() { iptables $IPT_W "$@"; }
+# shellcheck disable=SC2086
+fw6() { ip6tables $IPT_W "$@"; }
+# Removes the given rules only while one of them is the first rule in OUTPUT,
+# where the window puts them, so the same rule further down (Tailscale's
+# HTTPS allow) is left alone. Rules are compared with whitespace and the
+# implicit -m tcp/-m udp normalized.
+strip_top() {
+  local tool=$1 first spec match removed=0
+  shift
+  while [ "$removed" -lt 10 ]; do
+    first=$("$tool" -S OUTPUT 2>/dev/null | awk '$1 == "-A" && $2 == "OUTPUT" { $1 = $2 = ""; $0 = $0; $1 = $1; print; exit }')
+    first=${first// -m tcp/}
+    first=${first// -m udp/}
+    match=
+    for spec in "$@"; do
+      [ "$first" = "$spec" ] && match=$spec
+    done
+    [ -n "$match" ] || break
+    # shellcheck disable=SC2086
+    "$tool" -D OUTPUT $match || break
+    removed=$((removed + 1))
+  done
+  echo "$removed"
+}
+open_wan() {
+  say "Allowing HTTPS and DNS out for the download (temporary)"
+  WAN_OPEN=yes
+  local rule
+  for rule in "${WAN_RULES[@]}"; do
+    # shellcheck disable=SC2086
+    fw4 -I OUTPUT 1 $rule || say "WARNING: could not allow $rule out"
+  done
+  # shellcheck disable=SC2086
+  fw6 -I OUTPUT 1 $WAN_RULE6 2>/dev/null || true
+}
 close_wan() {
   [ "$WAN_OPEN" = yes ] || return 0
-  say "Re-blocking internet access"
+  say "Closing internet access again"
+  strip_top fw4 "${WAN_RULES[@]}" >/dev/null
+  strip_top fw6 "$WAN_RULE6" >/dev/null
   sh "$LIVE/scripts/block_internet_access.sh" >/dev/null 2>&1 \
     || sh "$PREV/scripts/block_internet_access.sh" >/dev/null 2>&1 || true
   WAN_OPEN=no
 }
-cleanup() { close_wan; rm -rf "$STAGE" "$STAGE.unzip" "$STAGE.health" "$STAGE.migrate.log" "$ZIP"; }
+# A stalled step must not hold the window open. Busybox builds that only
+# take "timeout -t SECS" fail the probe and get the watchdog instead.
+run_limited() {
+  local seconds=$1 pid watchdog status
+  shift
+  if timeout 1 true 2>/dev/null; then
+    timeout "$seconds" "$@"
+    return
+  fi
+  "$@" &
+  pid=$!
+  (
+    i=0
+    while [ "$i" -lt "$seconds" ]; do sleep 1; i=$((i + 1)); done
+    kill -TERM "$pid" 2>/dev/null
+  ) &
+  watchdog=$!
+  wait "$pid"
+  status=$?
+  kill "$watchdog" 2>/dev/null
+  wait "$watchdog" 2>/dev/null
+  return "$status"
+}
+cleanup() { trap '' HUP INT TERM; close_wan; rm -rf "$STAGE" "$STAGE.unzip" "$STAGE.health" "$STAGE.migrate.log" "$ZIP"; }
 
 fail() { say "FATAL: $*"; exit 1; }
 
@@ -113,6 +187,9 @@ if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
   export NIGHTSTAND_OPERATION_OWNER=$$
 fi
 trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 if [ "$HANDOFF" != 1 ]; then
 # --- consume the target-version request file, if any -------------------------
@@ -291,10 +368,17 @@ ROOT_FREE=$(free_mb /)
 if [ "$HANDOFF" != 1 ]; then
   if [ "$LOCK_SAME" = no ]; then
     say "package-lock.json changed: running npm install in staging"
-    sudo -u dac bash -c "cd '$STAGE/server' && '$NPM' install --no-audit --no-fund" \
-      || fail "npm install failed; live install untouched"
+    run_limited 900 sudo -u dac bash -c "cd '$STAGE/server' && '$NPM' install --no-audit --no-fund" \
+      || fail "npm install failed or took over 15 minutes; live install untouched"
   else
     say "package-lock.json unchanged: reusing existing node_modules"
+  fi
+  # Volta fetches a newly pinned Node the first time npm or npx runs under it,
+  # which would otherwise be after the window closes. Fetch it now.
+  if [ "$(node_fetch_mb "$(node_pin "$STAGE")" "$(node_pin "$LIVE")")" != 0 ]; then
+    say "Fetching Node $(node_pin "$STAGE") for the new version"
+    run_limited 600 sudo -u dac bash -c "cd '$STAGE/server' && '$NPM' --version" >/dev/null \
+      || fail "could not fetch Node $(node_pin "$STAGE"); live install untouched"
   fi
   close_wan
 
@@ -501,8 +585,8 @@ if [ "$HEALTHY" = yes ]; then
       ! grep -q -- '--dport 1337.*--reject-with tcp-reset' "$LIVE/scripts/block_internet_access.sh"; then
       EXPECT_RESET=no
     fi
-    if iptables -w 5 -C OUTPUT -j DROP; then
-      if [ "$EXPECT_RESET" = no ] || iptables -w 5 -C OUTPUT -p tcp --dport 1337 -j REJECT --reject-with tcp-reset; then
+    if fw4 -C OUTPUT -j DROP; then
+      if [ "$EXPECT_RESET" = no ] || fw4 -C OUTPUT -p tcp --dport 1337 -j REJECT --reject-with tcp-reset; then
         say "SUCCESS: pod is serving v$STAGED_VERSION. Previous version kept at $PREV; backup at $BK"
         exit 0
       fi

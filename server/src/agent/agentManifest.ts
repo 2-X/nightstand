@@ -110,6 +110,7 @@ export const AGENT_MANIFEST: AgentEntry[] = [
   { path: 'scripts/update_service.sh', mode: 'copy', why: 'systemd entry point for the updater' },
   { path: 'scripts/setup_services.sh', mode: 'add', why: 'installs the updater, rollback and revert units and their sudoers rules' },
   { path: 'scripts/rollback_pod.sh', mode: 'add', why: 'swaps the live and previous trees offline' },
+  { path: 'scripts/close_update_window.sh', mode: 'add', why: 'closes the download window after the update or revert unit stops' },
   // No snapshot exists to restore. Upstream ships no tags, so this downloads
   // whatever main is that day, which is not pinned to AGENT_BASE.sha and need
   // not equal the tree the pod started from.
