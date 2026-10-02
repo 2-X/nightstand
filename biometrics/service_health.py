@@ -29,7 +29,7 @@ SENSOR_TEMPS_UPDATE_INTERVAL = 30  # seconds
 SENSOR_TEMPS_MAX_RECORD_AGE = 120  # seconds
 
 
-def _frz_record_epoch(record: dict):
+def frz_record_epoch(record: dict):
     """Epoch seconds of a frzTemp/frzHealth record's `ts`, or None if missing/unparseable.
 
     Live records carry epoch seconds; load_raw_files-style replays may have
@@ -113,7 +113,7 @@ def update_sensor_temps(frz_temp_data: dict):
     # Drop replayed/stale records before the throttle check so they cannot
     # consume the 30s window and shadow the live records behind them. A
     # record with no parseable ts is treated as live rather than discarded.
-    record_epoch = _frz_record_epoch(frz_temp_data)
+    record_epoch = frz_record_epoch(frz_temp_data)
     if record_epoch is not None and now - record_epoch > SENSOR_TEMPS_MAX_RECORD_AGE:
         logger.debug(f'Skipping stale frzTemp record ({now - record_epoch:.0f}s old)')
         return
@@ -234,7 +234,7 @@ def update_pump_health(frz_health_data: dict):
     # with historical data. A frame with no parseable ts is treated as live
     # rather than discarded.
     now = time.time()
-    record_epoch = _frz_record_epoch(frz_health_data)
+    record_epoch = frz_record_epoch(frz_health_data)
     if record_epoch is not None and now - record_epoch > PUMP_HEALTH_MAX_RECORD_AGE:
         logger.debug(f'Skipping stale frzHealth frame ({now - record_epoch:.0f}s old)')
         return

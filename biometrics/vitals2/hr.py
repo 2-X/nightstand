@@ -294,6 +294,12 @@ class HrTracker:
                 self._add(start, row, motion, env[offset:offset + size].copy())
         return self._finish(final=False)
 
+    def pending_from(self) -> Optional[int]:
+        """Start of the oldest window not yet returned; every window before it has been."""
+        if self._pending < len(self._windows):
+            return self._windows[self._pending].start
+        return self._next_start
+
     def flush(self) -> List[HrWindow]:
         """Return the windows still waiting for later neighbours, judged on those present."""
         return self._finish(final=True)

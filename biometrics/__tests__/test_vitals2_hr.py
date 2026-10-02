@@ -301,6 +301,7 @@ class TrackerStateTest(unittest.TestCase):
         self.assertTrue(all(window.bpm is not None for window in waiting))
         fresh = after_gap[len(waiting):]
         self.assertTrue(fresh)
+        self.assertEqual(tracker.pending_from(), fresh[-1].start + hr.HOP_SECONDS)
         self.assertGreater(fresh[0].start - starts[-1], hr.RESET_GAP_SECONDS)
 
     def test_reset_forgets_the_track(self):
