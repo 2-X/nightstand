@@ -90,10 +90,11 @@ it('shows the Smart Schedule line during a Smart Schedule sleep', async () => {
   expect(await screen.findByText('Smart phase line')).toBeInTheDocument();
 });
 
-it('shows no schedule text while it cannot tell which engine runs', async () => {
+it('says the schedule is loading while it cannot tell which engine runs', async () => {
   bed.value = { state: 'loading' };
   renderWithProviders(<UpcomingNight/>);
-  await waitFor(() => expect(screen.queryByText(/Turns on/)).not.toBeInTheDocument());
+  expect(await screen.findByText('Loading schedule')).toBeInTheDocument();
+  expect(screen.queryByText(/Turns on/)).not.toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Upcoming' })).not.toBeInTheDocument();
 });
 

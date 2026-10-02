@@ -48,4 +48,6 @@ it('keeps the not responding state readable', () => {
   expect(ratio(palette.status.warn, palette.bg.base)).toBeGreaterThanOrEqual(4.5);
   expect(ratio(palette.text.secondary, palette.bg.base)).toBeGreaterThanOrEqual(4.5);
   expect(ratio(palette.text.secondary, palette.ember)).toBeGreaterThanOrEqual(4.5);
+  // "Loading" in the dial, on the page. "Loading schedule" sits on the Tonight card, checked against bg.elevated above.
+  expect(ratio(palette.text.tertiary, palette.bg.base)).toBeGreaterThanOrEqual(4.5);
 });

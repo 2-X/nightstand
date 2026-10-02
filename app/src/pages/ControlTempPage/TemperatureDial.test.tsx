@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { palette } from '@design/tokens';
 import TemperatureDial from './TemperatureDial';
 import { useControlTempStore } from './controlTempStore';
@@ -49,6 +49,16 @@ it('shows last night, not the steppers, for an away side that is on', () => {
   render(<TemperatureDial status={ on } away refetch={ vi.fn() } format="level" whenOff={ <span>Last night</span> }/>);
   expect(screen.queryByText('Temperature stepper')).not.toBeInTheDocument();
   expect(screen.getByText('Last night')).toBeInTheDocument();
+});
+
+it('says Loading in the dial and leaves every slot empty while the status loads', () => {
+  const { container } = render(<TemperatureDial loading refetch={ vi.fn() } format="level"/>);
+  const dial = within(container.querySelector<HTMLElement>('[data-dial]')!);
+  expect(dial.getByRole('status')).toHaveTextContent('Loading');
+  expect(dial.getByRole('status')).toHaveStyle({ color: palette.text.tertiary });
+  expect(container.querySelector('[data-dial] path[data-band="off"]')).not.toBeNull();
+  expect(container.querySelector('[data-caption-slot]')!.textContent).toBe('');
+  expect(container.querySelector('[data-controls-row]')).toBeEmptyDOMElement();
 });
 
 it('draws the empty track and no text before the status loads', () => {
@@ -113,6 +123,16 @@ it('greys a last known status, dates it, and says what that means for tonight', 
   expect(slot.querySelector('[role="status"]')).not.toBeNull();
   expect(container.querySelector('circle[data-stale]')).not.toBeNull();
   expect(screen.getByText('Temperature stepper')).toBeInTheDocument();
+});
+
+it('keeps one empty status region in the caption slot and fills it when the Pod stops answering', () => {
+  const { container, rerender } = render(<TemperatureDial status={ on } refetch={ vi.fn() } format="level"/>);
+  const region = container.querySelector('[data-caption-slot] [role="status"]');
+  expect(region).not.toBeNull();
+  expect(region!.textContent).toBe('');
+  rerender(<TemperatureDial status={ on } staleSince={ since } refetch={ vi.fn() } format="level"/>);
+  expect(container.querySelector('[data-caption-slot] [role="status"]')).toBe(region);
+  expect(region).toHaveTextContent('No response from the Pod since 4:41 AM.');
 });
 
 it('says Off with its time for a side last known to be off', () => {

@@ -113,3 +113,10 @@ it('draws the selected Bed tile warm, from the top, with room for three lines', 
   expect(selected).toHaveStyle({ backgroundColor: '#2A251F', minHeight: '84px', borderRadius: '16px', justifyContent: 'flex-start' });
   expect(screen.getByRole('radio', { name: /^Sam/ }).closest('label')).toHaveStyle({ backgroundColor: '#121518' });
 });
+
+it('names only the side while the bed status loads', () => {
+  render(<SideControl compact={ false } captions={ { left: '', right: '' } }/>);
+  expect(screen.getByRole('radio', { name: 'Alex.' })).toBeChecked();
+  expect(screen.getByRole('radio', { name: 'Sam.' })).toBeInTheDocument();
+  expect(screen.queryByText('Off')).not.toBeInTheDocument();
+});

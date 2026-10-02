@@ -103,7 +103,9 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
             value={ key }
             checked={ selected }
             slotProps={ { input: {
-              'aria-label': `${title}. ${both ? `${name}'s controls apply to both sides. ` : ''}${spoken}.${occupancy ? ` ${occupancy}.` : ''}`,
+              'aria-label': [
+                `${title}.`, both && `${name}'s controls apply to both sides.`, spoken && `${spoken}.`, occupancy && `${occupancy}.`,
+              ].filter(Boolean).join(' '),
             } } }
             sx={ { position: 'absolute', inset: 0, opacity: 0, p: 0, '& input': { width: '100%', height: '100%' } } }/>
           { compact ? <>

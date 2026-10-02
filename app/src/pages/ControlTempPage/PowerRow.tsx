@@ -11,6 +11,8 @@ type PowerRowProps = {
   refetch: PowerButtonProps['refetch'];
   // Puts Try again in the button's place while the Pod does not answer.
   onRetry?: () => void;
+  // Empty at its full height while the status loads.
+  loading?: boolean;
 };
 
 // One height whatever it holds, so nothing under it moves.
@@ -20,12 +22,12 @@ const rowSx = {
   [media.tight]: { mt: '2px', minHeight: 48 },
 } as const;
 
-export default function PowerRow({ isOn, refetch, onRetry }: PowerRowProps) {
+export default function PowerRow({ isOn, refetch, onRetry, loading = false }: PowerRowProps) {
   const { side, isUpdating } = useAppStore();
   const { data: settings } = useSettings();
   const away = !!settings?.[side]?.awayMode;
   return <Box data-power-row sx={ rowSx }>
-    { onRetry ? <Button
+    { loading ? null : onRetry ? <Button
       aria-disabled={ isUpdating || undefined }
       onClick={ () => { if (!isUpdating) onRetry(); } }
       sx={ powerPillSx('on') }>

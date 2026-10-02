@@ -173,20 +173,20 @@ for (const [width, height] of sizes) {
 for (const [width, height] of [[360, 640], [375, 560], [375, 667], [390, 844], [1280, 800]] as const) {
   test(`nothing below the header moves while the page loads at ${width}x${height}`, async ({ page }) => {
     await page.setViewportSize({ width, height });
-    // Sample every frame from the first one: the side tiles exist from first paint, the power button once
-    // the bed status arrives. Keep sampling for 2 s after the button appears.
+    // Sample every frame from the first one: the tiles, the caption slot, the power row and the Tonight card
+    // exist from first paint. Keep sampling for 2 s after the power button appears.
     await page.addInitScript(() => {
-      const samples: { tiles: number[]; power: number[] } = { tiles: [], power: [] };
+      const selectors = ['[role="radiogroup"][aria-label="Bed side"]', '[data-caption-slot]', '[data-power-row]', '[data-tonight]'];
+      const samples: Record<string, number[]> = Object.fromEntries(selectors.map(selector => [selector, []]));
       (window as unknown as { loadSamples: typeof samples }).loadSamples = samples;
       let powerSeenAt = 0;
       const sample = (now: number) => {
-        const tiles = document.querySelector('[role="radiogroup"][aria-label="Bed side"]');
-        const power = Array.from(document.querySelectorAll('button')).find(button => /^Turn (on|off)$/.test(button.textContent ?? ''));
-        if (tiles) samples.tiles.push(tiles.getBoundingClientRect().top);
-        if (power) {
-          powerSeenAt ||= now;
-          samples.power.push(power.getBoundingClientRect().top);
+        for (const selector of selectors) {
+          const node = document.querySelector(selector);
+          if (node) samples[selector].push(node.getBoundingClientRect().top + window.scrollY);
         }
+        const power = Array.from(document.querySelectorAll('button')).find(button => /^Turn (on|off)$/.test(button.textContent ?? ''));
+        if (power) powerSeenAt ||= now;
         if (!powerSeenAt || now - powerSeenAt < 2000) requestAnimationFrame(sample);
         else (window as unknown as { loadDone: boolean }).loadDone = true;
       };
@@ -195,10 +195,10 @@ for (const [width, height] of [[360, 640], [375, 560], [375, 667], [390, 844], [
     await page.goto('/');
     await page.waitForFunction(() => (window as unknown as { loadDone?: boolean }).loadDone, undefined, { timeout: 20_000 });
     await expect(page.getByRole('link', { name: 'Elevation' })).toBeVisible();
-    const { tiles, power } = await page.evaluate(() => (window as unknown as { loadSamples: { tiles: number[]; power: number[] } }).loadSamples);
-    expect(power.length).toBeGreaterThan(10);
-    for (const series of [tiles, power]) {
-      expect(Math.max(...series) - Math.min(...series)).toBeLessThanOrEqual(1);
+    const samples = await page.evaluate(() => (window as unknown as { loadSamples: Record<string, number[]> }).loadSamples);
+    for (const [selector, series] of Object.entries(samples)) {
+      expect(series.length, selector).toBeGreaterThan(10);
+      expect(Math.max(...series) - Math.min(...series), selector).toBeLessThanOrEqual(1);
     }
   });
 }

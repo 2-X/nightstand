@@ -7,7 +7,7 @@ import { useSchedules } from '@api/schedules.ts';
 import { useSettings } from '@api/settings.ts';
 import { isSchedulePaused, pauseEndsAt } from '@api/schedulePause.ts';
 import { useAppStore } from '@state/appStore.tsx';
-import { sx as shared } from '@design/tokens';
+import { palette, sx as shared } from '@design/tokens';
 import { displayTemperature } from '@lib/temperatureConversions.ts';
 import { nextBedEvent } from './bedEvents';
 import AlarmNotification from './AlarmNotification';
@@ -47,12 +47,15 @@ export default function UpcomingNight() {
   // While Rhythms runs the weekly schedules are not needed.
   const legacy = bed.state === 'legacy';
   if (!settings || bed.state === 'loading' || bed.state === 'error' || (legacy && !schedules)) {
-    if (!settingsError && bed.state !== 'error' && !(legacy && schedulesError)) return null;
+    const failed = settingsError || bed.state === 'error' || (legacy && schedulesError);
+    // The card holds its place while the schedule loads, so nothing under it moves when it arrives.
     return (
       <Box data-tonight sx={ cardSx }>
         <SectionHeading sx={ headingSx }>Tonight</SectionHeading>
-        <Typography sx={ tonightLineSx } role="status">Schedule unavailable.</Typography>
-        <Button sx={ { ...shared.lampLink, ml: '-10px' } } onClick={ retry }>Try again</Button>
+        { failed ? <>
+          <Typography sx={ tonightLineSx } role="status">Schedule unavailable.</Typography>
+          <Button sx={ { ...shared.lampLink, ml: '-10px' } } onClick={ retry }>Try again</Button>
+        </> : <Typography sx={ { ...tonightLineSx, color: palette.text.tertiary } } role="status">Loading schedule</Typography> }
       </Box>
     );
   }

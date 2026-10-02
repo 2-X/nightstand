@@ -13,6 +13,8 @@ it('fails or holds the bed status only when a spec asks', () => {
   expect(demoReads()).toBeUndefined();
   localStorage.setItem(DEMO_READS_KEY, 'fail');
   expect(demoReads()).toBe('fail');
+  localStorage.setItem(DEMO_READS_KEY, 'hang');
+  expect(demoReads()).toBe('hang');
   localStorage.setItem(DEMO_READS_KEY, 'other');
   expect(demoReads()).toBeUndefined();
 });

@@ -72,3 +72,15 @@ test('a first load that fails says so in the same frame, with Try again', async 
   await expect(page.locator('[data-dial] h2')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /^Turn o/ })).toHaveCount(0);
 });
+
+test('while the status loads every slot is drawn, empty, at its full size', async ({ page }) => {
+  await open(page, { 'nightstand-demo-reads': 'hang' });
+  await expect(page.locator('[data-dial]').getByRole('status')).toHaveText('Loading');
+  await expect(page.locator('[data-tonight]').getByRole('status')).toHaveText('Loading schedule');
+  await expect(page.getByRole('radio', { name: 'Alex.' })).toBeAttached();
+  await expect(page.locator('[data-caption-slot]')).toBeEmpty();
+  await expect(page.locator('[data-controls-row]')).toBeEmpty();
+  await expect(page.locator('[data-power-row]')).toBeEmpty();
+  expect((await page.locator('[data-power-row]').boundingBox())!.height).toBeGreaterThanOrEqual(54);
+  await expect(page.getByRole('button', { name: /^Turn o/ })).toHaveCount(0);
+});

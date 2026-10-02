@@ -29,8 +29,10 @@ it('recovers when Try again succeeds', async () => {
   expect(await screen.findByRole('link', { name: 'Edit schedule' })).toBeInTheDocument();
 });
 
-it('shows nothing while the schedule is still loading', () => {
+it('holds the card in place with "Loading schedule" while the schedule loads', () => {
   server.use(http.get('*/api/schedules', () => new Promise(() => undefined)));
   renderWithProviders(<UpcomingNight />);
+  expect(screen.getByRole('heading', { level: 2, name: 'Tonight' })).toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('Loading schedule');
   expect(screen.queryByText('Schedule unavailable.')).not.toBeInTheDocument();
 });

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Alert, Box, Typography } from '@mui/material';
+import { Alert, Box } from '@mui/material';
 
 import AlarmDismissal from './AlarmDismissal.tsx';
 import AnalyzeLastNightPrompt from './AnalyzeLastNightPrompt.tsx';
@@ -23,6 +23,8 @@ import { media } from '@design/tokens';
 import { useSettings } from '@api/settings.ts';
 
 const NOT_RESPONDING = 'Not responding';
+const STALE_TILES = { left: NOT_RESPONDING, right: NOT_RESPONDING };
+const LOADING_TILES = { left: '', right: '' };
 const pageSx = {
   [media.short]: { gap: 1, pt: 1 },
   [media.tight]: { gap: 0.5, pt: 0.5 },
@@ -49,6 +51,7 @@ export default function ControlTempPage() {
 
   // Stale keeps the last known values; the page never drops the dial.
   const staleSince = frame.kind === 'stale' ? frame.since : undefined;
+  const loading = frame.kind === 'loading';
   const sideStatus = frame.kind === 'loading' ? undefined : frame.status;
   const isOn = sideStatus?.isOn ?? false;
   const lastNight = useLastNight();
@@ -82,19 +85,18 @@ export default function ControlTempPage() {
       </Alert> }
       <Box sx={ gridSx }>
         <Box data-bed-controls sx={ controlColumnSx }>
-          <SideControl compact={ false } captions={ staleSince ? { left: NOT_RESPONDING, right: NOT_RESPONDING } : undefined }/>
-          { frame.kind === 'loading' ? <Typography role="status">Loading bed status...</Typography> : <>
-            <TemperatureDial
-              status={ sideStatus }
-              staleSince={ staleSince }
-              away={ away }
-              refetch={ refetch }
-              format={ settings?.temperatureFormat ?? 'fahrenheit' }
-              whenOff={ <ErrorBoundary componentName="Last night summary">
-                <LastNightSummary lastNight={ lastNight } />
-              </ErrorBoundary> }/>
-            <PowerRow isOn={ isOn } refetch={ refetch } onRetry={ staleSince ? () => void refetch() : undefined }/>
-          </> }
+          <SideControl compact={ false } captions={ loading ? LOADING_TILES : staleSince ? STALE_TILES : undefined }/>
+          <TemperatureDial
+            status={ sideStatus }
+            loading={ loading }
+            staleSince={ staleSince }
+            away={ away }
+            refetch={ refetch }
+            format={ settings?.temperatureFormat ?? 'fahrenheit' }
+            whenOff={ <ErrorBoundary componentName="Last night summary">
+              <LastNightSummary lastNight={ lastNight } />
+            </ErrorBoundary> }/>
+          <PowerRow isOn={ isOn } refetch={ refetch } loading={ loading } onRetry={ staleSince ? () => void refetch() : undefined }/>
           { commandError && <Alert severity="error" sx={ { width: '100%' } }>{ commandError }</Alert> }
         </Box>
         <Box sx={ { display: 'flex', flexDirection: 'column', gap: 2, width: '100%' } }>
@@ -105,7 +107,7 @@ export default function ControlTempPage() {
           <ErrorBoundary componentName="Alarm notification">
             <UpcomingNight />
           </ErrorBoundary>
-          { !lastNightUnderDial && <ErrorBoundary componentName="Last night chip">
+          { !loading && !lastNightUnderDial && <ErrorBoundary componentName="Last night chip">
             <LastNightChip lastNight={ lastNight } />
           </ErrorBoundary> }
           <ErrorBoundary componentName="Analyze last night">

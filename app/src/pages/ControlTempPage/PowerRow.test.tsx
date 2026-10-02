@@ -56,3 +56,10 @@ it('puts Try again in the calm pill while the Pod does not answer', async () => 
   await user.click(button);
   expect(retry).toHaveBeenCalledOnce();
 });
+
+it('stays empty at its full height while the status loads', async () => {
+  const { container } = renderWithProviders(<PowerRow isOn={ false } loading refetch={ refetch }/>);
+  const row = container.querySelector('[data-power-row]')!;
+  expect(row).toBeEmptyDOMElement();
+  expect(row).toHaveStyle({ minHeight: '54px' });
+});

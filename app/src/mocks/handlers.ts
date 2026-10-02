@@ -75,6 +75,7 @@ export const handlers = [
     return HttpResponse.json(deepClone(updated));
   }),
   http.get('/api/schedules', async () => {
+    if (demoReads() === 'hang') await delay('infinite');
     await delay(120);
     return HttpResponse.json(deepClone(getSchedules()));
   }),
@@ -85,6 +86,7 @@ export const handlers = [
     return HttpResponse.json(deepClone(updated));
   }),
   http.get('/api/rhythms', async () => {
+    if (demoReads() === 'hang') await delay('infinite');
     await delay(120);
     return HttpResponse.json(deepClone(getMockRhythmsResponse()));
   }),
@@ -94,6 +96,7 @@ export const handlers = [
     return result.ok ? HttpResponse.json(deepClone(result.body)) : HttpResponse.json(result.body, { status: result.status });
   }),
   http.get('/api/rhythms/sleeps', async ({ request }) => {
+    if (demoReads() === 'hang') await delay('infinite');
     const url = new URL(request.url);
     const side = url.searchParams.get('side') === 'right' ? 'right' : 'left';
     const from = new Date(url.searchParams.get('from') ?? Date.now());
@@ -127,6 +130,7 @@ export const handlers = [
     return HttpResponse.json(deepClone(updated));
   }),
   http.get('/api/deviceStatus', async () => {
+    if (demoReads() === 'hang') await delay('infinite');
     if (demoReads() === 'fail') {
       return HttpResponse.json({ error: { message: 'Pod did not respond in time, retrying connection' } }, { status: 503 });
     }

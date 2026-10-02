@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
-import { Box } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { useAppStore } from '@state/appStore';
 import { useSettings } from '@api/settings.ts';
-import { media } from '@design/tokens';
+import { media, palette } from '@design/tokens';
 import { fahrenheitToLevel, type TemperatureFormat } from '@lib/temperatureConversions.ts';
 import { temperatureColor } from '@lib/temperatureColor';
 import { lastKnownAt } from './bedText';
@@ -11,12 +11,14 @@ import { useControlTempStore } from './controlTempStore.tsx';
 import DialRing from './DialRing';
 import { DIAL_HEIGHT, DIAL_WIDTH } from './dialGeometry';
 import TemperatureButtons from './TemperatureButtons.tsx';
-import TemperatureLabel from './TemperatureLabel.tsx';
+import TemperatureLabel, { centreSx } from './TemperatureLabel.tsx';
 
 type TemperatureDialProps = {
   // The side's status: live, or the last known one while staleSince is set.
   status?: { isOn: boolean; targetTemperatureF: number; currentTemperatureF: number };
   staleSince?: Date;
+  // Nothing to show yet: every slot keeps its size.
+  loading?: boolean;
   // An away side that is on follows the other side; it shows last night instead of steppers.
   away?: boolean;
   refetch: () => unknown;
@@ -52,7 +54,7 @@ const controlsRowSx = {
   [media.tight]: { height: 67, mt: '2px' },
 } as const;
 
-export default function TemperatureDial({ status, staleSince, away = false, refetch, format, whenOff }: TemperatureDialProps) {
+export default function TemperatureDial({ status, staleSince, loading = false, away = false, refetch, format, whenOff }: TemperatureDialProps) {
   const { side } = useAppStore();
   const { data: settings } = useSettings();
   const stored = useControlTempStore(state => state.deviceStatus?.[side]?.targetTemperatureF);
@@ -71,6 +73,9 @@ export default function TemperatureDial({ status, staleSince, away = false, refe
         pending={ pending }
         targetLevel={ targetLevel }
         currentLevel={ fahrenheitToLevel(status?.currentTemperatureF ?? target) }/>
+      { loading && <Box sx={ centreSx }>
+        <Typography role="status" sx={ { fontSize: 15, color: palette.text.tertiary } }>Loading</Typography>
+      </Box> }
       { status && <TemperatureLabel
         isOn={ isOn }
         sliderTemp={ target }

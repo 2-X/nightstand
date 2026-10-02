@@ -23,9 +23,9 @@ type CaptionSlotProps = {
 export default function CaptionSlot({ isOn, staleSince, empty = false }: CaptionSlotProps) {
   const lines = useBedCaption(isOn);
   const { data: settings } = useSettings();
+  // The status region is always there, empty unless stale, so a screen reader announces the lines when they arrive.
   return <Box data-caption-slot sx={ captionSlotSx }>
-    { empty ? null
-      : staleSince ? <Box role="status">{ staleCaption(staleSince, settings?.timeZone).map(line) }</Box>
-        : lines.map(line) }
+    <Box role="status">{ !empty && staleSince ? staleCaption(staleSince, settings?.timeZone).map(line) : null }</Box>
+    { empty || staleSince ? null : lines.map(line) }
   </Box>;
 }
