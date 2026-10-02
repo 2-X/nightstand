@@ -48,6 +48,10 @@ is a hard fork; for the history of the projects it descends from, see
   Pod, that side was off, or Nightstand hit an error. If the Pod did not
   confirm an alarm, the message says it may not have rung. The message shows
   at the top of every page until you dismiss it or a week passes.
+- Updating, rolling back or switching from the app now warns and asks you to
+  confirm when a side is on, an alarm is due within 15 minutes, or the bed's
+  state cannot be read. The update dialog now says that Nightstand restarts,
+  not the Pod.
 
 ## [3.5.1] - 2026-10-01
 

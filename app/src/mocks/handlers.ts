@@ -4,6 +4,7 @@ import type { SleepRecord } from '@api/sleepSchema.ts';
 import type { Jobs } from '@api/jobs.ts';
 import type { BasePosition } from '@api/baseControl.ts';
 import type { MissedAlarm } from '@api/missedAlarms.ts';
+import { inUseLines, type InUseReasonText } from '@api/bedInUse.ts';
 import {
   getServices,
   updateServices,
@@ -55,6 +56,22 @@ const missedAlarmsForDemo = (): MissedAlarm[] => {
     { id: 'demo-right-off', side: 'right', at: '2026-10-05T14:00:00.000Z', reason: 'side-off', recordedAt: '2026-10-05T14:10:00.000Z' },
   ] : [];
   return demoMissedAlarms;
+};
+
+// The demo treats the bed as idle unless it is opened with ?in-use, so update,
+// rollback and switch can show their second confirmation. Read once, as above.
+let demoInUse: InUseReasonText[] | undefined;
+const inUseForDemo = (): InUseReasonText[] => {
+  demoInUse ??= new URLSearchParams(globalThis.location?.search).has('in-use') ? ['left-on', 'alarm-soon'] : [];
+  return demoInUse;
+};
+const refuseWhileInUse = async (request: Request) => {
+  const reasons = inUseForDemo();
+  if (reasons.length === 0) return undefined;
+  const text = await request.clone().text();
+  if ((text ? JSON.parse(text) : {}).confirmInUse === true) return undefined;
+  const message = inUseLines(reasons).join(' ');
+  return HttpResponse.json({ error: message, message, reasons }, { status: 409 });
 };
 
 type Filters = {
@@ -180,7 +197,7 @@ export const handlers = [
     return HttpResponse.json({ entries: deepClone(getChangelog()) });
   }),
   http.get('/api/update/rollback-info', () => HttpResponse.json(rollbackInfo)),
-  http.post('/api/update', () => new HttpResponse(null, { status: 204 })),
+  http.post('/api/update', async ({ request }) => (await refuseWhileInUse(request)) ?? new HttpResponse(null, { status: 204 })),
   http.get('/api/base-control', async () => {
     await delay(100);
     return HttpResponse.json(deepClone(getBaseStatus()));
@@ -324,8 +341,8 @@ export const handlers = [
     demoMissedAlarms = missedAlarmsForDemo().filter(item => !ids.includes(item.id));
     return new HttpResponse(null, { status: 204 });
   }),
-  http.post('/api/update/revert-to-stock', () => HttpResponse.json({ success: true })),
-  http.post('/api/update/rollback', () => HttpResponse.json({ success: true })),
+  http.post('/api/update/revert-to-stock', async ({ request }) => (await refuseWhileInUse(request)) ?? HttpResponse.json({ success: true })),
+  http.post('/api/update/rollback', async ({ request }) => (await refuseWhileInUse(request)) ?? HttpResponse.json({ success: true })),
   http.post('/api/jobs', async ({ request }) => {
     const jobs = (await request.json()) as Jobs;
     handleJobs(jobs);

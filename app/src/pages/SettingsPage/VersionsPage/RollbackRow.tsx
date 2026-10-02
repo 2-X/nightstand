@@ -7,6 +7,7 @@ import {
 import RestorePageIcon from '@mui/icons-material/RestorePage';
 import { postRollback } from '@api/update.ts';
 import { useUpdateProgress } from '@api/useUpdateProgress.ts';
+import InUseConfirm from '../../../components/InUseConfirm';
 import RhythmsLeaveNote from './RhythmsLeaveNote';
 
 type Props = {
@@ -17,9 +18,9 @@ type Props = {
 export default function RollbackRow({ runningVersion, rollbackVersion }: Props) {
   const [open, setOpen] = useState(false);
   const titleId = useId();
-  const { phase, error, start, reset } = useUpdateProgress(runningVersion);
+  const { phase, error, inUse, start, reset } = useUpdateProgress(runningVersion);
 
-  const rollback = () => start(() => postRollback());
+  const rollback = () => start(confirmInUse => postRollback(confirmInUse ? { confirmInUse } : undefined));
 
   return (
     // The dialog is a sibling of the row, not a child of it. A portalled
@@ -58,6 +59,7 @@ export default function RollbackRow({ runningVersion, rollbackVersion }: Props) 
         </DialogTitle>
         <DialogContent>
           { phase === 'failed' && <Alert severity="error">{ error }</Alert> }
+          { phase === 'idle' && <InUseConfirm reasons={ inUse }/> }
           { phase === 'idle' && (
             <DialogContentText>
               The Pod switches back to the version it kept. Settings and sleep data stay.
@@ -92,8 +94,8 @@ export default function RollbackRow({ runningVersion, rollbackVersion }: Props) 
         <DialogActions>
           { phase === 'idle' && (
             <>
-              <Button onClick={ () => setOpen(false) }>Cancel</Button>
-              <Button variant="contained" onClick={ rollback }>Go back now</Button>
+              <Button autoFocus={ inUse !== undefined } onClick={ () => { reset(); setOpen(false); } }>Cancel</Button>
+              <Button variant="contained" onClick={ rollback }>{ inUse ? 'Continue anyway' : 'Go back now' }</Button>
             </>
           ) }
           { (phase === 'timed_out' || phase === 'failed') && (

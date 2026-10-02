@@ -109,3 +109,41 @@ it('keeps polling after an ambiguous transport disconnect', async () => {
   await act(async () => { await result.current.start(() => axios.post('/update', {})); });
   expect(result.current.phase).toBe('updating');
 });
+
+describe('when the bed may be in use', () => {
+  const refuse = (reasons: unknown) => HttpResponse.json({ error: 'in use', message: 'in use', reasons }, { status: 409 });
+
+  it('stays idle with the reasons, then confirms on the next start', async () => {
+    const confirms: boolean[] = [];
+    const { result } = renderHook(() => useUpdateProgress('3.2.0'));
+    server.use(http.post('*/update', () => refuse(['right-on'])));
+    await act(async () => { await result.current.start(confirm => { confirms.push(confirm); return axios.post('/update', {}); }); });
+    expect(result.current.phase).toBe('idle');
+    expect(result.current.inUse).toEqual(['right-on']);
+    server.use(http.post('*/update', () => new HttpResponse(null, { status: 204 })));
+    await act(async () => { await result.current.start(confirm => { confirms.push(confirm); return axios.post('/update', {}); }); });
+    expect(confirms).toEqual([false, true]);
+    expect(result.current.phase).toBe('updating');
+  });
+
+  it('forgets the reasons on reset', async () => {
+    server.use(http.post('*/update', () => refuse(['left-on'])));
+    const { result } = renderHook(() => useUpdateProgress('3.2.0'));
+    await act(async () => { await result.current.start(() => axios.post('/update', {})); });
+    act(() => result.current.reset());
+    expect(result.current.inUse).toBeUndefined();
+  });
+
+  it.each([
+    ['no reasons', undefined],
+    ['an empty list', []],
+    ['reasons it does not know', ['from-the-future']],
+  ])('treats a 409 with %s as a plain failure', async (_what, reasons) => {
+    server.use(http.post('*/update', () => refuse(reasons)));
+    const { result } = renderHook(() => useUpdateProgress('3.2.0'));
+    await act(async () => { await result.current.start(() => axios.post('/update', {})); });
+    expect(result.current.phase).toBe('failed');
+    expect(result.current.error).toBe('in use');
+    expect(result.current.inUse).toBeUndefined();
+  });
+});

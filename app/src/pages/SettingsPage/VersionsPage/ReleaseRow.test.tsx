@@ -4,6 +4,7 @@ import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import ReleaseRow from './ReleaseRow';
+import { serveInUse } from '@test/inUse';
 
 const release = { kind: 'agent', version: '3.4.0', channel: 'stable', date: '2026-07-01' } as const;
 
@@ -94,5 +95,32 @@ describe('ReleaseRow', () => {
     renderWithProviders(<ReleaseRow release={ release } runningVersion="3.3.0" body={ undefined } offerReinstall/>);
     expect(screen.getByRole('button', { name: 'Install' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Reinstall' })).not.toBeInTheDocument();
+  });
+});
+
+describe('ReleaseRow when the bed may be in use', () => {
+  const open = async () => {
+    const view = renderWithProviders(<ReleaseRow release={ release } runningVersion="3.3.0" body={ undefined }/>);
+    await view.user.click(screen.getByRole('button', { name: 'Install' }));
+    return view;
+  };
+
+  it('asks again after a refusal and confirms the same request on Continue anyway', async () => {
+    const bodies = serveInUse('*/update', ['status-unknown']);
+    const { user } = await open();
+    await user.click(await screen.findByRole('button', { name: 'Install now' }));
+    expect(await screen.findByText("Nightstand cannot read the bed's state right now, so someone may be using it.")).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Continue anyway' }));
+    await waitFor(() => expect(bodies).toEqual([
+      { targetVersion: '3.4.0', allowDowngrade: false },
+      { targetVersion: '3.4.0', allowDowngrade: false, confirmInUse: true },
+    ]));
+  });
+
+  it('sends no confirmation when the bed is idle', async () => {
+    const bodies = serveInUse('*/update', []);
+    const { user } = await open();
+    await user.click(await screen.findByRole('button', { name: 'Install now' }));
+    await waitFor(() => expect(bodies).toEqual([{ targetVersion: '3.4.0', allowDowngrade: false }]));
   });
 });

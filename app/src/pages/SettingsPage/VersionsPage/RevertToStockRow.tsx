@@ -7,6 +7,7 @@ import {
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { postRevertToStock } from '@api/update.ts';
 import { useUpdateProgress } from '@api/useUpdateProgress.ts';
+import InUseConfirm from '../../../components/InUseConfirm';
 import RhythmsLeaveNote from './RhythmsLeaveNote';
 
 type Props = {
@@ -16,9 +17,9 @@ type Props = {
 export default function RevertToStockRow({ runningVersion }: Props) {
   const [open, setOpen] = useState(false);
   const titleId = useId();
-  const { phase, error, start, reset } = useUpdateProgress(runningVersion);
+  const { phase, error, inUse, start, reset } = useUpdateProgress(runningVersion);
 
-  const revert = () => start(() => postRevertToStock());
+  const revert = () => start(confirmInUse => postRevertToStock(confirmInUse ? { confirmInUse } : undefined));
 
   return (
     // The dialog is a sibling of the row, not a child of it. A portalled
@@ -55,6 +56,7 @@ export default function RevertToStockRow({ runningVersion }: Props) {
         </DialogTitle>
         <DialogContent>
           { phase === 'failed' && <Alert severity="error">{ error }</Alert> }
+          { phase === 'idle' && <InUseConfirm reasons={ inUse }/> }
           { phase === 'idle' && (
             <DialogContentText component="div">
               <Typography variant="body2" sx={ { mb: 2 } }>
@@ -119,8 +121,10 @@ export default function RevertToStockRow({ runningVersion }: Props) {
             '& > :not(style) ~ :not(style)': { ml: 0 }, '& .MuiButton-root': { width: { xs: '100%', sm: 'auto' } } } }>
           { phase === 'idle' && (
             <>
-              <Button onClick={ () => setOpen(false) }>Cancel</Button>
-              <Button color="error" variant="contained" onClick={ revert }>Switch to upstream free-sleep</Button>
+              <Button autoFocus={ inUse !== undefined } onClick={ () => { reset(); setOpen(false); } }>Cancel</Button>
+              <Button color="error" variant="contained" onClick={ revert }>
+                { inUse ? 'Continue anyway' : 'Switch to upstream free-sleep' }
+              </Button>
             </>
           ) }
           { (phase === 'timed_out' || phase === 'failed') && (

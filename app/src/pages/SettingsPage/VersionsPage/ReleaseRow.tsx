@@ -9,6 +9,7 @@ import { postUpdate } from '@api/update.ts';
 import { migrationsApplied, useUpdateProgress } from '@api/useUpdateProgress.ts';
 import type { Release } from '@api/releases.ts';
 import { downgradeWarnings } from './downgradeWarnings';
+import InUseConfirm from '../../../components/InUseConfirm';
 import RhythmsLeaveNote from './RhythmsLeaveNote';
 import { palette } from '@design/tokens';
 
@@ -28,13 +29,15 @@ export default function ReleaseRow({ release, runningVersion, offerReinstall = f
   const isReinstall = isRunning && offerReinstall;
   // A reinstall never changes the running version, so it is done when the
   // database is, not when the version moves.
-  const { phase, error, start, reset } = useUpdateProgress(runningVersion, isReinstall ? migrationsApplied : undefined);
+  const { phase, error, inUse, start, reset } = useUpdateProgress(runningVersion, isReinstall ? migrationsApplied : undefined);
 
   const isDowngrade = !!runningVersion && !!semver.valid(runningVersion) && semver.lt(release.version, runningVersion);
 
   const warnings = downgradeWarnings(release, runningVersion);
 
-  const install = () => start(() => postUpdate({ targetVersion: release.version, allowDowngrade: isDowngrade }));
+  const install = () => start(confirmInUse => postUpdate({
+    targetVersion: release.version, allowDowngrade: isDowngrade, ...(confirmInUse && { confirmInUse }),
+  }));
 
   return (
     <Box sx={ { py: 1.5, borderBottom: `1px solid ${palette.border.subtle}` } }>
@@ -60,6 +63,7 @@ export default function ReleaseRow({ release, runningVersion, offerReinstall = f
         </DialogTitle>
         <DialogContent>
           { phase === 'failed' && <Alert severity="error">{ error }</Alert> }
+          { phase === 'idle' && <InUseConfirm reasons={ inUse }/> }
           { phase === 'idle' && (
             <DialogContentText>
               { isReinstall
@@ -105,8 +109,10 @@ export default function ReleaseRow({ release, runningVersion, offerReinstall = f
         <DialogActions>
           { phase === 'idle' && (
             <>
-              <Button onClick={ () => setOpen(false) }>Cancel</Button>
-              <Button variant="contained" onClick={ install }>{ isReinstall ? 'Reinstall now' : 'Install now' }</Button>
+              <Button autoFocus={ inUse !== undefined } onClick={ () => { reset(); setOpen(false); } }>Cancel</Button>
+              <Button variant="contained" onClick={ install }>
+                { inUse ? 'Continue anyway' : isReinstall ? 'Reinstall now' : 'Install now' }
+              </Button>
             </>
           ) }
           { (phase === 'timed_out' || phase === 'failed') && (

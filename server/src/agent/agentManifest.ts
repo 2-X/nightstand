@@ -90,6 +90,8 @@ export const AGENT_MANIFEST: AgentEntry[] = [
   { path: 'app/src/api/updateSchema.ts', mode: 'add', why: 'shared update request and response types' },
   { path: 'app/src/state/updateAttentionStore.ts', mode: 'add', why: 'retains update request outcomes while navigating the app' },
   { path: 'app/src/api/useUpdateProgress.ts', mode: 'add', why: 'polls for the pod coming back on a new version' },
+  { path: 'app/src/api/bedInUse.ts', mode: 'add', why: 'reads the reasons an update, rollback or switch is held while the bed may be in use' },
+  { path: 'app/src/components/InUseConfirm.tsx', mode: 'add', why: 'shows those reasons before the second confirmation' },
   { path: 'app/src/components/VersionStatus.tsx', mode: 'copy', why: 'hosts the update prompt and the rollback and revert rows' },
   { path: 'app/src/pages/SettingsPage/DeviceSettingsSection/UpdateFreeSleepButton.tsx', mode: 'copy', why: 'triggers the pod self-updater' },
   { path: 'app/src/pages/SettingsPage/VersionsPage/RollbackRow.tsx', mode: 'add', why: 'instant offline rollback to the previous tree' },

@@ -9,6 +9,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Slide from '@mui/material/Slide';
 import { TransitionProps } from '@mui/material/transitions';
 import { useEffect, useState, useId, useRef, forwardRef, type ReactElement, type Ref } from 'react';
+import InUseConfirm from '../../../components/InUseConfirm';
 import { postUpdate } from '@api/update.ts';
 import { useLatestVersion } from '@api/useLatestVersion.ts';
 import { useUpdateProgress } from '@api/useUpdateProgress.ts';
@@ -37,7 +38,7 @@ export default function UpdateFreeSleepButton({ runningVersion, onProblem, onSta
   const startVersion = useRef(runningVersion);
   const latestVersion = useLatestVersion();
   const [targetVersion, setTargetVersion] = useState<string>();
-  const { phase, error, start, reset } = useUpdateProgress(runningVersion);
+  const { phase, error, inUse, start, reset } = useUpdateProgress(runningVersion);
 
   useEffect(() => { if (phase === 'failed' || phase === 'timed_out') onProblem?.(phase, startVersion.current); }, [phase, onProblem]);
 
@@ -47,7 +48,7 @@ export default function UpdateFreeSleepButton({ runningVersion, onProblem, onSta
     if (targetVersion && isNewer(targetVersion)) {
       startVersion.current = runningVersion;
       onStart?.();
-      void start(() => postUpdate({ targetVersion }));
+      void start(confirmInUse => postUpdate({ targetVersion, ...(confirmInUse && { confirmInUse }) }));
     }
   };
 
@@ -82,8 +83,11 @@ export default function UpdateFreeSleepButton({ runningVersion, onProblem, onSta
           </Alert> }
           { phase === 'idle' && (
             <>
+              <InUseConfirm reasons={ inUse }/>
               <DialogContentText>
-                The Pod restarts to finish, and schedules and alarms pause for 2 to 5 minutes.
+                Nightstand restarts to finish, and schedules and alarms pause for up to five minutes.
+              </DialogContentText>
+              <DialogContentText>
                 If the checks fail, it attempts to go back to v{ runningVersion } on its own.
               </DialogContentText>
               <Accordion>
@@ -109,6 +113,7 @@ export default function UpdateFreeSleepButton({ runningVersion, onProblem, onSta
                   Installation of v{ targetVersion } is not confirmed after 10 minutes. The Pod may
                   still be updating or may have rolled back. Check its logs and current status.
               </DialogContentText>
+              <DialogContentText>Until this page loads again, schedules and alarms are not running.</DialogContentText>
               <Typography variant="body2">
                 Last reported running version: { runningVersion ? `v${runningVersion}` : 'unavailable' }.
               </Typography>
@@ -122,8 +127,10 @@ export default function UpdateFreeSleepButton({ runningVersion, onProblem, onSta
         <DialogActions>
           { phase === 'idle' && (
             <>
-              <Button onClick={ () => setOpen(false) }>Cancel</Button>
-              <Button variant="contained" disabled={ !isNewer(targetVersion) } onClick={ startUpdate }>Update now</Button>
+              <Button autoFocus={ inUse !== undefined } onClick={ () => { reset(); setOpen(false); } }>Cancel</Button>
+              <Button variant="contained" disabled={ !isNewer(targetVersion) } onClick={ startUpdate }>
+                { inUse ? 'Continue anyway' : 'Update now' }
+              </Button>
             </>
           ) }
           { phase === 'failed' && <Button onClick={ startUpdate }>Try again</Button> }
