@@ -23,6 +23,11 @@ is a hard fork; for the history of the projects it descends from, see
 - HRV is no longer shown in the app. Checked against chest-strap recordings,
   the stored estimate was no more accurate than a fixed guess. It is still
   stored and returned by the API.
+- Updates now check a downloaded release against a checksum published in
+  the release list before installing it. This catches a corrupted or swapped
+  download, not a compromised GitHub account. Switching to upstream installs
+  the upstream version the switch was last checked with, once one is
+  recorded.
 - Nightstand now removes old database snapshots, keeping the newest three and
   any from the last week, so they cannot fill a Pod's storage. It removes more,
   oldest first, only when space runs low.
