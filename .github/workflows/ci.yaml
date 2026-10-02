@@ -60,6 +60,19 @@ jobs:
             echo "::notice::Committed bundles are out of date; rebuild them before deploying or releasing."
           fi
 
+  shellcheck:
+    name: Shellcheck
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      # Preinstalled on GitHub's Ubuntu images. Errors only: the scripts run
+      # as root on the Pod, so a real error fails the build.
+      - name: Shellcheck
+        run: shellcheck -S error scripts/*.sh scripts/migrate/*.sh ops/*.sh
+
   lint:
     name: Lint
     runs-on: ubuntu-24.04

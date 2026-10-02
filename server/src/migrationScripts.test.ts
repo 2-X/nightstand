@@ -46,20 +46,6 @@ describe('fork-switch tool scripts', () => {
       const mode = statSync(full).mode;
       assert.ok(mode & 0o111, `${script} must carry the exec bit`);
     });
-
-    it(`${script} passes shellcheck when available (non-fatal)`, () => {
-      const full = path.join(repoRoot, script);
-      try {
-        execFileSync('which', ['shellcheck'], { stdio: 'ignore' });
-      } catch {
-        return; // shellcheck not installed on this machine, skip, don't fail CI-of-one
-      }
-      try {
-        execFileSync('shellcheck', ['-S', 'error', full], { stdio: 'pipe' });
-      } catch (err: any) {
-        console.warn(`shellcheck warnings for ${script}:\n${err.stdout?.toString?.() ?? err}`);
-      }
-    });
   }
 
   it('data-compat-check.mjs exists and parses', () => {
