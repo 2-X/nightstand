@@ -37,11 +37,13 @@ for (const [file, name] of [
 let server: Server;
 let url: string;
 let setInUseCheck: typeof import('./update.js')['setInUseCheck'];
+let setResultFileForTests: typeof import('./update.js')['setResultFileForTests'];
 before(async () => {
   const app = express();
   app.use(express.json());
   const update = await import('./update.js');
-  ({ setInUseCheck } = update);
+  ({ setInUseCheck, setResultFileForTests } = update);
+  setResultFileForTests(path.join(folder, 'update-result.json'));
   setInUseCheck(async () => reasons);
   app.use('/api/update', update.default);
   server = app.listen(0);
@@ -163,4 +165,37 @@ it('refuses without a registered check, as the updater overlay has none', async 
     other.closeAllConnections();
     await new Promise<void>(resolve => other.close(() => resolve()));
   }
+});
+
+describe('GET /api/update/last-result', () => {
+  const resultFile = () => path.join(folder, 'update-result.json');
+  const record = {
+    runId: '1f2e3d4c', operation: 'update', outcome: 'rolled-back', from: '3.5.1', to: '3.6.0',
+    message: 'the new version did not pass its health check', finishedAt: '2026-10-02T03:04:05Z',
+  };
+  beforeEach(() => fs.rmSync(resultFile(), { force: true }));
+
+  it('returns what the script wrote', async () => {
+    fs.writeFileSync(resultFile(), JSON.stringify(record));
+    const response = await send('GET', '/api/update/last-result');
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body, record);
+  });
+
+  it('accepts a record with no versions', async () => {
+    const bare = { ...record, from: null, to: null };
+    fs.writeFileSync(resultFile(), JSON.stringify(bare));
+    assert.deepEqual((await send('GET', '/api/update/last-result')).body, bare);
+  });
+
+  it('answers 404 when nothing has been recorded', async () => {
+    assert.equal((await send('GET', '/api/update/last-result')).status, 404);
+  });
+
+  it('answers 404 for a file it cannot read as a result', async () => {
+    for (const content of ['{not json', '{}', JSON.stringify({ ...record, outcome: 'exploded' }), JSON.stringify({ ...record, runId: 7 })]) {
+      fs.writeFileSync(resultFile(), content);
+      assert.equal((await send('GET', '/api/update/last-result')).status, 404, content);
+    }
+  });
 });

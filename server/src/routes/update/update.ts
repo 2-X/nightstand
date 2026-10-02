@@ -5,7 +5,7 @@ import logger from '../../logger.js';
 import { triggerUpdateService } from '../../jobs/update.js';
 import { triggerRollbackService } from '../../jobs/rollback.js';
 import { triggerRevertToStockService } from '../../jobs/revertToStock.js';
-import { UpdateRequestSchema, OperationRequestSchema, RollbackInfo } from './updateSchema.js';
+import { UpdateRequestSchema, UpdateResultSchema, OperationRequestSchema, RollbackInfo } from './updateSchema.js';
 import { inUseText, type InUseReasonText } from './inUseText.js';
 
 import { PrivilegedCommandError, privilegedErrorStatus } from '../../jobs/privilegedCommand.js';
@@ -20,6 +20,11 @@ const PREV_SERVER_INFO_PATH = '/home/dac/free-sleep-prev/server/src/serverInfo.j
 // Consumed once by scripts/update.sh (deleted immediately after reading), so
 // a stale file can never redirect a future plain update.
 const TARGET_FILE = '/persistent/free-sleep-data/update-target.json';
+
+// Written by the update, rollback and switch scripts when they end, so the
+// app can report a failure at once instead of waiting out a timeout.
+let resultFile = '/persistent/free-sleep-data/update-result.json';
+export const setResultFileForTests = (file: string) => { resultFile = file; };
 
 const PrepareToStopSchema = z.object({ reason: z.enum(['downgrade', 'rollback', 'revert']) }).strict();
 export type LeaveReason = 'downgrade' | 'rollback' | 'revert';
@@ -128,6 +133,16 @@ router.post('/', async (req, res) => {
     res.status(privilegedErrorStatus(error)).json({
       message: error instanceof PrivilegedCommandError ? error.message : 'Unable to start update',
     });
+  }
+});
+
+router.get('/last-result', async (_req, res) => {
+  try {
+    const parsed = UpdateResultSchema.safeParse(JSON.parse(await fs.promises.readFile(resultFile, 'utf8')));
+    if (!parsed.success) throw new Error('unreadable');
+    res.json(parsed.data);
+  } catch {
+    res.status(404).json({ error: 'No result recorded yet' });
   }
 });
 
