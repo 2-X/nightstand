@@ -13,8 +13,20 @@ const EVENING = new Date('2026-09-29T04:41:00Z');
 // Monday 11:00 PM, inside that sleep, so its turn-off is tomorrow morning.
 const IN_SLEEP = new Date('2026-09-29T06:00:00Z');
 
+// The demo's presence switch, read by demoPresence and demoPresenceStale in src/mocks/demoPreferences.ts: 'fresh' seats
+// the left side for twelve minutes, 'fresh-short' just now, and 'stale' leaves it seated at a report too old to trust.
+const DEMO_PRESENCE_KEY = 'nightstand-demo-presence';
+type DemoPresence = 'fresh' | 'fresh-short' | 'stale';
+// Now, for the next request, or before the page loads.
+export async function setDemoPresence(page: Page, value: DemoPresence) {
+  await page.evaluate(([key, entry]) => localStorage.setItem(key, entry), [DEMO_PRESENCE_KEY, value] as const);
+}
+export async function presetDemoPresence(page: Page, value: DemoPresence) {
+  await page.addInitScript(([key, entry]) => localStorage.setItem(key, entry), [DEMO_PRESENCE_KEY, value] as const);
+}
+
 const PREFS: Partial<Record<BedState, Record<string, string>>> = {
-  upstale: { 'nightstand-demo-presence': 'stale' },
+  upstale: { [DEMO_PRESENCE_KEY]: 'stale' },
   pending: { 'nightstand-demo-writes': 'hang' },
   loading: { 'nightstand-demo-reads': 'hang' },
 };

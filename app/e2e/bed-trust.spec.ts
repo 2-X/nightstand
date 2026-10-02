@@ -1,5 +1,6 @@
 /// <reference lib="dom" />
 import { test, expect, type Page } from '@playwright/test';
+import { presetDemoPresence, setDemoPresence } from './bedStates';
 
 test.use({ viewport: { width: 390, height: 844 } });
 
@@ -86,7 +87,7 @@ test('while the status loads every slot is drawn, empty, at its full size', asyn
 });
 
 test('with presence stale, the get-up caption keeps only the latest turn-off', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('nightstand-demo-presence', 'stale'));
+  await presetDemoPresence(page, 'stale');
   // Monday 11:00 PM, inside the Workday sleep, so its turn-off is tomorrow morning.
   await page.clock.install({ time: new Date('2026-09-29T06:00:00Z') });
   await page.goto('/schedules');
@@ -96,6 +97,8 @@ test('with presence stale, the get-up caption keeps only the latest turn-off', a
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByRole('navigation', { name: 'Primary mobile' }).getByRole('link', { name: 'Bed', exact: true }).click();
   await expect(page.locator('[data-caption-slot]')).toHaveText(/^Turns off tomorrow by\s9:45\sAM$/);
+  // The demo's last report has the left side in bed; too old to show.
+  await expect(page.getByRole('radio', { name: /^Alex\./ })).toBeAttached();
   await expect(page.getByText(/^In bed/)).toHaveCount(0);
 
   const positions = () => page.evaluate(() => {
@@ -106,8 +109,9 @@ test('with presence stale, the get-up caption keeps only the latest turn-off', a
     };
   });
   const stale = await positions();
-  await page.evaluate(() => localStorage.setItem('nightstand-demo-presence', 'fresh-short'));
+  await setDemoPresence(page, 'fresh-short');
   await page.clock.fastForward(11_000);
   await expect(page.locator('[data-caption-slot]')).toHaveText(/^Turns off when you get up, tomorrow by\s9:45\sAM$/);
+  await expect(page.getByText(/^In bed/)).toBeVisible();
   expect(await positions()).toEqual(stale);
 });

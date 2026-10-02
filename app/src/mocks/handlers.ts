@@ -263,9 +263,17 @@ export const handlers = [
     return HttpResponse.json(filtered);
   }),
   http.get('/api/metrics/presence', () => {
-    if (demoPresenceStale()) return HttpResponse.json(presence);
-    const seated = demoPresence();
     const now = Date.now();
+    // Someone was in bed at the last report, which is too old to trust.
+    if (demoPresenceStale()) {
+      return HttpResponse.json({
+        ...presence,
+        left: {
+          present: true, lastUpdatedAt: new Date(now - 10 * 60_000).toISOString(), stateChangedAt: new Date(now - 40 * 60_000).toISOString(),
+        },
+      });
+    }
+    const seated = demoPresence();
     // The demo acts as if presence were fresh, as its live state does; a spec can make it stale.
     if (!seated) {
       const reported = new Date(now).toISOString();
