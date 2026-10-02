@@ -113,15 +113,55 @@ fi
 
 # --- preflight: pod ---------------------------------------------------------
 say "Preflight: pod state"
-SSH "set -e
-  [ -d $LIVE ] || { echo 'NO_LIVE_INSTALL'; exit 1; }
-  ROOT_FREE=\$(df -m / | awk 'NR==2{print \$4}')
-  PERS_FREE=\$(df -m /persistent | awk 'NR==2{print \$4}')
-  [ \"\$ROOT_FREE\" -gt 1500 ] || { echo \"LOW_DISK_ROOT: \${ROOT_FREE}M free\"; exit 1; }
-  [ \"\$PERS_FREE\" -gt 2000 ] || { echo \"LOW_DISK_PERSISTENT: \${PERS_FREE}M free\"; exit 1; }
-  systemctl is-active free-sleep-update.service >/dev/null 2>&1 && { echo 'UPDATE_SERVICE_RUNNING'; exit 1; }
-  echo \"disk ok (/ \${ROOT_FREE}M, /persistent \${PERS_FREE}M)\"
-" || die "pod preflight failed"
+# Quoted, so nothing below expands here; it runs as is on the pod with the
+# install path and the Node version HEAD pins as its arguments.
+NODE_PIN=$(git show HEAD:server/package.json | python3 -c 'import json, sys; print(json.load(sys.stdin).get("volta", {}).get("node", ""))')
+SSH "bash -s -- $LIVE $NODE_PIN" <<'PREFLIGHT' || die "pod preflight failed"
+LIVE=$1
+[ -d "$LIVE" ] || { echo 'NO_LIVE_INSTALL'; exit 1; }
+# Free-space helpers, kept identical in update.sh, revert-to-stock.sh,
+# migrate/pod-installer.sh, migrate/switch-to-this-fork.sh and ops/deploy.sh.
+# Sizes are whole MB, rounded up, and a missing path counts as 0.
+# SPACE_MARGIN_MB stays free for the firmware, the server and the logs while
+# the operation runs, and covers a release a little larger than the one
+# installed.
+SPACE_MARGIN_MB=64
+free_mb() { { df -kP "$1" 2>/dev/null || true; } | awk 'NR == 2 { print int($4 / 1024) }'; }
+size_mb() { { du -sk "$@" 2>/dev/null || true; } | awk '{ kb += $1 } END { print int((kb + 1023) / 1024) }'; }
+# The Node version a tree pins for Volta, empty when it pins none.
+node_pin() {
+  python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("volta", {}).get("node", ""))' \
+    "$1/server/package.json" 2>/dev/null || true
+}
+# Volta fetches a pinned Node the first time npm or npx runs under it. For
+# 24.11.0 on arm64 that is a 56 MB archive it keeps plus 207 MB unpacked.
+# $1 is the version wanted, $2 the one already in use (empty if unknown).
+node_fetch_mb() {
+  if [ -n "$1" ] && [ "$1" != "$2" ] && [ ! -d "/home/dac/.volta/tools/image/node/$1" ]; then
+    echo 280
+  else
+    echo 0
+  fi
+}
+# Same writes as update.sh, sized from the install this replaces. On /: the
+# shipped tar and its unpacked tree, a fresh node_modules plus a third of
+# that again for npm's and Prisma's caches (68 and 33 MB from empty for
+# 330 MB), and a Node that Volta must fetch. On /persistent: the code backup
+# (counted unpacked), the database copy and the settings copy, plus half the
+# database again for migrations, which only ever add.
+MODULES_MB=$(size_mb "$LIVE/server/node_modules")
+TREE_MB=$(( $(size_mb "$LIVE") - MODULES_MB ))
+DB_MB=$(size_mb /persistent/free-sleep-data/free-sleep.db /persistent/free-sleep-data/free-sleep.db-wal)
+ROOT_NEED=$(( 2 * TREE_MB + MODULES_MB + MODULES_MB / 3 + $(node_fetch_mb "${2:-}" "$(node_pin "$LIVE")") + SPACE_MARGIN_MB ))
+PERS_NEED=$(( TREE_MB + DB_MB + DB_MB / 2 + $(size_mb /persistent/free-sleep-data/lowdb) + SPACE_MARGIN_MB ))
+ROOT_FREE=$(free_mb /)
+PERS_FREE=$(free_mb /persistent)
+[ "${ROOT_FREE:-0}" -ge "$ROOT_NEED" ] || { echo "LOW_DISK_ROOT: ${ROOT_FREE:-unknown}M free, ${ROOT_NEED}M needed"; exit 1; }
+[ "${PERS_FREE:-0}" -ge "$PERS_NEED" ] \
+  || { echo "LOW_DISK_PERSISTENT: ${PERS_FREE:-unknown}M free, ${PERS_NEED}M needed; old snapshots in /persistent/free-sleep-database-backups/ can be removed to make room"; exit 1; }
+systemctl is-active free-sleep-update.service >/dev/null 2>&1 && { echo 'UPDATE_SERVICE_RUNNING'; exit 1; }
+echo "disk ok (/ ${ROOT_FREE}M free, ${ROOT_NEED}M needed; /persistent ${PERS_FREE}M free, ${PERS_NEED}M needed)"
+PREFLIGHT
 
 STATUS_JSON=$(curl -sf --max-time 10 "http://$POD_IP:3000/api/deviceStatus") || die "current server not answering; investigate before deploying (ops/rollback.sh or journalctl -u free-sleep)"
 POD_VERSION=$(printf '%s' "$STATUS_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["freeSleep"]["version"])')

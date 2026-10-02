@@ -91,6 +91,31 @@ fail() {
   exit 1
 }
 
+# Free-space helpers, kept identical in update.sh, revert-to-stock.sh,
+# migrate/pod-installer.sh, migrate/switch-to-this-fork.sh and ops/deploy.sh.
+# Sizes are whole MB, rounded up, and a missing path counts as 0.
+# SPACE_MARGIN_MB stays free for the firmware, the server and the logs while
+# the operation runs, and covers a release a little larger than the one
+# installed.
+SPACE_MARGIN_MB=64
+free_mb() { { df -kP "$1" 2>/dev/null || true; } | awk 'NR == 2 { print int($4 / 1024) }'; }
+size_mb() { { du -sk "$@" 2>/dev/null || true; } | awk '{ kb += $1 } END { print int((kb + 1023) / 1024) }'; }
+# The Node version a tree pins for Volta, empty when it pins none.
+node_pin() {
+  python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("volta", {}).get("node", ""))' \
+    "$1/server/package.json" 2>/dev/null || true
+}
+# Volta fetches a pinned Node the first time npm or npx runs under it. For
+# 24.11.0 on arm64 that is a 56 MB archive it keeps plus 207 MB unpacked.
+# $1 is the version wanted, $2 the one already in use (empty if unknown).
+node_fetch_mb() {
+  if [ -n "$1" ] && [ "$1" != "$2" ] && [ ! -d "/home/dac/.volta/tools/image/node/$1" ]; then
+    echo 280
+  else
+    echo 0
+  fi
+}
+
 # ==============================================================================
 # Stage: pre-swap (their server is still running and untouched below this line)
 # ==============================================================================
@@ -120,10 +145,26 @@ else
   iptables-save > "$IPTABLES_SNAPSHOT" 2>/dev/null || say "WARNING: could not snapshot iptables"
 fi
 
-ROOT_FREE=$(df -m / | awk 'NR==2{print $4}')
-PERS_FREE=$(df -m /persistent | awk 'NR==2{print $4}')
-[ "$ROOT_FREE" -gt 2000 ] || fail "low disk on / (${ROOT_FREE}M free), aborting before touching anything"
-[ "$PERS_FREE" -gt 2000 ] || fail "low disk on /persistent (${PERS_FREE}M free), aborting before touching anything"
+# Room for what this installer writes. Their install says little about the
+# size of ours, so the release is never counted below 64 MB unpacked and
+# 400 MB of node_modules (3.5.1 measured 47 MB and 330 MB on arm64). On /:
+# the download and its unpacked tree, a fresh node_modules plus a third of
+# that again for npm's and Prisma's caches (68 and 33 MB from empty for
+# 330 MB), and the database copy the compatibility check migrates; a Node
+# that Volta must fetch is checked once staged. On /persistent: the database snapshot, plus
+# half the database again for the live migration, which only ever adds.
+MODULES_MB=$(size_mb "$LIVE/server/node_modules")
+TREE_MB=$(( $(size_mb "$LIVE") - MODULES_MB ))
+[ "$TREE_MB" -ge 64 ] || TREE_MB=64
+[ "$MODULES_MB" -ge 400 ] || MODULES_MB=400
+DB_MB=$(size_mb /persistent/free-sleep-data/free-sleep.db /persistent/free-sleep-data/free-sleep.db-wal)
+ROOT_NEED=$(( 2 * TREE_MB + MODULES_MB + MODULES_MB / 3 + DB_MB + DB_MB / 2 + SPACE_MARGIN_MB ))
+PERS_NEED=$(( DB_MB + DB_MB / 2 + SPACE_MARGIN_MB ))
+ROOT_FREE=$(free_mb /)
+PERS_FREE=$(free_mb /persistent)
+[ "${ROOT_FREE:-0}" -ge "$ROOT_NEED" ] || fail "low disk on / (${ROOT_FREE:-unknown}M free, ${ROOT_NEED}M needed), aborting before touching anything"
+[ "${PERS_FREE:-0}" -ge "$PERS_NEED" ] \
+  || fail "low disk on /persistent (${PERS_FREE:-unknown}M free, ${PERS_NEED}M needed), aborting before touching anything; old snapshots in /persistent/free-sleep-database-backups/ can be removed to make room"
 
 say "Downloading v$TARGET_VERSION (the tip of main)..."
 curl -fL --max-time 300 -o "$ZIP" "$MAIN_ZIP_URL" \
@@ -165,6 +206,14 @@ case "$ARTIFACT_CHECK" in
   ok|head-mismatch) : ;; # head-mismatch = target isn't manifest head (e.g. artifacts only present for head); not an error
   *) fail "artifact hash check failed ($ARTIFACT_CHECK), download may be corrupt or the wrong tag" ;;
 esac
+
+# What / still takes now that the release is staged: the Node ensure-node.sh
+# installs if Volta lacks it, the dependency install with its caches, and the
+# database copy the compatibility check migrates.
+DEPS_NEED=$(( $(node_fetch_mb "$(node_pin "$STAGE")" "") + MODULES_MB + MODULES_MB / 3 + DB_MB + DB_MB / 2 + SPACE_MARGIN_MB ))
+ROOT_FREE=$(free_mb /)
+[ "${ROOT_FREE:-0}" -ge "$DEPS_NEED" ] \
+  || fail "low disk on / (${ROOT_FREE:-unknown}M free, ${DEPS_NEED}M needed for the new dependencies); their server was never touched"
 
 say "Ensuring Node/Volta toolchain (shared with install.sh)..."
 bash "$STAGE/scripts/ensure-node.sh" dac || fail "node/volta bootstrap failed; their server was never touched"

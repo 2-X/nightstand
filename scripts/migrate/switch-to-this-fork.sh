@@ -283,11 +283,71 @@ else
   say "Could not read the pod's updater repo; proceeding as a migration to $THIS_FORK_REPO (running v$RUNNING_VERSION)."
 fi
 
-# Disk space, both sides.
-REMOTE_ROOT_FREE=$(ssh_cmd "$SSH_PORT" "df -m / | awk 'NR==2{print \$4}'")
-REMOTE_PERS_FREE=$(ssh_cmd "$SSH_PORT" "df -m /persistent | awk 'NR==2{print \$4}'" 2>/dev/null || echo 0)
-[ "${REMOTE_ROOT_FREE:-0}" -gt 2000 ] 2>/dev/null || fail "low disk on the pod's / (${REMOTE_ROOT_FREE}M free)"
-[ "${REMOTE_PERS_FREE:-0}" -gt 2000 ] 2>/dev/null || fail "low disk on the pod's /persistent (${REMOTE_PERS_FREE}M free)"
+# Disk space, both sides. The pod works out what this switch will write and
+# prints free and needed MB for / and then /persistent.
+IFS= read -r -d '' POD_SPACE_SCRIPT <<'MEASURE' || true
+LIVE=/home/dac/free-sleep
+# Free-space helpers, kept identical in update.sh, revert-to-stock.sh,
+# migrate/pod-installer.sh, migrate/switch-to-this-fork.sh and ops/deploy.sh.
+# Sizes are whole MB, rounded up, and a missing path counts as 0.
+# SPACE_MARGIN_MB stays free for the firmware, the server and the logs while
+# the operation runs, and covers a release a little larger than the one
+# installed.
+SPACE_MARGIN_MB=64
+free_mb() { { df -kP "$1" 2>/dev/null || true; } | awk 'NR == 2 { print int($4 / 1024) }'; }
+size_mb() { { du -sk "$@" 2>/dev/null || true; } | awk '{ kb += $1 } END { print int((kb + 1023) / 1024) }'; }
+# The Node version a tree pins for Volta, empty when it pins none.
+node_pin() {
+  python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("volta", {}).get("node", ""))' \
+    "$1/server/package.json" 2>/dev/null || true
+}
+# Volta fetches a pinned Node the first time npm or npx runs under it. For
+# 24.11.0 on arm64 that is a 56 MB archive it keeps plus 207 MB unpacked.
+# $1 is the version wanted, $2 the one already in use (empty if unknown).
+node_fetch_mb() {
+  if [ -n "$1" ] && [ "$1" != "$2" ] && [ ! -d "/home/dac/.volta/tools/image/node/$1" ]; then
+    echo 280
+  else
+    echo 0
+  fi
+}
+# Stage 4 copies the install and the database to / and keeps a tarball of
+# them on /persistent (counted unpacked) next to its own database copy.
+# pod-installer.sh then needs what it checks for itself: the release with
+# its node_modules and a third again for npm's and Prisma's caches, never
+# counted below 64 MB and 400 MB, and
+# a database copy on /, and on /persistent the database snapshot plus half
+# the database again for migrations.
+MODULES_MB=$(size_mb "$LIVE/server/node_modules")
+TREE_MB=$(( $(size_mb "$LIVE") - MODULES_MB ))
+DB_MB=$(size_mb /persistent/free-sleep-data/free-sleep.db /persistent/free-sleep-data/free-sleep.db-wal)
+RELEASE_MB=$TREE_MB
+[ "$RELEASE_MB" -ge 64 ] || RELEASE_MB=64
+RELEASE_MODULES_MB=$MODULES_MB
+[ "$RELEASE_MODULES_MB" -ge 400 ] || RELEASE_MODULES_MB=400
+ROOT_NEED=$(( TREE_MB + MODULES_MB + DB_MB ))
+INSTALLER_ROOT_MB=$(( 2 * RELEASE_MB + RELEASE_MODULES_MB + RELEASE_MODULES_MB / 3 + DB_MB + DB_MB / 2 ))
+[ "$ROOT_NEED" -ge "$INSTALLER_ROOT_MB" ] || ROOT_NEED=$INSTALLER_ROOT_MB
+ROOT_NEED=$(( ROOT_NEED + SPACE_MARGIN_MB ))
+PERS_NEED=$(( TREE_MB + MODULES_MB + DB_MB + $(size_mb /persistent/free-sleep-data/lowdb) + DB_MB \
+  + DB_MB + DB_MB / 2 + SPACE_MARGIN_MB ))
+# An unreadable df prints 0, so the laptop refuses rather than misreads.
+ROOT_FREE=$(free_mb /)
+PERS_FREE=$(free_mb /persistent)
+echo "${ROOT_FREE:-0} $ROOT_NEED ${PERS_FREE:-0} $PERS_NEED"
+MEASURE
+POD_SPACE=$(printf '%s\n' "$POD_SPACE_SCRIPT" | ssh_cmd "$SSH_PORT" 'bash -s' 2>/dev/null || true)
+read -r REMOTE_ROOT_FREE REMOTE_ROOT_NEED REMOTE_PERS_FREE REMOTE_PERS_NEED POD_SPACE_EXTRA <<< "$POD_SPACE"
+for value in "${REMOTE_ROOT_FREE:-}" "${REMOTE_ROOT_NEED:-}" "${REMOTE_PERS_FREE:-}" "${REMOTE_PERS_NEED:-}"; do
+  case $value in
+    '' | *[!0-9]*) fail "could not measure free space on the pod (got '$POD_SPACE')" ;;
+  esac
+done
+[ -z "${POD_SPACE_EXTRA:-}" ] || fail "could not measure free space on the pod (got '$POD_SPACE')"
+[ "${REMOTE_ROOT_FREE:-0}" -ge "${REMOTE_ROOT_NEED:-1}" ] 2>/dev/null \
+  || fail "low disk on the pod's / (${REMOTE_ROOT_FREE:-unknown}M free, ${REMOTE_ROOT_NEED:-unknown}M needed)"
+[ "${REMOTE_PERS_FREE:-0}" -ge "${REMOTE_PERS_NEED:-1}" ] 2>/dev/null \
+  || fail "low disk on the pod's /persistent (${REMOTE_PERS_FREE:-unknown}M free, ${REMOTE_PERS_NEED:-unknown}M needed); old snapshots in /persistent/free-sleep-database-backups/ can be removed to make room"
 LAPTOP_FREE_KB=$(df -Pk . | awk 'NR==2{print $4}')
 [ "${LAPTOP_FREE_KB:-0}" -gt 2097152 ] 2>/dev/null || fail "low free disk here on the laptop (need >2GB for the backup copy)"
 

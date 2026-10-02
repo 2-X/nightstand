@@ -63,6 +63,31 @@ cleanup() { close_wan; rm -rf "$STAGE" "$STAGE.unzip" "$STAGE.health" "$STAGE.mi
 
 fail() { say "FATAL: $*"; exit 1; }
 
+# Free-space helpers, kept identical in update.sh, revert-to-stock.sh,
+# migrate/pod-installer.sh, migrate/switch-to-this-fork.sh and ops/deploy.sh.
+# Sizes are whole MB, rounded up, and a missing path counts as 0.
+# SPACE_MARGIN_MB stays free for the firmware, the server and the logs while
+# the operation runs, and covers a release a little larger than the one
+# installed.
+SPACE_MARGIN_MB=64
+free_mb() { { df -kP "$1" 2>/dev/null || true; } | awk 'NR == 2 { print int($4 / 1024) }'; }
+size_mb() { { du -sk "$@" 2>/dev/null || true; } | awk '{ kb += $1 } END { print int((kb + 1023) / 1024) }'; }
+# The Node version a tree pins for Volta, empty when it pins none.
+node_pin() {
+  python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("volta", {}).get("node", ""))' \
+    "$1/server/package.json" 2>/dev/null || true
+}
+# Volta fetches a pinned Node the first time npm or npx runs under it. For
+# 24.11.0 on arm64 that is a 56 MB archive it keeps plus 207 MB unpacked.
+# $1 is the version wanted, $2 the one already in use (empty if unknown).
+node_fetch_mb() {
+  if [ -n "$1" ] && [ "$1" != "$2" ] && [ ! -d "/home/dac/.volta/tools/image/node/$1" ]; then
+    echo 280
+  else
+    echo 0
+  fi
+}
+
 # The updater that runs is the one already installed, so a fix to this script
 # would otherwise reach a pod one release after it ships. Once the new version
 # is downloaded and its dependencies installed, the rest of the update is
@@ -109,10 +134,25 @@ fi
 CUR_VERSION=$(python3 -c 'import json;print(json.load(open("'"$LIVE"'/server/src/serverInfo.json"))["version"])' 2>/dev/null) \
   || fail "cannot read current version"
 
-ROOT_FREE=$(df -m / | awk 'NR==2{print $4}')
-PERS_FREE=$(df -m /persistent | awk 'NR==2{print $4}')
-[ "$ROOT_FREE" -gt 1500 ] || fail "low disk on / (${ROOT_FREE}M free)"
-[ "$PERS_FREE" -gt 2000 ] || fail "low disk on /persistent (${PERS_FREE}M free)"
+# Room for what this run writes, sized from the install it replaces. On /:
+# the download and its unpacked tree, and a fresh node_modules when the
+# lockfile changed, plus a third of that again for npm's and Prisma's caches
+# (68 and 33 MB from empty for 330 MB). A handed-off run has all of that on
+# disk already, and a Node that Volta must fetch is checked once staged. On
+# /persistent: the code backup (counted unpacked), the database snapshot and
+# the settings copy, plus half the database again for migrations, which only
+# ever add.
+MODULES_MB=$(size_mb "$LIVE/server/node_modules")
+TREE_MB=$(( $(size_mb "$LIVE") - MODULES_MB ))
+DB_MB=$(size_mb /persistent/free-sleep-data/free-sleep.db /persistent/free-sleep-data/free-sleep.db-wal)
+ROOT_NEED=$(( 2 * TREE_MB + MODULES_MB + MODULES_MB / 3 + SPACE_MARGIN_MB ))
+[ "$HANDOFF" != 1 ] || ROOT_NEED=$SPACE_MARGIN_MB
+PERS_NEED=$(( TREE_MB + DB_MB + DB_MB / 2 + $(size_mb /persistent/free-sleep-data/lowdb) + SPACE_MARGIN_MB ))
+ROOT_FREE=$(free_mb /)
+PERS_FREE=$(free_mb /persistent)
+[ "${ROOT_FREE:-0}" -ge "$ROOT_NEED" ] || fail "low disk on / (${ROOT_FREE:-unknown}M free, ${ROOT_NEED}M needed)"
+[ "${PERS_FREE:-0}" -ge "$PERS_NEED" ] \
+  || fail "low disk on /persistent (${PERS_FREE:-unknown}M free, ${PERS_NEED}M needed); old snapshots in /persistent/free-sleep-database-backups/ can be removed to make room"
 
 if [ "$HANDOFF" = 1 ]; then
   # Handed off by the previously installed updater, which already consumed the
@@ -238,6 +278,16 @@ fi
 # --- dependencies (old server still running) ---------------------------------
 LOCK_SAME=no
 cmp -s "$LIVE/server/package-lock.json" "$STAGE/server/package-lock.json" && LOCK_SAME=yes
+# What / still takes now that the release is staged: a Node that Volta has to
+# fetch, and the dependency install with its caches when the lockfile changed.
+DEPS_NEED=$(node_fetch_mb "$(node_pin "$STAGE")" "$(node_pin "$LIVE")")
+if [ "$HANDOFF" != 1 ] && [ "$LOCK_SAME" = no ]; then
+  DEPS_NEED=$(( DEPS_NEED + MODULES_MB + MODULES_MB / 3 ))
+fi
+DEPS_NEED=$(( DEPS_NEED + SPACE_MARGIN_MB ))
+ROOT_FREE=$(free_mb /)
+[ "${ROOT_FREE:-0}" -ge "$DEPS_NEED" ] \
+  || fail "low disk on / (${ROOT_FREE:-unknown}M free, ${DEPS_NEED}M needed for the new dependencies); live install untouched"
 if [ "$HANDOFF" != 1 ]; then
   if [ "$LOCK_SAME" = no ]; then
     say "package-lock.json changed: running npm install in staging"

@@ -1,0 +1,387 @@
+import { describe, it, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// The free-space checks that run before an update, a revert, a deploy and a
+// fork switch. They are sized from what each one writes, so they run here
+// against a fake df and du on PATH that report a given partition and install.
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const read = (file: string) => readFileSync(path.join(repoRoot, file), 'utf8');
+
+const HELPER_FILES = [
+  'scripts/update.sh',
+  'scripts/revert-to-stock.sh',
+  'scripts/migrate/pod-installer.sh',
+  'scripts/migrate/switch-to-this-fork.sh',
+  'ops/deploy.sh',
+];
+
+function between(src: string, from: string, to: string) {
+  const start = src.indexOf(from);
+  assert.ok(start >= 0, `missing boundary: ${from}`);
+  const end = src.indexOf(to, start + from.length);
+  assert.ok(end > start, `missing boundary: ${to}`);
+  return src.slice(start, end);
+}
+
+function helpers(src: string) {
+  const start = src.indexOf('# Free-space helpers');
+  assert.ok(start >= 0, 'missing the free-space helpers');
+  return src.slice(start, src.indexOf('\n}\n', src.indexOf('node_fetch_mb() {', start)) + 3);
+}
+
+const MB = 1024;
+// What 3.5.1 measures: 47 MB unpacked, 330 MB of node_modules on arm64.
+const INSTALL: { tree: number; modules: number; db: number; wal?: number } = { tree: 48 * MB, modules: 330 * MB, db: 40 * MB };
+const DB_HINT = /old snapshots in \/persistent\/free-sleep-database-backups\/ can be removed/;
+
+let root: string;
+let live: string;
+let stage: string;
+let volta: string;
+
+// df and du answer only the exact flags the scripts use, so a change of units
+// or flags shows up as a refusal rather than passing quietly.
+function writeFakes() {
+  const bin = path.join(root, 'bin');
+  mkdirSync(bin);
+  writeFileSync(path.join(bin, 'df'), `#!/bin/sh
+if [ "$#" -ne 2 ] || [ "$1" != -kP ]; then echo "fake df: unexpected arguments: $*" >&2; exit 2; fi
+[ -z "\${FAKE_DF_SILENT:-}" ] || exit 1
+case $2 in
+  */persistent) avail=$FAKE_PERS_AVAIL_KB ;;
+  *) avail=$FAKE_ROOT_AVAIL_KB ;;
+esac
+echo 'Filesystem 1024-blocks Used Available Capacity Mounted on'
+echo "fake 99999999 1 $avail 1% $2"
+`, { mode: 0o755 });
+  writeFileSync(path.join(bin, 'du'), `#!/bin/sh
+if [ "$#" -lt 2 ] || [ "$1" != -sk ]; then echo "fake du: unexpected arguments: $*" >&2; exit 2; fi
+shift
+for arg in "$@"; do
+  case $arg in
+    -*) echo "fake du: unexpected argument: $arg" >&2; exit 2 ;;
+    */node_modules) kb=$FAKE_MODULES_KB ;;
+    */free-sleep.db) kb=$FAKE_DB_KB ;;
+    */free-sleep.db-wal) kb=\${FAKE_WAL_KB:-0} ;;
+    */lowdb) kb=200 ;;
+    *) kb=$((FAKE_TREE_KB + FAKE_MODULES_KB)) ;;
+  esac
+  printf '%s\\t%s\\n' "$kb" "$arg"
+done
+`, { mode: 0o755 });
+  writeFileSync(path.join(bin, 'systemctl'), '#!/bin/sh\nexit 3\n', { mode: 0o755 });
+}
+
+function pinNode(tree: string, version: string) {
+  mkdirSync(path.join(tree, 'server'), { recursive: true });
+  writeFileSync(path.join(tree, 'server/package.json'), JSON.stringify({ volta: { node: version } }));
+}
+
+interface Disk { rootFreeMb: number; persFreeMb: number; install?: typeof INSTALL; silentDf?: boolean }
+
+function run(script: string, disk: Disk) {
+  const install = disk.install ?? INSTALL;
+  const result = spawnSync('bash', ['-c', script.replaceAll('/home/dac/.volta', volta)], {
+    encoding: 'utf8',
+    timeout: 20_000,
+    env: {
+      ...process.env,
+      PATH: `${path.join(root, 'bin')}:${process.env.PATH}`,
+      FAKE_ROOT_AVAIL_KB: String(disk.rootFreeMb * MB),
+      FAKE_PERS_AVAIL_KB: String(disk.persFreeMb * MB),
+      FAKE_TREE_KB: String(install.tree),
+      FAKE_MODULES_KB: String(install.modules),
+      FAKE_DB_KB: String(install.db),
+      FAKE_WAL_KB: String(install.wal ?? 0),
+      FAKE_DF_SILENT: disk.silentDf ? '1' : '',
+    },
+  });
+  return { status: result.status, out: `${result.stdout}${result.stderr}` };
+}
+
+const PRELUDE = `set -uo pipefail
+say() { echo "$*"; }
+fail() { echo "FATAL: $*"; exit 1; }
+`;
+
+// Each check, as the script runs it, ending in a line that says it passed.
+const CHECKS: Record<string, (handoff?: boolean) => string> = {
+  'update.sh': (handoff = false) => {
+    const src = read('scripts/update.sh');
+    return `${PRELUDE}LIVE='${live}'; HANDOFF=${handoff ? 1 : "''"}
+${helpers(src)}${between(src, '# --- preflight', 'if [ "$HANDOFF" = 1 ]; then')}
+echo "PASSED / $ROOT_NEED /persistent $PERS_NEED"`;
+  },
+  'revert-to-stock.sh': () => {
+    const src = read('scripts/revert-to-stock.sh');
+    return `${PRELUDE}LIVE='${live}'
+${helpers(src)}${between(src, '# --- preflight', '# --- download + stage')}
+echo "PASSED / $ROOT_NEED /persistent $PERS_NEED"`;
+  },
+  'pod-installer.sh': () => {
+    const src = read('scripts/migrate/pod-installer.sh');
+    return `${PRELUDE}LIVE='${live}'
+${helpers(src)}${between(src, '# Room for what this installer writes', 'say "Downloading v')}
+echo "PASSED / $ROOT_NEED /persistent $PERS_NEED"`;
+  },
+  'deploy.sh': () => {
+    const src = read('ops/deploy.sh');
+    const remote = between(src, "<<'PREFLIGHT'", '\nPREFLIGHT\n').split('\n').slice(1).join('\n');
+    return `set -- '${live}' 24.11.0
+${remote}
+echo "PASSED"`;
+  },
+  'switch-to-this-fork.sh': () => {
+    const src = read('scripts/migrate/switch-to-this-fork.sh');
+    return `${PRELUDE.replace('FATAL', 'ABORTED')}SSH_PORT=8822
+ssh_cmd() { shift; bash -c "$*"; }
+${between(src, '# Disk space, both sides.', 'LAPTOP_FREE_KB=').replaceAll('/home/dac/free-sleep', live)}
+echo "PASSED / $REMOTE_ROOT_NEED /persistent $REMOTE_PERS_NEED"`;
+  },
+};
+
+// The checks that run once the release is staged, before its dependencies.
+function stagedCheck(file: string, lockChanged: boolean, handoff = false) {
+  const src = read(file);
+  const section = file.endsWith('pod-installer.sh')
+    ? between(src, '# What / still takes now that the release is staged', 'say "Ensuring Node/Volta')
+    : between(src, '# --- dependencies (old server still running)',
+      file.endsWith('update.sh') ? 'if [ "$HANDOFF" != 1 ]; then\n  if [ "$LOCK_SAME"' : 'if [ "$LOCK_SAME" = no ]; then\n  say');
+  writeFileSync(path.join(live, 'server/package-lock.json'), 'live');
+  writeFileSync(path.join(stage, 'server/package-lock.json'), lockChanged ? 'staged' : 'live');
+  return `${PRELUDE}LIVE='${live}'; STAGE='${stage}'; HANDOFF=${handoff ? 1 : "''"}
+MODULES_MB=330; DB_MB=40
+${helpers(src)}${section}
+echo "PASSED / $DEPS_NEED"`;
+}
+
+describe('free-space checks before an update, revert, deploy or switch', () => {
+  before(() => {
+    root = mkdtempSync(path.join(tmpdir(), 'nightstand-space-'));
+    live = path.join(root, 'free-sleep');
+    stage = path.join(root, 'free-sleep-staging');
+    volta = path.join(root, 'volta');
+    mkdirSync(path.join(live, 'server/src'), { recursive: true });
+    writeFileSync(path.join(live, 'server/src/serverInfo.json'), '{"version":"3.5.1"}');
+    pinNode(live, '24.11.0');
+    pinNode(stage, '24.11.0');
+    mkdirSync(path.join(volta, 'tools/image/node/24.11.0'), { recursive: true });
+    writeFakes();
+  });
+  after(() => rmSync(root, { recursive: true, force: true }));
+
+  it('every script carries the same helpers', () => {
+    const reference = helpers(read(HELPER_FILES[0]));
+    assert.match(reference, /SPACE_MARGIN_MB=64/);
+    assert.match(reference, /node_fetch_mb\(\) \{/);
+    for (const file of HELPER_FILES.slice(1)) {
+      assert.equal(helpers(read(file)), reference, file);
+    }
+  });
+
+  it('no script keeps a fixed 2000 or 1500 MB gate', () => {
+    for (const file of HELPER_FILES) {
+      assert.doesNotMatch(read(file), /FREE\S*"?\s+-gt (?:2000|1500)\b/, file);
+    }
+  });
+
+  it('free_mb matches what the filesystem reports, and size_mb what a file takes', () => {
+    const dir = path.join(root, 'real');
+    mkdirSync(dir);
+    writeFileSync(path.join(dir, 'blob'), Buffer.alloc(3 * MB * 1024, 1));
+    const result = spawnSync('bash', ['-c', `${helpers(read('scripts/update.sh'))}
+echo "$(free_mb '${dir}') $(size_mb '${dir}') $(size_mb '${dir}/missing')"`], { encoding: 'utf8' });
+    const fs = statfsSync(dir);
+    const expected = Math.floor((fs.bavail * fs.bsize) / (1024 * 1024));
+    assert.equal(result.status, 0, result.stderr);
+    const [free, size, missing] = result.stdout.trim().split(' ').map(Number);
+    assert.ok(Math.abs(free - expected) <= 1, `free_mb ${free}, statfs ${expected}`);
+    assert.ok(size >= 3 && size <= 5, result.stdout);
+    assert.equal(missing, 0);
+  });
+
+  it('the fake df and du refuse flags the scripts do not use', () => {
+    const env = { ...process.env, PATH: `${path.join(root, 'bin')}:${process.env.PATH}` };
+    assert.equal(spawnSync('df', ['-mP', '/'], { env }).status, 2);
+    assert.equal(spawnSync('du', ['-sm', '/'], { env }).status, 2);
+  });
+
+  // About 1 GB of /persistent, held near a quarter free by the RAW archive.
+  const pod3 = { rootFreeMb: 1200, persFreeMb: 250 };
+  for (const name of ['update.sh', 'revert-to-stock.sh', 'pod-installer.sh', 'deploy.sh']) {
+    it(`${name} passes on a 1 GB /persistent that has the room`, () => {
+      const result = run(CHECKS[name](), pod3);
+      assert.equal(result.status, 0, result.out);
+      assert.match(result.out, /PASSED/);
+    });
+
+    it(`${name} refuses a nearly full /persistent, says how much it needs and what can go`, () => {
+      const result = run(CHECKS[name](), { rootFreeMb: 1200, persFreeMb: 50 });
+      assert.equal(result.status, 1, result.out);
+      assert.match(result.out, /(?:low disk on \/persistent|LOW_DISK_PERSISTENT:) \(?50M free, \d+M needed/);
+      assert.match(result.out, DB_HINT);
+      assert.doesNotMatch(result.out, /PASSED/);
+    });
+
+    it(`${name} refuses a nearly full / and says how much it needs`, () => {
+      const result = run(CHECKS[name](), { rootFreeMb: 100, persFreeMb: 4000 });
+      assert.equal(result.status, 1, result.out);
+      assert.match(result.out, /(?:low disk on \/|LOW_DISK_ROOT:) \(?100M free, \d+M needed/);
+    });
+
+    it(`${name} counts the database's write-ahead log`, () => {
+      const result = run(CHECKS[name](), { ...pod3, install: { ...INSTALL, wal: 200 * MB } });
+      assert.equal(result.status, 1, result.out);
+    });
+
+    it(`${name} refuses when df cannot be read`, () => {
+      const result = run(CHECKS[name](), { rootFreeMb: 6000, persFreeMb: 12000, silentDf: true });
+      assert.equal(result.status, 1, result.out);
+    });
+
+    it(`${name} passes on a large partition, as before`, () => {
+      const result = run(CHECKS[name](), { rootFreeMb: 6000, persFreeMb: 12000 });
+      assert.equal(result.status, 0, result.out);
+    });
+
+    it(`${name} refuses a large partition that the database would fill`, () => {
+      // More than the old flat 2000 MB, still short of a 3 GB database's copy.
+      const install = { ...INSTALL, db: 3000 * MB };
+      const result = run(CHECKS[name](), { rootFreeMb: 6000, persFreeMb: 2500, install });
+      assert.equal(result.status, 1, result.out);
+    });
+  }
+
+  it('update.sh sizes the 1 GB case from the install: code, database and a half, settings, margin', () => {
+    const result = run(CHECKS['update.sh'](), pod3);
+    // / 48*2 + 330 + 110 + 64; /persistent 48 + 40 + 20 + 1 + 64
+    assert.match(result.out, /PASSED \/ 600 \/persistent 173/);
+  });
+
+  it('update.sh needs only the margin on / once the new version has taken over', () => {
+    assert.equal(run(CHECKS['update.sh'](false), { rootFreeMb: 150, persFreeMb: 4000 }).status, 1);
+    const handedOff = run(CHECKS['update.sh'](true), { rootFreeMb: 150, persFreeMb: 4000 });
+    assert.equal(handedOff.status, 0, handedOff.out);
+    assert.match(handedOff.out, /PASSED \/ 64 /);
+  });
+
+  it('pod-installer.sh never counts the release below what this fork ships', () => {
+    const tiny = { tree: 5 * MB, modules: 20 * MB, db: 0 };
+    const result = run(CHECKS['pod-installer.sh'](), { rootFreeMb: 6000, persFreeMb: 4000, install: tiny });
+    // 64*2 + 400 + 133 + 0 + 64
+    assert.match(result.out, /PASSED \/ 725 \/persistent 64/);
+  });
+
+  it('deploy.sh counts a Node that Volta would have to fetch', () => {
+    const src = CHECKS['deploy.sh']();
+    const cached = run(src, { rootFreeMb: 900, persFreeMb: 4000 });
+    assert.equal(cached.status, 0, cached.out);
+    // / 48*2 + 330 + 110 + 280 + 64 = 880
+    const fetched = run(src.replace(`'${live}' 24.11.0`, `'${live}' 26.1.0`), { rootFreeMb: 870, persFreeMb: 4000 });
+    assert.match(fetched.out, /LOW_DISK_ROOT: 870M free, 880M needed/);
+  });
+
+  for (const file of ['scripts/update.sh', 'scripts/revert-to-stock.sh']) {
+    it(`${file} checks / again once staged, for its dependencies and a new Node`, () => {
+      try {
+        assert.match(run(stagedCheck(file, false), { rootFreeMb: 100, persFreeMb: 0 }).out, /PASSED \/ 64$/m);
+        // 330 + 110 + 64
+        const deps = run(stagedCheck(file, true), { rootFreeMb: 400, persFreeMb: 0 });
+        assert.equal(deps.status, 1, deps.out);
+        assert.match(deps.out, /low disk on \/ \(400M free, 504M needed for (?:the new|upstream's) dependencies\); live install untouched/);
+        pinNode(stage, '26.1.0');
+        // 280 + 64; a pinned version Volta already has costs nothing.
+        assert.match(run(stagedCheck(file, false), { rootFreeMb: 400, persFreeMb: 0 }).out, /PASSED \/ 344$/m);
+        mkdirSync(path.join(volta, 'tools/image/node/26.1.0'));
+        assert.match(run(stagedCheck(file, false), { rootFreeMb: 400, persFreeMb: 0 }).out, /PASSED \/ 64$/m);
+      } finally {
+        pinNode(stage, '24.11.0');
+        rmSync(path.join(volta, 'tools/image/node/26.1.0'), { recursive: true, force: true });
+      }
+    });
+  }
+
+  it('update.sh after a handoff counts only a Node still to fetch, not the installed dependencies', () => {
+    assert.match(run(stagedCheck('scripts/update.sh', true, true), { rootFreeMb: 100, persFreeMb: 0 }).out, /PASSED \/ 64$/m);
+  });
+
+  it('pod-installer.sh checks / again once staged, counting any Node Volta lacks', () => {
+    const file = 'scripts/migrate/pod-installer.sh';
+    // 280 is not added: Volta has 24.11.0. 330 + 110 + 40 + 20 + 64
+    assert.match(run(stagedCheck(file, true), { rootFreeMb: 600, persFreeMb: 0 }).out, /PASSED \/ 564$/m);
+    try {
+      rmSync(path.join(volta, 'tools/image/node/24.11.0'), { recursive: true });
+      const result = run(stagedCheck(file, true), { rootFreeMb: 600, persFreeMb: 0 });
+      assert.match(result.out, /low disk on \/ \(600M free, 844M needed for the new dependencies\); their server was never touched/);
+    } finally {
+      mkdirSync(path.join(volta, 'tools/image/node/24.11.0'), { recursive: true });
+    }
+  });
+
+  it('switch-to-this-fork.sh passes on a 1 GB /persistent with room for its full backup', () => {
+    const result = run(CHECKS['switch-to-this-fork.sh'](), { rootFreeMb: 1200, persFreeMb: 700 });
+    assert.equal(result.status, 0, result.out);
+    // / installer 64*2 + 400 + 133 + 40 + 20, plus 64; /persistent backup
+    // 48 + 330 + 40 + 1, its database copy 40, the installer's 40 + 20, plus 64.
+    assert.match(result.out, /PASSED \/ 785 \/persistent 583/);
+  });
+
+  it('switch-to-this-fork.sh refuses before consent when the pod is nearly full', () => {
+    const full = run(CHECKS['switch-to-this-fork.sh'](), { rootFreeMb: 1200, persFreeMb: 50 });
+    assert.equal(full.status, 1, full.out);
+    assert.match(full.out, /ABORTED: low disk on the pod's \/persistent \(50M free, 583M needed\)/);
+    assert.match(full.out, DB_HINT);
+    const rootFull = run(CHECKS['switch-to-this-fork.sh'](), { rootFreeMb: 100, persFreeMb: 4000 });
+    assert.match(rootFull.out, /ABORTED: low disk on the pod's \/ \(100M free, 785M needed\)/);
+    const large = run(CHECKS['switch-to-this-fork.sh'](), { rootFreeMb: 6000, persFreeMb: 12000 });
+    assert.equal(large.status, 0, large.out);
+  });
+
+  it('switch-to-this-fork.sh reads an unreadable df on the pod as nothing free', () => {
+    const result = run(CHECKS['switch-to-this-fork.sh'](), { rootFreeMb: 6000, persFreeMb: 12000, silentDf: true });
+    assert.equal(result.status, 1, result.out);
+    assert.match(result.out, /ABORTED: low disk on the pod's \/ \(0M free, 785M needed\)/);
+  });
+
+  for (const [label, reply] of [
+    ['nothing', ''],
+    ['a value missing, so the rest shift', ' 752 700 583'],
+    ['a value that is not a number', '9000 752 x 583'],
+    ['an extra value', '9000 752 9000 583 1'],
+  ]) {
+    it(`switch-to-this-fork.sh refuses when the pod answers with ${label}`, () => {
+      const src = read('scripts/migrate/switch-to-this-fork.sh');
+      const script = `${PRELUDE.replace('FATAL', 'ABORTED')}SSH_PORT=8822
+ssh_cmd() { cat >/dev/null; printf '%s\\n' '${reply}'; }
+${between(src, '# Disk space, both sides.', 'LAPTOP_FREE_KB=')}
+echo PASSED`;
+      const result = run(script, { rootFreeMb: 6000, persFreeMb: 12000 });
+      assert.equal(result.status, 1, result.out);
+      assert.match(result.out, /ABORTED: could not measure free space on the pod/);
+      assert.doesNotMatch(result.out, /PASSED/);
+    });
+  }
+
+  it('every check still runs before anything on the install is changed', () => {
+    const update = read('scripts/update.sh');
+    assert.ok(update.indexOf('PERS_NEED') < update.indexOf('open_wan\n'));
+    assert.ok(update.indexOf('DEPS_NEED') < update.indexOf('npm install'));
+    assert.ok(update.indexOf('DEPS_NEED') < update.indexOf('# --- backup'));
+    const revert = read('scripts/revert-to-stock.sh');
+    assert.ok(revert.indexOf('PERS_NEED') < revert.indexOf('open_wan\n'));
+    assert.ok(revert.indexOf('DEPS_NEED') < revert.indexOf('npm install'));
+    const installer = read('scripts/migrate/pod-installer.sh');
+    assert.ok(installer.indexOf('PERS_NEED') < installer.indexOf('curl -fL --max-time 300'));
+    assert.ok(installer.indexOf('DEPS_NEED') < installer.indexOf('ensure-node.sh" dac'));
+    const deploy = read('ops/deploy.sh');
+    assert.ok(deploy.indexOf('PERS_NEED') < deploy.indexOf('# --- backup'));
+    const sw = read('scripts/migrate/switch-to-this-fork.sh');
+    assert.ok(sw.indexOf('REMOTE_PERS_NEED') < sw.indexOf('Stage 4: backing up'));
+    assert.ok(sw.indexOf('REMOTE_PERS_NEED') < sw.indexOf('[ "$CONFIRM" = "switch" ]'));
+  });
+});
