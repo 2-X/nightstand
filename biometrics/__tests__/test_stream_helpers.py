@@ -282,6 +282,8 @@ class TestPresenceMode(CapPresenceTestCase):
             self.assertIsNone(self._legacy_inputs(cap_profiles()))
         self.assertEqual(len(logs.output), 1)
         self.assertIn('learned', logs.output[0])
+        self.assertIn('the vibration sensor keeps deciding who is in bed, and the legacy estimators keep taking vitals',
+                      logs.output[0])
 
     def test_an_unchecked_format_waits_for_records_once_a_second(self):
         profiles = cap_profiles()
@@ -317,7 +319,7 @@ class TestPresenceMode(CapPresenceTestCase):
     def test_capsense2_on_another_pod_waits_like_an_unchecked_format(self):
         with self.assertLogs(stream.logger, level='INFO') as logs:
             self.assertIsNone(self._capsense2_inputs(False))
-        self.assertIn('capSense2 capacitance until', logs.output[0])
+        self.assertIn('With capSense2 capacitance,', logs.output[0])
         profiles = cap_profiles()
         for side in ('left', 'right'):
             profiles[side]['cap_occupied'] = {'level': 20.0}
@@ -491,6 +493,21 @@ class TestProcessBiometricsLoop(CapPresenceTestCase):
         self.assertEqual(drop_stale.call_count, 70)
         self.assertEqual(processor.process_piezo_record.call_count, 70)
 
+    def test_refreshes_the_vitals_path_with_the_presence_mode_and_shares_the_pump(self):
+        for _ in range(71):
+            stream.piezo_record_queue.put(recent_piezo())
+        stream.piezo_record_queue.put(None)
+        processor = unittest.mock.Mock()
+        with unittest.mock.patch.object(stream, 'StreamProcessor', return_value=processor) as build, \
+                unittest.mock.patch.object(stream, 'update_health'), \
+                unittest.mock.patch.object(stream, '_refresh_presence_mode'), \
+                unittest.mock.patch.object(stream, '_refresh_vitals_mode') as refresh, \
+                unittest.mock.patch.object(stream, '_drop_stale_presence_v2'):
+            stream.process_biometrics()
+        self.assertIs(build.call_args.kwargs['pump'], stream.pump_speed)
+        self.assertEqual(refresh.call_count, 2)
+        refresh.assert_called_with(processor)
+
     def test_a_failing_mode_switch_does_not_stop_processing(self):
         for _ in range(71):
             stream.piezo_record_queue.put(recent_piezo())
@@ -504,6 +521,112 @@ class TestProcessBiometricsLoop(CapPresenceTestCase):
             stream.process_biometrics()
         self.assertEqual(processor.process_piezo_record.call_count, 70)
         self.assertEqual(processor.use_presence_v2.call_count, 2)
+
+
+class TestVitalsMode(unittest.TestCase):
+    def test_the_refresh_follows_the_switch(self):
+        processor = unittest.mock.Mock()
+        for enabled in (True, False):
+            with unittest.mock.patch.object(stream, 'biometrics_v2_enabled', return_value=enabled):
+                stream._refresh_vitals_mode(processor)
+            processor.use_vitals_v2.assert_called_with(enabled)
+
+    def test_a_failed_switch_keeps_the_current_path(self):
+        processor = unittest.mock.Mock()
+        processor.use_vitals_v2.side_effect = RuntimeError('boom')
+        with unittest.mock.patch.object(stream, 'biometrics_v2_enabled', return_value=True), \
+                self.assertLogs(stream.logger, 'ERROR'):
+            stream._refresh_vitals_mode(processor)
+
+
+def pump_frame(rpm=3000):
+    return {'type': 'frzHealth', 'ts': time.time(), 'left': {'pump': {'rpm': rpm}}, 'right': {'pump': {'rpm': 1950}}}
+
+
+class TestPumpSpeedFeed(StreamHelpersTestCase):
+    """Both readers hand every frzHealth frame to the shared pump speed as well as to pump health."""
+
+    def setUp(self):
+        super().setUp()
+        self.pump = stream.PumpSpeed()
+        pump = unittest.mock.patch.object(stream, 'pump_speed', self.pump)
+        pump.start()
+        self.addCleanup(pump.stop)
+        health = unittest.mock.patch.object(stream, 'update_pump_health')
+        self.health = health.start()
+        self.addCleanup(health.stop)
+        warned = unittest.mock.patch.object(stream, '_pump_frame_warned', False)
+        warned.start()
+        self.addCleanup(warned.stop)
+
+    def follow(self, *frames):
+        folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        with open(os.path.join(folder, 'a.RAW'), 'wb') as handle:
+            for seq, frame in enumerate(frames):
+                handle.write(cbor2.dumps({'seq': seq, 'data': cbor2.dumps(frame)}))
+        handler = stream.LatestRawFileHandler(folder)
+        handler.follow_latest_file()
+        handler.latest_file_obj.close()
+        return handler
+
+    def test_the_file_watcher_feeds_both(self):
+        frame = pump_frame()
+        self.follow(frame)
+        self.assertTrue(self.pump.fed)
+        self.assertTrue(self.pump.high_during(frame['ts'] - 1, frame['ts']))
+        self.health.assert_called_once_with(frame)
+
+    def test_a_frame_the_pump_speed_cannot_read_still_reaches_pump_health(self):
+        broken = {'type': 'frzHealth', 'ts': time.time(), 'left': ['not', 'a', 'side']}
+        handler = self.follow(broken, recent_piezo(seq=9))
+        self.health.assert_called_once_with(broken)
+        self.assertFalse(self.pump.fed)
+        # The reader moved past both records.
+        self.assertEqual(handler.last_pos, os.path.getsize(handler.latest_file))
+        self.assertEqual(stream.piezo_record_queue.qsize(), 1)
+
+    def test_an_unreadable_frame_is_reported_once(self):
+        broken = {'type': 'frzHealth', 'ts': time.time(), 'left': ['not', 'a', 'side']}
+        with self.assertLogs(stream.logger, 'WARNING') as logs:
+            self.follow(broken, dict(broken, ts=broken['ts'] + 10))
+        self.assertEqual(len(logs.records), 1)
+        self.assertIn('pump speed', logs.records[0].getMessage())
+
+    def test_the_nats_consumer_feeds_both(self):
+        frame = pump_frame()
+
+        class Stop(Exception):
+            pass
+
+        message = unittest.mock.Mock(data=cbor2.dumps({'seq': 1, 'data': cbor2.dumps(frame)}))
+        message.ack = unittest.mock.AsyncMock()
+        batches = [[message]]
+
+        async def fetch(count, timeout):
+            if not batches:
+                raise Stop()
+            return batches.pop()
+
+        subscription = unittest.mock.Mock(fetch=fetch)
+        jetstream = unittest.mock.Mock()
+        jetstream.stream_info = unittest.mock.AsyncMock(
+            return_value=types.SimpleNamespace(config=types.SimpleNamespace(subjects=['raw'])))
+        jetstream.pull_subscribe = unittest.mock.AsyncMock(return_value=subscription)
+        connection = unittest.mock.Mock()
+        connection.jetstream.return_value = jetstream
+        connection.close = unittest.mock.AsyncMock()
+        modules = {name: unittest.mock.Mock() for name in ('nats', 'nats.js', 'nats.js.api')}
+        modules['nats'].connect = unittest.mock.AsyncMock(return_value=connection)
+        modules['nats.errors'] = types.SimpleNamespace(TimeoutError=type('NatsTimeout', (Exception,), {}))
+        with unittest.mock.patch.dict(sys.modules, modules), \
+                unittest.mock.patch.object(stream, 'process_biometrics', lambda: None), \
+                unittest.mock.patch.object(stream, 'update_health'):
+            with self.assertRaises(Stop):
+                asyncio.run(stream.watch_nats_stream())
+        self.assertTrue(self.pump.high_during(frame['ts'] - 1, frame['ts']))
+        self.health.assert_called_once_with(frame)
+        message.ack.assert_awaited_once()
 
 
 class TestStreamHealth(unittest.TestCase):

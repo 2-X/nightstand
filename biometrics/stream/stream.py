@@ -54,11 +54,15 @@ from presence.sensors import TYPE_NAME_LENGTH, printable_type, read_cap, unknown
 from stream_processor import LatestCap, StreamProcessor
 from load_raw_files import load_piezo_row, _read_raw_record
 from service_health import update_health, update_sensor_temps, update_pump_health
+from vitals2_stream import PumpSpeed
 
 # Global queue for processing decoded biometric data
 piezo_record_queue = queue.Queue()
 # Newest capacitance reading, for capacitance presence.
 latest_cap = LatestCap()
+# When the pump ran fast, from frzHealth frames, for the newer vitals.
+pump_speed = PumpSpeed()
+_pump_frame_warned = False
 # Capacitance presence runs only while capacitance records keep arriving, so a
 # Pod without them keeps piezo presence with the switch on.
 CAP_FRESH_SECONDS = 60
@@ -214,7 +218,8 @@ def _experimental_ready(stream_processor, profiles, cap_format) -> bool:
         return True
     if (cap_format.name, reason) not in _experimental_logged:
         _experimental_logged.add((cap_format.name, reason))
-        logger.info(f'Vitals stay on the vibration sensor with {cap_format.name} capacitance {reason}')
+        logger.info(f'With {cap_format.name} capacitance, the vibration sensor keeps deciding who is in bed, '
+                    f'and the legacy estimators keep taking vitals, {reason}')
     return False
 
 
@@ -226,6 +231,27 @@ def _refresh_presence_mode(stream_processor) -> None:
         logger.warning(f'Could not work out the presence mode, keeping the current one: {error}')
         return
     _switch_presence_mode(stream_processor, inputs)
+
+
+def _refresh_vitals_mode(stream_processor) -> None:
+    # biometrics_v2_enabled reads as off on any error, the same answer presence gets.
+    try:
+        stream_processor.use_vitals_v2(biometrics_v2_enabled())
+    except Exception as error:
+        logger.error(f'Could not switch the vitals path, keeping the current one: {error}')
+
+
+def _note_pump_speed(frame) -> None:
+    # A frame the pump gate cannot read must not stop the reader; the first one is reported.
+    global _pump_frame_warned
+    try:
+        pump_speed.note(frame)
+    except Exception as error:
+        if not _pump_frame_warned:
+            _pump_frame_warned = True
+            logger.warning(f'Could not read the pump speed from a frzHealth frame, more are not reported: {error}')
+        else:
+            logger.debug(f'Could not read the pump speed from a frzHealth frame: {error}')
 
 
 def _switch_presence_mode(stream_processor, inputs) -> None:
@@ -324,6 +350,7 @@ class LatestRawFileHandler(FileSystemEventHandler):
 
                 # Handle frzHealth records for pump-stall detection
                 if isinstance(decoded_data, dict) and decoded_data.get('type') == 'frzHealth':
+                    _note_pump_speed(decoded_data)
                     update_pump_health(decoded_data)
                     self.last_pos = self.latest_file_obj.tell()
                     continue
@@ -354,14 +381,16 @@ class LatestRawFileHandler(FileSystemEventHandler):
 
 def process_biometrics():
     piezo_record = piezo_record_queue.get()
-    stream_processor = StreamProcessor(piezo_record, debug=False, cap_source=latest_cap)
+    stream_processor = StreamProcessor(piezo_record, debug=False, cap_source=latest_cap, pump=pump_speed)
     _refresh_presence_mode(stream_processor)
+    _refresh_vitals_mode(stream_processor)
     ix = 0
     while True:
         ix += 1
         if ix == 60:
             update_health('stream', 'healthy')
             _refresh_presence_mode(stream_processor)
+            _refresh_vitals_mode(stream_processor)
             ix = 0
         try:
             piezo_record = piezo_record_queue.get(timeout=5)
@@ -475,6 +504,7 @@ async def watch_nats_stream():
                     if isinstance(decoded_data, dict) and decoded_data.get('type') == 'frzTemp':
                         update_sensor_temps(decoded_data)
                     elif isinstance(decoded_data, dict) and decoded_data.get('type') == 'frzHealth':
+                        _note_pump_speed(decoded_data)
                         update_pump_health(decoded_data)
                     elif not _store_decoded_cap_record(decoded_data) and _queue_decoded_piezo_record(decoded_data):
                         queued_count += 1

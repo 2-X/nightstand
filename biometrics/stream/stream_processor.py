@@ -271,8 +271,9 @@ class StreamProcessor:
         }
         states = self.presence.step(epoch, cap, piezo)
         if self._guard is not None and self._guard.step(states, piezo):
-            logger.warning('Capacitance did not explain the bed in use for 10 of the last 15 minutes, '
-                           'vitals follow the vibration sensor again until calibration changes')
+            logger.warning('Capacitance did not explain the bed in use for 10 of the last 15 minutes, so the '
+                           'vibration sensor decides who is in bed and the legacy estimators take vitals until '
+                           'calibration changes')
             declined = self._presence_inputs
             self.use_presence_v2(None)
             self._declined_inputs = declined

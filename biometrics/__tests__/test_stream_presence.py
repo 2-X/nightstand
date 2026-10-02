@@ -339,7 +339,7 @@ class LegacyLiveTest(unittest.TestCase):
         self.assertIsNone(processor.presence)
         self.assertIsNone(processor._piezo_presence)
         messages = [record.getMessage() for record in logs.records]
-        self.assertTrue(any('vitals follow the vibration sensor again' in message for message in messages))
+        self.assertTrue(any('the legacy estimators take vitals until calibration changes' in message for message in messages))
         self.assertFalse(any('presence' in message for message in messages))
         processor.use_presence_v2(legacy_inputs())
         self.assertIsNone(processor.presence)
@@ -451,7 +451,7 @@ class OtherPodLiveTest(unittest.TestCase):
         records = list(scenarios.raw_records(CAPSENSE2_MISFIT))
         with self.assertLogs(stream_processor_module.logger, level='WARNING') as logs:
             run = run_live(records, OTHER_POD_INPUTS)
-        self.assertTrue(any('vitals follow the vibration sensor again' in line for line in logs.output))
+        self.assertTrue(any('the legacy estimators take vitals until calibration changes' in line for line in logs.output))
         self.assertIsNone(run.processor.presence)
         self.assertIsNone(run.processor._piezo_presence)
         self.assertEqual(run.posts, run_live(records, None).posts)
