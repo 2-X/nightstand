@@ -13,6 +13,9 @@ import {
 } from './runEvent.js';
 import { smartOffExtends, smartResolveHooks } from './curveController.js';
 import { trackAlarm } from '../alarmActivity.js';
+import { noteMissedAlarm, setAlarmSuppression } from '../alarmLedger.js';
+import { isAlarmOverridden, rhythmSkipReason } from './gates.js';
+import settingsDB from '../../db/settings.js';
 import { forgetKeptAlarms, keptSleeps, rememberKeptAlarms, type KeptAlarm } from './keptAlarms.js';
 import { poweredOnSince, scheduleSleepAnalysis } from '../powerScheduler.js';
 import { SLEEP_ANALYSIS_HOUR, SLEEP_ANALYSIS_MINUTE } from '../../sleepAnalysisSchedule.js';
@@ -63,6 +66,7 @@ function scheduleSleep(settings: Settings, side: Side, sleep: ResolvedSleep, now
       ? () => trackAlarm(side, name, () => runRhythmEvent(side, sleep, event))
       : () => runRhythmEvent(side, sleep, event);
     if (scheduleOnce(name, event.at, now, run)) count += 1;
+    if (event.kind === 'alarm') setAlarmSuppression(name, due => isAlarmOverridden(settingsDB.data, side, sleep, due));
   }
   const analysisAt = new Date(sleep.end.getTime() + ANALYSIS_DELAY_MS);
   const analysisName = rhythmJobName(side, sleep.date, 'analysis', analysisAt, timeZone, 0);
@@ -119,6 +123,7 @@ async function ringKeptAlarm(side: Side, sleep: ResolvedSleep, event: Extract<Rh
     const status = await getDeviceStatusCoalesced();
     if (!status[side].isOn) {
       logger.info(`Skipping the kept alarm for ${side}: the side is off`);
+      if (!rhythmSkipReason(settingsDB.data, side, sleep, 'alarm', new Date(), event.at)) noteMissedAlarm(side, event.at, 'side-off');
       forgetKeptAlarms(side);
       return 0;
     }
@@ -152,6 +157,7 @@ export function scheduleKeptAlarms(now: Date): number {
     }
     for (const { name, event } of ahead) {
       if (scheduleOnce(name, event.at, now, () => trackAlarm(side, name, () => ringKeptAlarm(side, sleep, event)))) count += 1;
+      setAlarmSuppression(name, due => isAlarmOverridden(settingsDB.data, side, sleep, due));
     }
   }
   return count;

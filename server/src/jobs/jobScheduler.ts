@@ -29,6 +29,7 @@ import { reportRhythmsStatus } from './rhythms/rhythmsStatus.js';
 import { setCurveRetime, startCurveRuntime, stopCurveRuntime, syncCurvePlan } from './rhythms/curveRuntime.js';
 import { smartOffRuntime } from './rhythms/smartOffRuntime.js';
 import { setEngineActivation, sleepAround } from './scheduleQueries.js';
+import { startAlarmLedger, alarmLedgerHeartbeat } from './alarmLedger.js';
 
 
 // Under Rhythms a replacement alarm belongs to the resolved sleep around it.
@@ -128,6 +129,7 @@ async function rebuildJobs() {
     reportRhythmsStatus(engine, plan, settingsData.timeZone);
 
     logger.info('Done scheduling jobs!');
+    alarmLedgerHeartbeat(new Date());
     const failedSides = plan.failedSides.length;
     serverStatus.status.jobs.status = failedDays + failedSides > 0 ? 'failed' : 'healthy';
     if (failedSides > 0) {
@@ -189,6 +191,7 @@ export function setupJobs(): Promise<void> {
 }
 
 let RETRY_COUNT = 0;
+let alarmLedgerStarted = false;
 const FAST_RETRIES = 20;
 const FAST_RETRY_MS = 5_000;
 // The pod boots before NTP has corrected the clock, and a sync can take much
@@ -204,6 +207,10 @@ function waitForValidDateAndSetupJobs() {
     serverStatus.status.systemDate.message = '';
     RETRY_COUNT = 0;
     logger.info('System date is valid. Setting up jobs...');
+    if (!alarmLedgerStarted) {
+      alarmLedgerStarted = true;
+      startAlarmLedger(new Date());
+    }
     void setupJobs();
     return;
   }

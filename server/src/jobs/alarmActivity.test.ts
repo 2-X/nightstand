@@ -1,8 +1,17 @@
 import assert from 'node:assert/strict';
-import { afterEach, describe, it } from 'node:test';
+import { after, afterEach, describe, it } from 'node:test';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import schedule from 'node-schedule';
-import { nightAlarmPending, resetAlarmActivity, rhythmNightAlarms, trackAlarm } from './alarmActivity.js';
-import { setRebuilding } from './rebuildState.js';
+
+const folder = mkdtempSync(path.join(tmpdir(), 'nightstand-alarm-activity-'));
+mkdirSync(path.join(folder, 'lowdb'));
+process.env.DATA_FOLDER = `${folder}/`;
+process.env.ENV = 'local';
+const { nightAlarmPending, resetAlarmActivity, rhythmNightAlarms, trackAlarm } = await import('./alarmActivity.js');
+const { setRebuilding } = await import('./rebuildState.js');
+after(() => rmSync(folder, { recursive: true, force: true }));
 
 const MINUTE = 60_000;
 const NIGHT = rhythmNightAlarms('left', '2026-09-29');

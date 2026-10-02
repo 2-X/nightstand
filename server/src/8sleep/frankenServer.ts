@@ -12,7 +12,7 @@ import config from '../config.js';
 import { wait } from './promises.js';
 import { promiseWithTimeout } from './timeoutPromise.js';
 import metrics from '../metrics/metrics.js';
-import { FrankenSupersededError } from './frankenErrors.js';
+import { FrankenConnectionClosedError, FrankenSupersededError, markCommandWritten } from './frankenErrors.js';
 
 // 0 disables the connection timeout; only a missing or non-numeric value falls back.
 const connectionTimeoutFromEnv = (raw: string | undefined) => {
@@ -73,7 +73,7 @@ export class Franken {
     public readonly sequentialQueue: SequentialQueue,
   ) {
     socket.once('close', () => {
-      this.lifetime.abort(new Error('Franken connection closed'));
+      this.lifetime.abort(new FrankenConnectionClosedError());
       // A dropped socket aborts reads before their timeout can trigger recovery.
       // Retire only this active connection; late events must not close a newer one.
       if (franken === this) {
@@ -143,7 +143,10 @@ export class Franken {
       const response = responseBytes.toString();
       logger.debug(`Message sent successfully to sock | message: ${message}`);
       return response;
-    } catch (error) {
+    } catch (caught) {
+      // The abort reason is shared by every command on this connection.
+      const error = caught === this.lifetime.signal.reason ? new FrankenConnectionClosedError() : caught;
+      if (writeCompleted && error instanceof Error) markCommandWritten(error);
       if (error instanceof FrankenCommandTimeoutError) {
         timedOut = true;
         metrics.recordFrankenCommand(Date.now() - startedAt, true);
@@ -187,7 +190,7 @@ export class Franken {
   }
 
   public close() {
-    this.lifetime.abort(new Error('Franken connection closed'));
+    this.lifetime.abort(new FrankenConnectionClosedError());
     const socket = this.socket;
     if (!socket.destroyed) socket.destroy();
   }

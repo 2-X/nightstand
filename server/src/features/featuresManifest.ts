@@ -545,6 +545,30 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
       + 'Older versions ignore the setting.',
   },
   {
+    id: 'missed-alarm-report',
+    title: 'Missed alarm report',
+    description: 'Records alarms that could not ring: the server was not running, the Pod answered too late, '
+      + 'the command failed or was not confirmed, this server hit an error, or the side was off.',
+    category: 'safety',
+    version: 'n/a',
+    flag: null,
+    default: true,
+    touchpoints: [
+      'server/src/jobs/alarmLedger.ts', 'server/src/jobs/alarmScheduler.ts', 'server/src/jobs/alarmActivity.ts',
+      'server/src/jobs/jobScheduler.ts', 'server/src/jobs/alarmOverrideGate.ts', 'server/src/jobs/rhythms/scheduleRhythms.ts',
+      'server/src/routes/alarm/missedAlarms.ts', 'server/src/setup/routes.ts',
+    ],
+    depends_on: ['agent'],
+    reversible: true,
+    tests: [
+      'server/src/jobs/alarmLedger.test.ts', 'server/src/jobs/alarmLedgerOverride.test.ts',
+      'server/src/routes/alarm/missedAlarms.test.ts',
+    ],
+    upstream_offer: false,
+    rationale: 'Safety: tells the user when an alarm could not ring. Always on, with nothing to turn off. '
+      + 'It writes one extra file in the data folder, which older versions ignore.',
+  },
+  {
     id: 'rhythms',
     title: 'Rhythms',
     description: 'Named sleep plans per side, a weekly plan, date changes and an optional Smart Schedule temperature curve.',

@@ -1,5 +1,6 @@
 import binarySplit from 'binary-split';
 import { Transform } from 'stream';
+import { FrankenConnectionClosedError } from './frankenErrors.js';
 
 export class MessageStream {
   private readonly splitter: Transform;
@@ -41,7 +42,7 @@ export class MessageStream {
       }
 
       if (this.ended) {
-        throw new Error('stream ended');
+        throw new FrankenConnectionClosedError('stream ended');
       }
 
       if (signal?.aborted) {

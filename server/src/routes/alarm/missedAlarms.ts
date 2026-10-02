@@ -1,0 +1,22 @@
+import express, { Request, Response } from 'express';
+import { z } from 'zod';
+import { dismissMissedAlarms, listMissedAlarms } from '../../jobs/alarmLedger.js';
+
+const router = express.Router();
+const DismissSchema = z.object({ ids: z.array(z.string().max(120)).max(50) }).strict();
+
+router.get('/alarms/missed', (_req: Request, res: Response) => {
+  res.json({ missed: listMissedAlarms() });
+});
+
+router.post('/alarms/missed/dismiss', (req: Request, res: Response) => {
+  const parsed = DismissSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid request data', details: parsed.error.errors });
+    return;
+  }
+  dismissMissedAlarms(parsed.data.ids);
+  res.status(204).end();
+});
+
+export default router;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, afterEach, beforeEach, describe, it, mock } from 'node:test';
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -48,6 +48,7 @@ const { keepSleepAlarms, scheduleKeptAlarms } = await import('./scheduleRhythms.
 const { forgetKeptAlarms, dropKeptAlarms } = await import('./keptAlarms.js');
 const { resetAlarmActivity, rhythmNightAlarms } = await import('../alarmActivity.js');
 const { resetAlarmOccurrences } = await import('../alarmScheduler.js');
+const ledger = await import('../alarmLedger.js');
 
 const NOW = Date.parse('2026-09-29T05:45:00Z');
 const SECOND = 'rhythm-left-2026-09-28-alarm-0600-1';
@@ -91,6 +92,8 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  ledger.resetAlarmLedgerForTests();
+  rmSync(path.join(folder, 'alarm-ledger.json'), { force: true });
   cancelAll();
   dropKeptAlarms();
   mock.timers.reset();
@@ -186,5 +189,35 @@ describe('kept alarms', () => {
     assert.deepEqual(alarmJobs(), [SECOND], 'dropping must not cancel a job the engine may own');
     cancelAll();
     assert.equal(scheduleKeptAlarms(new Date(NOW)), 0);
+  });
+
+  it('reports a side that was off as missed, but not one that is paused', async () => {
+    ledger.startAlarmLedger(new Date(NOW));
+    keepSleepAlarms('left', sleep, new Date(NOW), 'UTC');
+    scheduleKeptAlarms(new Date(NOW));
+    deviceStatus.left.isOn = false;
+    settingsDB.data.left.scheduleOverrides.pause = { active: true, expiresAt: '2026-09-29T09:00:00Z' };
+    await ringAt(SECOND, '2026-09-29T06:00:00Z');
+    assert.deepEqual(ledger.listMissedAlarms(new Date(NOW)), []);
+    settingsDB.data.left.scheduleOverrides.pause = { active: false, expiresAt: '' };
+    keepSleepAlarms('left', sleep, new Date(NOW), 'UTC');
+    scheduleKeptAlarms(new Date(NOW));
+    await ringAt(SECOND, '2026-09-29T06:00:00Z');
+    const [missed] = ledger.listMissedAlarms(new Date(NOW));
+    assert.equal(missed.reason, 'side-off');
+    assert.equal(missed.at, '2026-09-29T06:00:00.000Z');
+  });
+
+  it('is left out of the saved alarms while an override replaces it', () => {
+    const saved = () => (JSON.parse(readFileSync(path.join(folder, 'alarm-ledger.json'), 'utf8')).upcoming as { jobName: string }[])
+      .map(item => item.jobName);
+    keepSleepAlarms('left', sleep, new Date(NOW), 'UTC');
+    scheduleKeptAlarms(new Date(NOW));
+    ledger.startAlarmLedger(new Date(NOW));
+    ledger.alarmLedgerHeartbeat(new Date(NOW));
+    assert.deepEqual(saved(), [SECOND]);
+    settingsDB.data.left.scheduleOverrides.alarm = { disabled: false, timeOverride: '06:30', expiresAt: '2026-09-29T06:30:00Z' };
+    ledger.alarmLedgerHeartbeat(new Date(NOW));
+    assert.deepEqual(saved(), []);
   });
 });

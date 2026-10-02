@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
-import { firmwareSecondsUntil, secondsUntilScheduledOff, WEEKLY_FIRMWARE_MARGIN_SECONDS } from './firmwareTimer.js';
-import { MAX_ON_DURATION_SECONDS } from '../routes/deviceStatus/deviceStatusSchema.js';
+import { after, describe, it } from 'node:test';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
+const folder = mkdtempSync(path.join(tmpdir(), 'nightstand-firmware-timer-'));
+mkdirSync(path.join(folder, 'lowdb'));
+process.env.DATA_FOLDER = `${folder}/`;
+process.env.ENV = 'local';
+const { firmwareSecondsUntil, secondsUntilScheduledOff, WEEKLY_FIRMWARE_MARGIN_SECONDS } = await import('./firmwareTimer.js');
+const { MAX_ON_DURATION_SECONDS } = await import('../routes/deviceStatus/deviceStatusSchema.js');
+after(() => rmSync(folder, { recursive: true, force: true }));
 
 const LA = 'America/Los_Angeles';
 

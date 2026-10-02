@@ -20,6 +20,8 @@ import { emitJobEvent } from './jobEvents.js';
 import { describePause, isAlarmPaused } from './schedulePause.js';
 import { ALARM_LATE_LIMIT_MS, trackAlarm } from './alarmActivity.js';
 import { alarmPatternFor } from './alarmPattern.js';
+import { missedReasonForError, noteMissedAlarm, setAlarmSuppression } from './alarmLedger.js';
+import { alarmOverrideSilences } from './alarmOverrideGate.js';
 
 
 const alarmOccurrences = new Map<string, number>();
@@ -44,6 +46,7 @@ export const executeAlarm = async (
   if (occurrenceKey && alarmOccurrences.has(occurrenceKey)) return 0;
   if (occurrenceKey) alarmOccurrences.set(occurrenceKey, Date.now());
   let fired = false;
+  let sending = false;
   emitJobEvent({ jobName: `alarm-${side}`, status: 'started' });
   try {
     const min10Duration = Math.max(10, duration);
@@ -61,6 +64,7 @@ export const executeAlarm = async (
     const resp = await franken.getDeviceStatus();
     if (!resp[side].isOn && !force) {
       logger.debug('Not executing alarm, side is off!');
+      if (options.background) noteMissedAlarm(side, new Date(due), 'side-off');
       return 0;
     }
 
@@ -84,10 +88,12 @@ export const executeAlarm = async (
       const message = `Skipped the ${side} alarm: the Pod was reachable only ${Math.round(lateMs / 1_000)}s after its time`;
       logger.warn(message);
       emitJobEvent({ jobName: `alarm-${side}`, status: 'fail', message });
+      noteMissedAlarm(side, new Date(due), 'late');
       return 0;
     }
 
     logger.debug(`Executing alarm... ${JSON.stringify(alarmPayload)}`);
+    sending = true;
     await executeFunction(command, hexPayload, { ...options, notAfter });
     fired = true;
     const activeAlarm = Symbol(side);
@@ -117,6 +123,8 @@ export const executeAlarm = async (
     serverStatus.status.alarmSchedule.message = message;
     logger.error(error);
     emitJobEvent({ jobName: `alarm-${side}`, status: 'fail', message });
+    // Once the Pod has the alarm it may be ringing, so a later error is not a miss.
+    if (options.background && !fired) noteMissedAlarm(side, new Date(due), missedReasonForError(error, sending));
     return 0;
   } finally {
     if (occurrenceKey && !fired) alarmOccurrences.delete(occurrenceKey);
@@ -360,16 +368,10 @@ export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek
           logger.info(`Skipping ${side} ${day} alarm at ${time}, schedule paused ${describePause(settingsDB.data, side)}`);
           return 0;
         }
-        if (settingsDB.data[side].scheduleOverrides.alarm.expiresAt) {
-          const expiresAt = moment.tz(settingsDB.data[side].scheduleOverrides.alarm.expiresAt, settingsData.timeZone);
-          // Keep the night's original alarms suppressed after an earlier replacement.
-          const date = now.clone().startOf('day');
-          if (compareTimes(time, dailySchedule.power.on) < 0) date.subtract(1, 'day');
-          const { start: nightStart, end: nightEnd } = nightBounds(date, dailySchedule.power);
-          if (expiresAt.isAfter(now) || expiresAt.isBetween(nightStart, nightEnd, undefined, '(]')) {
-            logJob(`Detected alarm override! Skipping alarm! Override expires at: ${expiresAt.format()}`, side, day, dayIndex, time);
-            return 0;
-          }
+        const overrideExpiresAt = settingsDB.data[side].scheduleOverrides.alarm.expiresAt;
+        if (alarmOverrideSilences(overrideExpiresAt, settingsData.timeZone, time, dailySchedule.power, now)) {
+          logJob(`Detected alarm override! Skipping alarm! Override expires at: ${overrideExpiresAt}`, side, day, dayIndex, time);
+          return 0;
         }
 
         return await executeAlarm({
@@ -386,5 +388,12 @@ export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek
         return 0;
       }
     }));
+    setAlarmSuppression(jobName, due => alarmOverrideSilences(
+      settingsDB.data[side].scheduleOverrides.alarm.expiresAt,
+      settingsData.timeZone,
+      time,
+      dailySchedule.power,
+      moment.tz(due, settingsData.timeZone),
+    ));
   });
 };

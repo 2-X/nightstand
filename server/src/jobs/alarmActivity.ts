@@ -4,6 +4,7 @@ import { DayOfWeek, Side } from '../db/schedulesSchema.js';
 import { wait } from '../8sleep/promises.js';
 import type { CancelableWait } from '../8sleep/promises.js';
 import { isRebuilding } from './rebuildState.js';
+import { noteAlarmStarted } from './alarmLedger.js';
 
 // Tracks scheduled alarms per side from the moment their job fires until
 // they stop ringing, so a power-off in the same minute can let them ring
@@ -34,6 +35,7 @@ const isRecurring = (name: string) => !name.includes('-alarm-override-') && !nam
 // when it did not ring. Call it first thing in the job so a power-off never
 // sees the job as neither due nor started.
 export function trackAlarm(side: Side, jobName: string, run: () => Promise<number>): Promise<void> {
+  noteAlarmStarted(jobName, new Date());
   const result = run();
   const done = result
     .then(ringMs => (ringMs > 0 ? wait(ringMs) : undefined))

@@ -12,10 +12,14 @@ mkdirSync(path.join(folder, 'lowdb'));
 process.env.DATA_FOLDER = `${folder}/`;
 process.env.ENV = 'local';
 const commands: unknown[][] = [];
+let sendError: Error | undefined;
 const updates: unknown[] = [];
 const analyses: string[][] = [];
 mock.module(new URL('../8sleep/deviceApi.js', import.meta.url).href, {
-  namedExports: { executeFunction: async (...args: unknown[]) => { commands.push(args); } },
+  namedExports: { executeFunction: async (...args: unknown[]) => {
+    if (sendError) throw sendError;
+    commands.push(args);
+  } },
 });
 let leftOn = true;
 mock.module(new URL('../8sleep/frankenServer.js', import.meta.url).href, {
@@ -42,6 +46,8 @@ const { scheduleTemperatures } = await import('./temperatureScheduler.js');
 const { scheduleSleepAnalysis, schedulePowerOn, schedulePowerOff, resetPowerOnTimes } = await import('./powerScheduler.js');
 const { markManualTempChange } = await import('./scheduleOverride.js');
 const { resetAlarmActivity, abortAlarmWaits } = await import('./alarmActivity.js');
+const ledger = await import('./alarmLedger.js');
+const { markCommandWritten } = await import('../8sleep/frankenErrors.js');
 
 const alarm = {
   time: '07:00', enabled: true, vibrationIntensity: 100,
@@ -58,6 +64,7 @@ beforeEach(async () => {
   now = Date.parse('2026-09-28T20:00:00Z');
   moment.now = () => now;
   commands.length = 0;
+  sendError = undefined;
   updates.length = 0;
   leftOn = true;
   analyses.length = 0;
@@ -82,6 +89,8 @@ beforeEach(async () => {
 afterEach(() => {
   Object.keys(schedule.scheduledJobs).forEach(name => schedule.cancelJob(name));
   resetAlarmActivity();
+  ledger.resetAlarmLedgerForTests();
+  rmSync(path.join(folder, 'alarm-ledger.json'), { force: true });
   resetPowerOnTimes();
   moment.now = originalMomentNow;
 });
@@ -123,6 +132,63 @@ test('a forced alarm test does not suppress the upcoming alarm', async (t) => {
   now = Date.parse('2026-09-29T07:00:00Z');
   await schedule.scheduledJobs['left-monday-07:00-0-alarm'].invoke();
   assert.equal(commands.length, 2);
+});
+
+test('a scheduled alarm on a side that is off is reported as missed, a manual one is not', async (t) => {
+  t.mock.method(Date, 'now', () => now);
+  ledger.startAlarmLedger(new Date(now));
+  leftOn = false;
+  assert.equal(await executeAlarm({ side: 'left', ...alarm }), 0);
+  assert.deepEqual(ledger.listMissedAlarms(new Date(now)), []);
+  assert.equal(await executeAlarm({ side: 'left', ...alarm }, undefined, { background: true, dueAt: now }), 0);
+  const [missed] = ledger.listMissedAlarms(new Date(now));
+  assert.equal(missed.reason, 'side-off');
+  assert.equal(missed.side, 'left');
+  assert.equal(missed.at, new Date(now).toISOString());
+  assert.equal(commands.length, 0);
+});
+
+const missedReasons = () => ledger.listMissedAlarms(new Date(now)).map(item => item.reason);
+const background = () => ({ background: true, dueAt: now });
+const named = (name: string) => Object.assign(new Error(name), { name });
+
+test('an alarm the Pod is already ringing is never reported, even if the bookkeeping after it fails', async (t) => {
+  t.mock.method(Date, 'now', () => now);
+  t.mock.method(globalThis, 'setTimeout', () => ({ unref() {} }) as NodeJS.Timeout);
+  ledger.startAlarmLedger(new Date(now));
+  t.mock.method(memory, 'write', async () => { throw new Error('no space left'); });
+  assert.equal(await executeAlarm({ side: 'left', ...alarm }, undefined, background()), 0);
+  assert.equal(commands.length, 1);
+  assert.deepEqual(missedReasons(), []);
+});
+
+test('a send that breaks is reported as failed, a command that gets no answer as unconfirmed', async (t) => {
+  t.mock.method(Date, 'now', () => now);
+  ledger.startAlarmLedger(new Date(now));
+  sendError = new Error('write EPIPE');
+  assert.equal(await executeAlarm({ side: 'left', ...alarm }, undefined, background()), 0);
+  sendError = named('FrankenCommandTimeoutError');
+  markCommandWritten(sendError);
+  assert.equal(await executeAlarm({ side: 'left', ...alarm }, undefined, { ...background(), dueAt: now + 1 }), 0);
+  assert.deepEqual(missedReasons().sort(), ['failed', 'unconfirmed']);
+});
+
+test('a Pod that became reachable too late is reported as late', async (t) => {
+  t.mock.method(Date, 'now', () => now);
+  ledger.startAlarmLedger(new Date(now));
+  sendError = named('FrankenUnavailableError');
+  assert.equal(await executeAlarm({ side: 'left', ...alarm }, undefined, background()), 0);
+  assert.deepEqual(missedReasons(), ['late']);
+});
+
+test('an error before the Pod is asked is reported as an error, and a manual alarm is not reported', async (t) => {
+  t.mock.method(Date, 'now', () => now);
+  ledger.startAlarmLedger(new Date(now));
+  const read = t.mock.method(settings, 'read', async () => { throw new Error('read failed'); });
+  assert.equal(await executeAlarm({ side: 'left', ...alarm }, undefined, background()), 0);
+  assert.equal(await executeAlarm({ side: 'left', ...alarm, force: true }), 0);
+  read.mock.restore();
+  assert.deepEqual(missedReasons(), ['error']);
 });
 
 test('disabled nights do not create temperature commands', async () => {
