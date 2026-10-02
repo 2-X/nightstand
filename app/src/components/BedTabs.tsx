@@ -6,10 +6,16 @@ export default function BedTabs() {
   const configured = useBaseConfigured();
   const { pathname } = useLocation();
   const selectedPath = pathname === '/elevation' ? '/elevation' : '/';
-  if (!configured) return null;
+  if (configured === false) return null;
   const destinations = [{ to: '/', label: 'Temperature' }, { to: '/elevation', label: 'Elevation' }];
+  // Until the base check answers, the row keeps its space so the page below does not jump when it appears.
+  const pending = configured === undefined;
   return (
-    <Box component="nav" aria-label="Bed controls" sx={ { display: 'flex', width: '100%', px: 0, borderBottom: 1, borderColor: 'divider' } }>
+    <Box
+      component="nav"
+      aria-label="Bed controls"
+      aria-hidden={ pending || undefined }
+      sx={ { display: 'flex', width: '100%', px: 0, borderBottom: 1, borderColor: 'divider', visibility: pending ? 'hidden' : undefined } }>
       { destinations.map(({ to, label }) => <Button
         key={ to }
         component={ Link }

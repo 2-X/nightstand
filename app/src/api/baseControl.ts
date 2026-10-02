@@ -69,16 +69,37 @@ export const useBaseStatus = () => {
 // merely rendering the navbar doesn't start a 2s poll of the base endpoint.
 // Configured-ness only changes with a service restart, so cache it for the
 // lifetime of the page.
-export const useBaseConfigured = (): boolean => {
-  const { data } = useQuery({
+const BASE_CONFIGURED_KEY = 'baseConfigured';
+
+function rememberedBaseConfigured(): boolean | undefined {
+  try {
+    const value = localStorage.getItem(BASE_CONFIGURED_KEY);
+    return value === 'true' ? true : value === 'false' ? false : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// Undefined until known. The last answer stands in while the check runs, so
+// a reload does not show the tabs late.
+export const useBaseConfigured = (): boolean | undefined => {
+  const { data, isError } = useQuery({
     queryKey: ['baseConfigured'],
-    queryFn: ({ signal }) => getBaseStatus(signal),
+    queryFn: async ({ signal }) => {
+      const status = await getBaseStatus(signal);
+      try {
+        localStorage.setItem(BASE_CONFIGURED_KEY, String(status.isConfigured === true));
+      } catch { /* storage unavailable */ }
+      return status;
+    },
     staleTime: Infinity,
     gcTime: Infinity,
     refetchOnWindowFocus: false,
     retry: retryUpTo(1),
   });
-  return data?.isConfigured === true;
+  if (data) return data.isConfigured === true;
+  if (isError) return false;
+  return rememberedBaseConfigured();
 };
 
 export const useSetBasePosition = () => {

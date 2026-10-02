@@ -78,3 +78,36 @@ for (const [width, height] of sizes) {
     }
   });
 }
+
+for (const [width, height] of [[390, 844], [1280, 800]] as const) {
+  test(`nothing below the header moves while the page loads at ${width}x${height}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    // Sample every frame from the first one: the side tiles exist from first paint, the power button once
+    // the bed status arrives. Keep sampling for 2 s after the button appears.
+    await page.addInitScript(() => {
+      const samples: { tiles: number[]; power: number[] } = { tiles: [], power: [] };
+      (window as unknown as { loadSamples: typeof samples }).loadSamples = samples;
+      let powerSeenAt = 0;
+      const sample = (now: number) => {
+        const tiles = document.querySelector('[role="radiogroup"][aria-label="Bed side"]');
+        const power = Array.from(document.querySelectorAll('button')).find(button => /^Turn (on|off)$/.test(button.textContent ?? ''));
+        if (tiles) samples.tiles.push(tiles.getBoundingClientRect().top);
+        if (power) {
+          powerSeenAt ||= now;
+          samples.power.push(power.getBoundingClientRect().top);
+        }
+        if (!powerSeenAt || now - powerSeenAt < 2000) requestAnimationFrame(sample);
+        else (window as unknown as { loadDone: boolean }).loadDone = true;
+      };
+      requestAnimationFrame(sample);
+    });
+    await page.goto('/');
+    await page.waitForFunction(() => (window as unknown as { loadDone?: boolean }).loadDone, undefined, { timeout: 20_000 });
+    await expect(page.getByRole('link', { name: 'Elevation' })).toBeVisible();
+    const { tiles, power } = await page.evaluate(() => (window as unknown as { loadSamples: { tiles: number[]; power: number[] } }).loadSamples);
+    expect(power.length).toBeGreaterThan(10);
+    for (const series of [tiles, power]) {
+      expect(Math.max(...series) - Math.min(...series)).toBeLessThanOrEqual(1);
+    }
+  });
+}
