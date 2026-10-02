@@ -1,7 +1,7 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,6 +35,11 @@ function helpers(src: string) {
   return src.slice(start, src.indexOf('\n}\n', src.indexOf('node_fetch_mb() {', start)) + 3);
 }
 
+// The check on the test amounts, which runs before anything else changes.
+function knobCheck(src: string) {
+  return `${between(src, '# Tests can ask for more room', '\ndone\n')}\ndone\n`;
+}
+
 const DB_HINT = /old snapshots in \/persistent\/free-sleep-database-backups\/ can be removed/;
 
 let root: string;
@@ -47,11 +52,12 @@ function pinNode(tree: string, version: string) {
   writeFileSync(path.join(tree, 'server/package.json'), JSON.stringify({ volta: { node: version } }));
 }
 
-function run(script: string, disk: Disk) {
+function run(script: string, disk: Disk, extraEnv: NodeJS.ProcessEnv = {}) {
   const result = spawnSync('bash', ['-c', script.replaceAll('/home/dac/.volta', volta)], {
     encoding: 'utf8',
     timeout: 20_000,
-    env: fakeDiskEnv(path.join(root, 'bin'), disk),
+    env: { ...fakeDiskEnv(path.join(root, 'bin'), disk), NIGHTSTAND_TEST_EXTRA_ROOT_MB: undefined,
+      NIGHTSTAND_TEST_EXTRA_PERSISTENT_MB: undefined, ...extraEnv },
   });
   return { status: result.status, out: `${result.stdout}${result.stderr}` };
 }
@@ -66,13 +72,13 @@ const CHECKS: Record<string, (handoff?: boolean) => string> = {
   'update.sh': (handoff = false) => {
     const src = read('scripts/update.sh');
     return `${PRELUDE}LIVE='${live}'; PRUNE_SNAPSHOTS='${live}/prune_db_snapshots.sh'; HANDOFF=${handoff ? 1 : "''"}
-${helpers(src)}${between(src, '# --- preflight', 'if [ "$HANDOFF" = 1 ]; then')}
+${helpers(src)}${knobCheck(src)}${between(src, '# --- preflight', 'if [ "$HANDOFF" = 1 ]; then')}
 echo "PASSED / $ROOT_NEED /persistent $PERS_NEED"`;
   },
   'revert-to-stock.sh': () => {
     const src = read('scripts/revert-to-stock.sh');
     return `${PRELUDE}LIVE='${live}'; PRUNE_SNAPSHOTS='${live}/prune_db_snapshots.sh'
-${helpers(src)}${between(src, '# --- preflight', '# --- download + stage')}
+${helpers(src)}${knobCheck(src)}${between(src, '# --- preflight', '# --- download + stage')}
 echo "PASSED / $ROOT_NEED /persistent $PERS_NEED"`;
   },
   'pod-installer.sh': () => {
@@ -208,6 +214,86 @@ echo "$(free_mb '${dir}') $(size_mb '${dir}') $(size_mb '${dir}/missing')"`], { 
       assert.equal(result.status, 1, result.out);
     });
   }
+
+  // A test can ask for more room than the script needs, never less.
+  for (const name of ['update.sh', 'revert-to-stock.sh']) {
+    it(`${name} refuses on /persistent when a test asks for more room than is free`, () => {
+      const result = run(CHECKS[name](), pod3, { NIGHTSTAND_TEST_EXTRA_PERSISTENT_MB: '100000' });
+      assert.equal(result.status, 1, result.out);
+      assert.match(result.out, /low disk on \/persistent \(\d+M free, \d+M needed/);
+    });
+
+    it(`${name} refuses on / when a test asks for more room there`, () => {
+      const result = run(CHECKS[name](), pod3, { NIGHTSTAND_TEST_EXTRA_ROOT_MB: '100000' });
+      assert.equal(result.status, 1, result.out);
+      assert.match(result.out, /low disk on \/ \(/);
+    });
+
+    it(`${name} adds the extra amounts to what it needs`, () => {
+      const base = run(CHECKS[name](), pod3).out.match(/PASSED \/ (\d+) \/persistent (\d+)/)!;
+      const result = run(CHECKS[name](), { rootFreeMb: 9000, persFreeMb: 9000 },
+        { NIGHTSTAND_TEST_EXTRA_ROOT_MB: '0100', NIGHTSTAND_TEST_EXTRA_PERSISTENT_MB: '7' });
+      assert.match(result.out, new RegExp(`PASSED / ${Number(base[1]) + 100} /persistent ${Number(base[2]) + 7}`));
+    });
+
+    it(`${name} treats an empty extra amount as unset`, () => {
+      const unset = run(CHECKS[name](), pod3).out;
+      const env = { NIGHTSTAND_TEST_EXTRA_ROOT_MB: '', NIGHTSTAND_TEST_EXTRA_PERSISTENT_MB: '' };
+      const result = run(CHECKS[name](), pod3, env);
+      assert.equal(result.status, 0, result.out);
+      assert.equal(result.out, unset);
+    });
+
+    it(`${name} accepts the longest amount it counts`, () => {
+      const result = run(CHECKS[name](), pod3, { NIGHTSTAND_TEST_EXTRA_ROOT_MB: '999999999' });
+      assert.match(result.out, /low disk on \/ \(\d+M free, 1000000\d{3}M needed/);
+    });
+
+    it(`${name} leaves snapshots and a queued target request alone when an amount is invalid`, () => {
+      const dir = mkdtempSync(path.join(root, 'untouched-'));
+      const snapshot = path.join(dir, 'old-snapshot.db');
+      const target = path.join(dir, 'update-target.json');
+      const prune = path.join(dir, 'prune.sh');
+      writeFileSync(snapshot, 'snapshot');
+      writeFileSync(target, '{"version":"3.5.0"}');
+      writeFileSync(prune, `rm -f '${snapshot}'\n`);
+      const src = read(`scripts/${name}`);
+      const stop = name === 'update.sh' ? 'if [ "$HANDOFF" = 1 ]; then' : '# --- download + stage';
+      const script = `${PRELUDE}LIVE='${live}'; PRUNE_SNAPSHOTS='${prune}'; DATABASE_BACKUPS='${dir}'
+TARGET_FILE='${target}'; HANDOFF=''
+${helpers(src)}${between(src, "trap 'exit 143' TERM\n", stop)}
+echo PASSED`;
+      const bad = run(script, pod3, { NIGHTSTAND_TEST_EXTRA_PERSISTENT_MB: '1e9' });
+      assert.equal(bad.status, 1, bad.out);
+      assert.match(bad.out, /must be a whole number of MB/);
+      assert.equal(readFileSync(snapshot, 'utf8'), 'snapshot');
+      assert.equal(readFileSync(target, 'utf8'), '{"version":"3.5.0"}');
+      // The same script does prune and consume the request when the amount is fine.
+      const good = run(script, pod3);
+      assert.equal(good.status, 0, good.out);
+      assert.equal(existsSync(snapshot), false);
+      if (name === 'update.sh') assert.equal(existsSync(target), false);
+    });
+
+    for (const [label, value] of [['not a number', '1e9'], ['negative', '-5'], ['fractional', '2.5'],
+      ['spaced', ' 5'], ['too long to count safely', '1000000000']]) {
+      for (const key of ['NIGHTSTAND_TEST_EXTRA_ROOT_MB', 'NIGHTSTAND_TEST_EXTRA_PERSISTENT_MB']) {
+        it(`${name} stops on ${key} when it is ${label}`, () => {
+          const result = run(CHECKS[name](), pod3, { [key]: value });
+          assert.equal(result.status, 1, result.out);
+          assert.match(result.out, /must be a whole number of MB/);
+          assert.doesNotMatch(result.out, /PASSED/);
+        });
+      }
+    }
+  }
+
+  it('only the two scripts read the test amounts; the server and the app never set them', () => {
+    const grep = spawnSync('grep', ['-rlE', 'NIGHTSTAND_TEST_EXTRA_(ROOT|PERSISTENT)_MB', 'server/src', 'app/src', 'scripts', 'ops'],
+      { cwd: repoRoot, encoding: 'utf8' });
+    const files = grep.stdout.split('\n').filter(Boolean).filter((f) => !f.endsWith('spaceGateScripts.test.ts')).sort();
+    assert.deepEqual(files, ['scripts/revert-to-stock.sh', 'scripts/update.sh']);
+  });
 
   it('update.sh sizes the 1 GB case from the install: code, database and a half, settings, margin', () => {
     const result = run(CHECKS['update.sh'](), pod3);

@@ -222,6 +222,17 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# Tests can ask for more room than this needs, to see the refusal without
+# filling a partition. The amounts only add to the need, and anything but a
+# plain whole number of MB stops the run before it changes anything, so a
+# typo shows.
+EXTRA_ROOT_MB="${NIGHTSTAND_TEST_EXTRA_ROOT_MB:-0}"
+EXTRA_PERS_MB="${NIGHTSTAND_TEST_EXTRA_PERSISTENT_MB:-0}"
+for EXTRA_MB in "$EXTRA_ROOT_MB" "$EXTRA_PERS_MB"; do
+  case "$EXTRA_MB" in *[!0-9]*) fail "NIGHTSTAND_TEST_EXTRA_*_MB must be a whole number of MB" ;; esac
+  [ "${#EXTRA_MB}" -le 9 ] || fail "NIGHTSTAND_TEST_EXTRA_*_MB must be a whole number of MB"
+done
+
 if [ "$HANDOFF" != 1 ]; then
 # --- consume the target-version request file, if any -------------------------
 TARGET_VERSION=""
@@ -258,6 +269,8 @@ DB_MB=$(size_mb /persistent/free-sleep-data/free-sleep.db /persistent/free-sleep
 ROOT_NEED=$(( 2 * TREE_MB + MODULES_MB + MODULES_MB / 3 + SPACE_MARGIN_MB ))
 [ "$HANDOFF" != 1 ] || ROOT_NEED=$SPACE_MARGIN_MB
 PERS_NEED=$(( TREE_MB + DB_MB + DB_MB / 2 + $(size_mb /persistent/free-sleep-data/lowdb) + SPACE_MARGIN_MB ))
+ROOT_NEED=$(( ROOT_NEED + 10#$EXTRA_ROOT_MB ))
+PERS_NEED=$(( PERS_NEED + 10#$EXTRA_PERS_MB ))
 ROOT_FREE=$(free_mb /)
 PERS_FREE=$(free_mb /persistent)
 [ "${ROOT_FREE:-0}" -ge "$ROOT_NEED" ] || fail "low disk on / (${ROOT_FREE:-unknown}M free, ${ROOT_NEED}M needed)"
