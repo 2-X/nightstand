@@ -18,7 +18,7 @@ type Props = {
 export default function RollbackRow({ runningVersion, rollbackVersion }: Props) {
   const [open, setOpen] = useState(false);
   const titleId = useId();
-  const { phase, error, inUse, start, reset } = useUpdateProgress(runningVersion);
+  const { phase, error, inUse, recordedOutcome, start, reset } = useUpdateProgress(runningVersion, undefined, 'rollback');
 
   const rollback = () => start(confirmInUse => postRollback(confirmInUse ? { confirmInUse } : undefined));
 
@@ -54,7 +54,7 @@ export default function RollbackRow({ runningVersion, rollbackVersion }: Props) 
         <DialogTitle id={ titleId }>
           { phase === 'idle' && `Go back to v${rollbackVersion}?` }
           { phase === 'updating' && 'Rolling back...' }
-          { phase === 'failed' && 'Request failed' }
+          { phase === 'failed' && (recordedOutcome ? 'Rollback did not finish' : 'Request failed') }
           { phase === 'timed_out' && 'Still not done' }
         </DialogTitle>
         <DialogContent>

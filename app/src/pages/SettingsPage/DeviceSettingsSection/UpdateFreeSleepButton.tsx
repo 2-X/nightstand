@@ -38,9 +38,16 @@ export default function UpdateFreeSleepButton({ runningVersion, onProblem, onSta
   const startVersion = useRef(runningVersion);
   const latestVersion = useLatestVersion();
   const [targetVersion, setTargetVersion] = useState<string>();
-  const { phase, error, inUse, start, reset } = useUpdateProgress(runningVersion);
+  const { phase, error, inUse, recordedOutcome, start, reset } = useUpdateProgress(runningVersion);
 
-  useEffect(() => { if (phase === 'failed' || phase === 'timed_out') onProblem?.(phase, startVersion.current); }, [phase, onProblem]);
+  // The notice is for a refused request, a timeout, or an update that ran and
+  // failed (reported as unfinished). An update that stopped or went back
+  // changed nothing, and the dialog already says why, so it leaves no notice.
+  useEffect(() => {
+    if (phase === 'timed_out') onProblem?.('timed_out', startVersion.current);
+    else if (phase === 'failed' && !recordedOutcome) onProblem?.('failed', startVersion.current);
+    else if (phase === 'failed' && recordedOutcome === 'failed') onProblem?.('timed_out', startVersion.current);
+  }, [phase, recordedOutcome, onProblem]);
 
   const isNewer = (target?: string) => !!target && !!semver.valid(target) && !!semver.valid(runningVersion)
     && semver.gt(target, runningVersion);
@@ -73,12 +80,12 @@ export default function UpdateFreeSleepButton({ runningVersion, onProblem, onSta
         <DialogTitle id={ titleId }>
           { phase === 'idle' && (targetVersion ? `Update to v${targetVersion}?` : 'Update Nightstand?') }
           { phase === 'updating' && 'Updating...' }
-          { phase === 'failed' && 'Request failed' }
+          { phase === 'failed' && (recordedOutcome ? 'Update did not finish' : 'Request failed') }
           { phase === 'timed_out' && 'Still not done' }
         </DialogTitle>
         <DialogContent>
           { phase === 'failed' && <Alert severity="error">
-            Nightstand did not accept the update request. Nothing was installed.
+            { !recordedOutcome && 'Nightstand did not accept the update request. Nothing was installed.' }
             { error && <Typography variant="body2">{ error }</Typography> }
           </Alert> }
           { phase === 'idle' && (
@@ -133,7 +140,7 @@ export default function UpdateFreeSleepButton({ runningVersion, onProblem, onSta
               </Button>
             </>
           ) }
-          { phase === 'failed' && <Button onClick={ startUpdate }>Try again</Button> }
+          { phase === 'failed' && recordedOutcome !== 'failed' && <Button onClick={ startUpdate }>Try again</Button> }
           { (phase === 'timed_out' || phase === 'failed') && (
             <Button onClick={ () => { reset(); setOpen(false); } }>Close</Button>
           ) }

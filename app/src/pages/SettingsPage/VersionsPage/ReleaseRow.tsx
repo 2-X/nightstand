@@ -29,7 +29,7 @@ export default function ReleaseRow({ release, runningVersion, offerReinstall = f
   const isReinstall = isRunning && offerReinstall;
   // A reinstall never changes the running version, so it is done when the
   // database is, not when the version moves.
-  const { phase, error, inUse, start, reset } = useUpdateProgress(runningVersion, isReinstall ? migrationsApplied : undefined);
+  const { phase, error, inUse, recordedOutcome, start, reset } = useUpdateProgress(runningVersion, isReinstall ? migrationsApplied : undefined);
 
   const isDowngrade = !!runningVersion && !!semver.valid(runningVersion) && semver.lt(release.version, runningVersion);
 
@@ -58,7 +58,7 @@ export default function ReleaseRow({ release, runningVersion, offerReinstall = f
         <DialogTitle id={ titleId }>
           { phase === 'idle' && `${isReinstall ? 'Reinstall' : 'Install'} v${release.version}?` }
           { phase === 'updating' && 'Installing...' }
-          { phase === 'failed' && 'Request failed' }
+          { phase === 'failed' && (recordedOutcome ? 'Update did not finish' : 'Request failed') }
           { phase === 'timed_out' && 'Still not done' }
         </DialogTitle>
         <DialogContent>

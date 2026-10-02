@@ -23,6 +23,8 @@ is a hard fork; for the history of the projects it descends from, see
 - HRV is no longer shown in the app. Checked against chest-strap recordings,
   the stored estimate was no more accurate than a fixed guess. It is still
   stored and returned by the API.
+- When an update stops or rolls back, the app now says so within seconds, with
+  the reason, instead of waiting ten minutes.
 - Nightstand now restarts its server if it is running but stops answering for
   three minutes, except while an update, rollback or switch is in progress.
 - Installs and updates now turn on the hardware watchdog on the Pod 5, so a

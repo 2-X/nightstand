@@ -17,7 +17,7 @@ type Props = {
 export default function RevertToStockRow({ runningVersion }: Props) {
   const [open, setOpen] = useState(false);
   const titleId = useId();
-  const { phase, error, inUse, start, reset } = useUpdateProgress(runningVersion);
+  const { phase, error, inUse, recordedOutcome, start, reset } = useUpdateProgress(runningVersion, undefined, 'switch');
 
   const revert = () => start(confirmInUse => postRevertToStock(confirmInUse ? { confirmInUse } : undefined));
 
@@ -51,7 +51,7 @@ export default function RevertToStockRow({ runningVersion }: Props) {
         <DialogTitle id={ titleId }>
           { phase === 'idle' && 'Switch to upstream free-sleep?' }
           { phase === 'updating' && 'Switching to upstream...' }
-          { phase === 'failed' && 'Request failed' }
+          { phase === 'failed' && (recordedOutcome ? 'Switch did not finish' : 'Request failed') }
           { phase === 'timed_out' && 'Still not done' }
         </DialogTitle>
         <DialogContent>
