@@ -413,6 +413,6 @@ Step 13 installs these. Run them on the Pod as root, over SSH or at the serial c
 - `fs-debug`: prints device/server status, resolver configuration and service logs. Check it before sharing and remove personal or network details you do not want public.
 - `fs-restart`: restarts the free-sleep and free-sleep-stream services.
 - `fs-reset-db`: deletes the biometrics database and recreates it empty (useful if the database file is corrupted). Asks for confirmation first.
-- `fs-reset`: deletes all Nightstand data (schedules, biometrics, settings) in `/persistent/free-sleep-data`, then runs the updater. Asks for confirmation first. The updater only installs something when a newer release is published, so on an up-to-date Pod nothing is reinstalled. If it reports "Already up to date", run `fs-restart` to start the server again.
+- `fs-reset`: permanently deletes Nightstand's settings, schedules and sleep data in `/persistent/free-sleep-data/`, then starts Nightstand again with empty settings. Backups in `/persistent/free-sleep-backups` and `/persistent/free-sleep-database-backups` are kept; delete them too to remove all sleep data. Asks for confirmation first.
 - `fs-update`: selects the newest release allowed by your saved channel preference and uses the same backup and rollback workflow as the app. Stable selects stable releases; beta includes both channels. To choose a channel or specific version, use Settings > Software.
 - `fs-dev-server`: stops the Nightstand service and runs the Express server directly with nodemon (for development).

@@ -39,6 +39,10 @@ is a hard fork; for the history of the projects it descends from, see
   as it already did for Rhythms. Editing tonight's off time moves this timer
   too. A power-on that cannot reach the Pod before those few minutes after
   the off time is skipped and shown as a power schedule error.
+- fs-reset keeps the Pod's hardware socket path, creates an empty database
+  and always starts Nightstand again. Before, on a Pod 4 or Pod 5 it could
+  leave Nightstand running but unable to reach the bed, and on an
+  up-to-date Pod it left the server stopped.
 
 ## [3.5.1] - 2026-10-01
 
