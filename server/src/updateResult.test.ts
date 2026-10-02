@@ -1,0 +1,389 @@
+import { describe, it, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawn, spawnSync } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { AGENT_MANIFEST } from './agent/agentManifest.js';
+import { Disk, fakeDiskEnv, writeFakeDiskTools } from './testing/fakeDisk.js';
+
+// How an update, a rollback and a switch record their ending for the app, run
+// against the real scripts with the Pod's paths redirected into a temp folder.
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const read = (file: string) => readFileSync(path.join(repoRoot, file), 'utf8');
+const SCRIPTS = [
+  ['scripts/update.sh', 'update'],
+  ['scripts/rollback_pod.sh', 'rollback'],
+  ['scripts/revert-to-stock.sh', 'switch'],
+] as const;
+const BLOCK_START = '# How this run ended';
+
+let root: string;
+let resultPath: string;
+let runs = 0;
+
+function resultBlock(src: string) {
+  const start = src.indexOf(BLOCK_START);
+  assert.ok(start >= 0, 'missing the result block');
+  const fn = src.indexOf('record_result() {', start);
+  assert.ok(fn > start, 'missing record_result');
+  return src.slice(start, src.indexOf('\n}\n', fn) + 3);
+}
+
+// Lays out a fresh pod under the temp folder and runs a script text there.
+function runScript(src: string, name: string, disk: Disk, setup?: (home: string) => void, lock?: string) {
+  const dir = path.join(root, `run${runs++}`);
+  const podHome = path.join(dir, 'home');
+  const data = path.join(dir, 'persistent/free-sleep-data');
+  mkdirSync(path.join(podHome, 'free-sleep/server/src'), { recursive: true });
+  mkdirSync(data, { recursive: true });
+  writeFileSync(path.join(podHome, 'free-sleep/server/src/serverInfo.json'), '{"version":"3.5.1"}');
+  setup?.(podHome);
+  const scriptDir = path.join(dir, 'scripts');
+  mkdirSync(scriptDir);
+  copyFileSync(path.join(repoRoot, 'scripts/write_result.py'), path.join(scriptDir, 'write_result.py'));
+  const file = path.join(scriptDir, name);
+  writeFileSync(file, src
+    .replaceAll('/persistent/free-sleep-data', data)
+    .replaceAll('/home/dac', podHome));
+  const bin = path.join(dir, 'bin');
+  writeFakeDiskTools(bin);
+  const result = spawnSync('bash', [file], {
+    encoding: 'utf8',
+    timeout: 20_000,
+    env: { ...fakeDiskEnv(bin, disk), NIGHTSTAND_OPERATION_LOCK: lock ?? path.join(dir, 'lock') },
+  });
+  const resultFile = path.join(data, 'update-result.json');
+  return {
+    status: result.status,
+    out: `${result.stdout}${result.stderr}`,
+    record: existsSync(resultFile) ? JSON.parse(readFileSync(resultFile, 'utf8')) as Record<string, string> : {},
+  };
+}
+
+const upTo = (src: string, marker: string) => {
+  const end = src.indexOf(marker);
+  assert.ok(end > 0, `missing ${marker}`);
+  return src.slice(0, end);
+};
+
+describe('the writer', () => {
+  before(() => {
+    root = mkdtempSync(path.join(tmpdir(), 'nightstand-result-'));
+    resultPath = path.join(root, 'update-result.json');
+  });
+  after(() => rmSync(root, { recursive: true, force: true }));
+
+  const writer = path.join(repoRoot, 'scripts/write_result.py');
+  const write = (...args: string[]) => spawnSync('python3', [writer, resultPath, ...args], { encoding: 'utf8' });
+
+  it('writes the record the app reads, with a fresh run id each time', () => {
+    assert.equal(write('update', 'rolled-back', '3.5.1', '3.6.0', 'the new version did not pass its health check').status, 0);
+    const first = JSON.parse(readFileSync(resultPath, 'utf8')) as Record<string, string>;
+    assert.deepEqual(
+      { ...first, runId: undefined, finishedAt: undefined },
+      { runId: undefined, operation: 'update', outcome: 'rolled-back', from: '3.5.1', to: '3.6.0',
+        message: 'the new version did not pass its health check', finishedAt: undefined },
+    );
+    assert.match(first.runId, /^[0-9a-f]{8}$/);
+    assert.match(first.finishedAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
+    write('update', 'failed', '', '', 'x');
+    const second = JSON.parse(readFileSync(resultPath, 'utf8')) as Record<string, string>;
+    assert.notEqual(second.runId, first.runId);
+    assert.equal(second.from, null);
+    assert.equal(second.to, null);
+  });
+
+  it('keeps a long reason to 300 characters, leaves no temp file, and is readable by the server', () => {
+    write('update', 'stopped', '3.5.1', '3.6.0', 'x'.repeat(500));
+    assert.equal(JSON.parse(readFileSync(resultPath, 'utf8')).message.length, 300);
+    assert.deepEqual(readdirSync(root).filter(name => name.includes('.tmp')), []);
+    assert.equal(statSync(resultPath).mode & 0o777, 0o644);
+  });
+});
+
+describe('how each script records its ending', () => {
+  before(() => { root = mkdtempSync(path.join(tmpdir(), 'nightstand-result-')); });
+  after(() => rmSync(root, { recursive: true, force: true }));
+
+  it('the three scripts share one block, naming only their operation', () => {
+    const [reference] = SCRIPTS.map(([file]) => resultBlock(read(file)));
+    for (const [file, operation] of SCRIPTS) {
+      const src = read(file);
+      assert.equal(resultBlock(src), reference, file);
+      assert.match(src, new RegExp(`^RESULT_OPERATION=${operation}$`, 'm'), file);
+      assert.ok(src.indexOf('RESULT_OPERATION=') < src.indexOf(BLOCK_START), file);
+    }
+  });
+
+  it('every failure keeps its first reason, and the exit trap records the ending', () => {
+    for (const [file] of SCRIPTS) {
+      const src = read(file);
+      assert.match(src, /^fail\(\) \{ say "FATAL: \$\*"; \[ -n "\$\{RESULT_REASON:-\}" \] \|\| RESULT_REASON="\$\*"; exit 1; \}$/m, file);
+    }
+    assert.match(read('scripts/update.sh'), /^cleanup\(\) \{ local status=\$\?;.*record_result "\$status"; \}$/m);
+    assert.match(read('scripts/revert-to-stock.sh'), /^cleanup\(\) \{ local status=\$\?;.*record_result "\$status"; \}$/m);
+    assert.match(read('scripts/rollback_pod.sh'), /^trap 'record_result \$\?' EXIT$/m);
+  });
+
+  // The outcome from where the run stood when it ended.
+  const outcomes: [string, string, number, string, string][] = [
+    ['an exit before anything changed', 'preflight', 1, 'no', 'stopped'],
+    ['a failure once the swap began', 'swapping', 1, 'no', 'failed'],
+    ['a failure after the swap', 'swapped', 1, 'no', 'failed'],
+    ['a failure after the old version came back', 'restored', 1, 'no', 'rolled-back'],
+    ['a normal finish', 'swapped', 0, 'no', 'success'],
+    ['a finish with nothing newer', 'preflight', 0, 'yes', 'up-to-date'],
+    ['a signal during the swap', 'swapped', 143, 'no', 'failed'],
+  ];
+  for (const [file, operation] of SCRIPTS) {
+    for (const [what, phase, status, upToDate, outcome] of outcomes) {
+      it(`${operation}: ${what} is ${outcome}`, () => {
+        const dir = path.join(root, `block${runs++}`);
+        mkdirSync(dir);
+        copyFileSync(path.join(repoRoot, 'scripts/write_result.py'), path.join(dir, 'write_result.py'));
+        const data = path.join(dir, 'free-sleep-data');
+        mkdirSync(data);
+        writeFileSync(path.join(dir, 'harness.sh'), `set -uo pipefail
+say() { echo "$*"; }
+RESULT_OPERATION=${operation}
+${resultBlock(read(file)).replaceAll('/persistent/free-sleep-data', data)}
+CUR_VERSION=3.5.1; EXPECTED_VERSION=3.6.0
+RESULT_PHASE=${phase}; UP_TO_DATE=${upToDate}; RESULT_REASON='a stated reason'
+record_result ${status}
+`);
+        const result = spawnSync('bash', [path.join(dir, 'harness.sh')], { encoding: 'utf8' });
+        assert.equal(result.status, 0, result.stderr);
+        const record = JSON.parse(readFileSync(path.join(data, 'update-result.json'), 'utf8'));
+        assert.equal(record.operation, operation);
+        assert.equal(record.outcome, outcome);
+        assert.equal(record.from, '3.5.1');
+        assert.equal(record.to, '3.6.0');
+        assert.equal(record.message, 'a stated reason');
+      });
+    }
+  }
+
+  const unstated: [number, string][] = [
+    [129, 'it was interrupted before it finished'],
+    [130, 'it was interrupted before it finished'],
+    [143, 'it was interrupted before it finished'],
+    [2, 'it ended without giving a reason (exit status 2). See the update log.'],
+  ];
+  for (const [status, reason] of unstated) {
+    it(`a failure with no stated reason (exit ${status}) says ${reason}`, () => {
+      for (const [file, operation] of SCRIPTS) {
+        const dir = path.join(root, `block${runs++}`);
+        mkdirSync(dir);
+        copyFileSync(path.join(repoRoot, 'scripts/write_result.py'), path.join(dir, 'write_result.py'));
+        writeFileSync(path.join(dir, 'harness.sh'), `set -uo pipefail
+RESULT_OPERATION=${operation}
+${resultBlock(read(file)).replaceAll('/persistent/free-sleep-data', dir)}
+record_result ${status}
+`);
+        spawnSync('bash', [path.join(dir, 'harness.sh')], { encoding: 'utf8' });
+        assert.equal(JSON.parse(readFileSync(path.join(dir, 'update-result.json'), 'utf8')).message, reason, file);
+      }
+    });
+  }
+
+  // The wording for a rollback and a switch names these versions, so each script must record the right ones.
+  const versions: [string, string, string, string][] = [
+    ['scripts/rollback_pod.sh', 'CUR_VERSION=3.6.0; TARGET_VERSION=3.5.1', '3.6.0', '3.5.1'],
+    ['scripts/revert-to-stock.sh', 'CUR_VERSION=3.6.0; STAGED_VERSION=1.0.0', '3.6.0', '1.0.0'],
+  ];
+  for (const [file, assignments, from, to] of versions) {
+    it(`${file} records the version it left and the one it moved to`, () => {
+      const src = read(file);
+      const dir = path.join(root, `block${runs++}`);
+      mkdirSync(dir);
+      copyFileSync(path.join(repoRoot, 'scripts/write_result.py'), path.join(dir, 'write_result.py'));
+      writeFileSync(path.join(dir, 'harness.sh'), `set -uo pipefail
+RESULT_OPERATION=x
+${resultBlock(src).replaceAll('/persistent/free-sleep-data', dir)}
+${assignments}
+record_result 1
+`);
+      spawnSync('bash', [path.join(dir, 'harness.sh')], { encoding: 'utf8' });
+      const record = JSON.parse(readFileSync(path.join(dir, 'update-result.json'), 'utf8')) as Record<string, string>;
+      assert.equal(record.from, from);
+      assert.equal(record.to, to);
+      // And the script assigns those names from the trees it reads.
+      assert.match(src, /^CUR_VERSION=\$\(python3 .*\/server\/src\/serverInfo\.json/m);
+      assert.match(src, file.includes('rollback') ? /^TARGET_VERSION=\$\(python3 .*PREV/m : /^STAGED_VERSION=\$\(python3 .*STAGE/m);
+    });
+  }
+
+  it('a result is written even when the tree the script came from has moved', () => {
+    // Reading the writer at the start is what lets a run that swaps its own
+    // tree away still record how it ended.
+    const dir = path.join(root, `block${runs++}`);
+    mkdirSync(path.join(dir, 'tree'), { recursive: true });
+    copyFileSync(path.join(repoRoot, 'scripts/write_result.py'), path.join(dir, 'tree/write_result.py'));
+    writeFileSync(path.join(dir, 'tree/harness.sh'), `set -uo pipefail
+RESULT_OPERATION=update
+${resultBlock(read('scripts/update.sh')).replaceAll('/persistent/free-sleep-data', dir)}
+mv '${dir}/tree' '${dir}/moved'
+record_result 0
+`);
+    spawnSync('bash', [path.join(dir, 'tree/harness.sh')], { encoding: 'utf8' });
+    assert.equal(JSON.parse(readFileSync(path.join(dir, 'update-result.json'), 'utf8')).outcome, 'success');
+  });
+
+  const lowPersistent: Disk = { rootFreeMb: 6000, persFreeMb: 50 };
+
+  it('update.sh records a refusal before anything changed as stopped, with the reason', () => {
+    const src = read('scripts/update.sh');
+    const { status, record } = runScript(upTo(src, 'if [ "$HANDOFF" = 1 ]; then'), 'update.sh', lowPersistent);
+    assert.equal(status, 1);
+    assert.equal(record.operation, 'update');
+    assert.equal(record.outcome, 'stopped');
+    assert.match(record.message, /^low disk on \/persistent \(50M free, \d+M needed\)/);
+    assert.match(record.runId, /^[0-9a-f]{8}$/);
+    assert.equal(record.from, '3.5.1');
+  });
+
+  it('update.sh records nothing when another operation holds the lock', async () => {
+    // A refusal at the lock must not overwrite the record of the run that holds it.
+    const dir = path.join(root, `run${runs++}`);
+    mkdirSync(dir);
+    const lock = path.join(dir, 'lock');
+    const holder = spawn('python3', ['-c', 'import fcntl, sys, time\n'
+      + `handle = open(${JSON.stringify(lock)}, "a")\n`
+      + 'fcntl.flock(handle, fcntl.LOCK_EX)\nprint("held", flush=True)\ntime.sleep(30)']);
+    try {
+      await new Promise<void>(resolve => holder.stdout.once('data', () => resolve()));
+      const src = upTo(read('scripts/update.sh'), 'if [ "$HANDOFF" != 1 ]; then');
+      const { status, out, record } = runScript(src, 'update.sh', lowPersistent, undefined, lock);
+      assert.equal(status, 1);
+      assert.match(out, /another update, rollback or switch is already running/);
+      assert.deepEqual(record, {});
+    } finally {
+      holder.kill();
+    }
+  });
+
+  it('rollback_pod.sh records a missing previous install as stopped', () => {
+    const src = read('scripts/rollback_pod.sh');
+    const { status, record } = runScript(upTo(src, '# Other forks cannot run'), 'rollback_pod.sh', lowPersistent);
+    assert.equal(status, 1);
+    assert.equal(record.operation, 'rollback');
+    assert.equal(record.outcome, 'stopped');
+    assert.match(record.message, /^no previous install at .*free-sleep-prev; nothing to roll back to$/);
+  });
+
+  it('revert-to-stock.sh records a refusal before anything changed as stopped', () => {
+    const src = read('scripts/revert-to-stock.sh');
+    const { status, record } = runScript(upTo(src, '# --- download + stage'), 'revert-to-stock.sh', lowPersistent);
+    assert.equal(status, 1);
+    assert.equal(record.operation, 'switch');
+    assert.equal(record.outcome, 'stopped');
+    assert.match(record.message, /^low disk on \/persistent \(50M free, \d+M needed\)/);
+  });
+});
+
+describe('where each script marks its progress', () => {
+  const follows = (src: string, marker: string, from: string) => {
+    const start = src.indexOf(from);
+    assert.ok(start >= 0, `missing ${from}`);
+    const at = src.indexOf(marker, start);
+    assert.ok(at > start, `${marker} does not follow ${from}`);
+    return at;
+  };
+
+  it('update.sh marks the swap, the rollback and an up to date finish where they happen', () => {
+    const src = read('scripts/update.sh');
+    assert.ok(src.indexOf('RESULT_PHASE=swapping') > src.indexOf('# --- atomic swap'));
+    assert.ok(src.indexOf('RESULT_PHASE=swapping') < src.indexOf('systemctl stop free-sleep\n'));
+    assert.ok(src.indexOf('RESULT_PHASE=swapped') > src.indexOf('mv "$STAGE" "$LIVE" || {'));
+    const rollback = src.indexOf('# --- automatic rollback');
+    assert.ok(src.indexOf('RESULT_PHASE=restored', rollback) > src.indexOf('mv "$PREV" "$LIVE" || {', rollback));
+    assert.ok(src.indexOf('UP_TO_DATE=yes') < src.indexOf('Already up to date'));
+    assert.match(src, /RESULT_REASON="Nightstand is already up to date \(the newest published version is v\$REMOTE_VERSION\)"/);
+  });
+
+  it('update.sh calls a swap that failed and was put back restored, never stopped before changing anything', () => {
+    const src = read('scripts/update.sh');
+    // The rollback slot is deleted and the services restart before either move, so the old
+    // tree coming back is a restore, not an untouched install.
+    const first = follows(src, 'RESULT_PHASE=restored', 'mv "$LIVE" "$PREV" || {');
+    assert.ok(first < src.indexOf('fail "swap failed moving live aside"'));
+    const second = follows(src, 'RESULT_PHASE=restored', 'mv "$STAGE" "$LIVE" || {');
+    assert.ok(second > src.indexOf('mv "$PREV" "$LIVE" || fail "swap failed and previous tree could not be restored'));
+    assert.ok(second < src.indexOf('fail "swap failed; previous version restored"'));
+  });
+
+  it('update.sh states why before each of its rollbacks', () => {
+    const src = read('scripts/update.sh');
+    assert.match(src, /RESULT_REASON="database migrations did not apply"/);
+    assert.match(src, /RESULT_REASON="the new firewall rules could not be applied"/);
+    const health = src.indexOf('[ -n "${RESULT_REASON:-}" ] || RESULT_REASON="the new version did not pass its health check"');
+    assert.ok(health > src.indexOf('# --- automatic rollback'));
+    assert.ok(health < src.indexOf('say "Health check FAILED: rolling back'));
+  });
+
+  it('update.sh does not call a rollback whose own health check failed a success', () => {
+    const src = read('scripts/update.sh');
+    const tail = src.slice(src.indexOf('if curl -sf --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" >/dev/null; then'));
+    assert.match(tail, /else\n {2}RESULT_PHASE=swapped\n {2}fail "update failed AND rollback health check failed/);
+  });
+
+  it('rollback_pod.sh marks the swap, and records restored only after a clean swap back', () => {
+    const src = read('scripts/rollback_pod.sh');
+    assert.ok(src.indexOf('RESULT_PHASE=swapped') > src.indexOf('mv "$PREV" "$LIVE" || {'));
+    assert.match(src, /RESULT_PHASE=swapping/);
+    const back = src.slice(src.indexOf('# --- swap back on failure'));
+    const restored = back.indexOf('RESULT_PHASE=restored');
+    assert.ok(restored > back.indexOf('mv "$PREV" "$LIVE" || {'));
+    assert.ok(restored < back.indexOf('mv "$TMP" "$PREV" || {'));
+    assert.match(back, /else\n {2}RESULT_PHASE=swapped\n {2}fail "rollback failed AND the restore-back health check failed too/);
+  });
+
+  it('rollback_pod.sh turns a signal into a failed ending, not a success', async () => {
+    const src = read('scripts/rollback_pod.sh');
+    const traps = src.split('\n').filter(line => /^trap .* (EXIT|HUP|INT|TERM)$/.test(line));
+    assert.equal(traps.length, 4, 'expected an exit trap and one each for HUP, INT and TERM');
+    const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-signal-'));
+    copyFileSync(path.join(repoRoot, 'scripts/write_result.py'), path.join(dir, 'write_result.py'));
+    writeFileSync(path.join(dir, 'harness.sh'), `set -uo pipefail
+say() { echo "$*"; }
+RESULT_OPERATION=rollback
+${resultBlock(src).replaceAll('/persistent/free-sleep-data', dir)}
+${traps.join('\n')}
+RESULT_PHASE=swapped
+echo ready
+sleep 3 >/dev/null 2>&1 &
+wait $!
+`);
+    const child = spawn('bash', [path.join(dir, 'harness.sh')]);
+    await new Promise<void>(resolve => child.stdout.once('data', () => resolve()));
+    const closed = new Promise<void>(resolve => child.once('exit', () => resolve()));
+    child.kill('SIGTERM');
+    await closed;
+    const record = JSON.parse(readFileSync(path.join(dir, 'update-result.json'), 'utf8')) as Record<string, string>;
+    assert.equal(record.outcome, 'failed');
+    assert.equal(record.message, 'it was interrupted before it finished');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('revert-to-stock.sh marks the swap and its own rollback', () => {
+    const src = read('scripts/revert-to-stock.sh');
+    assert.ok(src.indexOf('RESULT_PHASE=swapped') > src.indexOf('mv "$STAGE" "$LIVE" || {'));
+    const rollback = src.indexOf('# --- automatic rollback');
+    assert.ok(src.indexOf('RESULT_PHASE=restored', rollback) > src.indexOf('mv "$PREV" "$LIVE" || {', rollback));
+    assert.ok(src.indexOf('RESULT_PHASE=swapping') > src.indexOf('# --- atomic swap'));
+    // A server that will not stop has changed nothing, so it is not yet a swap.
+    assert.ok(src.indexOf('RESULT_PHASE=swapping') > src.indexOf('could not stop the server before converting settings'));
+    const phases = src.slice(src.indexOf('rm -rf "$PREV"\nmv "$LIVE" "$PREV" || {'));
+    assert.ok(phases.indexOf('RESULT_PHASE=restored') < phases.indexOf('fail "swap failed moving live aside"'));
+    const secondMove = phases.indexOf('mv "$STAGE" "$LIVE" || {');
+    assert.ok(phases.indexOf('RESULT_PHASE=restored', secondMove) < phases.indexOf('fail "swap failed; fork restored"'));
+  });
+
+  it('ships the writer in the overlay for stock installs', () => {
+    const entry = AGENT_MANIFEST.find(item => item.path === 'scripts/write_result.py');
+    assert.ok(entry, 'scripts/write_result.py is not in the agent manifest');
+    assert.equal(entry.mode, 'add');
+  });
+});

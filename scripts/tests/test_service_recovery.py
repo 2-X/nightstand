@@ -25,6 +25,7 @@ set -euo pipefail
 systemctl() { echo "$*" >> "$FIXTURE/services"; }
 fail() { echo "$*" >&2; exit 1; }
 say() { :; }
+record_result() { :; }
 ''' + setup + '\n' + body], env={**os.environ, 'FIXTURE': directory},
                 text=True, capture_output=True)
             log = Path(directory, 'services')

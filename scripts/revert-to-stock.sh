@@ -23,6 +23,36 @@ NPM=/home/dac/.volta/bin/npm
 
 say() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
+RESULT_OPERATION=switch
+
+# How this run ended, for the app to show. The writer is read now because the
+# tree it lives in can be moved aside before the run ends.
+RESULT_FILE=/persistent/free-sleep-data/update-result.json
+RESULT_PY=$(cat "$(dirname "${BASH_SOURCE[0]}")/write_result.py" 2>/dev/null || true)
+RESULT_PHASE=preflight
+RESULT_REASON=""
+UP_TO_DATE=no
+record_result() {
+  local status=$1 outcome
+  if [ "$status" -eq 0 ]; then
+    if [ "$UP_TO_DATE" = yes ]; then outcome=up-to-date; else outcome=success; fi
+  else
+    case "$RESULT_PHASE" in
+      preflight) outcome=stopped ;;
+      restored) outcome=rolled-back ;;
+      *) outcome=failed ;;
+    esac
+    if [ -z "$RESULT_REASON" ]; then
+      case "$status" in
+        129|130|143) RESULT_REASON="it was interrupted before it finished" ;;
+        *) RESULT_REASON="it ended without giving a reason (exit status $status). See the update log." ;;
+      esac
+    fi
+  fi
+  python3 -c "$RESULT_PY" "$RESULT_FILE" "$RESULT_OPERATION" "$outcome" \
+    "${CUR_VERSION:-}" "${EXPECTED_VERSION:-${TARGET_VERSION:-${STAGED_VERSION:-}}}" "$RESULT_REASON" >/dev/null 2>&1 || true
+}
+
 DATA_CHANGED=no
 RESTORE_ATTEMPTED=no
 ARCHIVE_WAS_ACTIVE=inactive
@@ -136,9 +166,9 @@ run_limited() {
   wait "$watchdog" 2>/dev/null
   return "$status"
 }
-cleanup() { trap '' HUP INT TERM; close_wan; restore_switch_data || say "WARNING: restore settings from $BK/lowdb before restarting"; rm -rf "$STAGE" "$STAGE.unzip" "$STAGE.health" "$ZIP"; }
+cleanup() { local status=$?; trap '' HUP INT TERM; close_wan; restore_switch_data || say "WARNING: restore settings from $BK/lowdb before restarting"; rm -rf "$STAGE" "$STAGE.unzip" "$STAGE.health" "$ZIP"; record_result "$status"; }
 
-fail() { say "FATAL: $*"; exit 1; }
+fail() { say "FATAL: $*"; [ -n "${RESULT_REASON:-}" ] || RESULT_REASON="$*"; exit 1; }
 
 # Free-space helpers, kept identical in update.sh, revert-to-stock.sh,
 # migrate/pod-installer.sh, migrate/switch-to-this-fork.sh and ops/deploy.sh.
@@ -291,6 +321,7 @@ curl -fsS --max-time 60 -X POST -H 'content-type: application/json' -d '{"reason
 STREAM_WAS_ACTIVE=$(systemctl is-active free-sleep-stream 2>/dev/null || true)
 systemctl stop free-sleep-stream 2>/dev/null || true
 systemctl stop free-sleep || fail "could not stop the server before converting settings"
+RESULT_PHASE=swapping
 ARCHIVE_WAS_ACTIVE=$(systemctl is-active free-sleep-archive-raw.timer 2>/dev/null || true)
 systemctl stop free-sleep-archive-raw.timer free-sleep-archive-raw.service >/dev/null 2>&1 || true
 # Refresh the settings copy after stopping writers, before changing its shape.
@@ -298,6 +329,7 @@ cp -rp /persistent/free-sleep-data/lowdb/. "$BK/lowdb/" || {
   systemctl start free-sleep
   [ "$STREAM_WAS_ACTIVE" != active ] || systemctl restart free-sleep-stream
   [ "$ARCHIVE_WAS_ACTIVE" != active ] || systemctl start free-sleep-archive-raw.timer
+  RESULT_PHASE=preflight
   fail "could not save the stopped settings; no conversion performed"
 }
 DATA_CHANGED=yes
@@ -305,6 +337,7 @@ python3 "$(dirname "${BASH_SOURCE[0]}")/prepare-upstream.py" /persistent/free-sl
   restore_switch_data_or_fail "conversion failed; restore settings from $BK/lowdb manually"
   systemctl start free-sleep
   [ "$STREAM_WAS_ACTIVE" != active ] || systemctl restart free-sleep-stream
+  RESULT_PHASE=preflight
   fail "could not prepare upstream settings; original settings restored"
 }
 say "RAW archive retained; remove it manually only if no longer needed:"
@@ -316,6 +349,7 @@ mv "$LIVE" "$PREV" || {
   if [ "$STREAM_WAS_ACTIVE" = active ]; then
     systemctl restart free-sleep-stream 2>/dev/null || true
   fi
+  RESULT_PHASE=restored
   fail "swap failed moving live aside"
 }
 mv "$STAGE" "$LIVE" || {
@@ -325,8 +359,10 @@ mv "$STAGE" "$LIVE" || {
   if [ "$STREAM_WAS_ACTIVE" = active ]; then
     systemctl restart free-sleep-stream 2>/dev/null || true
   fi
+  RESULT_PHASE=restored
   fail "swap failed; fork restored"
 }
+RESULT_PHASE=swapped
 MOVED_MODULES=no
 if [ "$LOCK_SAME" = yes ]; then
   mv "$PREV/server/node_modules" "$LIVE/server/node_modules"
@@ -388,6 +424,7 @@ if [ "$HEALTHY" = yes ]; then
 fi
 
 # --- automatic rollback to this fork ---------------------------------------------
+[ -n "${RESULT_REASON:-}" ] || RESULT_REASON="upstream free-sleep did not pass its health check"
 say "Health check FAILED: rolling back to this fork v$CUR_VERSION"
 say "Last 60 server log lines from the failed upstream free-sleep build (for diagnosis):"
 tail -n 60 /persistent/free-sleep-data/logs/free-sleep.log 2>/dev/null || say "  (no server log available)"
@@ -411,6 +448,7 @@ mv "$PREV" "$LIVE" || {
   fi
   fail "could not restore previous tree; attempted to restart the tree at $LIVE; manual recovery required"
 }
+RESULT_PHASE=restored
 if [ "$MOVED_MODULES" = yes ]; then
   mv "$FAILED/server/node_modules" "$LIVE/server/node_modules"
 fi
@@ -424,5 +462,6 @@ sleep 8
 if curl -sf --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" >/dev/null; then
   fail "revert to upstream free-sleep failed but rollback OK (pod back on this fork v$CUR_VERSION). Failed tree kept at $FAILED; see journalctl -u free-sleep"
 else
+  RESULT_PHASE=swapped
   fail "revert to upstream free-sleep failed AND rollback health check failed. Backup tarball: $BK. Check journalctl -u free-sleep. Schedules and alarms remain unavailable until the server is restored."
 fi

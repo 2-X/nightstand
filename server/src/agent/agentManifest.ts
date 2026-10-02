@@ -123,6 +123,7 @@ export const AGENT_MANIFEST: AgentEntry[] = [
   { path: 'scripts/sqlite-safety.py', mode: 'add', why: 'consistent database snapshots and verified migration recovery' },
   { path: 'scripts/prepare-downgrade.py', mode: 'add', why: 'preserves configured sensor archive retention in older trees' },
   { path: 'scripts/prepare-upstream.py', mode: 'add', why: 'prepares settings accepted by the upstream reader' },
+  { path: 'scripts/write_result.py', mode: 'add', why: 'records how an update, rollback or switch ended, so the app can report it' },
 
   // Server routes and jobs.
   { path: 'server/src/jobs/privilegedCommand.ts', mode: 'add', why: 'checks unit and sudo readiness before accepting an operation' },

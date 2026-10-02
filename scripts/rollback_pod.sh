@@ -15,7 +15,38 @@ PREV=/home/dac/free-sleep-prev
 TMP=/home/dac/free-sleep-rollback-tmp
 
 say() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
-fail() { say "FATAL: $*"; exit 1; }
+
+RESULT_OPERATION=rollback
+
+# How this run ended, for the app to show. The writer is read now because the
+# tree it lives in can be moved aside before the run ends.
+RESULT_FILE=/persistent/free-sleep-data/update-result.json
+RESULT_PY=$(cat "$(dirname "${BASH_SOURCE[0]}")/write_result.py" 2>/dev/null || true)
+RESULT_PHASE=preflight
+RESULT_REASON=""
+UP_TO_DATE=no
+record_result() {
+  local status=$1 outcome
+  if [ "$status" -eq 0 ]; then
+    if [ "$UP_TO_DATE" = yes ]; then outcome=up-to-date; else outcome=success; fi
+  else
+    case "$RESULT_PHASE" in
+      preflight) outcome=stopped ;;
+      restored) outcome=rolled-back ;;
+      *) outcome=failed ;;
+    esac
+    if [ -z "$RESULT_REASON" ]; then
+      case "$status" in
+        129|130|143) RESULT_REASON="it was interrupted before it finished" ;;
+        *) RESULT_REASON="it ended without giving a reason (exit status $status). See the update log." ;;
+      esac
+    fi
+  fi
+  python3 -c "$RESULT_PY" "$RESULT_FILE" "$RESULT_OPERATION" "$outcome" \
+    "${CUR_VERSION:-}" "${EXPECTED_VERSION:-${TARGET_VERSION:-${STAGED_VERSION:-}}}" "$RESULT_REASON" >/dev/null 2>&1 || true
+}
+
+fail() { say "FATAL: $*"; [ -n "${RESULT_REASON:-}" ] || RESULT_REASON="$*"; exit 1; }
 
 # Keep the descriptor across updater exec handoffs; all three operations share it.
 if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
@@ -32,6 +63,10 @@ if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
   fi
   export NIGHTSTAND_OPERATION_OWNER=$$
 fi
+trap 'record_result $?' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # node_modules can live in only one of the two trees: when the update that
 # produced this LIVE/PREV pair reused node_modules (identical lockfiles), it
@@ -91,16 +126,19 @@ if ! grep -qs prepare-to-stop "$PREV/server/dist/routes/update/update.js"; then
     http://127.0.0.1:3000/api/update/prepare-to-stop >/dev/null \
     || say "WARNING: the server could not prepare to stop; continuing"
 fi
+RESULT_PHASE=swapping
 STREAM_WAS_ACTIVE=$(systemctl is-active free-sleep-stream 2>/dev/null || true)
 systemctl stop free-sleep-stream 2>/dev/null || true
 systemctl stop free-sleep
 rm -rf "$TMP"
 mv "$LIVE" "$TMP" || {
+  RESULT_PHASE=preflight
   restart_services
   fail "swap failed moving live aside"
 }
 mv "$PREV" "$LIVE" || {
   mv "$TMP" "$LIVE" || fail "swap failed and running tree could not be restored; manual recovery required"
+  RESULT_PHASE=preflight
   restart_services
   fail "swap failed; running version restored"
 }
@@ -117,9 +155,11 @@ mv "$TMP" "$PREV" || {
     restart_services
     fail "could not restore original tree at $TMP; attempted to restart $LIVE; manual recovery required"
   }
+  RESULT_PHASE=preflight
   restart_services
   fail "could not preserve rollback slot; original running version restored"
 }
+RESULT_PHASE=swapped
 fix_shared_node_modules
 
 restart_services
@@ -167,6 +207,7 @@ fi
 # --- swap back on failure --------------------------------------------------------
 # A rollback that fails leaves the version that was running BEFORE this
 # script started still running. Never leave the pod on neither tree.
+[ -n "${RESULT_REASON:-}" ] || RESULT_REASON="the previous version did not pass its health check"
 say "Health check FAILED: swapping back to v$CUR_VERSION"
 systemctl stop free-sleep || true
 systemctl stop free-sleep-stream 2>/dev/null || true
@@ -180,6 +221,7 @@ mv "$PREV" "$LIVE" || {
   restart_services
   fail "could not restore previous tree; attempted to restart $LIVE; manual recovery required"
 }
+RESULT_PHASE=restored
 mv "$TMP" "$PREV" || {
   say "WARNING: could not preserve rollback slot; tree remains at $TMP"
   fix_shared_node_modules "$TMP"
@@ -190,5 +232,6 @@ sleep 8
 if curl -sf --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" >/dev/null; then
   fail "rollback to v$TARGET_VERSION failed health check; restored v$CUR_VERSION (still running). Check journalctl -u free-sleep-rollback"
 else
+  RESULT_PHASE=swapped
   fail "rollback failed AND the restore-back health check failed too. Check journalctl -u free-sleep. The bed hardware itself keeps running regardless."
 fi
