@@ -47,7 +47,7 @@ export default function UpcomingNight({ isOn }: { isOn?: boolean }) {
   if (!settings || bed.state === 'loading' || bed.state === 'error' || (legacy && !schedules)) {
     if (!settingsError && bed.state !== 'error' && !(legacy && schedulesError)) return null;
     return (
-      <Box sx={ { width: '100%', bgcolor: 'background.paper', borderRadius: '12px', border: 1, borderColor: 'divider', p: 2 } }>
+      <Box data-tonight sx={ { width: '100%', bgcolor: 'background.paper', borderRadius: '12px', border: 1, borderColor: 'divider', p: 2 } }>
         <SectionHeading>Tonight</SectionHeading>
         <Typography variant="body2" color="text.secondary" role="status">Schedule unavailable.</Typography>
         <Button size="small" sx={ { ml: -1 } } onClick={ retry }>Try again</Button>
@@ -105,7 +105,10 @@ export default function UpcomingNight({ isOn }: { isOn?: boolean }) {
     + (event.kind === 'temperature' && eventPaused ? ' (currently paused)' : '')
     + (rhythmLabel ? ` (${rhythmLabel})` : '');
   return (
-    <Box ref={ cardRef } sx={ { width: '100%', bgcolor: 'background.paper', borderRadius: '12px', border: 1, borderColor: 'divider', p: 2 } }>
+    <Box
+      ref={ cardRef }
+      data-tonight
+      sx={ { width: '100%', bgcolor: 'background.paper', borderRadius: '12px', border: 1, borderColor: 'divider', p: 2 } }>
       <Box sx={ { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' } }>
         <SectionHeading>
           { heading }

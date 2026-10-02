@@ -260,3 +260,14 @@ test('a phone on its side scrolls the page without overlaps at 844x390', async (
     expect(scrollWidth).toBeLessThanOrEqual(844);
   }
 });
+
+test('on a desktop the controls take a 440 px column and Tonight starts level with the tiles', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Turn off' })).toBeVisible();
+  const tiles = (await page.getByRole('radiogroup', { name: 'Bed side' }).boundingBox())!;
+  const card = (await page.locator('[data-tonight]').boundingBox())!;
+  expect(Math.abs(tiles.width - 440)).toBeLessThanOrEqual(1);
+  expect(Math.abs(card.y - tiles.y)).toBeLessThanOrEqual(1);
+  expect(card.x - (tiles.x + tiles.width)).toBeGreaterThanOrEqual(47);
+});

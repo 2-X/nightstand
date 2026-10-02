@@ -55,6 +55,8 @@ export const media = {
   short: '@media (max-height: 840px)',
   tight: '@media (max-height: 620px)',
   desktopShort: '@media (min-width: 900px) and (max-height: 840px)',
+  // A short screen that is not the desktop layout.
+  phoneShort: '@media (max-height: 840px) and (max-width: 899.95px)',
 };
 
 export const typography = {

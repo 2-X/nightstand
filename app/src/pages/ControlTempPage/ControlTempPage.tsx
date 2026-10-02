@@ -23,9 +23,20 @@ import { useDeviceStatus } from '@api/deviceStatus';
 import { media } from '@design/tokens';
 import { useSettings } from '@api/settings.ts';
 
-const pageSx = { [media.short]: { gap: 1, pt: 1 }, [media.tight]: { gap: 0.5, pt: 0.5 } } as const;
+const pageSx = {
+  [media.short]: { gap: 1, pt: 1 },
+  [media.tight]: { gap: 0.5, pt: 0.5 },
+  [media.desktop]: { maxWidth: 1000, px: '32px', pt: '24px', pb: '40px' },
+} as const;
+const tabsSx = { width: '100%', [media.desktop]: { maxWidth: 440, alignSelf: 'flex-start' } } as const;
+// One column on a phone. On a desktop the controls take 440 px and Tonight the rest, both from the top.
+const gridSx = {
+  display: 'grid', width: '100%', rowGap: 2, alignItems: 'start', gridTemplateColumns: 'minmax(0, 1fr)',
+  [media.desktop]: { gridTemplateColumns: '440px minmax(0, 1fr)', columnGap: '48px' },
+} as const;
 const controlColumnSx = {
-  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, [media.short]: { gap: 1 }, [media.tight]: { gap: 0.5 },
+  display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%',
+  gap: 2, [media.short]: { gap: 1 }, [media.tight]: { gap: 0.5 },
 } as const;
 
 export default function ControlTempPage() {
@@ -59,20 +70,12 @@ export default function ControlTempPage() {
   return (
     <PageContainer sx={ pageSx }>
       <PageHeader title="Bed" status={ deviceStatus?.isPriming ? 'Priming' : undefined }/>
-      <BedTabs />
+      <Box sx={ tabsSx }><BedTabs /></Box>
       { settingsError && <Alert severity="warning">
         Bed preferences are unavailable. { settings ? 'Using the last known preferences.' : 'Temperatures are shown in Fahrenheit.' }
       </Alert> }
-      <Box
-        sx={ {
-          display: 'grid',
-          width: '100%',
-          gap: 2,
-          gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'repeat(2, minmax(0, 1fr))' },
-          alignItems: 'start',
-        } }
-      >
-        <Box sx={ controlColumnSx }>
+      <Box sx={ gridSx }>
+        <Box data-bed-controls sx={ controlColumnSx }>
           <SideControl compact={ false } />
           { !sideStatus && !isError && (
             <Typography role="status">

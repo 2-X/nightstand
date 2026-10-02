@@ -1,6 +1,7 @@
 import { Box, Button } from '@mui/material';
 import { Link, useLocation } from 'react-router-dom';
 import { useBaseConfigured } from '@api/baseControl.ts';
+import { media, palette } from '@design/tokens';
 
 export default function BedTabs() {
   const configured = useBaseConfigured();
@@ -21,9 +22,17 @@ export default function BedTabs() {
         component={ Link }
         to={ to }
         aria-current={ selectedPath === to ? 'page' : undefined }
-        sx={ { minHeight: 44, flex: 1, px: 0, borderRadius: 0, borderBottom: 2,
-          borderColor: selectedPath === to ? 'primary.main' : 'transparent',
-          color: selectedPath === to ? 'primary.main' : 'text.secondary' } }
+        sx={ {
+          // A phone under 840 px tall gives the row back its 4 px: the power button has to clear the bottom bar.
+          minHeight: 48, [media.phoneShort]: { minHeight: 44 },
+          flex: 1, px: 0, borderRadius: 0, position: 'relative', fontSize: 16, fontWeight: 500,
+          color: selectedPath === to ? 'text.primary' : 'text.secondary',
+          // A short centred bar under the open tab, on the row's hairline.
+          '&::after': selectedPath === to ? {
+            content: '""', position: 'absolute', left: '50%', bottom: '-1px', width: 40, height: 2, ml: '-20px',
+            borderRadius: '2px', bgcolor: palette.lamp,
+          } : {},
+        } }
       >{ label }</Button>) }
     </Box>
   );

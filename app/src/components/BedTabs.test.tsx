@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { server } from '@test/setup';
 import { renderWithProviders } from '@test/renderWithProviders';
+import { palette } from '@design/tokens';
 import BedTabs from './BedTabs';
 
 afterEach(() => localStorage.removeItem('baseConfigured'));
@@ -62,4 +63,13 @@ it('shows the tabs at once when the last answer had a base', () => {
   }));
   renderWithProviders(<BedTabs/>);
   expect(screen.getByRole('link', { name: 'Elevation' })).toBeVisible();
+});
+
+it('marks the open tab with the primary text and a 48 px target', () => {
+  localStorage.setItem('baseConfigured', 'true');
+  renderWithProviders(<BedTabs/>);
+  const open = screen.getByRole('link', { name: 'Temperature' });
+  expect(open).toHaveAttribute('aria-current', 'page');
+  expect(open).toHaveStyle({ color: palette.text.primary, minHeight: '48px' });
+  expect(screen.getByRole('link', { name: 'Elevation' })).toHaveStyle({ color: palette.text.secondary });
 });
