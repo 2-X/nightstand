@@ -16,7 +16,17 @@
 # rather than failing the unit.
 #
 # Run as root. Safe to re-run. Limits apply the next time each service starts.
-# To undo: rm the two drop-ins below, then systemctl daemon-reload.
+#
+# The server also gets a restart drop-in: restart five seconds after any
+# exit and never give up. systemd's default start limit (five starts in ten
+# seconds) would otherwise leave a crash-looping server stopped until the
+# next reboot, and schedules and alarms run in it. StartLimitIntervalSec is
+# the spelling for systemd 230 and newer, and goes under [Unit]. The older
+# StartLimitInterval under [Service] covers systemd before 230, which would
+# ignore the new name; newer systemd still accepts it as an alias with the
+# same value.
+#
+# To undo: rm the three drop-ins below, then systemctl daemon-reload.
 
 set -euo pipefail
 
@@ -37,5 +47,16 @@ EOF
 
 write_dropin free-sleep.service 1200M
 write_dropin free-sleep-stream.service 512M
+
+cat > "${SYSTEMD_DIR}/free-sleep.service.d/20-nightstand-restart.conf" <<'EOF'
+# Managed by scripts/setup_resource_limits.sh. See that script for why.
+[Unit]
+StartLimitIntervalSec=0
+
+[Service]
+Restart=always
+RestartSec=5
+StartLimitInterval=0
+EOF
 
 systemctl daemon-reload

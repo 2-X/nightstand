@@ -291,6 +291,7 @@ if [ "$HEALTHY" = yes ]; then
     /etc/systemd/system/free-sleep-archive-raw.service /etc/systemd/system/free-sleep-archive-raw.timer
   # Upstream free-sleep never installs these. They take effect at the next service start.
   rm -f /etc/systemd/system/free-sleep.service.d/10-nightstand-limits.conf \
+    /etc/systemd/system/free-sleep.service.d/20-nightstand-restart.conf \
     /etc/systemd/system/free-sleep-stream.service.d/10-nightstand-limits.conf
   systemctl daemon-reload >/dev/null 2>&1 || true
   exit 0

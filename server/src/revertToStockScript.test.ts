@@ -83,6 +83,7 @@ describe('revert-to-stock.sh', () => {
     assert.match(rest, /free-sleep-revert\.service/);
     assert.match(rest, /free-sleep\.service\.d\/10-nightstand-limits\.conf/);
     assert.match(rest, /free-sleep-stream\.service\.d\/10-nightstand-limits\.conf/);
+    assert.match(rest, /free-sleep\.service\.d\/20-nightstand-restart\.conf/);
   });
 
   it('never rewrites /persistent/free-sleep-data other than a backup copy', () => {

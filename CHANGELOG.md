@@ -23,6 +23,8 @@ is a hard fork; for the history of the projects it descends from, see
 - HRV is no longer shown in the app. Checked against chest-strap recordings,
   the stored estimate was no more accurate than a fixed guess. It is still
   stored and returned by the API.
+- If Nightstand's server crashes repeatedly, systemd now keeps restarting it
+  every five seconds instead of giving up until the next reboot.
 - A side turned on by the weekly schedule now turns itself off a few minutes
   after its scheduled off time if Nightstand stops, instead of 12 hours after
   it was turned on. This also applies when a pause skips the scheduled off,
