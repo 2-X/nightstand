@@ -124,7 +124,7 @@ describe('how each script records its ending', () => {
     }
     assert.match(read('scripts/update.sh'), /^cleanup\(\) \{ local status=\$\?;.*record_result "\$status"; \}$/m);
     assert.match(read('scripts/revert-to-stock.sh'), /^cleanup\(\) \{ local status=\$\?;.*record_result "\$status"; \}$/m);
-    assert.match(read('scripts/rollback_pod.sh'), /^trap 'record_result \$\?' EXIT$/m);
+    assert.match(read('scripts/rollback_pod.sh'), /^trap 'status=\$\?; trap "" HUP INT TERM; record_result "\$status"' EXIT$/m);
   });
 
   // The outcome from where the run stood when it ended.
@@ -345,8 +345,9 @@ describe('where each script marks its progress', () => {
     const traps = src.split('\n').filter(line => /^trap .* (EXIT|HUP|INT|TERM)$/.test(line));
     assert.equal(traps.length, 4, 'expected an exit trap and one each for HUP, INT and TERM');
     const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-signal-'));
-    copyFileSync(path.join(repoRoot, 'scripts/write_result.py'), path.join(dir, 'write_result.py'));
-    writeFileSync(path.join(dir, 'harness.sh'), `set -uo pipefail
+    try {
+      copyFileSync(path.join(repoRoot, 'scripts/write_result.py'), path.join(dir, 'write_result.py'));
+      writeFileSync(path.join(dir, 'harness.sh'), `set -uo pipefail
 say() { echo "$*"; }
 RESULT_OPERATION=rollback
 ${resultBlock(src).replaceAll('/persistent/free-sleep-data', dir)}
@@ -356,15 +357,54 @@ echo ready
 sleep 3 >/dev/null 2>&1 &
 wait $!
 `);
-    const child = spawn('bash', [path.join(dir, 'harness.sh')]);
-    await new Promise<void>(resolve => child.stdout.once('data', () => resolve()));
-    const closed = new Promise<void>(resolve => child.once('exit', () => resolve()));
-    child.kill('SIGTERM');
-    await closed;
-    const record = JSON.parse(readFileSync(path.join(dir, 'update-result.json'), 'utf8')) as Record<string, string>;
-    assert.equal(record.outcome, 'failed');
-    assert.equal(record.message, 'it was interrupted before it finished');
-    rmSync(dir, { recursive: true, force: true });
+      const child = spawn('bash', [path.join(dir, 'harness.sh')]);
+      await new Promise<void>(resolve => child.stdout.once('data', () => resolve()));
+      const closed = new Promise<void>(resolve => child.once('exit', () => resolve()));
+      child.kill('SIGTERM');
+      await closed;
+      const record = JSON.parse(readFileSync(path.join(dir, 'update-result.json'), 'utf8')) as Record<string, string>;
+      assert.equal(record.outcome, 'failed');
+      assert.equal(record.message, 'it was interrupted before it finished');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rollback_pod.sh finishes writing its result when a second signal arrives', async () => {
+    const src = read('scripts/rollback_pod.sh');
+    const traps = src.split('\n').filter(line => /^trap .* (EXIT|HUP|INT|TERM)$/.test(line));
+    const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-signal-'));
+    try {
+      writeFileSync(path.join(dir, 'harness.sh'), `set -uo pipefail
+say() { echo "$*"; }
+RESULT_OPERATION=rollback
+${resultBlock(src).replaceAll('/persistent/free-sleep-data', dir)}
+record_result() { echo writing; sleep 1; echo done > "${dir}/written"; }
+${traps.join('\n')}
+echo ready
+sleep 5 >/dev/null 2>&1 &
+wait $!
+`);
+      const child = spawn('bash', [path.join(dir, 'harness.sh')]);
+      let seen = '';
+      const waitFor = (word: string) => new Promise<void>(resolve => {
+        const onData = (chunk: Buffer) => {
+          seen += chunk.toString();
+          if (seen.includes(word)) { child.stdout.off('data', onData); resolve(); }
+        };
+        child.stdout.on('data', onData);
+        onData(Buffer.alloc(0));
+      });
+      await waitFor('ready');
+      const closed = new Promise<void>(resolve => child.once('exit', () => resolve()));
+      child.kill('SIGTERM');
+      await waitFor('writing');
+      child.kill('SIGTERM');
+      await closed;
+      assert.ok(existsSync(path.join(dir, 'written')), 'the second signal cut the result write short');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('revert-to-stock.sh marks the swap and its own rollback', () => {

@@ -63,7 +63,7 @@ if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
   fi
   export NIGHTSTAND_OPERATION_OWNER=$$
 fi
-trap 'record_result $?' EXIT
+trap 'status=$?; trap "" HUP INT TERM; record_result "$status"' EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
