@@ -4,6 +4,7 @@ import { palette } from '@design/tokens';
 import { Button, Box } from '@mui/material';
 import { Add, Remove } from '@mui/icons-material';
 import { useControlTempStore } from './controlTempStore.tsx';
+import { controlsSlotSx } from './controlsSlot.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { postDeviceStatus } from '@api/deviceStatus.ts';
 import { useSettings } from '@api/settings.ts';
@@ -182,8 +183,7 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
     <Box
       sx={ {
         position: 'relative',
-        height: 64,
-        mt: -5,
+        ...controlsSlotSx,
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',

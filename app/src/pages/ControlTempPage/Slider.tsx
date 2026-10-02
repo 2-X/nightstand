@@ -1,9 +1,10 @@
-import { useId } from 'react';
+import { useId, type ReactNode } from 'react';
 import { Box } from '@mui/material';
 import { useAppStore } from '@state/appStore';
 import { useControlTempStore } from './controlTempStore.tsx';
 import TemperatureLabel from './TemperatureLabel.tsx';
 import TemperatureButtons from './TemperatureButtons.tsx';
+import { controlsSlotSx } from './controlsSlot.ts';
 import { fahrenheitToLevel, MAX_TEMP_F, MIN_TEMP_F, TemperatureFormat } from '@lib/temperatureConversions.ts';
 import { temperatureColor } from '@lib/temperatureColor';
 import { palette } from '@design/tokens';
@@ -15,7 +16,13 @@ type SliderProps = {
   currentTemperatureF: number;
   refetch: () => unknown;
   format: TemperatureFormat;
+  // Shown where the stepper sits while the side is off.
+  whenOff?: ReactNode;
 };
+
+const dialSx = {
+  position: 'relative', width: '100%', maxWidth: 'min(280px, 38dvh, calc(100% - 32px))', mx: 'auto', aspectRatio: '1 / 1', maxHeight: 320,
+} as const;
 
 function position(temperature: number) {
   const fraction = Math.max(0, Math.min(1, (temperature - MIN_TEMP_F) / (MAX_TEMP_F - MIN_TEMP_F)));
@@ -23,7 +30,7 @@ function position(temperature: number) {
   return { x: 140 + 122 * Math.cos(angle), y: 140 + 122 * Math.sin(angle) };
 }
 
-export default function Slider({ isOn, currentTargetTemp, refetch, currentTemperatureF, format, statusUnavailable }: SliderProps) {
+export default function Slider({ isOn, currentTargetTemp, refetch, currentTemperatureF, format, statusUnavailable, whenOff }: SliderProps) {
   const { side } = useAppStore();
   const target = useControlTempStore(state => state.deviceStatus?.[side]?.targetTemperatureF) ?? currentTargetTemp;
   const color = temperatureColor(fahrenheitToLevel(target));
@@ -38,9 +45,9 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
   const span = Math.abs(clampedTarget - clampedCurrent) / (MAX_TEMP_F - MIN_TEMP_F) * 240;
   const activeArc = `M ${current.x} ${current.y} A 122 122 0 ${span > 180 ? 1 : 0} `
     + `${target >= currentTemperatureF ? 1 : 0} ${requested.x} ${requested.y}`;
-  // Off, the next control tucks into the dial's open bottom, as the stepper does when on.
-  return <Box sx={ { width: '100%', maxWidth: 'min(280px, 38dvh, calc(100% - 32px))', mb: isOn ? 0 : -5 } }>
-    <Box sx={ { position: 'relative', width: '100%', aspectRatio: '1 / 1', maxHeight: 320 } }>
+  // While off, the slot has the stepper's height and overlap, so Turn on sits where Turn off does.
+  return <Box sx={ { width: '100%' } }>
+    <Box sx={ dialSx }>
       <svg viewBox="0 0 280 280" width="100%" height="100%" aria-hidden="true" style={ { pointerEvents: 'none' } }>
         <defs><linearGradient
           id={ gradient }
@@ -75,10 +82,13 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
         currentTemperatureF={ currentTemperatureF }
         format={ format }/>
     </Box>
-    { isOn && <TemperatureButtons
+    { isOn ? <TemperatureButtons
       key={ side }
       statusUnavailable={ statusUnavailable }
       refetch={ refetch }
-      currentTargetTemp={ currentTargetTemp }/> }
+      currentTargetTemp={ currentTargetTemp }/>
+      : <Box sx={ { ...controlsSlotSx, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' } }>
+        { whenOff }
+      </Box> }
   </Box>;
 }

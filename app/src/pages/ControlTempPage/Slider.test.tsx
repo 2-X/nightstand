@@ -26,8 +26,23 @@ it('clamps the active arc endpoints before deciding which arc to draw', () => {
   expect(container.querySelectorAll('path')[1].getAttribute('d')).toContain('A 122 122 0 0 1');
 });
 
-it('leaves no empty stepper row when the side is off', () => {
-  const { container } = render(<Slider isOn={ false } currentTargetTemp={ 83 } currentTemperatureF={ 75 } refetch={ vi.fn() } format="level"/>);
+it('keeps the stepper row height while the side is off and shows what it is given there', () => {
+  const { container } = render(<Slider
+    isOn={ false }
+    currentTargetTemp={ 83 }
+    currentTemperatureF={ 75 }
+    refetch={ vi.fn() }
+    format="level"
+    whenOff={ <span>Last night</span> }/>);
   expect(screen.queryByText('Temperature stepper')).not.toBeInTheDocument();
-  expect(container.firstElementChild?.children).toHaveLength(1);
+  const slot = container.firstElementChild!.children[1];
+  expect(slot).toHaveTextContent('Last night');
+  expect(getComputedStyle(slot).height).toBe('64px');
+});
+
+it('keeps the row height when there is nothing to show while off', () => {
+  const { container } = render(<Slider isOn={ false } currentTargetTemp={ 83 } currentTemperatureF={ 75 } refetch={ vi.fn() } format="level"/>);
+  const slot = container.firstElementChild!.children[1];
+  expect(slot).toBeEmptyDOMElement();
+  expect(getComputedStyle(slot).height).toBe('64px');
 });

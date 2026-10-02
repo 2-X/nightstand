@@ -5,6 +5,11 @@ import { getSettings } from '../../mocks/mockData';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import LastNightChip from './LastNightChip';
+import { useLastNight } from './useLastNight';
+
+function Chip() {
+  return <LastNightChip lastNight={ useLastNight() } />;
+}
 
 const record = (id: number, enteredBedAt: string, leftBedAt: string, seconds: number) => ({
   id, side: 'left', entered_bed_at: enteredBedAt, left_bed_at: leftBedAt, sleep_period_seconds: seconds,
@@ -25,7 +30,7 @@ it('scores the longest record of the newest wake date, as the Sleep page does', 
     }),
   );
 
-  renderWithProviders(<LastNightChip />);
+  renderWithProviders(<Chip />);
 
   expect(await screen.findByText(/Last night estimate 81/)).toBeInTheDocument();
   expect(requests).toEqual([{
@@ -47,7 +52,7 @@ it('ignores a stale row appended after the newest night', async () => {
     }),
   );
 
-  renderWithProviders(<LastNightChip />);
+  renderWithProviders(<Chip />);
 
   expect(await screen.findByText(/Last night estimate 77/)).toBeInTheDocument();
   expect(requests).toEqual(['2026-09-23T22:00:00-07:00']);
@@ -71,7 +76,7 @@ it('waits for the Pod time zone instead of guessing UTC, so only the right night
     }),
   );
 
-  renderWithProviders(<LastNightChip />);
+  renderWithProviders(<Chip />);
 
   expect(await screen.findByText(/Last night estimate 81/)).toBeInTheDocument();
   expect(requests).toEqual(['2026-09-22T22:00:00-07:00']);
@@ -92,7 +97,7 @@ it('groups nights in UTC, as the Sleep page does, when the Pod time zone is unse
     }),
   );
 
-  renderWithProviders(<LastNightChip />);
+  renderWithProviders(<Chip />);
 
   expect(await screen.findByText(/Last night estimate 64/)).toBeInTheDocument();
   expect(requests).toEqual(['2026-09-23T17:00:00-07:00']);

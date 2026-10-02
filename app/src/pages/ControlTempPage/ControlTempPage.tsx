@@ -9,6 +9,7 @@ import PageHeader from '@components/PageHeader';
 import BedTabs from '@components/BedTabs';
 import ErrorBoundary from '@components/ErrorBoundary.tsx';
 import LastNightChip from './LastNightChip.tsx';
+import LastNightSummary from './LastNightSummary.tsx';
 import PageContainer from '../PageContainer.tsx';
 import PowerButton from './PowerButton.tsx';
 import ScheduleOverrideBanner from './ScheduleOverrideBanner.tsx';
@@ -17,6 +18,7 @@ import Slider from './Slider.tsx';
 import WaterNotification from './WaterNotification.tsx';
 import { useAppStore } from '@state/appStore.tsx';
 import { useControlTempStore } from './controlTempStore.tsx';
+import { useLastNight } from './useLastNight.ts';
 import { useDeviceStatus } from '@api/deviceStatus';
 import { useSettings } from '@api/settings.ts';
 
@@ -30,6 +32,9 @@ export default function ControlTempPage() {
 
   const sideStatus = deviceStatus?.[side];
   const isOn = sideStatus?.isOn || false;
+  const lastNight = useLastNight();
+  // While off, last night moves up into the stepper's place under the dial.
+  const lastNightUnderDial = !!sideStatus && !isOn;
 
   useEffect(() => {
     refetch();
@@ -76,6 +81,9 @@ export default function ControlTempPage() {
               refetch={ refetch }
               currentTemperatureF={ sideStatus.currentTemperatureF }
               format={ settings?.temperatureFormat ?? 'fahrenheit' }
+              whenOff={ <ErrorBoundary componentName="Last night summary">
+                <LastNightSummary lastNight={ lastNight } />
+              </ErrorBoundary> }
             />
           ) }
 
@@ -97,9 +105,9 @@ export default function ControlTempPage() {
           <ErrorBoundary componentName="Alarm notification">
             <UpcomingNight isOn={ isOn } />
           </ErrorBoundary>
-          <ErrorBoundary componentName="Last night chip">
-            <LastNightChip />
-          </ErrorBoundary>
+          { !lastNightUnderDial && <ErrorBoundary componentName="Last night chip">
+            <LastNightChip lastNight={ lastNight } />
+          </ErrorBoundary> }
           <ErrorBoundary componentName="Analyze last night">
             <AnalyzeLastNightPrompt />
           </ErrorBoundary>
