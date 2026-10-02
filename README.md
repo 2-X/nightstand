@@ -68,7 +68,8 @@ user base.
 
 I maintain Nightstand on my own Pod 5, mostly fixing issues I run into day to
 day. Reports from owners of Pod 3 and Pod 4 are especially useful. Nightstand
-has no error reporting or analytics; its browser checks versions on GitHub.
+has no error reporting or analytics; its browser checks versions on GitHub
+([tested](app/e2e/privacy.spec.ts)).
 Daily use is local, with the [firewall exceptions](INSTALLATION.md#19-add-firewall-rules-to-block-internet-access-optional-but-recommended)
 explained in the installation guide. In-app updates support release selection
 and application rollback. Versions start at 3.0.0; upstream fixes are reviewed
