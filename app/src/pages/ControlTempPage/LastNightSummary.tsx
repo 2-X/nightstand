@@ -18,9 +18,12 @@ export default function LastNightSummary({ lastNight }: { lastNight?: LastNight 
       } }>
       <Typography variant="body2" color="text.secondary">
         <Box component="span" sx={ { whiteSpace: 'nowrap' } }>Last night estimate { lastNight.score }</Box>
-        { lastNight.duration && <> · <Box component="span" sx={ { whiteSpace: 'nowrap' } }>{ lastNight.duration }</Box></> }
+        { lastNight.duration && <>
+          <span aria-hidden="true"> · </span>
+          <Box component="span" sx={ { whiteSpace: 'nowrap' } }>{ lastNight.duration }</Box>
+        </> }
       </Typography>
-      <Button component={ Link } to="/sleep" size="small" sx={ { minWidth: 0 } }>View sleep</Button>
+      <Button component={ Link } to="/sleep" size="small" aria-label="View last night's sleep" sx={ { minWidth: 0 } }>View sleep</Button>
     </Box>
   );
 }

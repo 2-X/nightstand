@@ -36,8 +36,9 @@ describe('last night on the Bed page', () => {
     leftSide(false);
     renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
 
-    const link = await screen.findByRole('link', { name: 'View sleep' });
+    const link = await screen.findByRole('link', { name: 'View last night\'s sleep' });
     expect(link).toHaveAttribute('href', '/sleep');
+    expect(link).toHaveTextContent('View sleep');
     expect(screen.getByText('Last night estimate 86')).toBeInTheDocument();
     expect(screen.getByText('7h 12m asleep')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Turn on' })).toBeInTheDocument();
@@ -52,7 +53,7 @@ describe('last night on the Bed page', () => {
 
     expect(await screen.findByRole('button', { name: /^Last night estimate 86 ?View sleep$/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Increase temperature' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'View sleep' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'View last night\'s sleep' })).not.toBeInTheDocument();
     expect(screen.queryByText('7h 12m asleep')).not.toBeInTheDocument();
   });
 
@@ -72,7 +73,7 @@ describe('last night on the Bed page', () => {
     await waitFor(() => expect(answered).toBe(records.length ? 2 : 1));
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(screen.queryByText(/Last night estimate/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'View sleep' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'View last night\'s sleep' })).not.toBeInTheDocument();
   });
 
   it('leaves out the duration when the score has none', async () => {

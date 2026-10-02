@@ -15,7 +15,7 @@ test('turning a side off keeps the power button in place and shows last night un
   await turnOff.click();
   const turnOn = page.getByRole('button', { name: 'Turn on' });
   await expect(turnOn).toBeVisible();
-  const viewSleep = page.getByRole('link', { name: 'View sleep' });
+  const viewSleep = page.getByRole('link', { name: 'View last night\'s sleep' });
   await expect(viewSleep).toBeVisible();
   await expect(page.getByText(/^Last night estimate \d+$/)).toBeVisible();
   await expect(page.getByRole('button', { name: /^Last night estimate/ })).toHaveCount(0);
