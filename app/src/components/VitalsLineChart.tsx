@@ -21,6 +21,7 @@ const METRIC_CONFIG: Record<Metric, { unit: string; targetRange?: [number, numbe
   heart_rate: { unit: 'bpm' },
   hrv: { unit: 'ms' },
   breathing_rate: { unit: 'breaths/min', targetRange: [12, 20] },
+  resp_rate: { unit: 'breaths/min', targetRange: [12, 20] },
 };
 
 // Bucket-aggregate timestamped points: split into ~maxPoints contiguous

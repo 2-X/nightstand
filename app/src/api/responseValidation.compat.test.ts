@@ -114,10 +114,17 @@ it('accepts vitals rows beyond today\'s recorder limits', () => {
     { side: 'left', timestamp: 1790664360, heart_rate: 92.4, hrv: null, breathing_rate: 0, rmssd: 41.2 },
     { side: 'right', timestamp: 1790664420, heart_rate: 64, hrv: 38, breathing_rate: 15 },
   ];
-  expect(validateResponse('/metrics/vitals', vitals)).toEqual([
-    { side: 'left', timestamp: 1790664360, heart_rate: 92.4, hrv: null, breathing_rate: 0 },
-    vitals[1],
-  ]);
+  expect(validateResponse('/metrics/vitals', vitals)).toEqual(vitals);
+});
+
+it('accepts vitals rows from every estimator and keeps the new fields', () => {
+  const legacy = { side: 'left', timestamp: 1790600400, heart_rate: 61, hrv: 45, breathing_rate: 13 };
+  const low = { ...legacy, timestamp: 1790600460, heart_rate: 24 };
+  const v2 = {
+    side: 'right', timestamp: 1790600520, heart_rate: 104, hrv: 0, breathing_rate: 0,
+    hr_quality: null, rmssd: 41.3, sdnn: 38.4, hrv_coverage: 0.82, resp_rate: null, resp_quality: null, estimator: 2,
+  };
+  expect(validateResponse('/metrics/vitals', [legacy, low, v2])).toEqual([legacy, low, v2]);
 });
 
 const goodSleep = { id: 1, side: 'left', entered_bed_at: '2026-09-28T23:45:30-07:00', left_bed_at: '2026-09-29T05:40:14-07:00',

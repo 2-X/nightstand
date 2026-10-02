@@ -21,7 +21,7 @@ import { useAppStore, Side } from '@state/appStore';
 import { useSleepRecords } from '@api/sleep';
 import { useSettings } from '@api/settings';
 import { useServices } from '@api/services';
-import { useVitalsRecords, useVitalsSummary } from '@api/vitals';
+import { useVitalsRecords, useVitalsSummary, type VitalsSummary } from '@api/vitals';
 import type { SleepRecord } from '@api/sleepSchema';
 import type { VitalsMetric } from '@lib/vitalsPoints';
 import { vitalsRecordsToPoints } from '@lib/vitalsPoints';
@@ -33,12 +33,23 @@ import { useRhythmsState } from '@api/rhythms';
 import useAnalyzeSleep from '@lib/useAnalyzeSleep';
 import { SLEEP_ANALYSIS_HOUR, SLEEP_ANALYSIS_MINUTE } from '../../../../../server/src/sleepAnalysisSchedule';
 
-const METRICS = [
-  { key: 'heart_rate', label: 'Heart rate', unit: 'bpm', summary: 'avgHeartRate' },
-  { key: 'hrv', label: 'HRV', unit: 'ms', summary: 'avgHRV' },
-] as const;
+type MetricRow = { key: VitalsMetric; label: string; unit: string; summary: keyof VitalsSummary };
 
-function NightVitals({ record, side, timeZone }: { record: SleepRecord; side: Side; timeZone: string }) {
+const METRICS: ReadonlyArray<MetricRow> = [
+  { key: 'heart_rate', label: 'Heart rate', unit: 'bpm', summary: 'avgHeartRate' },
+];
+
+// With new sleep tracking on, breathing rate returns. Minutes whose breathing
+// estimate failed its quality check carry no resp_rate and are left out.
+const V2_METRICS: ReadonlyArray<MetricRow> = [
+  { key: 'heart_rate', label: 'Heart rate', unit: 'bpm', summary: 'avgHeartRate' },
+  { key: 'resp_rate', label: 'Breathing rate', unit: 'breaths/min', summary: 'avgBreathingRate' },
+];
+
+function NightVitals({ record, side, timeZone, biometricsV2 }: {
+  record: SleepRecord; side: Side; timeZone: string; biometricsV2: boolean;
+}) {
+  const metrics = biometricsV2 ? V2_METRICS : METRICS;
   const [params, setParams] = useSearchParams();
   const metric = params.get('metric');
   const query = { side, startTime: record.entered_bed_at, endTime: record.left_bed_at };
@@ -46,9 +57,9 @@ function NightVitals({ record, side, timeZone }: { record: SleepRecord; side: Si
   const { data: weekSummary } = useVitalsSummary({
     side, startTime: moment.tz(record.left_bed_at, timeZone).subtract(7, 'days').toISOString(), endTime: record.left_bed_at,
   });
-  const metricPoints = useMemo(() => METRICS.map(item =>
+  const metricPoints = useMemo(() => metrics.map(item =>
     vitalsRecordsToPoints(vitals ?? [], item.key, { startTime: record.entered_bed_at, endTime: record.left_bed_at }),
-  ), [vitals, record.entered_bed_at, record.left_bed_at]);
+  ), [metrics, vitals, record.entered_bed_at, record.left_bed_at]);
   const selectMetric = (next: VitalsMetric, expanded: boolean) => {
     const nextParams = new URLSearchParams(params);
     if (expanded) nextParams.set('metric', next);
@@ -58,7 +69,7 @@ function NightVitals({ record, side, timeZone }: { record: SleepRecord; side: Si
   return (
     <Box sx={ { minWidth: 0, display: 'grid', gap: 2 } }>
       <Typography variant="body2" color="text.secondary">Estimates from bed sensors, not a medical measurement.</Typography>
-      { METRICS.map((item, index) => {
+      { metrics.map((item, index) => {
         const points = metricPoints[index];
         const value = points.length ? points.reduce((sum, point) => sum + point.value, 0) / points.length : undefined;
         return (
@@ -101,7 +112,7 @@ function NightVitals({ record, side, timeZone }: { record: SleepRecord; side: Si
 }
 
 // Keep explicit date selection across side changes.
-function SleepContext({ side, timeZone }: { side: Side; timeZone: string }) {
+function SleepContext({ side, timeZone, biometricsV2 }: { side: Side; timeZone: string; biometricsV2: boolean }) {
   const [weekDate, setWeekDate] = useState<string>();
   const [chosenDate, setChosenDate] = useState<string>();
   const [view, setView] = useState('night');
@@ -241,7 +252,7 @@ function SleepContext({ side, timeZone }: { side: Side; timeZone: string }) {
                     <SleepStagesCard startTime={ displayed.entered_bed_at } endTime={ displayed.left_bed_at } timeZone={ timeZone }/>
                   </ErrorBoundary>
                   <ErrorBoundary key={ `${side}-${displayed.id}` } componentName="Night measurements">
-                    <NightVitals record={ displayed } side={ side } timeZone={ timeZone }/>
+                    <NightVitals record={ displayed } side={ side } timeZone={ timeZone } biometricsV2={ biometricsV2 }/>
                   </ErrorBoundary>
                 </Box>
               </Box>
@@ -270,7 +281,8 @@ export default function SleepPage() {
           <SleepContext
             key={ settings?.timeZone ?? 'UTC' }
             side={ side }
-            timeZone={ settings?.timeZone ?? 'UTC' }/>
+            timeZone={ settings?.timeZone ?? 'UTC' }
+            biometricsV2={ settings?.features?.biometricsV2 === true }/>
         ) : <CircularProgress aria-label="Loading Pod timezone"/> }
       </PageContainer>
     </ErrorBoundary>

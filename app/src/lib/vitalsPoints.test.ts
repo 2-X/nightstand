@@ -53,6 +53,14 @@ describe('vitalsRecordsToPoints', () => {
     expect(points.map(point => point.value)).toEqual([20, 140]);
   });
 
+  it('reads the newer metrics and skips minutes without them', () => {
+    const points = vitalsRecordsToPoints(
+      [record({ rmssd: 40, resp_rate: 15.5 }), record({ rmssd: null, resp_rate: null }), record({})],
+      'resp_rate',
+    );
+    expect(points.map((p) => p.value)).toEqual([15.5]);
+  });
+
   it('yields nothing when timestamps arrive as formatted strings', () => {
     // Not a supported input: this pins the shape of a past failure. The vitals
     // route used to reformat each epoch into an ISO8601 string before

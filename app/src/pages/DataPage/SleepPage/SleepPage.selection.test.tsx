@@ -110,13 +110,15 @@ describe('Sleep selection and period', () => {
   });
   it('keeps partial coverage separate from missing sleep and opens one metric at a time', async () => {
     records = [record(2, '2026-09-23', 8)];
+    server.use(http.get('*/settings', () => HttpResponse.json({
+      ...getSettings(), timeZone: 'America/Los_Angeles', features: { ...getSettings().features, biometricsV2: true },
+    })));
     const { user } = renderWithProviders(<SleepPage />, { initialRoute: '/sleep?metric=heart_rate' });
     await screen.findByText('8h');
     expect(screen.getByRole('button', { name: /Heart rate/ })).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.queryByRole('button', { name: /Breathing rate/ })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /HRV/ }));
+    await user.click(screen.getByRole('button', { name: /Breathing rate/ }));
     expect(screen.getByRole('button', { name: /Heart rate/ })).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getByRole('button', { name: /HRV/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: /Breathing rate/ })).toHaveAttribute('aria-expanded', 'true');
     expect(screen.queryByText('Sleep balance')).not.toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Week' }));
     expect(await screen.findByText('1 of 7 nights recorded')).toBeInTheDocument();
@@ -151,20 +153,20 @@ it('shows the nightly average once and the seven night average in expanded detai
   );
   const { user } = renderWithProviders(<SleepPage />);
   // The charts render late when the suite is busy, so wait longer than the default.
-  expect(await screen.findByRole('button', { name: 'HRV 87 ms' }, { timeout: 10_000 })).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: 'Heart rate 65 bpm' }, { timeout: 10_000 })).toBeInTheDocument();
   expect(screen.queryByText('SELECTED NIGHT')).not.toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: 'HRV 87 ms' }));
-  await screen.findByText('7-night average 63 ms', undefined, { timeout: 10_000 });
-  expect(screen.getAllByText('87 ms')).toHaveLength(1);
-  await user.click(screen.getByRole('button', { name: 'HRV 87 ms' }));
-  await waitFor(() => expect(screen.queryByText('7-night average 63 ms')).not.toBeInTheDocument(), { timeout: 10_000 });
+  await user.click(screen.getByRole('button', { name: 'Heart rate 65 bpm' }));
+  await screen.findByText('7-night average 63 bpm', undefined, { timeout: 10_000 });
+  expect(screen.getAllByText('65 bpm')).toHaveLength(1);
+  await user.click(screen.getByRole('button', { name: 'Heart rate 65 bpm' }));
+  await waitFor(() => expect(screen.queryByText('7-night average 63 bpm')).not.toBeInTheDocument(), { timeout: 10_000 });
 });
 
 it('keeps the night summary visible when measurements are malformed', async () => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   server.use(http.get('*/metrics/vitals', () => HttpResponse.json([null])));
   renderWithProviders(<SleepPage />);
-  expect(await screen.findAllByText('Measurements unavailable')).toHaveLength(2);
+  expect(await screen.findAllByText('Measurements unavailable')).toHaveLength(1);
   expect(screen.getByText('8h')).toBeInTheDocument();
   expect(screen.getByRole('group', { name: 'Nights in selected week' })).toBeInTheDocument();
 });

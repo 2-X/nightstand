@@ -270,7 +270,8 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     id: 'biometrics-v2',
     title: 'New sleep tracking (beta)',
     description: 'Tells the two sides apart with the bed\'s capacitance sensors, in live presence and the '
-      + 'nightly analysis, and keeps vitals through short trips out of bed.',
+      + 'nightly analysis, keeps vitals through short trips out of bed, and estimates heart rate and '
+      + 'breathing with methods built for the bed\'s vibration sensors.',
     category: 'biometrics',
     version: '3.5.0',
     flag: 'biometricsV2',
@@ -284,6 +285,9 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
       'app/src/pages/SettingsPage/FeaturesSection', 'app/src/pages/SettingsPage/SettingsPage.tsx',
       'server/src/features/sleepTrackingValidation.ts', 'server/src/routes/calibration',
       'app/src/api/sleepTrackingValidation.ts',
+      'biometrics/vitals2', 'biometrics/stream/vitals2_stream.py', 'biometrics/db.py',
+      'server/src/routes/metrics/vitalsV2.ts', 'server/src/routes/metrics/vitals.ts',
+      'server/src/db/vitalsRecordSchema.ts', 'app/src/pages/DataPage/SleepPage/SleepPage.tsx',
     ],
     depends_on: ['biometrics'],
     reversible: true,
@@ -302,6 +306,11 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
       'biometrics/__tests__/test_presence_v2_identity.py', 'biometrics/__tests__/test_presence_model.py',
       'server/src/features/sleepTrackingValidation.test.ts',
       'server/src/routes/calibration/calibrationView.test.ts',
+      'biometrics/__tests__/test_stream_vitals2.py', 'biometrics/__tests__/test_stream_vitals_legacy_output.py',
+      'biometrics/__tests__/test_vitals2_hr.py', 'biometrics/__tests__/test_vitals2_attribution.py',
+      'biometrics/__tests__/test_vitals2_hrv.py', 'biometrics/__tests__/test_vitals2_resp.py',
+      'server/src/routes/metrics/vitals.test.ts',
+      'app/src/pages/DataPage/SleepPage/SleepPage.vitals2.test.tsx',
     ],
     upstream_offer: false,
     rationale: 'Off by default while it is checked against more nights and more beds. Off leaves live '

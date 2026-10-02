@@ -233,7 +233,7 @@ it('shows measurement failures in collapsed vitals instead of no estimate', asyn
   );
   renderWithProviders(<SleepPage/>);
   await screen.findByLabelText('Night summary');
-  expect(await screen.findAllByText('Measurements unavailable')).toHaveLength(2);
+  expect(await screen.findAllByText('Measurements unavailable')).toHaveLength(1);
   expect(within(screen.getByRole('button', { name: /Heart rate/ })).queryByText('No estimate')).not.toBeInTheDocument();
 });
 
