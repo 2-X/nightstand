@@ -446,7 +446,10 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     touchpoints: ['app/src/components/SideControl.tsx', 'app/src/pages/ControlTempPage'],
     depends_on: ['agent'],
     reversible: false,
-    tests: ['app/src/components/SideControl.test.tsx', 'app/src/lib/temperatureColor.test.ts', 'app/src/pages/ControlTempPage/Slider.test.tsx'],
+    tests: [
+      'app/src/components/SideControl.test.tsx', 'app/src/lib/temperatureColor.test.ts',
+      'app/src/pages/ControlTempPage/TemperatureDial.test.tsx', 'app/src/pages/ControlTempPage/TemperatureButtons.queue.test.tsx',
+    ],
     upstream_offer: false,
     rationale: 'Side identity and readable controls are required for operating the bed.',
   },
