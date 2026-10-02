@@ -29,10 +29,34 @@ it('turns stale on its own two minutes after the last status', () => {
   expect(screen.getByText(`stale since ${new Date(T).toISOString()}`)).toBeInTheDocument();
 });
 
+it('starts the two minutes again when an answer equal to the last arrives', () => {
+  const data = { left: status };
+  fixture.query = { data, dataUpdatedAt: T, isError: false, isFetching: false, failureCount: 0 };
+  const { rerender } = render(<Probe/>);
+  act(() => { vi.advanceTimersByTime(60_000); });
+  // The query keeps the same data object for an equal answer; only its time moves.
+  fixture.query = { ...fixture.query, data, dataUpdatedAt: T + 60_000 };
+  rerender(<Probe/>);
+  act(() => { vi.advanceTimersByTime(119_000); });
+  expect(screen.getByText('live')).toBeInTheDocument();
+  act(() => { vi.advanceTimersByTime(2_000); });
+  expect(screen.getByText(`stale since ${new Date(T + 60_000).toISOString()}`)).toBeInTheDocument();
+});
+
 it('dates a first load that failed from its first render', () => {
   fixture.query = { data: undefined, dataUpdatedAt: 0, isError: true, isFetching: false, failureCount: 3 };
   render(<Probe/>);
   expect(screen.getByText(`stale since ${new Date(T).toISOString()}`)).toBeInTheDocument();
+});
+
+it('dates a first load that already failed from that failure, and keeps that time as it fails again', () => {
+  const earlier = T - 5 * 60_000;
+  fixture.query = { data: undefined, dataUpdatedAt: 0, isError: true, isFetching: false, failureCount: 1, errorUpdatedAt: earlier };
+  const { rerender } = render(<Probe/>);
+  expect(screen.getByText(`stale since ${new Date(earlier).toISOString()}`)).toBeInTheDocument();
+  fixture.query = { ...fixture.query, errorUpdatedAt: T + 60_000 };
+  rerender(<Probe/>);
+  expect(screen.getByText(`stale since ${new Date(earlier).toISOString()}`)).toBeInTheDocument();
 });
 
 it('is loading before the first answer', () => {

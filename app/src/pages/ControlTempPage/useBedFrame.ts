@@ -7,7 +7,8 @@ import { STALE_AFTER_MS, bedFrame } from './bedFrame';
 export function useBedFrame() {
   const query = useDeviceStatus();
   const { side } = useAppStore();
-  const [requestedAt] = useState(() => Date.now());
+  // A failure another page already saw dates from then. Read once, so later failures do not move it forward.
+  const [requestedAt] = useState(() => Math.min(Date.now(), query.errorUpdatedAt || Infinity));
   const [, tick] = useState(0);
   const { data, dataUpdatedAt } = query;
   // Render again the moment the last status turns two minutes old, even if nothing else changes.
