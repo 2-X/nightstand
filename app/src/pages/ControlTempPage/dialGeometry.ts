@@ -1,7 +1,6 @@
 // The ring is drawn in a 280 x 240 viewBox around (140, 140). Angles are SVG angles: 0 at +x, clockwise.
 export const DIAL_WIDTH = 280;
 export const DIAL_HEIGHT = 240;
-export const DIAL_ASPECT = DIAL_HEIGHT / DIAL_WIDTH;
 const CENTER = 140;
 export const TRACK_RADIUS = 118;
 export const TRACK_WIDTH = 6;

@@ -61,6 +61,7 @@ it('marks where the bed is now only while it differs from the target', () => {
   expect(attrs(ring(true, 3, 1).querySelector('line[data-notch]'), 'x1', 'y1', 'x2', 'y2'))
     .toEqual([notch.x1, notch.y1, notch.x2, notch.y2]);
   expect(ring(true, 3, 3).querySelector('line[data-notch]')).toBeNull();
+  expect(ring(true, 0.3, 0.1 + 0.2).querySelector('line[data-notch]')).toBeNull();
 });
 
 it('leaves the span empty at 0 and puts the dot at 12 o\'clock', () => {
@@ -74,6 +75,16 @@ it('leaves the span empty at 0 and puts the dot at 12 o\'clock', () => {
 it('keeps an out of range target on the scale', () => {
   const at = dialPoint(10);
   expect(centre(ring(true, 14).querySelector('circle[data-target]'))[0]).toBeCloseTo(at.x);
+});
+
+it('fills the whole half of the scale and puts the dot on the end at +10 and \u221210', () => {
+  for (const level of [-10, 10]) {
+    const container = ring(true, level);
+    expect(container.querySelectorAll('g[data-band="fill"] path')).toHaveLength(50);
+    const [x, y] = centre(container.querySelector('circle[data-target]'));
+    expect(x).toBeCloseTo(dialPoint(level).x);
+    expect(y).toBeCloseTo(dialPoint(level).y);
+  }
 });
 
 it('marks the target with a flat halo, never a blur', () => {

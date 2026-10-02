@@ -18,7 +18,16 @@ const band = (from: number, to: number) => bandSegments(from, to).map(segment =>
   strokeWidth={ TRACK_WIDTH }
   fill="none"/>);
 
+// Closer than this, now and the target are the same place on the ring.
+const SAME_LEVEL = 0.01;
+
 const endLabel = (level: number) => level < 0 ? `\u2212${-level}` : `+${level}`;
+
+// The parts of the ring that never move, worked out once.
+const GHOST_BAND = band(SCALE_MIN, SCALE_MAX);
+const OFF_ARC = offArc();
+const TICKS = ticks();
+const END_LABELS = endLabels();
 
 const svgStyle = {
   position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', overflow: 'visible', pointerEvents: 'none',
@@ -37,23 +46,23 @@ export default function DialRing({ isOn, targetLevel, currentLevel, pending = fa
   return (
     <svg viewBox={ `0 0 ${DIAL_WIDTH} ${DIAL_HEIGHT}` } aria-hidden="true" style={ svgStyle }>
       { live ? <>
-        <g data-band="ghost" opacity={ palette.dial.ghostOpacity }>{ band(SCALE_MIN, SCALE_MAX) }</g>
+        <g data-band="ghost" opacity={ palette.dial.ghostOpacity }>{ GHOST_BAND }</g>
         { fill && <g data-band="fill">{ band(fill[0], fill[1]) }</g> }
       </> : <path
         data-band="off"
-        d={ offArc() }
+        d={ OFF_ARC }
         stroke={ palette.dial.trackOff }
         strokeWidth={ TRACK_WIDTH }
         strokeLinecap="round"
         fill="none"/> }
-      { ticks().map(({ level, major, ...line }) => <line
+      { TICKS.map(({ level, major, ...line }) => <line
         key={ level }
         data-tick={ major ? 'major' : 'minor' }
         { ...line }
         stroke={ tickColor(level, major, live) }
         strokeWidth={ major ? 1.8 : 1.4 }
         strokeLinecap="round"/>) }
-      { live && current !== target && <>
+      { live && Math.abs(current - target) > SAME_LEVEL && <>
         <line { ...notch } stroke={ palette.bg.base } strokeWidth="5.5" strokeLinecap="round"/>
         <line data-notch { ...notch } stroke={ palette.lamp } strokeWidth="2.2" strokeLinecap="round" opacity="0.9"/>
       </> }
@@ -81,7 +90,7 @@ export default function DialRing({ isOn, targetLevel, currentLevel, pending = fa
         fill={ palette.text.tertiary }
         stroke={ palette.bg.base }
         strokeWidth="2.5"/> }
-      { endLabels().map(({ level, x, y }) => <text
+      { END_LABELS.map(({ level, x, y }) => <text
         key={ level }
         data-end-label
         x={ x }

@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import {
-  DIAL_ASPECT, DIAL_HEIGHT, DIAL_WIDTH, NOTCH, TRACK_RADIUS, bandSegments, clampLevel, dialPoint, endLabels, fillRange, levelAngle,
+  DIAL_HEIGHT, DIAL_WIDTH, NOTCH, TRACK_RADIUS, bandSegments, clampLevel, dialPoint, endLabels, fillRange, levelAngle,
   offArc, radialLine, ticks,
 } from './dialGeometry';
 
@@ -13,7 +13,6 @@ it('spreads -10..+10 over 240 degrees with 0 at 12 o\'clock', () => {
 
 it('draws in a 280 x 240 box around (140, 140)', () => {
   expect([DIAL_WIDTH, DIAL_HEIGHT]).toEqual([280, 240]);
-  expect(DIAL_ASPECT).toBeCloseTo(0.857, 3);
   const top = dialPoint(0);
   expect(top.x).toBeCloseTo(140);
   expect(top.y).toBeCloseTo(140 - TRACK_RADIUS);
@@ -51,6 +50,25 @@ it('fills from 0 toward the target and not at all at 0', () => {
   expect(fillRange(-3)).toEqual([-3, 0]);
   expect(fillRange(0)).toBeUndefined();
   expect(fillRange(14)).toEqual([0, 10]);
+});
+
+it('fills all the way to either end of the scale', () => {
+  const warm = bandSegments(...fillRange(10)!);
+  expect(warm).toHaveLength(50);
+  expect(warm[0].d.startsWith('M 140 22 ')).toBe(true);
+  expect(warm[warm.length - 1].d.endsWith(' 242.19 199')).toBe(true);
+  const cool = bandSegments(...fillRange(-10)!);
+  expect(cool).toHaveLength(50);
+  expect(cool[0].d.startsWith('M 37.81 199 ')).toBe(true);
+  expect(cool[cool.length - 1].d.endsWith(' 140 22')).toBe(true);
+});
+
+it('points the notch at either end of the scale along its angle', () => {
+  for (const level of [-10, 10]) {
+    const { x1, y1, x2, y2 } = radialLine(level, NOTCH.inner, NOTCH.outer);
+    const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+    expect((angle + 360) % 360).toBeCloseTo(levelAngle(level) % 360, 0);
+  }
 });
 
 it('runs the notch across the track', () => {

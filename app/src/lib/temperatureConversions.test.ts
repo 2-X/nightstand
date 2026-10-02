@@ -15,3 +15,9 @@ it('shows a true minus sign for negative levels on display text', () => {
   expect(displayTemperature(82, 'fahrenheit')).toBe('82°F');
   expect(displayTemperature(82, 'celsius')).toBe('28°C');
 });
+
+it('shows a true minus sign for negative Fahrenheit and Celsius too', () => {
+  expect(displayTemperature(-4, 'fahrenheit')).toBe('\u22124°F');
+  expect(displayTemperature(14, 'celsius')).toBe('\u221210°C');
+  expect(displayTemperature(31, 'celsius')).toBe('\u22120.5°C');
+});
