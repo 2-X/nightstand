@@ -15,7 +15,7 @@ import {
 } from './confirmation.js';
 import { latestOff, SMART_OFF } from '../../db/smartOff.js';
 import {
-  alarmAhead, decideAtSetOff, DECISION_GRACE_MS, nextStep, OFF_MEMORY_MS, stepStreak, upFor, type OffReason, type Streak,
+  alarmAhead, decideAtSetOff, DECISION_GRACE_MS, nextStep, OFF_MEMORY_MS, stepStreak, upFor, type OffReason, type SetOffDecision, type Streak,
 } from './offWhenUp.js';
 
 const MINUTE = 60_000;
@@ -73,12 +73,14 @@ export type SleepSummary = {
 // The night an alarm check is about: its date, and its start and set off for the override rule.
 export type AlarmNight = { date: string; start: Date; end: Date };
 
-// Reads and writes for "When I get up". The writes are not awaited.
+// Reads and writes for "When I get up". A write waits only a bounded time,
+// resolves true once the Pod took it, false when it was not sent, and
+// rejects when the Pod did not take it.
 export type SmartOffDeps = {
   // null when the Pod cannot be read now.
   sideIsOn: (side: Side) => Promise<boolean | null>;
-  powerOff: (side: Side) => void;
-  armTimer: (side: Side, until: Date, latest: Date) => void;
+  powerOff: (side: Side) => Promise<boolean>;
+  armTimer: (side: Side, until: Date, latest: Date) => Promise<boolean>;
   // Alarms outside the sleep's own: ringing, one-time and override alarms, or a rebuild in progress.
   alarmPending: (side: Side, night: AlarmNight, until: Date) => boolean;
   nextRestart: (after: Date) => Date | null;
@@ -181,19 +183,27 @@ export class CurveController {
     if (record?.status === 'extended') {
       // A job that fires a moment early still turns the side off at the latest.
       if (Math.max(now.getTime(), dueAt.getTime()) < record.latest.getTime()) return 'keep';
-      this.endOff(key, record, record.latest, 'cap', { write: false, retime: false });
+      this.endOff(key, record, record.latest, 'cap', { retime: false });
       return 'off';
     }
     if (record || !this.deps.smartOff || !turnsOffWhenUp(sleep)) return 'off';
     const setOff = sleep.setOff ?? sleep.end;
     const target = { side, date: sleep.date };
-    const run = presenceRun(this.deps.presence(), this.sidesFor(side), now.getTime(), PRESENCE_STALE_MS);
-    const latest = this.latestOffFor(side, sleep.date, setOff);
-    const decision = decideAtSetOff(run, setOff, latest);
+    // An alarm that rang first can delay the job; the analyses then follow the later off.
+    const late = now.getTime() - setOff.getTime() >= MINUTE;
+    let latest: Date;
+    let decision: SetOffDecision;
+    try {
+      const run = presenceRun(this.deps.presence(), this.sidesFor(side), now.getTime(), PRESENCE_STALE_MS);
+      latest = this.latestOffFor(side, sleep.date, setOff);
+      decision = decideAtSetOff(run, setOff, latest);
+    } catch (error: unknown) {
+      // The job turns the side off at the set time.
+      this.endOff(key, target, late ? now : setOff, 'decision-failed', { retime: late });
+      throw error;
+    }
     if (decision !== 'extend') {
-      // An alarm that rang first can delay the job; the analyses then follow the later off.
-      const late = now.getTime() - setOff.getTime() >= MINUTE;
-      this.endOff(key, target, late ? now : setOff, decision, { write: false, retime: late });
+      this.endOff(key, target, late ? now : setOff, decision, { retime: late });
       return 'off';
     }
     this.offs.set(key, { ...target, status: 'extended', latest, from: now, armedUntil: null, paused: false });
@@ -238,9 +248,11 @@ export class CurveController {
   status(side: Side, now: Date): CurveStatus | null {
     const time = now.getTime();
     for (const state of this.states.values()) {
-      if (state.side !== side || time >= state.powerOff.getTime()) continue;
+      if (state.side !== side) continue;
       const record = this.offs.get(keyOf(state.side, state.date));
-      if (record?.status === 'done') continue;
+      // A keep moves the end before the next tick refreshes the state.
+      const end = record?.status === 'extended' ? record.latest : state.powerOff;
+      if (time >= end.getTime() || record?.status === 'done') continue;
       // Only fresh presence can move the turn-off; otherwise it is the set time.
       const fresh = presenceRun(this.deps.presence(), this.sidesFor(state.side), time, PRESENCE_STALE_MS).known;
       const level = levelAt(state.points, now);
@@ -296,13 +308,13 @@ export class CurveController {
       if (record?.status === 'done' || time >= end.getTime()) {
         if (!record && this.awaitsOffDecision(state, time)) continue;
         this.states.delete(key);
-        this.closeExtension(key, state, now);
+        await this.closeExtension(key, state, now);
         await this.finish(state);
       } else if (!seen.has(key)) {
         this.states.delete(key);
         if (record?.status === 'extended') {
           // Gone while kept on (away mode, an edit): the side's own timer ends it.
-          this.endOff(key, record, now, 'stopped', { write: false, retime: true });
+          this.endOff(key, record, now, 'stopped', { retime: true });
           await this.finish(state);
           continue;
         }
@@ -405,18 +417,25 @@ export class CurveController {
     return latestOff({ setOff, nextStart: next?.start ?? null, restart });
   }
 
-  private endOff(key: string, target: OffTarget, at: Date, reason: OffReason, options: { write: boolean; retime: boolean }): void {
+  private endOff(key: string, target: OffTarget, at: Date, reason: OffReason, options: { retime: boolean }): void {
     this.offs.set(key, { side: target.side, date: target.date, status: 'done', at, reason });
     logger.info(`smart schedule ${target.side} ${target.date}: off at ${at.toISOString()} (${reason})`);
-    if (options.write) this.tryWrite(target, 'turn off', () => this.deps.smartOff?.powerOff(target.side));
     if (options.retime) this.deps.retime();
   }
 
-  // A failed write is logged; the firmware timer still ends the side.
-  private tryWrite(target: OffTarget, what: string, write: () => void): boolean {
+  // Turns the side off and records it only once the Pod took the write, so
+  // the next tick tries again. Until then the firmware timer still ends it.
+  private async turnOff(key: string, target: OffTarget, at: Date, reason: OffReason, options: { retime: boolean }): Promise<boolean> {
+    const smartOff = this.deps.smartOff;
+    if (!smartOff || !(await this.write(target, 'turn off', () => smartOff.powerOff(target.side)))) return false;
+    // A job may have ended it while the write waited.
+    if (this.offs.get(key)?.status !== 'done') this.endOff(key, target, at, reason, options);
+    return true;
+  }
+
+  private async write(target: OffTarget, what: string, write: () => Promise<boolean>): Promise<boolean> {
     try {
-      write();
-      return true;
+      return await write();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(`smart schedule ${target.side} ${target.date}: could not ${what}: ${message}`);
@@ -442,15 +461,19 @@ export class CurveController {
   }
 
   // At its latest off: the job there turns it off, and so does this, unless a
-  // pause leaves it to the side's own timer. An edit can leave the latest in the past.
-  private closeExtension(key: string, state: SleepState, now: Date): void {
+  // pause leaves it to the side's own timer. An edit can leave the latest in
+  // the past. A write the Pod rejects is left to that job, which waits out a
+  // reconnect, and to the firmware timer.
+  private async closeExtension(key: string, state: SleepState, now: Date): Promise<void> {
     const record = this.offs.get(key);
     if (record?.status !== 'extended') return;
     const paused = record.paused || this.deps.isPaused(record.side, now);
     const started = this.nextStarted(record.side, record.date, state.setOff, now.getTime());
     const late = now.getTime() - record.latest.getTime() >= MINUTE;
     const reason = started ? 'stopped' : paused ? 'paused' : 'cap';
-    this.endOff(key, record, late ? now : record.latest, reason, { write: !paused && !started, retime: late });
+    this.endOff(key, record, late ? now : record.latest, reason, { retime: late });
+    const smartOff = this.deps.smartOff;
+    if (smartOff && !paused && !started) await this.write(record, 'turn off', () => smartOff.powerOff(record.side));
   }
 
   private forgetOldOffs(time: number): void {
@@ -467,7 +490,7 @@ export class CurveController {
     const record = this.offs.get(key);
     if (!smartOff || !state.offWhenUp) {
       // No longer a "When I get up" rhythm: the side's own timer ends it.
-      if (record?.status === 'extended') this.endOff(key, record, now, 'stopped', { write: false, retime: true });
+      if (record?.status === 'extended') this.endOff(key, record, now, 'stopped', { retime: true });
       return false;
     }
     const time = now.getTime();
@@ -479,7 +502,7 @@ export class CurveController {
         && upFor(state.streak, time, state.wake.getTime())
         && !alarmAhead(state.alarms, time, setOff)
         && !this.alarmPending(smartOff, state);
-      if (due) this.endOff(key, state, now, 'got-up', { write: true, retime: true });
+      if (due) await this.turnOff(key, state, now, 'got-up', { retime: true });
       return due;
     }
     if (record.status !== 'extended') return false;
@@ -498,25 +521,27 @@ export class CurveController {
     if (time >= record.latest.getTime()) {
       const late = time - record.latest.getTime() >= MINUTE;
       const started = this.nextStarted(state.side, state.date, state.setOff, time);
-      this.endOff(key, record, late ? now : record.latest, started ? 'stopped' : 'cap', { write: !started, retime: late });
+      const at = late ? now : record.latest;
+      if (started) this.endOff(key, record, at, 'stopped', { retime: late });
+      else await this.turnOff(key, record, at, 'cap', { retime: late });
       return true;
     }
     if (!run.known) {
-      this.endOff(key, record, now, 'stale', { write: true, retime: true });
+      await this.turnOff(key, record, now, 'stale', { retime: true });
       return true;
     }
     if (upFor(state.streak, time, record.from.getTime())) {
-      this.endOff(key, record, now, 'got-up', { write: true, retime: true });
+      await this.turnOff(key, record, now, 'got-up', { retime: true });
       return true;
     }
     const on = await this.readSideOn(smartOff, record);
     if (on === false) {
-      this.endOff(key, record, now, 'side-off', { write: false, retime: true });
+      this.endOff(key, record, now, 'side-off', { retime: true });
       return true;
     }
     const until = on ? nextStep(record.armedUntil, time, record.latest.getTime()) : null;
-    // A step that did not land is tried again on the next tick.
-    if (until !== null && this.tryWrite(record, 'move the timer', () => smartOff.armTimer(state.side, new Date(until), record.latest))) {
+    // A step counts once the Pod took it; until then each tick tries again.
+    if (until !== null && await this.write(record, 'move the timer', () => smartOff.armTimer(state.side, new Date(until), record.latest))) {
       record.armedUntil = until;
     }
     return false;
@@ -540,10 +565,10 @@ export class CurveController {
     const smartOff = this.deps.smartOff;
     if (!smartOff || record?.status !== 'extended' || record.paused) return;
     const on = await this.readSideOn(smartOff, record);
-    if (on === false) this.endOff(key, record, this.deps.now(), 'side-off', { write: false, retime: true });
+    if (on === false) this.endOff(key, record, this.deps.now(), 'side-off', { retime: true });
     if (on !== true) return;
-    // A write that did not land is tried again on the next tick.
-    if (!this.tryWrite(record, 'move the timer', () => smartOff.armTimer(record.side, record.latest, record.latest))) return;
+    // Paused once the Pod took the timer; until then each tick tries again.
+    if (!(await this.write(record, 'move the timer', () => smartOff.armTimer(record.side, record.latest, record.latest)))) return;
     record.paused = true;
     logger.info(`smart schedule ${record.side} ${record.date}: paused while kept on, its timer ends it by ${record.latest.toISOString()}`);
   }

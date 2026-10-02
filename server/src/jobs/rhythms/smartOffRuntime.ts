@@ -23,15 +23,11 @@ export function smartOffRuntime(): SmartOffDeps {
         return null;
       }
     },
-    // Scheduled work, like the engine's own power-off. Not awaited, so a
-    // wait for the Pod never stalls a tick.
-    powerOff: side => {
-      if (handedBack()) return;
-      const update = { [side]: { isOn: false } } as DeepPartial<DeviceStatus>;
-      void updateDeviceStatus(update, { background: true }).catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        logger.warn(`smart schedule: could not turn the ${side} side off: ${message}`);
-      });
+    // A bounded wait for the Pod, as for the steps, so a tick never stalls long.
+    powerOff: async side => {
+      if (handedBack()) return false;
+      await updateDeviceStatus({ [side]: { isOn: false } } as DeepPartial<DeviceStatus>, {});
+      return true;
     },
     armTimer: (side, until, latest) => armExtensionStep(side, until, latest),
     // The night's own alarm jobs do not count while an override skips them; the

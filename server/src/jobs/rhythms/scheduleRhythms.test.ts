@@ -477,7 +477,13 @@ it('plans the analyses after the actual off and leaves the timer of a sleep kept
     applyLevel: async () => {},
     retime: () => {},
     recordHistory: async () => {},
-    smartOff: { sideIsOn: async () => true, powerOff: () => {}, armTimer: () => {}, alarmPending: () => false, nextRestart: () => null },
+    smartOff: {
+      sideIsOn: async () => true,
+      powerOff: async () => true,
+      armTimer: async () => true,
+      alarmPending: () => false,
+      nextRestart: () => null,
+    },
   });
   try {
     setNow('2026-09-29T06:00:00Z');
@@ -514,7 +520,13 @@ const smartOffController = (db: ReturnType<typeof testRhythmsDB>, present: boole
   applyLevel: async () => {},
   retime: () => {},
   recordHistory: async () => {},
-  smartOff: { sideIsOn: async () => true, powerOff: () => {}, armTimer: () => {}, alarmPending: () => false, nextRestart: () => null },
+  smartOff: {
+    sideIsOn: async () => true,
+    powerOff: async () => true,
+    armTimer: async () => true,
+    alarmPending: () => false,
+    nextRestart: () => null,
+  },
 });
 // The rebuild that follows an early off or a keep.
 const rebuildAt = (db: ReturnType<typeof testRhythmsDB>, iso: string) => {

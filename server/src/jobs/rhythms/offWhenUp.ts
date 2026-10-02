@@ -14,7 +14,8 @@ export const ALARM_DUE_MS = 2 * MINUTE;
 // Past the later analysis, two hours after the off.
 export const OFF_MEMORY_MS = 26 * 60 * MINUTE;
 
-export type OffReason = 'set-time' | 'stale' | 'no-room' | 'got-up' | 'cap' | 'side-off' | 'paused' | 'stopped' | 'not-decided';
+export type OffReason =
+  | 'set-time' | 'stale' | 'no-room' | 'got-up' | 'cap' | 'side-off' | 'paused' | 'stopped' | 'not-decided' | 'decision-failed';
 export type Streak = { kind: 'absent'; since: number } | { kind: 'present' } | { kind: 'unknown' } | null;
 export type SetOffDecision = 'extend' | Extract<OffReason, 'set-time' | 'stale' | 'no-room'>;
 

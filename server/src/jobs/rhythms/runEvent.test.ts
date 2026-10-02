@@ -12,6 +12,7 @@ process.env.ENV = 'local';
 
 const updates: unknown[] = [];
 const updateOptions: unknown[] = [];
+const writes = { fail: false };
 const commands: unknown[][] = [];
 const analyses: string[][] = [];
 const deviceStatus = { left: { isOn: true }, right: { isOn: true } };
@@ -19,6 +20,7 @@ const pod: { connected: boolean; onConnect?: () => void } = { connected: true };
 mock.module(new URL('../../routes/deviceStatus/updateDeviceStatus.js', import.meta.url).href, {
   namedExports: {
     updateDeviceStatus: async (value: unknown, options?: unknown) => {
+      if (writes.fail) throw new Error('Pod hardware is not connected; gave up after 10s');
       updates.push(value);
       updateOptions.push(options);
     },
@@ -57,6 +59,7 @@ const { DEFAULT_SMART } = await import('../../db/rhythmsSchema.js');
 const { smartPowerOffFor, startCurveController, stopCurveController } = await import('./curveController.js');
 const { resetPowerOnTimes } = await import('../powerScheduler.js');
 const { setEngineActivation } = await import('../scheduleQueries.js');
+const { nextReboot } = await import('../rebootTime.js');
 
 const at = (iso: string) => new Date(iso);
 const setNow = (iso: string) => mock.timers.setTime(Date.parse(iso));
@@ -88,6 +91,7 @@ beforeEach(async () => {
   resetOffTimes();
   pod.connected = true;
   pod.onConnect = undefined;
+  writes.fail = false;
   updates.length = 0;
   updateOptions.length = 0;
   commands.length = 0;
@@ -95,6 +99,9 @@ beforeEach(async () => {
   deviceStatus.left.isOn = true;
   deviceStatus.right.isOn = true;
   settingsDB.data.timeZone = 'UTC';
+  // Restarts at 13:30, clear of the sleeps here unless a test moves it.
+  settingsDB.data.primePodDaily = { enabled: true, time: '14:30' };
+  settingsDB.data.rebootDaily = true;
   for (const side of ['left', 'right'] as const) {
     settingsDB.data[side].awayMode = false;
     settingsDB.data[side].alarmsEnabled = true;
@@ -438,7 +445,13 @@ describe('"When I get up" sleeps', () => {
     applyLevel: async () => {},
     retime: () => {},
     recordHistory: async () => {},
-    smartOff: { sideIsOn: async () => true, powerOff: () => {}, armTimer: () => {}, alarmPending: () => false, nextRestart: () => null },
+    smartOff: {
+      sideIsOn: async () => true,
+      powerOff: async () => true,
+      armTimer: async () => true,
+      alarmPending: () => false,
+      nextRestart: after => nextReboot(settingsDB.data, after),
+    },
   });
 
   afterEach(() => {
@@ -465,6 +478,17 @@ describe('"When I get up" sleeps', () => {
     const later = withPowerOff(sleep, latest);
     await runRhythmEvent('left', later, eventOf(later, 'power-off'));
     assert.deepEqual(updates, [{ left: { isOn: false } }]);
+  });
+
+  it('keeps the side on no later than 30 minutes before the daily restart', async () => {
+    settingsDB.data.primePodDaily = { enabled: true, time: '09:00' };
+    await settingsDB.write();
+    const sleep = upSleepOn('2026-09-28');
+    startController();
+    setNow('2026-09-29T06:00:00Z');
+    await runRhythmEvent('left', sleep, eventOf(sleep, 'power-off'));
+    assert.deepEqual(updates, []);
+    assert.equal(smartPowerOffFor('left', '2026-09-28')?.toISOString(), '2026-09-29T07:30:00.000Z');
   });
 
   it('turns off at the set time when the bed is empty', async () => {
@@ -505,8 +529,8 @@ describe('"When I get up" sleeps', () => {
     assert.equal(smartPowerOffFor('left', '2026-09-28'), undefined);
   });
 
-  it('arms a short step and has the plan treat the latest off as armed', () => {
-    armExtensionStep('left', at('2026-09-29T06:15:00Z'), at('2026-09-29T09:00:00Z'), at('2026-09-29T06:00:00Z'));
+  it('arms a short step and has the plan treat the latest off as armed', async () => {
+    assert.equal(await armExtensionStep('left', at('2026-09-29T06:15:00Z'), at('2026-09-29T09:00:00Z'), at('2026-09-29T06:00:00Z')), true);
     assert.deepEqual(updates, [{ left: { secondsRemaining: 15 * 60 + 300 } }]);
     // Fail fast: a step that cannot reach the Pod now is dropped, not delivered late.
     assert.deepEqual(updateOptions, [{}]);
@@ -524,7 +548,13 @@ describe('"When I get up" sleeps', () => {
       applyLevel: async () => {},
       retime: () => {},
       recordHistory: async () => {},
-      smartOff: { sideIsOn: async () => true, powerOff: () => {}, armTimer: () => {}, alarmPending: () => false, nextRestart: () => null },
+      smartOff: {
+        sideIsOn: async () => true,
+        powerOff: async () => true,
+        armTimer: async () => true,
+        alarmPending: () => false,
+        nextRestart: after => nextReboot(settingsDB.data, after),
+      },
     });
     setNow('2026-09-29T06:00:00Z');
     await runRhythmEvent('left', sleep, eventOf(sleep, 'power-off'));
@@ -559,9 +589,15 @@ describe('"When I get up" sleeps', () => {
     assert.deepEqual(updates, [{ left: { isOn: false } }]);
   });
 
-  it('arms nothing while handing back before a stop', () => {
+  it('rejects a step the Pod did not take, so the controller tries again', async () => {
+    writes.fail = true;
+    await assert.rejects(armExtensionStep('left', at('2026-09-29T06:15:00Z'), at('2026-09-29T09:00:00Z'), at('2026-09-29T06:00:00Z')));
+    assert.deepEqual(updates, []);
+  });
+
+  it('arms nothing while handing back before a stop', async () => {
     holdForHandBack(new Date());
-    armExtensionStep('left', at('2026-09-29T06:15:00Z'), at('2026-09-29T09:00:00Z'), at('2026-09-29T06:00:00Z'));
+    assert.equal(await armExtensionStep('left', at('2026-09-29T06:15:00Z'), at('2026-09-29T09:00:00Z'), at('2026-09-29T06:00:00Z')), false);
     assert.deepEqual(updates, []);
   });
 });

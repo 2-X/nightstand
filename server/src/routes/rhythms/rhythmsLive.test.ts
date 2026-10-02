@@ -174,7 +174,13 @@ describe('GET /rhythms/live', () => {
       applyLevel: async () => {},
       retime: () => {},
       recordHistory: async () => {},
-      smartOff: { sideIsOn: async () => true, powerOff: () => {}, armTimer: () => {}, alarmPending: () => false, nextRestart: () => null },
+      smartOff: {
+        sideIsOn: async () => true,
+        powerOff: async () => true,
+        armTimer: async () => true,
+        alarmPending: () => false,
+        nextRestart: () => null,
+      },
     });
     await controller.tick();
     const state = RhythmsLiveResponseSchema.parse((await live('?side=left')).body);

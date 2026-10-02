@@ -11,8 +11,14 @@ process.env.DATA_FOLDER = `${folder}/`;
 process.env.ENV = 'local';
 
 const updates: Array<{ update: unknown; options: unknown }> = [];
+const writes = { fail: false };
 mock.module(new URL('../../routes/deviceStatus/updateDeviceStatus.js', import.meta.url).href, {
-  namedExports: { updateDeviceStatus: async (update: unknown, options?: unknown) => { updates.push({ update, options }); } },
+  namedExports: {
+    updateDeviceStatus: async (update: unknown, options?: unknown) => {
+      if (writes.fail) throw new Error('Pod hardware is not connected; gave up after 10s');
+      updates.push({ update, options });
+    },
+  },
 });
 mock.module(new URL('../../8sleep/deviceApi.js', import.meta.url).href, {
   namedExports: { executeFunction: async () => {} },
@@ -40,6 +46,7 @@ const { smartResolveHooks, startCurveController, stopCurveController } = await i
 
 beforeEach(async () => {
   updates.length = 0;
+  writes.fail = false;
   pod.connected = true;
   pod.fails = false;
   resetOffTimes();
@@ -63,12 +70,15 @@ describe('smartOffRuntime', () => {
     assert.equal(await off.sideIsOn('left'), null);
   });
 
-  it('turns a side off as scheduled work, and not while handing back before a stop', () => {
+  it('turns a side off with a bounded wait, says whether the Pod took it, and not while handing back before a stop', async () => {
     const off = smartOffRuntime();
-    off.powerOff('left');
-    assert.deepEqual(updates, [{ update: { left: { isOn: false } }, options: { background: true } }]);
+    assert.equal(await off.powerOff('left'), true);
+    assert.deepEqual(updates, [{ update: { left: { isOn: false } }, options: {} }]);
+    writes.fail = true;
+    await assert.rejects(off.powerOff('left'), /not connected/);
+    writes.fail = false;
     holdForHandBack(new Date());
-    off.powerOff('left');
+    assert.equal(await off.powerOff('left'), false);
     assert.equal(updates.length, 1);
   });
 
@@ -128,8 +138,11 @@ describe('smartOffRuntime', () => {
       smartOff: {
         ...smartOffRuntime(),
         sideIsOn: async () => true,
-        powerOff: () => {},
-        armTimer: (_side, until) => { arms.push(until.toISOString()); },
+        powerOff: async () => true,
+        armTimer: async (_side, until) => {
+          arms.push(until.toISOString());
+          return true;
+        },
         alarmPending: () => false,
       },
     });

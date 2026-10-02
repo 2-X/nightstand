@@ -239,13 +239,12 @@ export async function rearmRhythmSleep(side: Side, sleep: ResolvedSleep): Promis
 // A sleep kept on past its set off gets its timer in short steps, so a
 // stopped server still turns the side off soon. The plan treats the latest
 // off as armed and leaves the steps alone. A step that cannot reach the Pod
-// now is dropped rather than delivered late; the next tick tries again.
-export function armExtensionStep(side: Side, until: Date, latest: Date, now: Date = new Date()): void {
-  if (handedBack()) return;
+// now rejects rather than being delivered late; the next tick tries again.
+export async function armExtensionStep(side: Side, until: Date, latest: Date, now: Date = new Date()): Promise<boolean> {
+  if (handedBack()) return false;
   noteArmed(settingsDB.data, side, latest);
-  void updateDeviceStatus({ [side]: { secondsRemaining: firmwareSeconds(until, now) } }, {}).catch((error: unknown) => {
-    logger.warn(`Could not move the ${side} timer: ${errorMessage(error)}`);
-  });
+  await updateDeviceStatus({ [side]: { secondsRemaining: firmwareSeconds(until, now) } }, {});
+  return true;
 }
 
 // Analyses from an hour before the sleep's start, or lookbackMs before the

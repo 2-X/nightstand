@@ -49,6 +49,7 @@ const { startCurveController, stopCurveController } = await import('./curveContr
 const { armedEnd, rearmRhythmSleep, resetOffTimes, runRhythmEvent } = await import('./runEvent.js');
 const { scheduleRhythms } = await import('./scheduleRhythms.js');
 const { resolveSleeps } = await import('./resolve.js');
+const { nextReboot } = await import('../rebootTime.js');
 
 const NOW = new Date('2026-09-29T06:10:00Z');
 const RHYTHM = testNight('22:00', '06:30', { alarms: ['06:00'] });
@@ -350,6 +351,10 @@ describe('prepareToLeaveRhythms', () => {
   it('hands over a sleep kept on past its set off with its timer at the latest off', async () => {
     settingsDB.data.timeZone = 'UTC';
     settingsDB.data.features.rhythms = true;
+    // A 10:30 prime restarts at 09:30, so the latest off is 09:00.
+    const prime = settingsDB.data.primePodDaily;
+    settingsDB.data.primePodDaily = { enabled: true, time: '10:30' };
+    settingsDB.data.rebootDaily = true;
     for (const side of ['left', 'right'] as const) {
       settingsDB.data[side].awayMode = false;
       settingsDB.data[side].scheduleOverrides.alarm = { disabled: false, timeOverride: '', expiresAt: '' };
@@ -377,7 +382,13 @@ describe('prepareToLeaveRhythms', () => {
       applyLevel: async () => {},
       retime: () => {},
       recordHistory: async () => {},
-      smartOff: { sideIsOn: async () => true, powerOff: () => {}, armTimer: () => {}, alarmPending: () => false, nextRestart: () => null },
+      smartOff: {
+        sideIsOn: async () => true,
+        powerOff: async () => true,
+        armTimer: async () => true,
+        alarmPending: () => false,
+        nextRestart: after => nextReboot(settingsDB.data, after),
+      },
     });
     updates.length = 0;
     mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-09-29T06:40:00Z') });
@@ -385,14 +396,15 @@ describe('prepareToLeaveRhythms', () => {
       const [sleep] = resolveSleeps({ db, side: 'left', timeZone: 'UTC', from: new Date('2026-09-29T06:00:00Z'), to: setOff });
       assert.equal(controller.decideOff('left', sleep, setOff), 'keep');
       assert.deepEqual((await prepareToLeaveRhythms('rollback')).sides[0], {
-        side: 'left', action: 'kept-on-until', until: '2026-09-29T09:30:00.000Z', alarmOverrideSet: false,
+        side: 'left', action: 'kept-on-until', until: '2026-09-29T09:00:00.000Z', alarmOverrideSet: false,
       });
     } finally {
       mock.timers.reset();
       stopCurveController();
       setEngineActivation({ active: false, reason: 'flag-off' });
+      settingsDB.data.primePodDaily = prime;
     }
-    assert.deepEqual(updates, [{ left: { secondsRemaining: (2 * 3600 + 50 * 60) + 300 } }]);
+    assert.deepEqual(updates, [{ left: { secondsRemaining: (2 * 3600 + 20 * 60) + 300 } }]);
   });
 });
 

@@ -336,7 +336,13 @@ describe('presenceAutoOffMonitor', () => {
       applyLevel: async () => {},
       retime: () => {},
       recordHistory: async () => {},
-      smartOff: { sideIsOn: async () => true, powerOff: () => {}, armTimer: () => {}, alarmPending: () => false, nextRestart: () => null },
+      smartOff: {
+        sideIsOn: async () => true,
+        powerOff: async () => true,
+        armTimer: async () => true,
+        alarmPending: () => false,
+        nextRestart: () => null,
+      },
     });
     try {
       const [sleep] = resolveSleeps({ db, side: 'left', timeZone: 'UTC', from: new Date(at('2026-03-02T16:00:00')), to: setOff });
@@ -377,7 +383,13 @@ describe('presenceAutoOffMonitor', () => {
       applyLevel: async () => {},
       retime: () => {},
       recordHistory: async () => {},
-      smartOff: { sideIsOn: async () => true, powerOff: () => {}, armTimer: () => {}, alarmPending: () => false, nextRestart: () => null },
+      smartOff: {
+        sideIsOn: async () => true,
+        powerOff: async () => true,
+        armTimer: async () => true,
+        alarmPending: () => false,
+        nextRestart: () => null,
+      },
     });
     try {
       await controller.tick();
