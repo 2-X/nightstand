@@ -20,8 +20,10 @@ type SliderProps = {
   whenOff?: ReactNode;
 };
 
+// A tablet's single column has room for a larger dial.
 const dialSx = {
-  position: 'relative', width: '100%', maxWidth: 'min(280px, 38dvh, calc(100% - 32px))', mx: 'auto', aspectRatio: '1 / 1', maxHeight: 320,
+  position: 'relative', width: '100%', mx: 'auto', aspectRatio: '1 / 1', maxHeight: 320,
+  maxWidth: { xs: 'min(280px, 38dvh, calc(100% - 32px))', sm: 'min(320px, 38dvh, calc(100% - 32px))' },
 } as const;
 
 function position(temperature: number) {
