@@ -558,6 +558,9 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
       'app/src/pages/SettingsPage/FeaturesSection/DisableRhythmsDialog.tsx',
       'app/src/pages/SettingsPage/FeaturesSection/turnOffPreview.ts', 'app/src/pages/SettingsPage/VersionsPage/RhythmsLeaveNote.tsx',
       'app/src/mocks/rhythmsMock.ts',
+      'server/src/db/smartOff.ts', 'server/src/jobs/rebootTime.ts', 'server/src/jobs/primeScheduler.ts', 'server/src/jobs/rebuildState.ts',
+      'app/src/api/smartOff.ts', 'fixtures/compat/v3.5.0/rhythmsSchema.ts.txt',
+      'app/src/pages/SchedulePage/ScheduleTimeline.tsx', 'app/src/pages/ControlTempPage/TemperatureLabel.tsx', 'app/src/mocks/handlers.ts',
     ],
     depends_on: ['agent'],
     reversible: true,
@@ -576,9 +579,14 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
       'server/src/routes/rhythms/rhythmsLive.test.ts', 'app/src/api/smartCurve.test.ts',
       'app/src/api/rhythms.test.tsx', 'app/src/pages/SchedulePage/rhythms/RhythmsPage.test.tsx',
       'app/src/pages/ControlTempPage/BedRhythms.test.tsx', 'app/src/pages/SettingsPage/FeaturesSection/turnOffPreview.test.ts',
+      'server/src/db/rhythmsCompat.test.ts', 'server/src/db/smartOff.test.ts', 'server/src/jobs/rebootTime.test.ts',
+      'server/src/jobs/rhythms/offWhenUp.test.ts', 'server/src/jobs/rhythms/resolveOff.test.ts', 'server/src/jobs/alarmActivity.test.ts',
+      'server/src/jobs/rhythms/curveControllerOff.test.ts', 'server/src/jobs/rhythms/smartOffRuntime.test.ts',
+      'app/src/pages/SchedulePage/ScheduleTimeline.getUp.test.tsx', 'app/src/api/rhythmsLiveOff.test.ts',
     ],
     upstream_offer: false,
     rationale: 'Off by default. Its data lives only in rhythmsDB.json and it never writes schedulesDB.json, so turning it '
-      + 'off, rolling back or switching to upstream leaves the weekly schedule exactly as it was.',
+      + 'off, rolling back or switching to upstream leaves the weekly schedule exactly as it was.'
+      + ' A rhythm set to turn off when the person gets up carries one optional key, which 3.5.0 drops on read.',
   },
 ];
