@@ -40,7 +40,8 @@
         "settings-groups",
         "schedule-pause",
         "rhythms"
-      ]
+      ],
+      "treeSha256": "ad636bbfdfcf193d2586f0bb21bb0302fbe2670e03df7c3fb45ff7052bb6f178"
     },
     {
       "kind": "bundle",
@@ -78,7 +79,8 @@
         "settings-groups",
         "schedule-pause",
         "rhythms"
-      ]
+      ],
+      "treeSha256": "8886041f1cde7b9278e9cd05e1772e0f8cbe5a457e6129ebf3b47f8058f19302"
     },
     {
       "kind": "bundle",
@@ -113,7 +115,8 @@
         "grouped-night-schedule",
         "sleep-night-summary",
         "settings-groups"
-      ]
+      ],
+      "treeSha256": "d04605a996c9153c09db40bba84ebcf4fd434a22168ebe09a1d415e852117d7f"
     },
     {
       "kind": "bundle",
@@ -138,7 +141,8 @@
         "raw-archive-retention",
         "water-tank-status",
         "service-memory-limits"
-      ]
+      ],
+      "treeSha256": "44e840ed2d72151899005d880755e03000bc5effa833f1bbd96ea17622b476a7"
     },
     {
       "kind": "bundle",
@@ -163,7 +167,8 @@
         "raw-archive-retention",
         "water-tank-status",
         "service-memory-limits"
-      ]
+      ],
+      "treeSha256": "2d55d4048b2e346d90cf51095f7e1886d01f5c2014ad303654c6e26244560149"
     },
     {
       "kind": "bundle",
@@ -188,7 +193,8 @@
         "raw-archive-retention",
         "water-tank-status",
         "service-memory-limits"
-      ]
+      ],
+      "treeSha256": "8d0672505655c68312da782e593de4ac620a04bceb77925dab96cd82ab2bd881"
     },
     {
       "kind": "bundle",
@@ -210,7 +216,8 @@
         "design-system",
         "logs-viewer",
         "base-control"
-      ]
+      ],
+      "treeSha256": "a98a21caaa521c8412ef215a4e8cf540d16134a9c155cf3b6b4d9198dfa04cb8"
     },
     {
       "kind": "bundle",
@@ -232,7 +239,8 @@
         "design-system",
         "logs-viewer",
         "base-control"
-      ]
+      ],
+      "treeSha256": "7aef0a994bbcc0a8ce86e33cb1cc6a137862bf784b923897f82cb19ba6caac1a"
     },
     {
       "kind": "bundle",
@@ -254,7 +262,8 @@
         "design-system",
         "logs-viewer",
         "base-control"
-      ]
+      ],
+      "treeSha256": "fc99c031a46b7f0b621d333bc7843923ec22496ddfdba801662dd3949ed5075d"
     },
     {
       "kind": "bundle",
@@ -276,7 +285,8 @@
         "design-system",
         "logs-viewer",
         "base-control"
-      ]
+      ],
+      "treeSha256": "9dfae20b6fcdf7b45079473e83cea2691e9aec1d251398c6cdc170fa5fc82267"
     },
     {
       "kind": "bundle",
@@ -298,7 +308,8 @@
         "design-system",
         "logs-viewer",
         "base-control"
-      ]
+      ],
+      "treeSha256": "5923a42de333ff6633592c1bb4dbcae759a79ea1750c3988eb9d2559affbaa9b"
     },
     {
       "kind": "bundle",
@@ -320,7 +331,8 @@
         "design-system",
         "logs-viewer",
         "base-control"
-      ]
+      ],
+      "treeSha256": "49aca471e8d18b046cee4ea14e035ec8df39b3167cd54acfbb671888e72144de"
     }
   ]
 }
