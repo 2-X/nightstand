@@ -21,11 +21,13 @@ from get_logger import get_logger
 from biometric_processor import BiometricProcessor
 from buffer import Buffer
 from data_types import *
+from db import insert_vitals
 from presence.cap import CAP_HOLD_SECONDS, CapBaseline, cap_delta
 from presence.detector import FRAME_GAP_SECONDS, DetectorParams, PresenceDetector, piezo_range
 from presence.guard import UnexplainedUseGuard
 from presence.piezo import CadenceCheck, keep_layout, piezo_layout
 from presence.sensors import CAPSENSE2, CapFormat
+from vitals2_stream import PumpSpeed, Vitals2Stream
 import numpy as np
 
 logger = get_logger()
@@ -93,6 +95,7 @@ class StreamProcessor:
             piezo_record,
             debug=False,
             cap_source: Optional[LatestCap] = None,
+            pump: Optional[PumpSpeed] = None,
     ):
         if 'left2' in piezo_record:
             self.sensor_count = 2
@@ -123,6 +126,13 @@ class StreamProcessor:
         # On an unchecked format, the piezo detector's processors, which go on
         # telling the server who is in bed while capacitance gates the vitals.
         self._piezo_presence: Optional[Tuple[BiometricProcessor, BiometricProcessor]] = None
+        self.pump = pump
+        # Set through use_vitals_v2. Off leaves vitals to the legacy processors.
+        self.vitals2 = Vitals2Stream(pump=pump)
+        self.vitals2_enabled = False
+        # Whether the newer estimators wrote the last record's vitals, and the first minute they may write.
+        self._vitals2_running = False
+        self._vitals2_from = 0
 
     def use_presence_v2(self, inputs: Optional[PresenceInputs]) -> None:
         """Hand presence to the capacitance detector (inputs) or back to piezo (None).
@@ -171,6 +181,66 @@ class StreamProcessor:
         self._presence_epoch = None
         self._guard = guard
 
+    def use_vitals_v2(self, enabled: bool) -> None:
+        """Let the newer estimators take vitals while capacitance presence is in charge (True), or never (False)."""
+        if enabled == self.vitals2_enabled:
+            return
+        logger.info('Newer vitals estimators switched ' + ('on; they take vitals while capacitance presence '
+                                                           'is in charge' if enabled else 'off'))
+        self.vitals2_enabled = enabled
+
+    def _use_vitals2(self, epoch: int) -> bool:
+        """Whether this record's vitals come from the newer estimators, handing over between paths cleanly.
+
+        The newer estimators need capacitance presence; otherwise the legacy
+        path writes, as with the switch off. Each path starts cold, and no
+        side and minute gets rows from both.
+        """
+        wanted = self.vitals2_enabled and self.presence is not None
+        if wanted == self._vitals2_running:
+            return wanted
+        self._vitals2_running = wanted
+        if wanted:
+            logger.info('Vitals now from the newer estimators')
+            self.vitals2 = Vitals2Stream(pump=self.pump)
+            # The legacy path may already have written this minute.
+            self._vitals2_from = epoch // 60 * 60 + 60
+        else:
+            logger.info('Vitals now from the legacy estimators')
+            # Minutes before this one; the legacy path writes from here on.
+            self._insert_vitals2(self.vitals2.flush(epoch, self.piezo_layout))
+            self.vitals2 = Vitals2Stream(pump=self.pump)
+            # Measurements from before the newer estimators ran must not be written now.
+            self.left_processor.reset()
+            self.right_processor.reset()
+        return wanted
+
+    def _insert_vitals2(self, rows) -> None:
+        for row in rows:
+            if row['timestamp'] >= self._vitals2_from:
+                insert_vitals(row)
+
+    def _present_sides(self) -> Dict[str, bool]:
+        # Only the capacitance detector places a side for the newer estimators. It feeds these two
+        # processors, the quiet pair on an unchecked format included.
+        if self.presence is None:
+            return {'left': False, 'right': False}
+        return {'left': self.left_processor.present, 'right': self.right_processor.present}
+
+    def _cap_age(self, epoch: int) -> Optional[float]:
+        """Seconds since the capacitance reading the detector reads, None without one it can use."""
+        if self.presence is None or self.cap_source is None:
+            return None
+        reading = self.cap_source.read()
+        if reading is None or reading[3].name != _inputs_format(self._presence_inputs).name:
+            return None
+        return epoch - reading[0]
+
+    def _process_vitals2(self, piezo_record) -> None:
+        epoch = int(piezo_record['ts'])
+        self._insert_vitals2(self.vitals2.step(epoch, self.piezo_layout, self.buffer, self._present_sides(),
+                                               cap_age=self._cap_age(epoch)))
+
     def _quiet_processor(self, side: str) -> BiometricProcessor:
         return _QuietProcessor(side=side, sensor_count=self.sensor_count, insertion_frequency=60, debug=self.debug)
 
@@ -215,6 +285,9 @@ class StreamProcessor:
             right.reset()
         if right_swap:
             left.reset()
+        if left_swap or right_swap:
+            self.vitals2.reset_side('left')
+            self.vitals2.reset_side('right')
         left.apply_presence(states['left'], epoch, reset_state=left_swap)
         right.apply_presence(states['right'], epoch, reset_state=right_swap)
 
@@ -276,6 +349,10 @@ class StreamProcessor:
 
             if self.presence is None or self._piezo_presence is not None:
                 self.check_presence(left1_signal, right1_signal, left2_signal, right2_signal)
+
+            if self._use_vitals2(int(epoch)):
+                self._process_vitals2(piezo_record)
+                return
 
             # Process left side
             if self.left_processor.present_for > self.left_processor.heart_rate_window_seconds:

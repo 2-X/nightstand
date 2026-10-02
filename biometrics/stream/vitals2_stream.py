@@ -240,6 +240,10 @@ class Vitals2Stream:
             self._breathing(epoch, clock, buffer)
         return retired + rows
 
+    def flush(self, epoch: int, layout: Optional[PiezoLayout]) -> List[dict]:
+        """Rows for every minute before `epoch`'s that the estimators still hold, for a stream about to stop."""
+        return self._retire(list(SIDES), epoch, layout)
+
     def _retire(self, sides: List[str], epoch: int, layout: Optional[PiezoLayout]) -> List[dict]:
         """Rows still owed by sides about to start over, from the windows their trackers hold back."""
         if layout is None or layout.freq is None:

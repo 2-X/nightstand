@@ -2,7 +2,9 @@
 
 The left side carries a heartbeat and breathing; the right side is an empty
 bed. Rows land, through the real db.insert_vitals, in an in-memory database
-built from the real migrations.
+built from the real migrations. With capacitance, a capSense2 reading a
+second behind each piezo record shows the left side occupied and the right
+side empty.
 """
 import os
 import sys
@@ -24,9 +26,21 @@ sys.modules.setdefault('db', _db_stub)
 
 import biometric_processor
 import stream_processor
+from presence.cap import CapBaseline
+from presence.detector import DetectorParams, SideParams
+from presence.sensors import CAPSENSE2
 from vitals2_synth import piezo
 
 START = 1_790_600_400
+# The stream hands presence back to piezo once the newest reading is older than this.
+CAP_FRESH_SECONDS = 60
+PARAMS = DetectorParams(left=SideParams(enter_delta=8.0, exit_delta=4.0),
+                        right=SideParams(enter_delta=4.0, exit_delta=2.0),
+                        piezo_floor={'left': 40_000.0, 'right': 70_000.0})
+BASELINE = (10.0, 10.0, 10.0)
+BASELINES = {side: CapBaseline(mean=BASELINE, noise=0.05) for side in ('left', 'right')}
+# Spread over the three channels, a rise of 20 on the left; the right stays at its baseline.
+LEFT_CHANNELS = tuple(mean + 20.0 / 3 for mean in BASELINE)
 
 
 def records(seconds=480, seed=7):
@@ -38,32 +52,39 @@ def records(seconds=480, seed=7):
                'left1': left[window].copy(), 'right1': right[window].copy(), 'seq': second}
 
 
-def run_stream(db_module, seconds=480, v2=False):
+def run_stream(db_module, seconds=480, v2=False, capacitance=False):
     """Feed the fixture through StreamProcessor with the vitals switch as given; return the database module.
 
-    Presence is the piezo detector throughout (no capacitance source), as on a
-    Pod without capacitance records or with the switch off.
+    Without capacitance, presence is the piezo detector throughout, as on a
+    Pod without capacitance records or with the switch off. capacitance=True
+    puts the capacitance detector in charge from the first record; a (start,
+    stop) pair of seconds sends readings only in that span, hands presence to
+    the capacitance detector at start, and back to piezo once the newest
+    reading is more than CAP_FRESH_SECONDS old, as the stream does.
     """
+    span = (0, None) if capacitance is True else capacitance
     biometric_processor._PresenceCoordinator._latest = {'left': 0.0, 'right': 0.0}
     patches = [
         unittest.mock.patch.object(biometric_processor.BiometricProcessor, '_update_presence_api',
                                    lambda self, present: None),
         unittest.mock.patch.object(biometric_processor, 'insert_vitals', db_module.insert_vitals),
+        unittest.mock.patch.object(stream_processor, 'insert_vitals', db_module.insert_vitals),
     ]
-    if hasattr(stream_processor, 'insert_vitals'):
-        patches.append(unittest.mock.patch.object(stream_processor, 'insert_vitals', db_module.insert_vitals))
     for patch in patches:
         patch.start()
     try:
         processor = None
-        for record in records(seconds):
+        latest = stream_processor.LatestCap() if span else None
+        for second, record in enumerate(records(seconds)):
+            if span and second >= span[0] and (span[1] is None or second < span[1]):
+                latest.update(record['ts'] - 1, LEFT_CHANNELS, BASELINE, CAPSENSE2)
             if processor is None:
-                processor = stream_processor.StreamProcessor(record)
-                # Task 11 adds the method; before it, only the legacy path exists.
-                if hasattr(processor, 'use_vitals_v2'):
-                    processor.use_vitals_v2(v2)
-                elif v2:
-                    raise RuntimeError('StreamProcessor has no use_vitals_v2 yet')
+                processor = stream_processor.StreamProcessor(record, cap_source=latest)
+                processor.use_vitals_v2(v2)
+            if span and second == span[0]:
+                processor.use_presence_v2((PARAMS, BASELINES))
+            if span and span[1] is not None and second == span[1] + CAP_FRESH_SECONDS:
+                processor.use_presence_v2(None)
             processor.process_piezo_record(record)
     finally:
         for patch in patches:
