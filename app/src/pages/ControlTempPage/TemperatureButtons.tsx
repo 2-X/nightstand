@@ -146,8 +146,6 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
   if (isInAwayMode) return null;
 
   const disabled = statusUnavailable || isInAwayMode || !Number.isFinite(deviceStatus?.[side]?.targetTemperatureF);
-  const borderColor = palette.border.control;
-  const iconColor = palette.lamp;
 
   const handleClick = (direction: 1 | -1) => {
     if (!deviceStatus || disabled) return;
@@ -171,7 +169,9 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
 
   const buttonStyle = {
     borderWidth: '2px',
-    borderColor,
+    borderColor: palette.border.control,
+    color: palette.lamp,
+    '&.Mui-disabled': { borderWidth: '2px', borderColor: palette.border.subtle, color: palette.text.disabled },
     width: 64,
     height: 64,
     borderRadius: '50%',
@@ -202,7 +202,7 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
         onKeyDown={ event => { if (event.key === 'ArrowDown' || event.key === 'ArrowLeft') { event.preventDefault(); handleClick(-1); } } }
         disabled={ disabled || (deviceStatus?.[side]?.targetTemperatureF ?? MIN_TEMP_F) <= MIN_TEMP_F }
       >
-        <Remove sx={ { color: iconColor } }/>
+        <Remove/>
       </Button>
       <Button
         aria-label="Increase temperature"
@@ -213,7 +213,7 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
         onKeyDown={ event => { if (event.key === 'ArrowUp' || event.key === 'ArrowRight') { event.preventDefault(); handleClick(1); } } }
         disabled={ disabled || (deviceStatus?.[side]?.targetTemperatureF ?? MAX_TEMP_F) >= MAX_TEMP_F }
       >
-        <Add sx={ { color: iconColor } }/>
+        <Add/>
       </Button>
     </Box>
   );

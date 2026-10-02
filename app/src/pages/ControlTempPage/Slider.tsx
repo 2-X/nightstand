@@ -61,17 +61,17 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
         <path
           d={ `M ${start.x} ${start.y} A 122 122 0 1 1 ${end.x} ${end.y}` }
           stroke={ palette.border.control }
-          strokeWidth="5"
+          strokeWidth="4"
           strokeLinecap="round"
           fill="none"/>
         { isOn && <>
           <path
             d={ activeArc }
             stroke={ `url(#${gradient})` }
-            strokeWidth="6"
+            strokeWidth="8"
             strokeLinecap="round"
             fill="none"/>
-          <circle cx={ requested.x } cy={ requested.y } r="5" fill={ color }/>
+          <circle cx={ requested.x } cy={ requested.y } r="7" fill={ color } stroke={ palette.bg.base } strokeWidth="2"/>
         </> }
       </svg>
       <TemperatureLabel
