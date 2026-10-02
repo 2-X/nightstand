@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from vitals2.gates import HR_MIN_QUALITY, HR_RANGE, RESP_MIN_QUALITY, RESP_RANGE
+from vitals2.gates import HR_MAX_MOTION, HR_MIN_QUALITY, HR_RANGE, RESP_MIN_QUALITY, RESP_RANGE
 
 ESTIMATOR = 2
 # A minute's heart rate needs this many passing windows, and this share of
@@ -23,6 +23,7 @@ class WindowEstimate:
     value: float | None
     quality: float
     usable: bool = True
+    motion: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,12 @@ def _passing(windows: list[WindowEstimate], min_quality: float, bounds: tuple[fl
 
 
 def _settled_rate(hr_windows: list[WindowEstimate]) -> tuple[float, float] | None:
+    # The minute's windows together are held to the movement limit each window
+    # meets (summed, with a little tolerance so windows exactly at it pass):
+    # around movement the windows that still pass read the still part of the
+    # minute, below the rate over the whole of it.
+    if sum(window.motion for window in hr_windows) > HR_MAX_MOTION * len(hr_windows) + 1e-9:
+        return None
     heart = _passing(hr_windows, HR_MIN_QUALITY, HR_RANGE)
     if len(heart) < MIN_HR_WINDOWS:
         return None
@@ -60,8 +67,9 @@ def minute_row(side: str, minute_start: int, hr_windows: list[WindowEstimate],
     """One vitals row from a minute of window estimates, or None without a heart rate.
 
     The heart rate is the median of the minute's passing windows when they
-    agree; otherwise there is no row. The legacy columns get the same numbers
-    in their long-standing units, with 0 for no estimate.
+    agree and the minute holds little movement; otherwise there is no row.
+    The legacy columns get the same numbers in their long-standing units,
+    with 0 for no estimate.
     """
     settled = _settled_rate(hr_windows)
     if settled is None:

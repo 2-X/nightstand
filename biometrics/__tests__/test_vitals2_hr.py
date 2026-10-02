@@ -197,6 +197,16 @@ class RefusalTest(unittest.TestCase):
         self.assertFalse([start for start, _ in rows if 300 - hr.WINDOW_SECONDS + 2 < start < 330 - 2])
         self.assertAlmostEqual(float(np.median([value for _, value in rows])), 60, delta=1.0)
 
+    def test_each_window_carries_its_share_of_moving_seconds(self):
+        signal = realistic(600, 60, 6)
+        burst = slice(int(300 * FS), int(330 * FS))
+        signal[burst] += np.random.default_rng(7).normal(0.0, 8_000_000, burst.stop - burst.start)
+        cleaned, bad = mask_artifacts(signal)
+        motion = {window.start: window.motion for window in estimate_hr(cleaned, FS, bad=bad)}
+        self.assertEqual(motion[310], 1.0)
+        self.assertEqual(motion[200], 0.0)
+        self.assertTrue(0.4 <= motion[295] <= 0.7, motion[295])
+
     def test_clipped_seconds_are_not_reported(self):
         raw = piezo(600, bpm=60, jitter_ms=40, seed=8, modulation=0.3, pink_level=25_000).astype(np.int64)
         raw[int(200 * FS):int(225 * FS):50] = 8_388_607

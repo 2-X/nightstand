@@ -246,6 +246,24 @@ class CapacitanceGateTest(unittest.TestCase):
             self.assertNotIn(last, stale)
             self.assertNotIn(last, empty)
 
+    def test_each_window_reaches_the_minute_rule_with_its_movement(self):
+        recorder = Recorder()
+        seen = []
+        real_step = hr.HrTracker.step
+
+        def step(tracker, *args, **kwargs):
+            found = real_step(tracker, *args, **kwargs)
+            seen.extend(found)
+            return found
+        with unittest.mock.patch.object(vitals2_stream, 'minute_row', recorder), \
+                unittest.mock.patch.object(hr.HrTracker, 'step', step):
+            drive(self.stream, self.buffer, self.left, 0, 420, True)
+        motion = {window.start: window.motion for window in seen}
+        windows = recorder.windows()
+        self.assertTrue(windows)
+        for window in windows:
+            self.assertEqual(window.motion, motion[window.timestamp])
+
     def test_windows_ending_inside_a_data_gap_are_not_used(self):
         recorder = Recorder()
         with unittest.mock.patch.object(vitals2_stream, 'minute_row', recorder):

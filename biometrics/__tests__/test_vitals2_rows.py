@@ -4,13 +4,14 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+from vitals2.gates import HR_MAX_MOTION
 from vitals2.rows import HrvEstimate, WindowEstimate, minute_row, round_half_up
 
 MINUTE = 1_790_600_400
 
 
-def windows(values, quality=0.8, usable=True):
-    return [WindowEstimate(MINUTE + 5 * index, value, quality, usable) for index, value in enumerate(values)]
+def windows(values, quality=0.8, usable=True, motion=0.0):
+    return [WindowEstimate(MINUTE + 5 * index, value, quality, usable, motion) for index, value in enumerate(values)]
 
 
 class MinuteRowTest(unittest.TestCase):
@@ -40,6 +41,24 @@ class MinuteRowTest(unittest.TestCase):
 
     def test_scattered_windows_mean_no_row(self):
         self.assertIsNone(minute_row('left', MINUTE, windows([50.0, 60.0, 70.0, 80.0, 90.0]), [], None))
+
+    def test_a_minute_with_too_much_movement_has_no_row(self):
+        moving = windows([62.0] * 9) + windows([None] * 3, motion=1.0)
+        self.assertIsNone(minute_row('left', MINUTE, moving, [], None))
+        below = 0.9 * HR_MAX_MOTION
+        within = windows([62.0] * 10, motion=below) + windows([None] * 2, motion=below)
+        self.assertEqual(minute_row('left', MINUTE, within, [], None)['heart_rate'], 62)
+
+    def test_a_minute_whose_windows_each_meet_the_movement_limit_keeps_its_row(self):
+        at_limit = windows([62.0] * 12, motion=HR_MAX_MOTION)
+        self.assertEqual(minute_row('left', MINUTE, at_limit, [], None)['heart_rate'], 62)
+        over = windows([62.0] * 11, motion=HR_MAX_MOTION) + windows([62.0], motion=HR_MAX_MOTION + 0.1)
+        self.assertIsNone(minute_row('left', MINUTE, over, [], None))
+
+    def test_movement_counts_every_window_of_the_minute_not_only_passing_ones(self):
+        moving_rejects = windows([62.0] * 6) + windows([None] * 6, quality=0.1, motion=0.5)
+        self.assertIsNone(minute_row('left', MINUTE, moving_rejects, [], None))
+        self.assertIsNotNone(minute_row('left', MINUTE, windows([62.0] * 6) + windows([None] * 6, quality=0.1), [], None))
 
     def test_hrv_never_supplies_a_rate(self):
         scattered = windows([50.0, 60.0, 70.0, 80.0, 90.0])

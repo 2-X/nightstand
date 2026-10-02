@@ -261,7 +261,8 @@ class Vitals2Stream:
                 if keep and start in other and self.sides[other_side].occupied_at(window_end, clock.record_seconds):
                     pair = attribute(window, other[start]) if side == 'left' else attribute(other[start], window)
                     keep = pair[0] if side == 'left' else pair[1]
-                estimate = WindowEstimate(start, _finite(window.bpm), _finite(window.quality) or 0.0, usable=keep)
+                estimate = WindowEstimate(start, _finite(window.bpm), _finite(window.quality) or 0.0, usable=keep,
+                                          motion=window.motion)
                 state.hr_windows.setdefault(_minute(start), []).append(estimate)
 
     def _close_minutes(self, side: str, epoch: int, clock: _Clock, buffer, available: float, end: float,

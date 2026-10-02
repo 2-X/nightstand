@@ -86,6 +86,7 @@ class HrWindow(NamedTuple):
     quality: float  # posterior mass within QUALITY_TOLERANCE of the track
     track: float  # the tracked rate before gating, NaN without evidence
     envelope: Optional[np.ndarray]  # the window's cardiac envelope at ENVELOPE_FS
+    motion: float = 0.0  # share of the window's seconds moving or masked; 1 for a window the stream missed
 
 
 def resample(values: np.ndarray, fs: float, target_fs: float) -> np.ndarray:
@@ -329,7 +330,7 @@ class HrTracker:
         while self._pending < len(self._windows) and (final or self._pending + OCTAVE_HOPS < len(self._windows)):
             window = self._windows[self._pending]
             out.append(HrWindow(window.start, _gate(self._windows, self._pending), window.quality, window.track,
-                                window.envelope))
+                                window.envelope, window.motion))
             self._pending += 1
         drop = max(0, self._pending - OCTAVE_HOPS)
         self._windows = self._windows[drop:]
