@@ -38,6 +38,9 @@ for (const width of [390, 320]) {
     const caption = page.locator('svg[viewBox="0 0 280 280"] ~ div span.MuiTypography-caption').first();
     await expect(caption).toBeVisible();
     const onBox = (await caption.boundingBox())!;
+    // Room to breathe between the caption and the stepper under it.
+    const stepper = (await page.getByRole('button', { name: 'Decrease temperature' }).boundingBox())!;
+    expect(stepper.y - (onBox.y + onBox.height)).toBeGreaterThanOrEqual(12);
 
     await page.getByRole('button', { name: 'Turn off' }).click();
     await expect(page.getByRole('button', { name: 'Turn on' })).toBeVisible();

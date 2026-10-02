@@ -1,2 +1,4 @@
-// The row under the dial: the temperature stepper while on, Turn on while off.
-export const controlsSlotSx = { height: 64, mt: -5 } as const;
+// The row under the dial: the temperature stepper while on, last night while off.
+// It tucks this far up into the dial's open bottom.
+export const CONTROLS_OVERLAP_PX = 32;
+export const controlsSlotSx = { height: 64, mt: `-${CONTROLS_OVERLAP_PX}px` } as const;

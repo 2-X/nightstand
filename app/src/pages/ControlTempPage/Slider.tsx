@@ -48,7 +48,7 @@ export default function Slider({ isOn, currentTargetTemp, refetch, currentTemper
   // While off, the slot has the stepper's height and overlap, so Turn on sits where Turn off does.
   return <Box sx={ { width: '100%' } }>
     <Box sx={ dialSx }>
-      <svg viewBox="0 0 280 280" width="100%" height="100%" aria-hidden="true" style={ { pointerEvents: 'none' } }>
+      <svg viewBox="0 0 280 280" width="100%" height="100%" aria-hidden="true" style={ { display: 'block', pointerEvents: 'none' } }>
         <defs><linearGradient
           id={ gradient }
           gradientUnits="userSpaceOnUse"
