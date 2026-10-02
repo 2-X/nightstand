@@ -32,6 +32,15 @@ model vitals {
   heart_rate     Float? // bpm, 0 means no estimate
   hrv            Float? // SDNN in ms, 0 means no estimate
   breathing_rate Float? // breaths per minute, 0 means no estimate
+  // Filled by the newer estimators only; NULL on older rows and wherever an
+  // estimate failed its quality check.
+  hr_quality     Float?
+  rmssd          Float?
+  sdnn           Float?
+  hrv_coverage   Float?
+  resp_rate      Float?
+  resp_quality   Float?
+  estimator      Int?
 
   @@unique([side, timestamp]) // Ensure no duplicate intervals
   @@index([side, timestamp])
