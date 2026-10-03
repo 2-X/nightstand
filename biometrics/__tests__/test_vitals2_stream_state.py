@@ -375,6 +375,29 @@ class PumpTest(unittest.TestCase):
         pump.note(one_side)
         self.assertTrue(pump.high_during(145, 150))
 
+    def test_a_long_step_back_of_the_clock_starts_the_history_over(self):
+        pump = PumpSpeed()
+        for stamp in range(1000, 1100, 10):
+            pump.note(_frame(stamp, 1900))
+        # The record clock steps back an hour; the pump then runs fast on the new clock.
+        for stamp in range(1000 - 3600, 1000 - 3600 + 30, 10):
+            pump.note(_frame(stamp, 1900))
+        for stamp in range(1000 - 3600 + 30, 1000 - 3600 + 60, 10):
+            pump.note(_frame(stamp, 3000))
+        self.assertTrue(pump.fed)
+        self.assertTrue(pump.high_during(1000 - 3600 + 40, 1000 - 3600 + 60))
+        self.assertFalse(pump.high_during(1000 - 3600, 1000 - 3600 + 20))
+
+    def test_a_small_step_back_is_still_a_replayed_frame(self):
+        pump = PumpSpeed()
+        pump.note(_frame(1000, 1900))
+        pump.note(_frame(1000 - vitals2_stream.CLOCK_STEP_BACK_SECONDS, 3000))
+        self.assertFalse(pump.high_during(0, 5_000))
+
+    def test_the_pump_and_the_stream_step_back_at_the_same_size(self):
+        import pump_speed
+        self.assertEqual(pump_speed.CLOCK_STEP_BACK_SECONDS, vitals2_stream.CLOCK_STEP_BACK_SECONDS)
+
     def test_replayed_frames_carry_their_stamp_as_text(self):
         pump = PumpSpeed()
         fast = _frame(0, 3000)

@@ -19,6 +19,9 @@ PUMP_FRAME_SECONDS = 10
 PUMP_HISTORY_SECONDS = 900
 # A fast run with no frame for this long is unknown, not fast.
 PUMP_STALE_SECONDS = 30
+# A frame this much older than the newest is a clock change, not a replay: the history starts over.
+# The same size as the newer vitals' own limit.
+CLOCK_STEP_BACK_SECONDS = 600
 
 
 def _number(value) -> bool:
@@ -44,8 +47,12 @@ class PumpSpeed:
     def note(self, frame: dict) -> None:
         ts = frz_record_epoch(frame) if isinstance(frame, dict) else None
         spans, last_ts = self._state
-        if ts is None or not math.isfinite(ts) or (last_ts is not None and ts < last_ts):
+        if ts is None or not math.isfinite(ts):
             return
+        if last_ts is not None and ts < last_ts:
+            if last_ts - ts <= CLOCK_STEP_BACK_SECONDS:
+                return
+            spans, last_ts = (), None
         rpms = [((frame.get(side) or {}).get('pump') or {}).get('rpm') for side in SIDES]
         rpms = [rpm for rpm in rpms if _number(rpm)]
         if not rpms:
