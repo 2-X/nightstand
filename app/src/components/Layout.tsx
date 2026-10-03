@@ -49,6 +49,7 @@ export default function Layout() {
         } }
         sx={ {
           position: 'fixed', top: 8, left: 8, zIndex: 1400, px: 2, py: 1, borderRadius: 1,
+          display: 'flex', alignItems: 'center', minHeight: 44,
           bgcolor: 'background.paper', color: 'text.primary', border: 1, borderColor: 'divider',
           transform: 'translateY(-200%)', '&:focus': { transform: 'none' },
         } }
