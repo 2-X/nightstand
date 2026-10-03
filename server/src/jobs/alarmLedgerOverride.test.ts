@@ -15,7 +15,7 @@ const LEDGER = path.join(folder, 'alarm-ledger.json');
 const { default: settingsDB } = await import('../db/settings.js');
 const { default: schedulesDB } = await import('../db/schedules.js');
 const ledger = await import('./alarmLedger.js');
-const { scheduleAlarm } = await import('./alarmScheduler.js');
+const { scheduleAlarm, scheduleAlarmOverride } = await import('./alarmScheduler.js');
 const { scheduleRhythms } = await import('./rhythms/scheduleRhythms.js');
 const { everyNight, testNight, testRhythmsDB } = await import('./rhythms/testSupport.js');
 
@@ -76,5 +76,30 @@ describe('a Rhythms alarm', () => {
     plan();
     assert.ok(schedule.scheduledJobs['rhythm-left-2026-09-28-alarm-0545-0']);
     assert.equal(planned().includes('rhythm-left-2026-09-28-alarm-0545-0'), false);
+  });
+});
+
+describe('an alarm job that fails before it reaches the Pod', () => {
+  const fire = async (name: string, at: string) => {
+    ledger.startAlarmLedger(new Date(NOW));
+    const job = schedule.scheduledJobs[name];
+    assert.ok(job, name);
+    const read = mock.method(settingsDB, 'read', async () => { throw new Error('settings unreadable'); });
+    try {
+      // node-schedule hands invoke's argument to the job as its fire date.
+      await (job.invoke.bind(job) as unknown as (fireDate: Date) => Promise<void>)(new Date(at));
+    } finally {
+      read.mock.restore();
+    }
+    return ledger.listMissedAlarms(new Date(NOW)).map(m => [m.reason, m.at]);
+  };
+  it('is reported for a weekly alarm', async () => {
+    scheduleAlarm(settingsDB.data, 'left', 'monday', night);
+    assert.deepEqual(await fire('left-monday-07:00-0-alarm', '2026-09-28T07:00:00Z'), [['error', '2026-09-28T07:00:00.000Z']]);
+  });
+  it('is reported for an override', async () => {
+    override('2026-09-29T07:30:00Z');
+    scheduleAlarmOverride(settingsDB.data, 'left');
+    assert.deepEqual(await fire('left-alarm-override-07:30', '2026-09-29T07:30:00Z'), [['error', '2026-09-29T07:30:00.000Z']]);
   });
 });

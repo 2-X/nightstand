@@ -15,13 +15,16 @@ import { isAlarmPaused } from './schedulePause.js';
 //   not-running: the server was stopped when it was due
 //   late: the Pod could be reached only after the alarm's time had passed
 //   failed: sending the alarm to the Pod broke
-//   unconfirmed: the Pod did not answer, so it may or may not be ringing
+//   unconfirmed: the Pod did not answer, or the server stopped while the
+//     alarm was being sent, so it may or may not have rung
 //   error: this server failed before it asked the Pod to ring
 //   side-off: the side was off, so the alarm does not ring
 export type MissedReason = 'not-running' | 'late' | 'failed' | 'unconfirmed' | 'error' | 'side-off';
 export type MissedAlarm = { id: string; side: Side; at: string; reason: MissedReason; recordedAt: string };
 type Upcoming = { side: Side; at: string; jobName: string };
-type Started = { jobName: string; at: string };
+// done is false from the job's start until it rang, chose not to, or noted
+// why it could not. Versions before it saved no done at all.
+export type Started = { jobName: string; at: string; done?: boolean };
 type Ledger = { version: 1; aliveAt: string | null; upcoming: Upcoming[]; started: Started[]; missed: MissedAlarm[] };
 
 const iso = z.string().refine(value => Number.isFinite(Date.parse(value)));
@@ -30,7 +33,7 @@ const FileSchema = z.object({
   version: z.literal(1),
   aliveAt: iso.nullable().default(null),
   upcoming: z.array(z.object({ side, at: iso, jobName: z.string() })).default([]),
-  started: z.array(z.object({ jobName: z.string(), at: iso })).default([]),
+  started: z.array(z.object({ jobName: z.string(), at: iso, done: z.boolean().optional().catch(undefined) })).default([]),
   missed: z.array(z.unknown()).default([]),
 });
 const MissedSchema = z.object({
@@ -45,6 +48,8 @@ const JUDGE_GRACE_MS = 10_000;
 const MAX_MISSED = 20;
 const MAX_STARTED = 50;
 const HEARTBEAT_MS = 60_000;
+// How long an unfinished job of this server is kept for the next start to judge.
+const UNFINISHED_KEEP_MS = 60 * 60_000;
 
 const ledgerFile = () => path.join(config.dbFolder, 'alarm-ledger.json');
 const empty = (): Ledger => ({ version: 1, aliveAt: null, upcoming: [], started: [], missed: [] });
@@ -55,6 +60,8 @@ let planned = false;
 // Saved alarms from before a restart that have not been judged yet.
 let pending: Upcoming[] = [];
 let timer: NodeJS.Timeout | undefined;
+// Jobs this server started, which settle themselves.
+let startedHere = new Set<Started>();
 const suppressions = new Map<string, (due: Date) => boolean>();
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -186,18 +193,24 @@ function add(found: MissedAlarm[], now: Date): void {
   ledger.missed = recent([...ledger.missed, ...found.filter(item => !known.has(item.id))], now);
 }
 
-// The saved alarms that came due and never started, as missed alarms. Away
-// and paused sides are left out, as they do not ring.
+// The saved alarms that came due and never started, or started in an
+// earlier run of the server that stopped before they finished, as missed
+// alarms. Away and paused sides are left out, as they do not ring.
 function unstarted(items: Upcoming[], now: Date): MissedAlarm[] {
   const settings = settingsDB.data;
-  const found = items.filter(item => {
+  const found = items.flatMap(item => {
     const due = Date.parse(item.at);
-    if (ledger.started.some(run => run.jobName === item.jobName && Math.abs(Date.parse(run.at) - due) <= STARTED_MATCH_MS)) return false;
-    if (settings[item.side].awayMode) return false;
-    return !isAlarmPaused(settings, item.side, new Date(due));
-  }).map(item => entry(item.side, new Date(item.at), 'not-running', now));
+    const runs = ledger.started.filter(run => run.jobName === item.jobName && Math.abs(Date.parse(run.at) - due) <= STARTED_MATCH_MS);
+    if (runs.some(run => run.done !== false || startedHere.has(run))) return [];
+    if (settings[item.side].awayMode) return [];
+    if (isAlarmPaused(settings, item.side, new Date(due))) return [];
+    return [entry(item.side, new Date(item.at), runs.length > 0 ? 'unconfirmed' : 'not-running', now)];
+  });
   add(found, now);
-  for (const item of found) logger.warn(`Missed the ${item.side} alarm due ${item.at}: the server was not running`);
+  for (const item of found) {
+    logger.warn(`Missed the ${item.side} alarm due ${item.at}: ${item.reason === 'unconfirmed'
+      ? 'the server stopped while it was being sent' : 'the server was not running'}`);
+  }
   return found;
 }
 
@@ -216,6 +229,14 @@ export function alarmsDueWithin(now: Date, windowMs: number): { alarms: { side: 
   return { alarms: [...live, ...saved], known };
 }
 
+// Jobs of this server that started and have not finished, as saved alarms,
+// so a crash before they finish still reports them after a later heartbeat.
+function unfinishedHere(t: number): Upcoming[] {
+  return [...startedHere]
+    .filter(run => run.done === false && ledger.started.includes(run) && t - Date.parse(run.at) < UNFINISHED_KEEP_MS)
+    .map(run => ({ side: sideOf(run.jobName), at: run.at, jobName: run.jobName }));
+}
+
 function beat(now: Date, jobsPlanned: boolean): void {
   if (!running) return;
   if (jobsPlanned) planned = true;
@@ -225,10 +246,11 @@ function beat(now: Date, jobsPlanned: boolean): void {
   // Once jobs are planned, a saved alarm still ahead is replaced by its live job.
   pending = pending.filter(item => !judgeable.includes(item) && (!planned || Date.parse(item.at) <= t));
   if (planned) {
-    // Alive up to the earliest alarm still being judged, so a crash now still reports it.
-    const earliest = Math.min(t, ...pending.map(item => Date.parse(item.at) - 1));
+    // Alive up to the earliest alarm still being judged or sent, so a crash now still reports it.
+    const unfinished = unfinishedHere(t);
+    const earliest = Math.min(t, ...[...pending, ...unfinished].map(item => Date.parse(item.at) - 1));
     ledger.aliveAt = new Date(earliest).toISOString();
-    ledger.upcoming = [...upcomingAlarms(now), ...pending];
+    ledger.upcoming = [...upcomingAlarms(now), ...pending, ...unfinished];
   } else {
     ledger.upcoming = [...pending];
   }
@@ -243,6 +265,7 @@ export function startAlarmLedger(now: Date): MissedAlarm[] {
   return guard('start', [], () => {
     ledger = load();
     loaded = true;
+    startedHere = new Set();
     const aliveAt = ledger.aliveAt ? Date.parse(ledger.aliveAt) : Number.NaN;
     const carried = Number.isFinite(aliveAt) ? ledger.upcoming.filter(item => Date.parse(item.at) > aliveAt) : [];
     const due = carried.filter(item => Date.parse(item.at) <= now.getTime());
@@ -285,10 +308,23 @@ export function leaveAlarmLedger(): void {
   });
 }
 
-export function noteAlarmStarted(jobName: string, at: Date): void {
-  guard('start note', undefined, () => {
-    if (!running || !isAlarmJobName(jobName)) return;
-    ledger.started = [...ledger.started, { jobName, at: at.toISOString() }].slice(-MAX_STARTED);
+// Returns the saved entry, for noteAlarmFinished.
+export function noteAlarmStarted(jobName: string, at: Date): Started | undefined {
+  return guard('start note', undefined, () => {
+    if (!running || !isAlarmJobName(jobName)) return undefined;
+    const run: Started = { jobName, at: at.toISOString(), done: false };
+    ledger.started = [...ledger.started, run].slice(-MAX_STARTED);
+    startedHere.add(run);
+    save();
+    return run;
+  });
+}
+
+// The job rang, chose not to ring, or noted why it could not.
+export function noteAlarmFinished(run: Started | undefined): void {
+  guard('finish note', undefined, () => {
+    if (!run || !ledger.started.includes(run)) return;
+    run.done = true;
     save();
   });
 }
@@ -324,6 +360,7 @@ export function resetAlarmLedgerForTests(): void {
   running = false;
   planned = false;
   pending = [];
+  startedHere = new Set();
   suppressions.clear();
   if (timer) clearInterval(timer);
   timer = undefined;

@@ -71,7 +71,23 @@ describe('alarms missed while the server was not running', () => {
     assert.equal(found[0].reason, 'not-running');
     assert.deepEqual(ledger.listMissedAlarms(at(10)).map(m => m.at), [at(5).toISOString()]);
   });
-  it('does not report one that started before the server stopped', () => {
+  it('does not report one that finished before the server stopped', () => {
+    writeLedger({
+      aliveAt: T0.toISOString(),
+      upcoming: [{ side: 'left', at: at(5).toISOString(), jobName: 'left-one-off-alarm' }],
+      started: [{ jobName: 'left-one-off-alarm', at: at(5).toISOString(), done: true }],
+    });
+    assert.equal(ledger.startAlarmLedger(at(10)).length, 0);
+  });
+  it('reports one that started but never finished as possibly not rung', () => {
+    writeLedger({
+      aliveAt: T0.toISOString(),
+      upcoming: [{ side: 'left', at: at(5).toISOString(), jobName: 'left-one-off-alarm' }],
+      started: [{ jobName: 'left-one-off-alarm', at: at(5).toISOString(), done: false }],
+    });
+    assert.deepEqual(ledger.startAlarmLedger(at(10)).map(m => m.reason), ['unconfirmed']);
+  });
+  it('trusts a start saved by a version that did not record finishing', () => {
     writeLedger({
       aliveAt: T0.toISOString(),
       upcoming: [{ side: 'left', at: at(5).toISOString(), jobName: 'left-one-off-alarm' }],
@@ -373,5 +389,66 @@ describe('leaving for another version', () => {
     ledger.resetAlarmLedgerForTests();
     ledger.startAlarmLedger(at(60));
     assert.deepEqual(ledger.listMissedAlarms(at(60)).map(m => m.at), [at(5).toISOString()]);
+  });
+});
+
+describe('an alarm job from start to finish', () => {
+  const restart = (now: Date) => {
+    ledger.resetAlarmLedgerForTests();
+    return ledger.startAlarmLedger(now);
+  };
+  const due = () => writeLedger({ aliveAt: T0.toISOString(), upcoming: [upcoming('left-one-off-alarm', 5)] });
+
+  it('is saved as started and then as finished', async () => {
+    ledger.startAlarmLedger(at(1));
+    await activity.trackAlarm('left', 'left-one-off-alarm', async () => 0);
+    assert.deepEqual(saved().started.map((run: { done?: boolean }) => run.done), [true]);
+  });
+
+  it('a server stopped while the job ran reports the alarm after the restart', () => {
+    due();
+    ledger.startAlarmLedger(at(1));
+    void activity.trackAlarm('left', 'left-one-off-alarm', () => new Promise<number>(() => undefined));
+    // The started entry carries the job's real start time; match it to the saved alarm.
+    const started = saved().started as { jobName: string; at: string; done: boolean }[];
+    writeLedger({
+      aliveAt: T0.toISOString(), upcoming: [upcoming('left-one-off-alarm', 5)],
+      started: started.map(run => ({ ...run, at: at(5).toISOString() })),
+    });
+    assert.deepEqual(restart(at(10)).map(m => m.reason), ['unconfirmed']);
+  });
+
+  // Due at 5:00, waiting for the Pod, a heartbeat at 5:30 and a crash at 5:40.
+  it('a server that stops after a heartbeat while the job ran still reports the alarm', () => {
+    ledger.startAlarmLedger(at(4));
+    ledger.alarmLedgerHeartbeat(at(4));
+    ledger.noteAlarmStarted('left-one-off-alarm', at(5));
+    ledger.alarmLedgerHeartbeat(new Date(at(5).getTime() + 30_000));
+    assert.deepEqual(restart(new Date(at(5).getTime() + 40_000)).map(m => m.reason), ['unconfirmed']);
+  });
+
+  it('a job that finished before the heartbeat is not kept for the next start', () => {
+    ledger.startAlarmLedger(at(4));
+    ledger.alarmLedgerHeartbeat(at(4));
+    ledger.noteAlarmFinished(ledger.noteAlarmStarted('left-one-off-alarm', at(5)));
+    ledger.alarmLedgerHeartbeat(new Date(at(5).getTime() + 30_000));
+    assert.deepEqual(saved().upcoming, []);
+    assert.deepEqual(restart(new Date(at(5).getTime() + 40_000)), []);
+  });
+
+  it('a job that is still running in this server is not reported', () => {
+    writeLedger({ aliveAt: T0.toISOString(), upcoming: [upcoming('left-one-off-alarm', 12)] });
+    ledger.startAlarmLedger(at(10));
+    ledger.noteAlarmStarted('left-one-off-alarm', at(12));
+    ledger.alarmLedgerHeartbeat(at(14));
+    assert.equal(ledger.listMissedAlarms(at(14)).length, 0);
+  });
+
+  it('a job that fails before it reaches the Pod is reported as an error', async () => {
+    ledger.startAlarmLedger(new Date());
+    const failing = async (): Promise<number> => { throw new Error('settings unreadable'); };
+    await assert.rejects(activity.trackAlarm('left', 'rhythm-left-2026-10-05-alarm-0630-0', failing));
+    assert.deepEqual(ledger.listMissedAlarms().map(m => m.reason), ['error']);
+    assert.deepEqual(saved().started.map((run: { done?: boolean }) => run.done), [true]);
   });
 });

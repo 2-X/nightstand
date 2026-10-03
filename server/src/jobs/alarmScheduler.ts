@@ -282,6 +282,7 @@ export function scheduleAlarmOverride(
       }
     } catch (error: unknown) {
       logger.error(error);
+      noteMissedAlarm(side, fireDate ?? next.toDate(), 'error');
       return 0;
     }
     // The replacement belongs to a night starting today or yesterday, not
@@ -385,6 +386,7 @@ export const scheduleAlarm = (settingsData: Settings, side: Side, day: DayOfWeek
         const message = error instanceof Error ? error.message : String(error);
         serverStatus.status.alarmSchedule.message = message;
         logger.error(error);
+        noteMissedAlarm(side, fireDate ?? new Date(), 'error');
         return 0;
       }
     }));
