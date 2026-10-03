@@ -183,7 +183,7 @@ describe('update.sh will not ship code onto a schema that did not migrate', () =
 
   it('stops the biometrics streamer before it migrates', () => {
     assertOrder([
-      'systemctl stop free-sleep-stream',
+      'stop_writer free-sleep-stream',
       'prisma migrate deploy',
     ], 'stop-before-migrate');
   });
@@ -214,7 +214,7 @@ describe('update.sh will not ship code onto a schema that did not migrate', () =
 
   it('decides whether to migrate from what the database is missing, not from a schema diff', () => {
     assertOrder([
-      'systemctl stop free-sleep-stream',
+      'stop_writer free-sleep-stream',
       'Downgrade: skipping prisma migrate',
       'prisma migrate status',
       'prisma migrate deploy',

@@ -38,7 +38,7 @@ nice() { shift 2; "$@"; }
 ionice() { shift 4; "$@"; }
 export -f nice ionice
 curl() { return 0; }
-systemctl() { echo "$* $(cat "$LIVE/version")" >> "$FIXTURE/services"; }
+systemctl() { [ "$1" != is-active ] || { echo inactive; return 3; }; echo "$* $(cat "$LIVE/version")" >> "$FIXTURE/services"; }
 ssh_cmd() { echo "$*" >> "$FIXTURE/ssh"; echo 0; }
 restore_and_report() { echo restored > "$FIXTURE/restored"; }
 fix_shared_node_modules() { :; }
@@ -58,6 +58,35 @@ ${fixtureScript}`], { env, encoding: 'utf8', input: 'y\n', timeout: 5000 });
   rmSync(dir, { recursive: true, force: true });
   return output;
 }
+
+// Keeps each unit's state, so a test can see what runs when the script ends.
+// A command equal to TERM_ON interrupts the script once it has run. A unit in
+// STOP_FAILS fails to stop, one in STAYS_ACTIVE stops without ending, one in
+// DEACTIVATING is still ending after its stop, and one in MISSING is not
+// installed.
+const statefulServices = (inactive = '') => `
+for unit in free-sleep free-sleep-stream; do echo active > "$FIXTURE/state-$unit"; done
+for unit in ${inactive}; do echo inactive > "$FIXTURE/state-$unit"; done
+systemctl() {
+  case "$1" in
+    is-active) local state; state=$(cat "$FIXTURE/state-$2" 2>/dev/null || echo inactive); echo "$state"; [ "$state" = active ]; return;;
+    show) case " \${MISSING:-} " in *" $4 "*) echo LoadState=not-found;; *) echo LoadState=loaded;; esac; return;;
+  esac
+  echo "$* $(cat "$LIVE/version" 2>/dev/null)" >> "$FIXTURE/services"
+  if [ "$1" = stop ]; then
+    case " \${MISSING:-} " in *" $2 "*) return 5;; esac
+    case " \${STOP_FAILS:-} " in *" $2 "*) return 1;; esac
+  fi
+  case "$1" in
+    stop)
+      case " \${STAYS_ACTIVE:-} \${DEACTIVATING:-} " in
+        *" $2 "*) [ " \${DEACTIVATING:-} " = " $2 " ] && echo deactivating > "$FIXTURE/state-$2";;
+        *) echo inactive > "$FIXTURE/state-$2";;
+      esac;;
+    start|restart) echo active > "$FIXTURE/state-$2";;
+  esac
+  [ "$*" != "\${TERM_ON:-}" ] || kill -TERM $$
+}`;
 
 it('a failed fork migration restores the original without starting the failed build', () => {
   const result = run(section('scripts/migrate/pod-installer.sh', 'say "Running prisma', '# --- health check'), 'sudo() { return 1; }');
@@ -234,9 +263,7 @@ mv() { if [ "$2" = "$LIVE" ]; then return 1; else command mv "$@"; fi; }
 it('a failed forward rollback bookkeeping move restores the original tree before exiting', () => {
   const result = run(section('scripts/rollback_pod.sh', '# --- swap', '# --- health check'), `
 mv() { if [ "$1" = "$TMP" ] && [ "$2" = "$PREV" ]; then return 1; else command mv "$@"; fi; }
-systemctl() {
-  if [ "$1" = is-active ]; then echo active; else echo "$* $(cat "$LIVE/version")" >> "$FIXTURE/services"; fi
-}
+${statefulServices()}
 `);
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.equal(result.liveVersion, 'failed');
@@ -248,9 +275,7 @@ systemctl() {
 for (const streamState of ['active', 'inactive']) {
   it(`a successful rollback preserves an ${streamState} biometrics service`, () => {
     const result = run(section('scripts/rollback_pod.sh', '# --- swap', '# --- health check'), `
-systemctl() {
-  if [ "$1" = is-active ]; then echo ${streamState}; else echo "$* $(cat "$LIVE/version")" >> "$FIXTURE/services"; fi
-}
+${statefulServices(streamState === 'active' ? '' : 'free-sleep-stream')}
 `);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.equal(result.liveVersion, 'restored');
@@ -466,9 +491,7 @@ mv() {
   fi
   command mv "$@"
 }
-systemctl() {
-  if [ "$1" = is-active ]; then echo active; else echo "$* $(cat "$LIVE/version")" >> "$FIXTURE/services"; fi
-}
+${statefulServices()}
 `);
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.equal(result.liveVersion, expectedVersion);
@@ -544,22 +567,6 @@ for (const [file, from, to, reason, setup, tree] of [
   });
 }
 
-// Keeps each unit's state, so a test can see what runs when the script ends.
-// A command equal to TERM_ON interrupts the script once it has run.
-const statefulServices = `
-for unit in free-sleep free-sleep-stream; do echo active > "$FIXTURE/state-$unit"; done
-systemctl() {
-  case "$1" in
-    is-active) [ "$(cat "$FIXTURE/state-$2" 2>/dev/null)" = active ] && echo active && return; echo inactive; return 3;;
-    show) echo LoadState=loaded; return;;
-  esac
-  echo "$* $(cat "$LIVE/version" 2>/dev/null)" >> "$FIXTURE/services"
-  case "$1" in
-    stop) echo inactive > "$FIXTURE/state-$2";;
-    start|restart) echo active > "$FIXTURE/state-$2";;
-  esac
-  [ "$*" != "\${TERM_ON:-}" ] || kill -TERM $$
-}`;
 const termAfterMovingLive = 'mv() { command mv "$@" || return; [ "$1" != "$LIVE" ] || kill -TERM $$; }';
 
 // The script's own exit handling around one of its swaps.
@@ -591,7 +598,7 @@ restore_switch_data() { DATA_CHANGED=no; }; ${staged}`, 'failed'],
     ['after moving the live tree', termAfterMovingLive, liveAfterMove],
   ]) {
     it(`${file} (${from}) interrupted ${phase} leaves a live tree and its services running`, () => {
-      const result = run(withExitHandling(file, swap), `${stubs}\n${statefulServices}\n${setup}\n${interrupt}`);
+      const result = run(withExitHandling(file, swap), `${stubs}\n${statefulServices()}\n${setup}\n${interrupt}`);
       assert.equal(result.status, 143, result.stdout + result.stderr);
       assert.equal(result.liveVersion, liveVersion, result.stdout + result.stderr);
       assert.equal(result.serverState, 'active', result.services);
@@ -608,7 +615,7 @@ restore_switch_data() { DATA_CHANGED=no; }; ${staged}`, 'failed'],
     // With an unchanged lockfile the new tree has no node_modules until after
     // the swap, so the previous tree, with its own, must be the one started.
     it(`${file} interrupted right after moving the new tree in starts the previous one`, () => {
-      const result = run(withExitHandling(file, swap), `${stubs}\n${statefulServices}\n${setup}
+      const result = run(withExitHandling(file, swap), `${stubs}\n${statefulServices()}\n${setup}
 LOCK_SAME=yes; mkdir -p "$LIVE/server/node_modules"
 mv() { command mv "$@" || return; [ "$1 $2" != "$STAGE $LIVE" ] || kill -TERM $$; }`);
       assert.equal(result.status, 143, result.stdout + result.stderr);
@@ -620,3 +627,59 @@ mv() { command mv "$@" || return; [ "$1 $2" != "$STAGE $LIVE" ] || kill -TERM $$
     });
   }
 }
+
+// Every writer must be stopped, or confirmed absent, before a tree moves.
+for (const [file, from, to, setup] of [
+  ['scripts/update.sh', '# --- atomic swap', 'MOVED_MODULES=no', `IS_DOWNGRADE=no; STAGED_VERSION=3.2.0; ${staged}`],
+  ['scripts/rollback_pod.sh', '# --- swap', '# --- health check', ''],
+  ['scripts/revert-to-stock.sh', '# --- atomic swap', 'MOVED_MODULES=no',
+    `STAGED_VERSION=1.0.0; BK="$FIXTURE/bk"; mkdir -p "$BK/lowdb"; ${staged}`],
+]) {
+  const swap = section(file, from, to);
+  for (const failure of ['STOP_FAILS=free-sleep', 'STAYS_ACTIVE=free-sleep', 'DEACTIVATING=free-sleep',
+    'STOP_FAILS=free-sleep-stream', 'STAYS_ACTIVE=free-sleep-stream']) {
+    it(`${file} changes nothing and restarts the services when ${failure}`, () => {
+      const result = run(withExitHandling(file, swap), `${stubs}\n${statefulServices()}\n${setup}\n${failure}`);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.equal(result.liveVersion, 'failed', result.stdout);
+      assert.equal(result.previousVersion, 'restored', result.stdout);
+      assert.match(result.stdout, file === 'scripts/revert-to-stock.sh'
+        ? /could not stop the server before converting settings/
+        : /could not stop the running services; live install untouched/);
+      assert.equal(result.serverState, 'active', result.services);
+      assert.equal(result.streamState, 'active', result.services);
+    });
+  }
+
+  if (file === 'scripts/rollback_pod.sh') {
+    // A rollback to another fork stops the archive timer before this point.
+    it(`${file} starts the archive timer again when the server does not stop`, () => {
+      const result = run(withExitHandling(file, swap), `${stubs}\n${statefulServices()}
+ARCHIVE_WAS_ACTIVE=active; mkdir -p "$LIVE/scripts"; touch "$LIVE/scripts/archive-raw.sh"
+STOP_FAILS=free-sleep`);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.services, /^start free-sleep-archive-raw\.timer /m);
+    });
+  }
+
+  // systemd refuses to stop a unit that does not load, even one already stopped.
+  it(`${file} goes on when a stream unit that does not load is already stopped`, () => {
+    const stopped = `${stubs}\n${statefulServices('free-sleep-stream')}\n${setup}\nSTOP_FAILS=free-sleep-stream`;
+    const result = run(withExitHandling(file, swap), stopped);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.notEqual(result.liveVersion, 'failed', result.stdout);
+  });
+
+  it(`${file} goes on when the biometrics stream is not installed`, () => {
+    const result = run(withExitHandling(file, swap), `${stubs}\n${statefulServices('free-sleep-stream')}\n${setup}\nMISSING=free-sleep-stream`);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.notEqual(result.liveVersion, 'failed', result.stdout);
+  });
+}
+
+it('the writer stop is the same in every script that stops the writers', () => {
+  const stopWriter = (file: string) => section(file, '# Stops a service that writes the data', '\n}\n');
+  const scripts = ['scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh', 'scripts/reset.sh'];
+  const [first, ...rest] = scripts.map(stopWriter);
+  for (const helper of rest) assert.equal(helper, first);
+});

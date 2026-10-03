@@ -49,10 +49,24 @@ restart_services() {
 }
 trap restart_services EXIT
 
+# Stops a service that writes the data and confirms it is not running. Kept
+# identical in the update, rollback, switch and reset scripts.
+# systemd refuses to stop a unit that is not installed or does not load, even
+# one that is not running, so the unit's state decides, not the stop.
+stop_writer() {
+  systemctl stop "$1" 2>/dev/null
+  case "$(systemctl is-active "$1" 2>/dev/null)" in
+    inactive|failed|unknown) return 0 ;;
+  esac
+  return 1
+}
+
 echo "Stopping Nightstand"
 systemctl stop free-sleep-archive-raw.timer 2>/dev/null || true
-systemctl stop free-sleep-stream 2>/dev/null || true
-systemctl stop free-sleep || exit 1
+if ! stop_writer free-sleep-stream || ! stop_writer free-sleep; then
+  echo "Nightstand did not stop, so no data was deleted."
+  exit 1
+fi
 
 echo "Deleting Nightstand data..."
 rm -rf "$DATA_DIR"

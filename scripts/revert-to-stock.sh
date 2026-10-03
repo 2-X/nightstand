@@ -171,6 +171,18 @@ run_limited() {
   wait "$watchdog" 2>/dev/null
   return "$status"
 }
+# Stops a service that writes the data and confirms it is not running. Kept
+# identical in the update, rollback, switch and reset scripts.
+# systemd refuses to stop a unit that is not installed or does not load, even
+# one that is not running, so the unit's state decides, not the stop.
+stop_writer() {
+  systemctl stop "$1" 2>/dev/null
+  case "$(systemctl is-active "$1" 2>/dev/null)" in
+    inactive|failed|unknown) return 0 ;;
+  esac
+  return 1
+}
+
 # Set while the services are stopped for a swap: the tree that goes back to
 # LIVE if the run ends before the services start again. SWAP_NEW is the tree
 # being swapped in; once it has left its place it sits at LIVE not yet set up
@@ -423,8 +435,7 @@ curl -fsS --max-time 60 -X POST -H 'content-type: application/json' -d '{"reason
 STREAM_WAS_ACTIVE=$(systemctl is-active free-sleep-stream 2>/dev/null || true)
 RESTORE_TREE=$PREV
 SWAP_NEW=$STAGE
-systemctl stop free-sleep-stream 2>/dev/null || true
-systemctl stop free-sleep || fail "could not stop the server before converting settings"
+{ stop_writer free-sleep-stream && stop_writer free-sleep; } || fail "could not stop the server before converting settings"
 RESULT_PHASE=swapping
 ARCHIVE_WAS_ACTIVE=$(systemctl is-active free-sleep-archive-raw.timer 2>/dev/null || true)
 systemctl stop free-sleep-archive-raw.timer free-sleep-archive-raw.service >/dev/null 2>&1 || true

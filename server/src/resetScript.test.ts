@@ -13,6 +13,7 @@ const SOCK = '/persistent/deviceinfo/dac.sock';
 
 function run(answer: string, {
   migrateExit = 0, stopFails = false, watchdogMark = undefined as string | undefined, rmKeepsServices = false,
+  streamStopFails = false, staysActive = '', streamMissing = false, streamBroken = false,
 } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-reset-'));
   const persistent = path.join(dir, 'persistent');
@@ -34,7 +35,18 @@ function run(answer: string, {
     writeFileSync(path.join(bin, name), `#!/bin/sh\necho "${name} $*" >> "${calls}"\n${body}\n`);
     chmodSync(path.join(bin, name), 0o755);
   };
-  stub('systemctl', `[ "$1" = is-active ] && echo active\n${stopFails ? '[ "$1 $2" = "stop free-sleep" ] && exit 1\n' : ''}exit 0`);
+  // Units report active until stopped; staysActive names one whose stop does not end it.
+  const stopped = path.join(dir, 'stopped-');
+  stub('systemctl', [
+    `[ "$1" = is-active ] && { [ -e "${stopped}$2" ] && { echo inactive; exit 3; }; echo active; exit 0; }`,
+    `[ "$1" = show ] && { echo LoadState=${streamMissing ? 'not-found' : streamBroken ? 'bad-setting' : 'loaded'}; exit 0; }`,
+    // A unit that is not installed or does not load is not running, but systemd refuses to stop it.
+    streamMissing || streamBroken ? `touch "${stopped}free-sleep-stream"` : ':',
+    stopFails ? '[ "$1 $2" = "stop free-sleep" ] && exit 1' : ':',
+    streamStopFails || streamMissing || streamBroken ? '[ "$1 $2" = "stop free-sleep-stream" ] && exit 5' : ':',
+    `[ "$1" = stop ] && [ "$2" != "${staysActive}" ] && touch "${stopped}$2"`,
+    'exit 0',
+  ].join('\n'));
   stub('sudo', `exit ${migrateExit}`);
   stub('chown', 'exit 0');
   // A removal that fails partway and leaves the Biometrics switch behind.
@@ -136,5 +148,33 @@ describe('reset.sh', () => {
     // Nothing was deleted, so Biometrics still reads as it did.
     assert.ok(result.log.includes('systemctl restart free-sleep-stream'), result.log.join('\n'));
     assert.ok(!result.log.includes('systemctl disable free-sleep-stream'));
+  });
+
+  for (const [what, options] of [
+    ['the biometrics stream cannot be stopped', { streamStopFails: true }],
+    ['the biometrics stream keeps running after its stop', { staysActive: 'free-sleep-stream' }],
+    ['the server keeps running after its stop', { staysActive: 'free-sleep' }],
+  ] as const) {
+    it(`deletes nothing when ${what}`, () => {
+      const result = run('y', options);
+      assert.notEqual(result.status, 0);
+      assert.equal(result.settingsLeft, true);
+      assert.equal(result.dbLeft, true);
+      assert.ok(result.log.includes('systemctl start free-sleep'), result.log.join('\n'));
+      assert.ok(result.log.includes('systemctl restart free-sleep-stream'), result.log.join('\n'));
+      assert.match(result.stdout, /did not stop, so no data was deleted/);
+    });
+  }
+
+  it('resets a Pod whose stream unit does not load but is stopped', () => {
+    const result = run('y', { streamBroken: true });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(result.settingsLeft, false);
+  });
+
+  it('resets a Pod without the biometrics stream', () => {
+    const result = run('y', { streamMissing: true });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(result.settingsLeft, false);
   });
 });
