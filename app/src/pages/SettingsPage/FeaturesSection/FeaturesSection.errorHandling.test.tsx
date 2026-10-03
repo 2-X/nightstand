@@ -52,6 +52,16 @@ it('shows the backend repair hint when a biometrics change fails', async () => {
   expect(toggle).toBeChecked();
 });
 
+it('says an update is running when the server refuses a biometrics change for it', async () => {
+  const message = 'An update, rollback or switch is already running. Wait for it to finish.';
+  server.use(http.post('*/api/services', () => HttpResponse.json({ error: message }, { status: 409 })));
+  const { user } = renderWithProviders(<FeaturesSection />);
+  const toggle = await screen.findByRole('switch', { name: 'Biometrics' });
+  await user.click(toggle);
+  expect(await screen.findByRole('alert')).toHaveTextContent(message);
+  expect(toggle).toBeChecked();
+});
+
 it('keeps client validation failures generic', async () => {
   server.use(http.post('*/api/services', () => HttpResponse.json({ error: 'Internal validation detail' }, { status: 400 })));
   const { user } = renderWithProviders(<FeaturesSection />);

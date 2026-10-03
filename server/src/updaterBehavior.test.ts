@@ -60,7 +60,9 @@ ${fixtureScript}`], { env, encoding: 'utf8', input: 'y\n', timeout: 5000 });
 }
 
 // Keeps each unit's state, so a test can see what runs when the script ends.
-// A command equal to TERM_ON interrupts the script once it has run. A unit in
+// A command equal to TERM_ON interrupts the script once it has run, and one
+// equal to STREAM_ON then starts the stream, as the server's Biometrics
+// switch could while the server stops. A unit in
 // STOP_FAILS fails to stop, one in STAYS_ACTIVE stops without ending, one in
 // DEACTIVATING is still ending after its stop, and one in MISSING is not
 // installed.
@@ -85,6 +87,7 @@ systemctl() {
       esac;;
     start|restart) echo active > "$FIXTURE/state-$2";;
   esac
+  [ "$*" != "\${STREAM_ON:-}" ] || echo active > "$FIXTURE/state-free-sleep-stream"
   [ "$*" != "\${TERM_ON:-}" ] || kill -TERM $$
 }`;
 
@@ -678,8 +681,44 @@ STOP_FAILS=free-sleep`);
   });
 }
 
+// The stream started while the server stopped is stopped again before any
+// tree moves, and runs again once the swap is done.
+const streamAtMove = 'mv() { cat "$FIXTURE/state-free-sleep-stream" >> "$FIXTURE/ssh"; command mv "$@"; }';
+for (const [file, from, to, setup] of [
+  ['scripts/update.sh', '# --- atomic swap', 'MOVED_MODULES=no', `IS_DOWNGRADE=no; STAGED_VERSION=3.2.0; ${staged}`],
+  ['scripts/rollback_pod.sh', '# --- swap', '# --- health check', ''],
+  ['scripts/revert-to-stock.sh', '# --- atomic swap', 'MOVED_MODULES=no',
+    `STAGED_VERSION=1.0.0; BK="$FIXTURE/bk"; mkdir -p "$BK/lowdb"; ${staged}`],
+]) {
+  const swap = `${section(file, from, to)}\necho "$STREAM_WAS_ACTIVE" > "$FIXTURE/restored"`;
+  it(`${file} stops a stream the server started while it stopped, before the swap`, () => {
+    const result = run(withExitHandling(file, swap),
+      `${stubs}\n${statefulServices('free-sleep-stream')}\n${setup}\nSTREAM_ON="stop free-sleep"\n${streamAtMove}`);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.notEqual(result.liveVersion, 'failed', result.stdout);
+    assert.ok(result.ssh.length > 0, 'trees moved');
+    assert.deepEqual([...new Set(result.ssh.trim().split('\n'))], ['inactive'], 'no tree moves under the stream');
+    const calls = result.services.trim().split('\n');
+    assert.ok(calls.lastIndexOf('stop free-sleep-stream failed') > calls.indexOf('stop free-sleep failed'), result.services);
+    assert.equal(result.restored.trim(), 'active', 'the stream runs again after the swap');
+  });
+
+  it(`${file} changes nothing when a stream the server started will not stop`, () => {
+    const result = run(withExitHandling(file, swap),
+      `${stubs}\n${statefulServices('free-sleep-stream')}\n${setup}\nSTREAM_ON="stop free-sleep"\nSTAYS_ACTIVE=free-sleep-stream`);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.equal(result.liveVersion, 'failed', result.stdout);
+    assert.equal(result.previousVersion, 'restored', result.stdout);
+    assert.equal(result.serverState, 'active', result.services);
+    assert.equal(result.streamState, 'active', result.services);
+  });
+}
+
 it('the writer stop is the same in every script that stops the writers', () => {
   const stopWriter = (file: string) => section(file, '# Stops a service that writes the data', '\n}\n');
+  const lateStream = (file: string) => section(file, '# Until the server has stopped, its Biometrics', '\n}\n');
+  const [firstLate, ...restLate] = ['scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh'].map(lateStream);
+  for (const helper of restLate) assert.equal(helper, firstLate);
   const scripts = ['scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh', 'scripts/reset.sh'];
   const [first, ...rest] = scripts.map(stopWriter);
   for (const helper of rest) assert.equal(helper, first);

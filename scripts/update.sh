@@ -176,6 +176,16 @@ stop_writer() {
   esac
   return 1
 }
+# Until the server has stopped, its Biometrics switch can start the stream
+# again, so the stream is checked once more after the server stops. A stream
+# started meanwhile is stopped for the swap and started again after it.
+stop_late_stream() {
+  case "$(systemctl is-active free-sleep-stream 2>/dev/null)" in
+    inactive|failed|unknown) return 0 ;;
+  esac
+  STREAM_WAS_ACTIVE=active
+  stop_writer free-sleep-stream
+}
 
 # Set while the services are stopped for a swap: the tree that goes back to
 # LIVE if the run ends before the services start again. SWAP_NEW is the tree
@@ -608,7 +618,7 @@ RESULT_PHASE=swapping
 STREAM_WAS_ACTIVE=$(systemctl is-active free-sleep-stream 2>/dev/null || true)
 RESTORE_TREE=$PREV
 SWAP_NEW=$STAGE
-if ! stop_writer free-sleep-stream || ! stop_writer free-sleep; then
+if ! stop_writer free-sleep-stream || ! stop_writer free-sleep || ! stop_late_stream; then
   RESULT_PHASE=preflight
   fail "could not stop the running services; live install untouched"
 fi

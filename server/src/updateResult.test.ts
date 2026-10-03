@@ -298,7 +298,7 @@ describe('where each script marks its progress', () => {
   it('update.sh marks the swap, the rollback and an up to date finish where they happen', () => {
     const src = read('scripts/update.sh');
     assert.ok(src.indexOf('RESULT_PHASE=swapping') > src.indexOf('# --- atomic swap'));
-    assert.ok(src.indexOf('RESULT_PHASE=swapping') < src.indexOf('! stop_writer free-sleep; then'));
+    assert.ok(src.indexOf('RESULT_PHASE=swapping') < src.indexOf('! stop_late_stream; then'));
     assert.ok(src.indexOf('RESULT_PHASE=swapped') > src.indexOf('mv "$STAGE" "$LIVE" || {'));
     const rollback = src.indexOf('# --- automatic rollback');
     assert.ok(src.indexOf('RESULT_PHASE=restored', rollback) > src.indexOf('mv "$PREV" "$LIVE" || {', rollback));
@@ -442,7 +442,7 @@ trap 'record_result $?' EXIT
 CUR_VERSION=3.5.1; EXPECTED_VERSION=3.6.0; STAGED_VERSION=1.0.0; TARGET_VERSION=3.6.0
 LIVE=live; PREV=prev; STAGE=stage; BK=bk; IS_DOWNGRADE=no; STREAM_WAS_ACTIVE=no
 RESULT_PHASE=swapping
-systemctl() { :; }; stop_writer() { :; }; rm() { :; }; curl() { :; }; restore_switch_data_or_fail() { :; }
+systemctl() { :; }; stop_writer() { :; }; stop_late_stream() { :; }; rm() { :; }; curl() { :; }; restore_switch_data_or_fail() { :; }
 mv() { [ "$1" = ${failMove === 'live' ? 'live' : 'stage'} ] && return 1; return 0; }
 ${section}
 `);

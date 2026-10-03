@@ -16,9 +16,11 @@ process.env.ENV = 'local';
 
 const runs: string[] = [];
 let fail = false;
-const { PrivilegedCommandError } = await import('../../jobs/privilegedCommand.js');
+let busy = false;
+const { OperationBusyError, PrivilegedCommandError } = await import('../../jobs/privilegedCommand.js');
 const run = (name: string) => async (save?: () => Promise<unknown>) => {
   runs.push(name);
+  if (busy) throw new OperationBusyError('An update, rollback or switch is already running. Wait for it to finish.');
   if (fail) throw new PrivilegedCommandError('Cannot run free-sleep-stream.service: A successful update repairs these rules and services.');
   return save?.();
 };
@@ -41,7 +43,7 @@ after(async () => {
   await new Promise<void>(resolve => server.close(() => resolve()));
   rmSync(folder, { recursive: true, force: true });
 });
-beforeEach(() => { runs.length = 0; fail = false; });
+beforeEach(() => { runs.length = 0; fail = false; busy = false; });
 
 const post = (body: unknown) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const enabled = async () => { await servicesDB.read(); return servicesDB.data.biometrics.enabled; };
@@ -67,6 +69,18 @@ it('leaves the switch off and says why when the stream cannot be turned on', asy
   assert.match((await response.json() as { error: string }).error, /successful update repairs/);
   assert.equal(await enabled(), false);
 });
+
+for (const enabledValue of [true, false]) {
+  it(`answers 409 and keeps the switch when turning it ${enabledValue ? 'on' : 'off'} during an update`, async () => {
+    busy = true;
+    const before = await enabled();
+    const response = await post({ biometrics: { enabled: enabledValue } });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json() as { error: string }).error,
+      'An update, rollback or switch is already running. Wait for it to finish.');
+    assert.equal(await enabled(), before);
+  });
+}
 
 it('saves the switch with the command, so it is not saved before the command ran', async () => {
   // The route hands its save to the queued command rather than saving after.

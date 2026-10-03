@@ -1,5 +1,5 @@
 import { execFile } from 'child_process';
-import { runPrivilegedCommand } from './privilegedCommand.js';
+import { assertOperationsIdle, runPrivilegedCommand } from './privilegedCommand.js';
 
 // Pulled out so the "when do we stop the stream" decision is unit-testable
 // without spawning a real process. `deepPartial()`-parsed POST /services
@@ -17,10 +17,13 @@ export function shouldEnableBiometrics(body: { biometrics?: { enabled?: boolean 
 // Every on and off request runs after the one before it, with its save, so
 // quick toggles end in the state of the last request and the saved switch
 // always matches the stream. Requests are not merged: disable_biometrics.sh
-// and enable --now are both safe to repeat.
+// and enable --now are both safe to repeat. None runs while an update,
+// rollback or switch is under way, since those stop the stream to move the
+// code it runs from.
 let last: Promise<unknown> = Promise.resolve();
 function inOrder<T>(command: () => Promise<void>, save?: () => Promise<T>): Promise<T | undefined> {
   const run = last.then(async () => {
+    await assertOperationsIdle();
     await command();
     return save?.();
   });

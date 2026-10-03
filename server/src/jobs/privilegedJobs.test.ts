@@ -28,7 +28,7 @@ mock.module('child_process', { namedExports: {
     else callback((denied || (startFailed && !args.includes('-l'))) ? new Error('denied') : null, '');
   },
 } });
-const { assertOperationsIdle } = await import('./privilegedCommand.js');
+const { assertOperationsIdle, OperationBusyError } = await import('./privilegedCommand.js');
 const { triggerUpdateService } = await import('./update.js');
 const { triggerRollbackService } = await import('./rollback.js');
 const { triggerRevertToStockService } = await import('./revertToStock.js');
@@ -117,6 +117,37 @@ it('does not run target hooks when another operation is active', async () => {
     assert.equal(writes, 0);
     assert.equal(deletes, 0);
   } finally { activeUnit = ''; }
+});
+
+// The Biometrics switch would otherwise start or stop the stream while one
+// of these moves the code it runs from.
+for (const unit of ['free-sleep-update.service', 'free-sleep-rollback.service', 'free-sleep-revert.service']) {
+  it(`does not turn Biometrics on or off while ${unit} is running`, async () => {
+    calls.length = 0; loadState = 'loaded'; denied = false; startFailed = false;
+    activeUnit = unit;
+    try {
+      for (const trigger of [triggerBiometricsEnable, triggerBiometricsDisable]) {
+        let saved = false;
+        await assert.rejects(trigger(async () => { saved = true; }),
+          (error: Error) => error instanceof OperationBusyError && /already running/.test(error.message));
+        assert.equal(saved, false);
+      }
+      assert.equal(calls.some(args => args[0] === 'sudo'), false);
+    } finally { activeUnit = ''; }
+  });
+}
+
+it('does not turn Biometrics on while an update is being started', async () => {
+  let release: (() => void) | undefined;
+  holdLoadCheck = resume => { release = resume; holdLoadCheck = undefined; };
+  const update = triggerUpdateService();
+  try {
+    await assert.rejects(triggerBiometricsEnable(), /already running/);
+  } finally {
+    holdLoadCheck = undefined;
+    release?.();
+    await update;
+  }
 });
 
 it('turns the stream on with the one command its sudo rule allows, not enable_biometrics.sh', async () => {

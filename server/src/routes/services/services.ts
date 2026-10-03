@@ -4,7 +4,7 @@ import logger from '../../logger.js';
 const router = express.Router();
 
 import servicesDB, { updateServices } from '../../db/services.js';
-import { PrivilegedCommandError } from '../../jobs/privilegedCommand.js';
+import { PrivilegedCommandError, privilegedErrorStatus } from '../../jobs/privilegedCommand.js';
 import { ServicesSchema } from '../../db/servicesSchema.js';
 import {
   shouldDisableBiometrics, shouldEnableBiometrics, triggerBiometricsDisable, triggerBiometricsEnable,
@@ -62,7 +62,7 @@ router.post('/services', async (req: Request, res: Response) => {
   } catch (error) {
     logger.error(`Failed to ${turnOff ? 'disable' : 'enable'} biometrics`, error);
     const fallback = `Unable to ${turnOff ? 'disable' : 'enable'} biometrics`;
-    res.status(500).json({ error: error instanceof PrivilegedCommandError ? error.message : fallback });
+    res.status(privilegedErrorStatus(error)).json({ error: error instanceof PrivilegedCommandError ? error.message : fallback });
     return;
   }
 

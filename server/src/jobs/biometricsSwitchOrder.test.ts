@@ -9,9 +9,12 @@ const pending: Pending[] = [];
 const ran: string[] = [];
 let stream: 'on' | 'off' = 'on';
 let failNext: 'on' | 'off' | undefined;
+let operationRunning = false;
 mock.module('child_process', { namedExports: {
   execFile: (command: string, args: string[], _options: unknown, callback: (error: Error | null, stdout: string) => void) => {
-    if (command === '/bin/systemctl') callback(null, 'loaded');
+    if (command === '/bin/systemctl' && args.includes('--property=ActiveState')) {
+      callback(null, operationRunning && args.includes('free-sleep-update.service') ? 'active' : 'inactive');
+    } else if (command === '/bin/systemctl') callback(null, 'loaded');
     else if (args.includes('-l')) callback(null, '');
     else {
       const action = args.includes('/bin/systemctl') ? 'on' : 'off';
@@ -72,4 +75,24 @@ it('saves nothing for a request whose command failed, and still runs the next', 
 it('returns what the save returned', async () => {
   const result = settle([triggerBiometricsEnable(async () => 'saved')]);
   assert.equal(((await result)[0] as PromiseFulfilledResult<string>).value, 'saved');
+});
+
+// An update stops the stream and then the server, which answers requests
+// until it has stopped. A request that reaches its turn then must not start
+// the stream again under the update.
+it('refuses a queued request whose turn comes while an update runs, and saves nothing', async () => {
+  ran.length = 0;
+  flag = 'on'; stream = 'on';
+  const requests = [request('off'), request('on')];
+  while (pending.length === 0) await new Promise(resolve => setImmediate(resolve));
+  operationRunning = true;
+  try {
+    const [off, on] = await settle(requests);
+    assert.equal(off.status, 'fulfilled');
+    assert.equal(on.status, 'rejected');
+    assert.match(String((on as PromiseRejectedResult).reason), /already running/);
+    assert.deepEqual(ran, ['off']);
+    assert.equal(stream, 'off');
+    assert.equal(flag, 'off');
+  } finally { operationRunning = false; }
 });

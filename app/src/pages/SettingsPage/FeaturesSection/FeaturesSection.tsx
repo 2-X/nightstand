@@ -43,7 +43,8 @@ export default function FeaturesSection() {
       .catch((error) => {
         console.error(error);
         const status = isAxiosError(error) ? error.response?.status : undefined;
-        const message = status && status >= 500 && status < 600 ? error.response?.data?.error : undefined;
+        // A 409 says an update, rollback or switch is running.
+        const message = status && (status === 409 || (status >= 500 && status < 600)) ? error.response?.data?.error : undefined;
         setError(typeof message === 'string' && message.trim() ? message : 'Could not save this change. Try again.');
       })
       .finally(() => setIsUpdating(false));

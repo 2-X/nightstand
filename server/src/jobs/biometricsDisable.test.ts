@@ -5,7 +5,7 @@ const starts: string[] = [];
 let finishStart: (() => void) | undefined;
 mock.module('child_process', { namedExports: {
   execFile: (command: string, args: string[], _options: unknown, callback: (error: Error | null, stdout: string) => void) => {
-    if (command === '/bin/systemctl') callback(null, 'loaded');
+    if (command === '/bin/systemctl') callback(null, args.includes('--property=ActiveState') ? 'inactive' : 'loaded');
     else if (args.includes('-l')) callback(null, '');
     else {
       starts.push(args.join(' '));

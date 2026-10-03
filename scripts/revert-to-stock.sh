@@ -182,6 +182,16 @@ stop_writer() {
   esac
   return 1
 }
+# Until the server has stopped, its Biometrics switch can start the stream
+# again, so the stream is checked once more after the server stops. A stream
+# started meanwhile is stopped for the swap and started again after it.
+stop_late_stream() {
+  case "$(systemctl is-active free-sleep-stream 2>/dev/null)" in
+    inactive|failed|unknown) return 0 ;;
+  esac
+  STREAM_WAS_ACTIVE=active
+  stop_writer free-sleep-stream
+}
 
 # Set while the services are stopped for a swap: the tree that goes back to
 # LIVE if the run ends before the services start again. SWAP_NEW is the tree
@@ -474,7 +484,7 @@ curl -fsS --max-time 60 -X POST -H 'content-type: application/json' -d '{"reason
 STREAM_WAS_ACTIVE=$(systemctl is-active free-sleep-stream 2>/dev/null || true)
 RESTORE_TREE=$PREV
 SWAP_NEW=$STAGE
-{ stop_writer free-sleep-stream && stop_writer free-sleep; } || fail "could not stop the server before converting settings"
+{ stop_writer free-sleep-stream && stop_writer free-sleep && stop_late_stream; } || fail "could not stop the server before converting settings"
 RESULT_PHASE=swapping
 ARCHIVE_WAS_ACTIVE=$(systemctl is-active free-sleep-archive-raw.timer 2>/dev/null || true)
 systemctl stop free-sleep-archive-raw.timer free-sleep-archive-raw.service >/dev/null 2>&1 || true
