@@ -24,6 +24,7 @@ import MemoryIndicator from './MemoryIndicator.tsx';
 import ErrorBoundary from '@components/ErrorBoundary.tsx';
 import TimeZoneSelector from './DeviceSettingsSection/TimeZoneSelector.tsx';
 import TemperatureFormatSelector from './DeviceSettingsSection/TemperatureFormatSelector.tsx';
+import ThemePicker from './ThemePicker.tsx';
 import LedBrightnessSlider from './DeviceSettingsSection/LedBrightnessSlider.tsx';
 import { friendlyTimeZone } from '../../lib/timeZone';
 import DeviceInfo from './DeviceSettingsSection/DeviceInfo.tsx';
@@ -133,6 +134,7 @@ export default function SettingsPage() {
               <Stack spacing={ 3 }>
                 <TimeZoneSelector settings={ settings } updateSettings={ updateSettings } />
                 <TemperatureFormatSelector settings={ settings } updateSettings={ updateSettings } />
+                <ThemePicker />
                 <LedBrightnessSlider />
               </Stack>
             </Section>

@@ -204,19 +204,22 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
   {
     id: 'design-system',
     title: 'Design system',
-    description: 'System typography, dark surfaces, neutral controls and a shared temperature color scale.',
+    description: 'Four looks, chosen per device in Settings > Bed and sides: one token set per look for colour, type voice and '
+      + 'corners, a temperature scale per look with a neutral zero, and the same layout and 44 px targets in each.',
     category: 'ui',
     version: 'n/a',
     flag: null,
     default: true,
-    touchpoints: ['app/src/theme.ts', 'app/src/design/GlassCard.tsx'],
+    touchpoints: ['app/src/theme.ts', 'app/src/design/tokens.ts', 'app/src/design/themes', 'app/src/design/themePreference.ts',
+      'app/src/design/themeBoot.ts', 'app/src/pages/SettingsPage/ThemePicker.tsx'],
     depends_on: ['agent'],
     reversible: false,
-    tests: [],
+    tests: ['app/src/design/themes/themes.test.ts', 'app/src/design/themePreference.test.ts',
+      'app/src/pages/SettingsPage/ThemePicker.test.tsx'],
     upstream_offer: false,
-    rationale: 'Always on. A features.nightstandTheme key exists in settings from 3.1.0, '
-      + 'but nothing reads it and Settings does not show it; it stays in the schema so '
-      + 'stored settings keep validating. A real toggle would need a second whole theme.',
+    rationale: 'Always on: a look is a per device preference kept in the browser, not a server setting, so older versions '
+      + 'ignore it and going back needs no migration. The features.nightstandTheme key from 3.1.0 is still not read; it stays '
+      + 'in the schema so stored settings keep validating.',
   },
   {
     id: 'logs-viewer',
