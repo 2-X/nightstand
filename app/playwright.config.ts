@@ -1,7 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
+import { THEME_STORAGE_KEY } from './src/design/themes/ids';
 
 const PORT = 4173;
 const baseURL = `http://localhost:${PORT}`;
+// NIGHTSTAND_THEME=<id> runs every spec in that look, for checking a look against the layout specs.
+const theme = process.env.NIGHTSTAND_THEME;
 
 // Drives the pre-built demo (app/dist) in headless Chromium. The demo's MSW
 // service worker intercepts every request, so this runs fully offline. Build
@@ -21,6 +24,9 @@ export default defineConfig({
     // Not Pacific, the demo's own zone, so a spec that only passes on a Pacific-time machine fails here.
     timezoneId: 'Asia/Tokyo',
     trace: 'on-first-retry',
+    ...(theme ? {
+      storageState: { cookies: [], origins: [{ origin: baseURL, localStorage: [{ name: THEME_STORAGE_KEY, value: theme }] }] },
+    } : {}),
   },
   projects: [
     // The bottom navigation (aria-label per item, what these specs target)
