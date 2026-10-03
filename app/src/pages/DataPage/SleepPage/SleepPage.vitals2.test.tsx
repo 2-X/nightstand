@@ -64,7 +64,7 @@ describe('Sleep page vitals', () => {
   it('shows heart rate only, with no HRV or breathing row, when new sleep tracking is off', async () => {
     serve(false);
     renderWithProviders(<SleepPage/>);
-    const heart = await screen.findByRole('button', { name: /Heart rate/ });
+    const heart = await screen.findByRole('button', { name: /Average heart rate/ });
     expect(await within(heart).findByText('60 bpm')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /HRV/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Breathing rate/ })).not.toBeInTheDocument();
@@ -73,7 +73,7 @@ describe('Sleep page vitals', () => {
   it('opens heart rate when a saved link names HRV', async () => {
     serve(false);
     renderWithProviders(<SleepPage/>, { initialRoute: '/sleep?metric=hrv' });
-    const heart = await screen.findByRole('button', { name: /Heart rate/ });
+    const heart = await screen.findByRole('button', { name: /Average heart rate/ });
     await waitFor(() => expect(heart).toHaveAttribute('aria-expanded', 'true'));
     expect(screen.queryByText(/HRV/)).not.toBeInTheDocument();
   });

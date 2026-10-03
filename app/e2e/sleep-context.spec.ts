@@ -5,7 +5,7 @@ test('Monday opens the latest recorded night and expanded charts fill their pane
   await page.goto('/sleep');
   await expect(page.getByText(/Woke Mon, Sep 28/)).toBeVisible();
   await expect(page.getByRole('button', { name: /HRV/ })).toHaveCount(0);
-  const heartRate = page.getByRole('button', { name: /^Heart rate/ });
+  const heartRate = page.getByRole('button', { name: /^Average heart rate/ });
   await expect(heartRate).toContainText(/\d+ bpm/);
   await heartRate.click();
   const region = page.getByRole('region');

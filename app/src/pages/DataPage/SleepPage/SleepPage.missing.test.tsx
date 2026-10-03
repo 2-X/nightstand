@@ -234,7 +234,7 @@ it('shows measurement failures in collapsed vitals instead of no estimate', asyn
   renderWithProviders(<SleepPage/>);
   await screen.findByLabelText('Night summary');
   expect(await screen.findAllByText('Measurements unavailable')).toHaveLength(1);
-  expect(within(screen.getByRole('button', { name: /Heart rate/ })).queryByText('No estimate')).not.toBeInTheDocument();
+  expect(within(screen.getByRole('button', { name: /Average heart rate/ })).queryByText('No estimate')).not.toBeInTheDocument();
 });
 
 
@@ -259,7 +259,9 @@ it('shows failed stage data as an error while preserving the summary and vitals 
   renderWithProviders(<SleepPage/>);
   expect(await screen.findByText('Sleep stages could not be loaded.', {}, { timeout: 3000 })).toBeInTheDocument();
   expect(screen.getByLabelText('Night summary')).toBeInTheDocument();
-  expect(screen.getByText('Estimates from bed sensors, not a medical measurement.')).toBeInTheDocument();
+  expect(screen.getByText(
+    'Estimates from bed sensors, not a medical measurement. In a shared bed, some readings can come from the other sleeper.',
+  )).toBeInTheDocument();
   expect(screen.queryByText('No sleep stages data available for this period')).not.toBeInTheDocument();
 });
 it('describes the Rhythms analysis timing only while Rhythms is active', async () => {

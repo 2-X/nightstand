@@ -115,16 +115,16 @@ describe('Sleep selection and period', () => {
     })));
     const { user } = renderWithProviders(<SleepPage />, { initialRoute: '/sleep?metric=heart_rate' });
     await screen.findByText('8h');
-    expect(screen.getByRole('button', { name: /Heart rate/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: /Average heart rate/ })).toHaveAttribute('aria-expanded', 'true');
     await user.click(screen.getByRole('button', { name: /Breathing rate/ }));
-    expect(screen.getByRole('button', { name: /Heart rate/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /Average heart rate/ })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByRole('button', { name: /Breathing rate/ })).toHaveAttribute('aria-expanded', 'true');
     expect(screen.queryByText('Sleep balance')).not.toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Week' }));
     expect(await screen.findByText('1 of 7 nights recorded')).toBeInTheDocument();
     expect(screen.getByText(/Missing nights are not counted as zero sleep/)).toBeInTheDocument();
     expect(screen.queryByText(/-48h/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Heart rate/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Average heart rate/ })).not.toBeInTheDocument();
   });
 });
 
@@ -153,12 +153,12 @@ it('shows the nightly average once and the seven night average in expanded detai
   );
   const { user } = renderWithProviders(<SleepPage />);
   // The charts render late when the suite is busy, so wait longer than the default.
-  expect(await screen.findByRole('button', { name: 'Heart rate 65 bpm' }, { timeout: 10_000 })).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: 'Average heart rate 65 bpm' }, { timeout: 10_000 })).toBeInTheDocument();
   expect(screen.queryByText('SELECTED NIGHT')).not.toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: 'Heart rate 65 bpm' }));
+  await user.click(screen.getByRole('button', { name: 'Average heart rate 65 bpm' }));
   await screen.findByText('7-night average 63 bpm', undefined, { timeout: 10_000 });
   expect(screen.getAllByText('65 bpm')).toHaveLength(1);
-  await user.click(screen.getByRole('button', { name: 'Heart rate 65 bpm' }));
+  await user.click(screen.getByRole('button', { name: 'Average heart rate 65 bpm' }));
   await waitFor(() => expect(screen.queryByText('7-night average 63 bpm')).not.toBeInTheDocument(), { timeout: 10_000 });
 });
 

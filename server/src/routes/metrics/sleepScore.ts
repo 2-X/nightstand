@@ -26,18 +26,8 @@ function scoreDuration(seconds: number): number {
 }
 
 function scoreContinuity(timesExited: number): number {
-  // 0 exits = 100, -15 per exit, floor at 0
+  // 0 trips = 100, -15 per trip, floor at 0
   return Math.max(0, 100 - timesExited * 15);
-}
-
-function scoreRestingHr(minHr: number): number {
-  // Lower min HR during sleep = deeper rest
-  if (minHr === 0) return 0;
-  if (minHr < 55) return 95;
-  if (minHr < 65) return 85;
-  if (minHr < 75) return 70;
-  if (minHr < 85) return 55;
-  return 40;
 }
 
 function formatHours(seconds: number): string {
@@ -90,7 +80,7 @@ router.get(
       timestamp: { gte: startUnix, lte: endUnix },
     };
     const hrAgg = await prisma.vitals.aggregate({
-      where: vitalsQuery,
+      where: { ...vitalsQuery, heart_rate: { gt: 0 } },
       _min: { heart_rate: true },
     });
 
@@ -104,17 +94,19 @@ router.get(
       continuity: {
         score: scoreContinuity(exits),
         weight: 0.3,
-        value: `${exits} ${exits === 1 ? 'exit' : 'exits'}`,
+        value: `${exits} ${exits === 1 ? 'trip' : 'trips'} out of bed`,
         available: true,
       },
       // Kept in the response for older apps. The estimate is not used in the
       // score, so its weight goes to the other components.
       hrv: { score: 0, weight: 0.15, value: '', available: false },
+      // The lowest estimate is reported for the info sheet only: one low
+      // reading says little about rest, so it carries no weight in the score.
       restingHr: {
-        score: scoreRestingHr(minHr),
+        score: 0,
         weight: 0.15,
-        value: minHr > 0 ? `${Math.round(minHr)} bpm` : '\u2014',
-        available: minHr > 0,
+        value: minHr > 0 ? `${Math.round(minHr)} bpm` : '',
+        available: false,
       },
     };
 

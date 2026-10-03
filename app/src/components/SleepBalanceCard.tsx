@@ -4,7 +4,7 @@ import type { SleepRecord } from '@api/sleepSchema';
 import GlassCard from '@design/GlassCard';
 import { typography } from '@design/tokens';
 import {
-  formatSleepDuration, recordForNight, summarizeDurations, SLEEP_GOAL_MIN_SECONDS, SLEEP_GOAL_MAX_SECONDS,
+  formatSleepDuration, recordForNight, summarizeDurations, SLEEP_GOAL_MIN_SECONDS, SLEEP_GOAL_MAX_SECONDS, SLEEP_RANGE_TEXT,
 } from '../pages/DataPage/SleepPage/sleepContext';
 import useNightDurations from '../pages/DataPage/SleepPage/useNightDurations';
 import WeeklyScheduleBars from '../pages/DataPage/SleepPage/WeeklyScheduleBars';
@@ -27,7 +27,7 @@ export default function SleepBalanceCard({ records, weekStart, timeZone, onSelec
       { isPending ? <Typography variant="body2" color="text.secondary">Loading sleep durations</Typography> : summaries.map(summary => (
         <Box key={ summary.kind } sx={ { my: 1 } }>
           <Typography sx={ typography.metricValue }>
-            { formatSleepDuration(summary.average) } { summary.kind } on average
+            { formatSleepDuration(summary.average) } { summary.kind } on average{ summary.kind === 'asleep' ? ' (estimate)' : '' }
           </Typography>
           { summaries.length > 1 && (
             <Typography variant="body2" color="text.secondary">
@@ -37,7 +37,7 @@ export default function SleepBalanceCard({ records, weekStart, timeZone, onSelec
           ) }
           <Typography variant="body2" color="text.secondary">
             { summary.average < SLEEP_GOAL_MIN_SECONDS ? 'Under' : summary.average > SLEEP_GOAL_MAX_SECONDS ? 'Over' : 'Within' }{ ' ' }
-            your 6h 30m to 9h range
+            the { SLEEP_RANGE_TEXT } range
             { summary.kind === 'in bed' ? ' for time in bed' : '' }.
           </Typography>
         </Box>

@@ -10,14 +10,13 @@ import { useSleepStages } from '@api/sleepStages';
 import GlassCard from '@design/GlassCard';
 import { palette, typography } from '@design/tokens';
 import {
-  formatSleepDuration, nightDuration, SLEEP_GOAL_MIN_SECONDS, SLEEP_GOAL_MAX_SECONDS,
+  formatSleepDuration, nightDuration, SLEEP_GOAL_MIN_SECONDS, SLEEP_GOAL_MAX_SECONDS, SLEEP_RANGE_SOURCE, SLEEP_RANGE_TEXT,
 } from '../pages/DataPage/SleepPage/sleepContext';
 
 type Props = { sleepRecord: SleepRecord; timeZone?: string; title?: string; timeZoneLabel?: string };
 const CONTRIBUTORS = [
   { key: 'duration', label: 'Duration' },
-  { key: 'continuity', label: 'Continuity' },
-  { key: 'restingHr', label: 'Resting HR' },
+  { key: 'continuity', label: 'Trips out of bed' },
 ] as const;
 
 const spaceUnit = (value: string) => value.replace(/\s*(ms|bpm)$/, ' $1');
@@ -65,7 +64,7 @@ export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZon
       </Typography>
       { (duration.seconds < SLEEP_GOAL_MIN_SECONDS || duration.seconds > SLEEP_GOAL_MAX_SECONDS) && (
         <Typography variant="body2" color="text.secondary" sx={ { mt: 1 } }>
-          { duration.seconds < SLEEP_GOAL_MIN_SECONDS ? 'Under' : 'Over' } your 6h 30m to 9h range
+          { duration.seconds < SLEEP_GOAL_MIN_SECONDS ? 'Under' : 'Over' } the { SLEEP_RANGE_TEXT } range
           { duration.kind === 'in bed' ? ' for time in bed' : '' }
         </Typography>
       ) }
@@ -99,8 +98,8 @@ export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZon
         <DialogTitle id="sleep-estimate-title">About this estimate</DialogTitle>
         <DialogContent>
           <Typography>
-            A rough summary of time asleep, trips out of bed and heart rate from the bed's sensors. It has not been
-            validated, rarely goes below 70, and is mostly driven by how long you slept. Use it to compare your own nights.
+            A rough summary of time asleep and trips out of bed from the bed's sensors. It has not been validated and
+            is mostly driven by how long you slept.
           </Typography>
           { CONTRIBUTORS.map(({ key, label }) => {
             const component = score?.components?.[key];
@@ -110,9 +109,15 @@ export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZon
               </Typography>
             ) : null;
           }) }
+          { score?.components?.restingHr?.value && (
+            <Typography variant="body2" sx={ { mt: 2 } }>
+              { `Lowest heart rate (estimate): ${spaceUnit(score.components.restingHr.value)}` }
+            </Typography>
+          ) }
           <Typography variant="body2" color="text.secondary" sx={ { mt: 2 } }>
             The duration contribution uses time asleep, or time in bed when there are too few heart readings.
           </Typography>
+          <Typography variant="body2" color="text.secondary" sx={ { mt: 2 } }>{ SLEEP_RANGE_SOURCE }</Typography>
         </DialogContent>
         <DialogActions><Button onClick={ () => setInfoOpen(false) }>Close</Button></DialogActions>
       </Dialog>

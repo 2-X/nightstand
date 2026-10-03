@@ -155,6 +155,17 @@ describe('the demo data', () => {
     }
   });
 
+  it('words bed exits as trips and keeps the lowest heart rate out of the score', () => {
+    const [night] = createSampleNights(NOWS[0], 'America/Los_Angeles');
+    setSleepRecords([{
+      id: night.id, side: night.side, entered_bed_at: night.start.toISOString(), left_bed_at: night.end.toISOString(),
+      sleep_period_seconds: 0, times_exited_bed: 1, present_intervals: [], not_present_intervals: [],
+    }]);
+    const { components } = getSleepScore(night.start.toISOString(), night.end.toISOString());
+    expect(components.continuity?.value).toBe('1 trip out of bed');
+    expect(components.restingHr).toMatchObject({ available: false, value: expect.stringMatching(/^\d+ bpm$/) });
+  });
+
   it('is not priming while a side is warming', () => {
     const status = getDeviceStatus();
     expect(status.isPriming).toBe(false);

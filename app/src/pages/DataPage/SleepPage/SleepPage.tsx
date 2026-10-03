@@ -36,13 +36,13 @@ import { SLEEP_ANALYSIS_HOUR, SLEEP_ANALYSIS_MINUTE } from '../../../../../serve
 type MetricRow = { key: VitalsMetric; label: string; unit: string; summary: keyof VitalsSummary };
 
 const METRICS: ReadonlyArray<MetricRow> = [
-  { key: 'heart_rate', label: 'Heart rate', unit: 'bpm', summary: 'avgHeartRate' },
+  { key: 'heart_rate', label: 'Average heart rate', unit: 'bpm', summary: 'avgHeartRate' },
 ];
 
 // With new sleep tracking on, breathing rate returns. Minutes whose breathing
 // estimate failed its quality check carry no resp_rate and are left out.
 const V2_METRICS: ReadonlyArray<MetricRow> = [
-  { key: 'heart_rate', label: 'Heart rate', unit: 'bpm', summary: 'avgHeartRate' },
+  { key: 'heart_rate', label: 'Average heart rate', unit: 'bpm', summary: 'avgHeartRate' },
   { key: 'resp_rate', label: 'Breathing rate', unit: 'breaths/min', summary: 'avgBreathingRate' },
 ];
 
@@ -70,7 +70,9 @@ function NightVitals({ record, side, timeZone, biometricsV2 }: {
   };
   return (
     <Box sx={ { minWidth: 0, display: 'grid', gap: 2 } }>
-      <Typography variant="body2" color="text.secondary">Estimates from bed sensors, not a medical measurement.</Typography>
+      <Typography variant="body2" color="text.secondary">
+        Estimates from bed sensors, not a medical measurement. In a shared bed, some readings can come from the other sleeper.
+      </Typography>
       { metrics.map((item, index) => {
         const points = metricPoints[index];
         const value = points.length ? points.reduce((sum, point) => sum + point.value, 0) / points.length : undefined;

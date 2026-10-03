@@ -2,8 +2,12 @@ import moment from 'moment-timezone';
 import type { SleepStagesResponse } from '@api/sleepStages';
 import type { SleepRecord } from '@api/sleepSchema';
 
-export const SLEEP_GOAL_MIN_SECONDS = 6.5 * 3600;
+export const SLEEP_GOAL_MIN_SECONDS = 7 * 3600;
 export const SLEEP_GOAL_MAX_SECONDS = 9 * 3600;
+export const SLEEP_RANGE_TEXT = '7h to 9h';
+export const SLEEP_RANGE_SOURCE = 'The 7 to 9 hour range is the National Sleep Foundation\'s recommendation for adults 18 to 64 '
+  + '(Hirshkowitz et al., Sleep Health, 2015), also in line with the AASM and SRS consensus of 7 or more hours '
+  + '(Watson et al., 2015). It is a general guide, not advice for you.';
 
 // Week-strip bar height in px: proportional from 0 up to the top of the goal range.
 export const nightMarkHeight = (seconds: number) =>

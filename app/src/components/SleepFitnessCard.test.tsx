@@ -11,9 +11,9 @@ vi.mock('@api/sleepScore', () => ({
   useSleepScore: () => fixture.scoreError ? { data: undefined, isError: true, isPending: false } : ({ data: {
     active: fixture.active, score: fixture.score, components: {
       duration: { score: 90, value: fixture.lowCoverage || !fixture.epochs ? '7h 30m in bed' : '6h 30m asleep', available: true },
-      continuity: { score: 84, value: '84%', available: true },
+      continuity: { score: 84, value: '1 trip out of bed', available: true },
       hrv: { score: 70, value: '63ms', available: true },
-      restingHr: { score: 80, value: fixture.restingHr, available: !!fixture.restingHr },
+      restingHr: { score: 80, value: fixture.restingHr, available: false },
     } } }),
 }));
 vi.mock('@api/sleepStages', () => ({ useSleepStages: () => ({ data: {
@@ -38,16 +38,25 @@ it('leads with duration and shows the score as a small estimate, without verdict
 it('opens with the plain description of what the score is', async () => {
   const { user } = renderWithProviders(<SleepFitnessCard sleepRecord={ record } timeZone="UTC"/>);
   await user.click(await screen.findByRole('button', { name: 'About the sleep estimate' }));
-  expect(screen.getByText(/^A rough summary of time asleep, trips out of bed and heart rate/)).toBeInTheDocument();
+  expect(screen.getByText(
+    'A rough summary of time asleep and trips out of bed from the bed\'s sensors. '
+    + 'It has not been validated and is mostly driven by how long you slept.',
+  )).toBeInTheDocument();
 });
-it('shows all contributors with unavailable data in words', async () => {
+it('shows duration and trips out of bed as contributors, with no heart rate row', async () => {
   renderWithProviders(<SleepFitnessCard sleepRecord={ record } timeZone="UTC"/>);
   expect(screen.getByText('6h 30m asleep', { selector: '.MuiTypography-body2' })).toBeInTheDocument();
-  expect(screen.getByText('84%')).toBeInTheDocument();
-  expect(screen.getByText('Resting HR')).toBeInTheDocument();
-  expect(screen.getByText('Not enough data')).toBeInTheDocument();
+  expect(screen.getByText('Trips out of bed')).toBeInTheDocument();
+  expect(screen.getByText('1 trip out of bed')).toBeInTheDocument();
+  expect(screen.queryByText('Resting HR')).not.toBeInTheDocument();
+  expect(screen.queryByText('Not enough data')).not.toBeInTheDocument();
   expect(screen.getAllByRole('progressbar')).toHaveLength(2);
   expect(screen.queryByText('HRV')).not.toBeInTheDocument();
+});
+it('names the 7h to 9h range, not a personal one, when the night is out of it', () => {
+  renderWithProviders(<SleepFitnessCard sleepRecord={ record } timeZone="UTC"/>);
+  expect(screen.getByText(/^Under the 7h to 9h range/)).toBeInTheDocument();
+  expect(screen.queryByText(/your/)).not.toBeInTheDocument();
 });
 it('does not turn presence duration into a sleep estimate when classification is disabled', () => {
   fixture.enabled = false;
@@ -65,15 +74,20 @@ it('uses a presence label when classification has no epochs', () => {
 });
 
 it('shows contributor values instead of word bands, and repeats them in the info sheet', async () => {
-  fixture.restingHr = '52bpm';
+  fixture.restingHr = '52 bpm';
   const { user } = renderWithProviders(<SleepFitnessCard sleepRecord={ record } timeZone="UTC"/>);
-  expect(screen.getByText('52 bpm')).toBeInTheDocument();
+  expect(screen.getByText('Trips out of bed')).toBeInTheDocument();
+  expect(screen.getByText('1 trip out of bed')).toBeInTheDocument();
+  expect(screen.queryByText('52 bpm')).not.toBeInTheDocument();
+  expect(screen.queryByText('Resting HR')).not.toBeInTheDocument();
   expect(screen.queryByText('63 ms')).not.toBeInTheDocument();
   expect(screen.queryByRole('progressbar', { name: 'HRV contribution' })).not.toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'About the sleep estimate' }));
   const dialog = screen.getByRole('dialog');
   expect(within(dialog).getByText('Duration: 6h 30m asleep')).toBeInTheDocument();
-  expect(within(dialog).getByText('Resting HR: 52 bpm')).toBeInTheDocument();
+  expect(within(dialog).getByText('Trips out of bed: 1 trip out of bed')).toBeInTheDocument();
+  expect(within(dialog).getByText('Lowest heart rate (estimate): 52 bpm')).toBeInTheDocument();
+  expect(within(dialog).getByText(/^The 7 to 9 hour range is the National Sleep Foundation's recommendation/)).toBeInTheDocument();
   expect(dialog).not.toHaveTextContent('HRV');
 });
 
@@ -91,7 +105,7 @@ it('says the score is unavailable, not that data is missing, when the score requ
   fixture.scoreError = true;
   renderWithProviders(<SleepFitnessCard sleepRecord={ record } timeZone="UTC"/>);
   expect(screen.getByText('Score unavailable')).toBeInTheDocument();
-  expect(screen.getAllByText('Unavailable')).toHaveLength(3);
+  expect(screen.getAllByText('Unavailable')).toHaveLength(2);
   expect(screen.queryByText('Not enough data')).not.toBeInTheDocument();
 });
 

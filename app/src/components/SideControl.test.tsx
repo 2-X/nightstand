@@ -52,6 +52,8 @@ it('leaves uncertain and disabled presence out of the tiles', () => {
   vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-29T05:00:00Z'));
   const view = render(<SideControl compact={ false }/>);
   expect(screen.queryByText(/In bed/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/resence/)).not.toBeInTheDocument();
+  expect(screen.getByRole('radio', { name: 'Alex. Off.' })).toBeInTheDocument();
   vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-28T05:00:00Z'));
   fixture.enabled = false;
   view.rerender(<SideControl compact={ false }/>);

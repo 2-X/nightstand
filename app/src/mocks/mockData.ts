@@ -138,8 +138,8 @@ const createSleepScore = (startTime: string, endTime: string): SleepScore => {
         score: night.duration, weight: 0.4, available: true,
         value: `${Math.floor(asleepMinutes / 60)}h ${asleepMinutes % 60}m asleep`,
       },
-      continuity: { score: night.continuity, weight: 0.3, value: `${exits} ${exits === 1 ? 'exit' : 'exits'}`, available: true },
-      restingHr: { score: night.restingHr, weight: 0.15, value: `${night.minHeartRate} bpm`, available: true },
+      continuity: { score: night.continuity, weight: 0.3, value: `${exits} ${exits === 1 ? 'trip' : 'trips'} out of bed`, available: true },
+      restingHr: { score: 0, weight: 0.15, value: `${night.minHeartRate} bpm`, available: false },
     },
   };
 };

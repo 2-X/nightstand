@@ -95,3 +95,49 @@ test('never uses HRV, whatever the stored values', async () => {
   assert.deepEqual(withoutHrv.components.hrv, withHrv.components.hrv);
   assert.equal(withHrv.score, withoutHrv.score);
 });
+
+async function seedNight(side: 'left' | 'right', from: number, exits: number, heartRates: number[]) {
+  await prisma.$executeRawUnsafe(`INSERT INTO sleep_records
+    (side, entered_bed_at, left_bed_at, sleep_period_seconds, times_exited_bed, present_intervals, not_present_intervals)
+    VALUES ('${side}', ${from - 60}, ${from + 3660}, 3720, ${exits}, '[]', '[]')`);
+  const rows = heartRates.map((bpm, index) => `('${side}', ${from + index * 60}, ${bpm}, 0, 13)`).join(', ');
+  await prisma.$executeRawUnsafe(`INSERT INTO vitals (side, timestamp, heart_rate, hrv, breathing_rate) VALUES ${rows}`);
+}
+
+test('counts trips out of bed in words and leaves the lowest heart rate out of the score', async () => {
+  const night = 1790700000;
+  await seedNight('left', night, 1, [52, 60, 64]);
+  await seedNight('right', night, 1, [90, 95, 99]);
+  const low = await scoreFor('left', night);
+  const high = await scoreFor('right', night);
+  assert.equal(low.components.continuity.value, '1 trip out of bed');
+  assert.equal(low.components.restingHr.available, false);
+  assert.equal(low.components.restingHr.value, '52 bpm');
+  assert.equal(high.components.restingHr.value, '90 bpm');
+  assert.equal(low.components.restingHr.score, 0);
+  assert.equal(low.score, high.score);
+  const { duration, continuity } = low.components;
+  assert.equal(low.score, Math.round((duration.score * 0.4 + continuity.score * 0.3) / 0.7));
+});
+
+test('says 0 trips and plural trips out of bed', async () => {
+  const night = 1790800000;
+  await seedNight('left', night, 0, [60, 61]);
+  await seedNight('right', night, 3, [60, 61]);
+  assert.equal((await scoreFor('left', night)).components.continuity.value, '0 trips out of bed');
+  assert.equal((await scoreFor('right', night)).components.continuity.value, '3 trips out of bed');
+});
+
+test('leaves the lowest heart rate blank when the night has no estimate', async () => {
+  const night = 1790900000;
+  await seedNight('left', night, 0, [0, 0]);
+  const response = await scoreFor('left', night);
+  assert.equal(response.components.restingHr.available, false);
+  assert.equal(response.components.restingHr.value, '');
+});
+
+test('skips failed-estimate minutes when finding the lowest heart rate', async () => {
+  const night = 1791000000;
+  await seedNight('left', night, 0, [0, 55, 61]);
+  assert.equal((await scoreFor('left', night)).components.restingHr.value, '55 bpm');
+});

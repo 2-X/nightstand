@@ -30,6 +30,10 @@ is a hard fork; for the history of the projects it descends from, see
 - The Sleep page no longer shows deep sleep and REM. They came from fixed
   rules over heart rate and movement and looked about the same every night,
   so it shows time awake and asleep instead.
+- Sleep labels say what they measure: average heart rate, with a note that a
+  shared bed can mix in the other sleeper; trips out of bed instead of
+  continuity; the lowest heart rate is no longer scored; the sleep range is 7
+  to 9 hours, with its source in the score's info sheet.
 - Settings > Software now says when you are running a beta while your update
   channel is Stable, and offers to switch. Releases are marked Stable or Beta
   in the version list and the release notes, and installing a beta says so.
