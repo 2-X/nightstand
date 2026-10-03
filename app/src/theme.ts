@@ -1,68 +1,39 @@
-import { PaletteMode, alpha, createTheme, type Theme, type ThemeOptions } from '@mui/material/styles';
+import { alpha, createTheme, type Theme, type ThemeOptions, type TypographyVariantsOptions } from '@mui/material/styles';
 
-import { palette } from '@design/tokens';
+import { themeTokens } from '@design/tokens';
+import type { ThemeTokens } from '@design/themes/types';
 
-const HEADING_WEIGHT = 600;
-const DARK_THEME_BORDER = palette.border.subtle;
-const LIGHT_THEME_BORDER = '#E0E0E0';
-const DARK_APP_BAR = palette.bg.base;
-
-const typography = {
-  fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',
+// Sizes are shared by every look; only colour, corners and type voice come from the tokens.
+const buildTypography = ({ type }: ThemeTokens): TypographyVariantsOptions => ({
+  fontFamily: type.fontFamily,
+  fontWeightMedium: type.mediumWeight,
   allVariants: {
     fontSize: 16,
     letterSpacing: 'normal',
     fontVariantNumeric: 'tabular-nums',
   },
-  h1: {
-    fontSize: '1.75rem',
-    fontWeight: HEADING_WEIGHT,
-    lineHeight: 1.15,
-    letterSpacing: '-0.01em',
-  },
-  h2: {
-    fontSize: '1.125rem',
-    fontWeight: HEADING_WEIGHT,
-  },
-  h3: {
-    fontSize: '1.125rem',
-    fontWeight: HEADING_WEIGHT,
-  },
-  h4: {
-    fontSize: '1rem',
-    fontWeight: HEADING_WEIGHT,
-  },
-  h5: {
-    fontSize: '1rem',
-    fontWeight: HEADING_WEIGHT,
-  },
-  h6: {
-    fontSize: '0.875rem',
-    fontWeight: HEADING_WEIGHT,
-  },
-  body1: { fontSize: '1rem', lineHeight: 1.5 },
-  body2: { fontSize: '0.875rem', lineHeight: 1.5 },
-  caption: { fontSize: '0.8125rem' },
-} satisfies ThemeOptions['typography'];
-
-const getBorderColor = (mode: PaletteMode) => (mode === 'dark' ? DARK_THEME_BORDER : LIGHT_THEME_BORDER);
+  h1: { fontSize: '1.75rem', fontWeight: type.headingWeight, lineHeight: 1.15, letterSpacing: '-0.01em' },
+  h2: { fontSize: '1.125rem', fontWeight: type.headingWeight },
+  h3: { fontSize: '1.125rem', fontWeight: type.headingWeight },
+  h4: { fontSize: '1rem', fontWeight: type.headingWeight },
+  h5: { fontSize: '1rem', fontWeight: type.headingWeight },
+  h6: { fontSize: '0.875rem', fontWeight: type.headingWeight },
+  body1: { fontSize: '1rem', lineHeight: 1.5, letterSpacing: type.bodyLetterSpacing },
+  body2: { fontSize: '0.875rem', lineHeight: 1.5, letterSpacing: type.bodyLetterSpacing },
+  caption: { fontSize: '0.8125rem', letterSpacing: type.bodyLetterSpacing },
+});
 
 const getFilledChipStyles = (theme: Theme, paletteKey: 'success' | 'info' | 'warning' | 'secondary') => {
   const paletteColor = theme.palette[paletteKey];
-  const overlay = theme.palette.mode === 'light' ? 0.15 : 0.35;
-
   return {
-    backgroundColor: alpha(paletteColor.main, overlay),
-    color:
-      theme.palette.mode === 'light'
-        ? (paletteColor.dark ?? paletteColor.main)
-        : (paletteColor.light ?? paletteColor.contrastText ?? theme.palette.getContrastText(paletteColor.main)),
+    backgroundColor: alpha(paletteColor.main, 0.35),
+    color: paletteColor.light ?? paletteColor.contrastText ?? theme.palette.getContrastText(paletteColor.main),
     border: 'none',
   };
 };
 
-const buildComponents = (mode: PaletteMode) => {
-  const borderColor = getBorderColor(mode);
+const buildComponents = ({ palette: p, radius, type }: ThemeTokens) => {
+  const controlCase = { textTransform: type.controlCase.textTransform, letterSpacing: type.controlCase.letterSpacing };
   return {
     MuiCssBaseline: {
       styleOverrides: {
@@ -73,7 +44,7 @@ const buildComponents = (mode: PaletteMode) => {
           '@media (min-width: 900px)': { scrollPaddingTop: '80px', scrollPaddingBottom: '16px' },
         },
         summary: { minHeight: 44, paddingBlock: 10, boxSizing: 'border-box', cursor: 'pointer' },
-        ':focus-visible': { outline: `2px solid ${palette.lamp}`, outlineOffset: '3px' },
+        ':focus-visible': { outline: `2px solid ${p.accent}`, outlineOffset: '3px' },
         '@media (prefers-reduced-motion: reduce)': {
           '*, *::before, *::after': {
             animationDuration: '0.01ms !important',
@@ -90,23 +61,15 @@ const buildComponents = (mode: PaletteMode) => {
     MuiButtonBase: {
       styleOverrides: {
         root: {
-          '&.Mui-focusVisible': { outline: `2px solid ${palette.lamp}`, outlineOffset: '2px' },
+          '&.Mui-focusVisible': { outline: `2px solid ${p.accent}`, outlineOffset: '2px' },
           '&.Mui-focusVisible .MuiTouchRipple-ripplePulsate': { display: 'none' },
         },
       },
     },
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          textTransform: 'none',
-          minHeight: 44,
-        },
-      },
-    },
+    MuiButton: { styleOverrides: { root: { ...controlCase, minHeight: 44 } } },
     MuiSlider: { styleOverrides: { root: { padding: '20px 0' }, thumb: { '&::after': { width: 44, height: 44 } } } },
     MuiSwitch: {
-      styleOverrides: { root: { width: 64, height: 44, padding: 15 },
-        switchBase: { padding: 12, color: mode === 'dark' ? palette.text.secondary : undefined } },
+      styleOverrides: { root: { width: 64, height: 44, padding: 15 }, switchBase: { padding: 12, color: p.text.secondary } },
     },
     MuiRadio: { styleOverrides: { root: { minWidth: 44, minHeight: 44 } } },
     MuiCheckbox: { styleOverrides: { root: { minWidth: 44, minHeight: 44 } } },
@@ -114,109 +77,47 @@ const buildComponents = (mode: PaletteMode) => {
     MuiToggleButton: {
       styleOverrides: {
         root: {
-          textTransform: 'none',
+          ...controlCase,
           minHeight: 44,
           paddingBlock: 8,
           fontSize: 16,
           lineHeight: 1.5,
-          '&.Mui-selected': { backgroundColor: mode === 'dark' ? palette.bg.selected : undefined },
+          '&.Mui-selected': { backgroundColor: p.bg.selected },
         },
       },
     },
     MuiTabs: { styleOverrides: { root: { minHeight: 44 } } },
-    MuiTab: {
-      styleOverrides: {
-        root: {
-          minHeight: 44,
-          textTransform: 'none',
-        },
-      },
-    },
+    MuiTab: { styleOverrides: { root: { ...controlCase, minHeight: 44 } } },
     MuiFormControl: { defaultProps: { variant: 'standard' } },
     MuiCardContent: { styleOverrides: { root: { padding: 16, '&:last-child': { paddingBottom: 16 } } } },
     MuiAccordion: { styleOverrides: { root: {
-      '&&': { borderRadius: 12, margin: 0 }, '&:before': { display: 'none' },
+      '&&': { borderRadius: radius, margin: 0 }, '&:before': { display: 'none' },
     } } },
-    MuiAccordionSummary: { styleOverrides: { root: { fontFamily: 'inherit', fontSize: 16, fontWeight: 500, minHeight: 44,
+    MuiAccordionSummary: { styleOverrides: { root: { fontFamily: 'inherit', fontSize: 16, fontWeight: type.mediumWeight, minHeight: 44,
       '&.Mui-expanded': { minHeight: 44 },
       '&.Mui-focusVisible': { outlineOffset: '-2px' } }, content: { margin: '8px 0', '&.Mui-expanded': { margin: '8px 0' } } } },
-    MuiDialogTitle: { styleOverrides: { root: { fontSize: 16, fontWeight: 600 } } },
+    MuiDialogTitle: { styleOverrides: { root: { fontSize: 16, fontWeight: type.headingWeight } } },
     MuiListItemText: { styleOverrides: { root: { marginBlock: 2 } } },
     MuiListItemButton: { styleOverrides: { root: { minHeight: 44, '&.Mui-focusVisible': { outlineOffset: '-2px' },
-      '&.Mui-selected': { backgroundColor: mode === 'dark' ? palette.bg.selected : undefined } } } },
-    MuiFormControlLabel: {
-      styleOverrides: {
-        label: {
-          textTransform: 'none',
-        },
-      },
-    },
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          backgroundImage: 'none',
-          border: `1px solid ${borderColor}`,
-          boxShadow: 'none',
-        },
-      },
-    },
-    MuiTextField: {
-      defaultProps: {
-        variant: 'standard',
-      },
-    },
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          textTransform: 'none',
-        },
-      },
-    },
-    MuiFormHelperText: {
-      styleOverrides: {
-        root: {
-          fontSize: '0.875rem',
-        },
-      },
-    },
-    MuiOutlinedInput: {
-      styleOverrides: {
-        notchedOutline: {
-          borderColor: mode === 'dark' ? palette.border.control : borderColor,
-        },
-      },
-    },
-    MuiInputBase: {
-      styleOverrides: { root: { minHeight: 44 }, input: { minHeight: 44, boxSizing: 'border-box' } },
-    },
+      '&.Mui-selected': { backgroundColor: p.bg.selected } } } },
+    MuiFormControlLabel: { styleOverrides: { label: { textTransform: 'none' } } },
+    MuiPaper: { styleOverrides: { root: { backgroundImage: 'none', border: `1px solid ${p.border.subtle}`, boxShadow: 'none' } } },
+    MuiTextField: { defaultProps: { variant: 'standard' } },
+    MuiCard: { styleOverrides: { root: { textTransform: 'none' } } },
+    MuiFormHelperText: { styleOverrides: { root: { fontSize: '0.875rem' } } },
+    MuiOutlinedInput: { styleOverrides: { notchedOutline: { borderColor: p.border.control } } },
+    MuiInputBase: { styleOverrides: { root: { minHeight: 44 }, input: { minHeight: 44, boxSizing: 'border-box' } } },
     MuiSelect: {
       defaultProps: { variant: 'standard' },
       styleOverrides: {
-        select: {
-          minHeight: '44px !important',
-          boxSizing: 'border-box',
-          display: 'flex', alignItems: 'center',
-          fontSize: 16,
-        },
+        select: { minHeight: '44px !important', boxSizing: 'border-box', display: 'flex', alignItems: 'center', fontSize: 16 },
       },
     },
-    MuiAutocomplete: {
-      styleOverrides: {
-        input: {
-          fontSize: 16,
-        },
-      },
-    },
+    MuiAutocomplete: { styleOverrides: { input: { fontSize: 16 } } },
     MuiInput: {
       styleOverrides: {
-        input: {
-          fontSize: 16,
-        },
-        underline: ({ theme }) => ({
-          '&:before': {
-            borderBottomColor: theme.palette.mode === 'dark' ? palette.border.control : theme.palette.divider,
-          },
-        }),
+        input: { fontSize: 16 },
+        underline: { '&:before': { borderBottomColor: p.border.control } },
       },
     },
     MuiAppBar: {
@@ -226,18 +127,15 @@ const buildComponents = (mode: PaletteMode) => {
           borderTop: 'none',
           borderLeft: 'none',
           borderRight: 'none',
-          borderBottomColor: `${borderColor} !important`,
+          borderBottomColor: `${p.border.subtle} !important`,
           boxShadow: 'none',
-          backgroundColor: mode === 'dark' ? DARK_APP_BAR : 'rgb(245, 245, 245)',
+          backgroundColor: p.appBar,
         },
       },
     },
     MuiChip: {
       styleOverrides: {
-        root: {
-          borderRadius: 999,
-          fontWeight: 500,
-        },
+        root: { borderRadius: 999, fontWeight: type.mediumWeight },
         colorSuccess: ({ theme }) => getFilledChipStyles(theme, 'success'),
         colorInfo: ({ theme }) => getFilledChipStyles(theme, 'info'),
         colorWarning: ({ theme }) => getFilledChipStyles(theme, 'warning'),
@@ -247,36 +145,26 @@ const buildComponents = (mode: PaletteMode) => {
   } satisfies ThemeOptions['components'];
 };
 
-const buildPalette = (mode: PaletteMode): ThemeOptions['palette'] => ({
-  mode,
-  divider: getBorderColor(mode),
-  ...(mode === 'dark' ? {
-    primary: { main: palette.lamp }, secondary: { main: palette.lamp },
-    success: { main: palette.status.ok }, warning: { main: palette.status.warn },
-    error: { main: palette.status.error }, info: { main: palette.status.info },
-    action: { active: palette.text.secondary, disabled: palette.text.disabled, hover: palette.bg.hover },
-    text: { primary: palette.text.primary, secondary: palette.text.secondary, disabled: palette.text.disabled },
-  } : {}),
-  background:
-    mode === 'dark'
-      ? {
-        default: palette.bg.base,
-        paper: palette.bg.elevated,
-      }
-      : {
-        default: 'rgb(250, 250, 250)',
-        paper: 'rgb(255, 255, 255)',
-      },
-});
-
-export const buildTheme = (mode: PaletteMode = 'dark') =>
-  createTheme({
-    typography,
-    palette: buildPalette(mode),
-    shape: {
-      borderRadius: 12,
+export const buildMuiTheme = (tokens: ThemeTokens) => {
+  const p = tokens.palette;
+  return createTheme({
+    typography: buildTypography(tokens),
+    palette: {
+      mode: 'dark',
+      divider: p.border.subtle,
+      primary: { main: p.accent },
+      secondary: { main: p.accent },
+      success: { main: p.status.ok },
+      warning: { main: p.status.warn },
+      error: { main: p.status.error },
+      info: { main: p.status.info },
+      action: { active: p.text.secondary, disabled: p.text.disabled, hover: p.bg.hover },
+      text: { primary: p.text.primary, secondary: p.text.secondary, disabled: p.text.disabled },
+      background: { default: p.bg.base, paper: p.bg.elevated },
     },
-    components: buildComponents(mode),
+    shape: { borderRadius: tokens.radius },
+    components: buildComponents(tokens),
   });
+};
 
-export const theme = buildTheme('dark');
+export const theme = buildMuiTheme(themeTokens);
