@@ -19,10 +19,10 @@ import { useAppStore } from '@state/appStore.tsx';
 import { useControlTempStore } from './controlTempStore.tsx';
 import { useLastNight } from './useLastNight.ts';
 import { useBedFrame } from './useBedFrame';
+import { NOT_RESPONDING } from './bedText';
 import { media } from '@design/tokens';
 import { useSettings } from '@api/settings.ts';
 
-const NOT_RESPONDING = 'Not responding';
 const STALE_TILES = { left: NOT_RESPONDING, right: NOT_RESPONDING };
 const LOADING_TILES = { left: '', right: '' };
 const pageSx = {

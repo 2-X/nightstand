@@ -4,8 +4,8 @@ import { useBedFrame } from './useBedFrame';
 
 const T = Date.parse('2026-09-29T04:41:00Z');
 const status = { isOn: true, targetTemperatureF: 84, currentTemperatureF: 82 };
-const fixture = vi.hoisted(() => ({ query: {} as Record<string, unknown> }));
-vi.mock('@api/deviceStatus', () => ({ useDeviceStatus: () => fixture.query }));
+const fixture = vi.hoisted(() => ({ query: {} as Record<string, unknown>, refetch: vi.fn() }));
+vi.mock('@api/deviceStatus', () => ({ useDeviceStatus: () => ({ refetch: fixture.refetch, ...fixture.query }) }));
 vi.mock('@state/appStore', () => ({ useAppStore: () => ({ side: 'left' }) }));
 
 function Probe() {
@@ -14,19 +14,22 @@ function Probe() {
 }
 
 beforeEach(() => {
+  fixture.refetch.mockClear();
   vi.useFakeTimers();
   vi.setSystemTime(T);
 });
 afterEach(() => vi.useRealTimers());
 
-it('turns stale on its own two minutes after the last status', () => {
+it('stops showing a status as live on its own two minutes after it, and asks again', () => {
   fixture.query = { data: { left: status }, dataUpdatedAt: T, isError: false, isFetching: false, failureCount: 0 };
   render(<Probe/>);
   expect(screen.getByText('live')).toBeInTheDocument();
   act(() => { vi.advanceTimersByTime(119_000); });
   expect(screen.getByText('live')).toBeInTheDocument();
+  expect(fixture.refetch).not.toHaveBeenCalled();
   act(() => { vi.advanceTimersByTime(2_000); });
-  expect(screen.getByText(`stale since ${new Date(T).toISOString()}`)).toBeInTheDocument();
+  expect(screen.getByText('loading')).toBeInTheDocument();
+  expect(fixture.refetch).toHaveBeenCalledWith({ cancelRefetch: false });
 });
 
 it('starts the two minutes again when an answer equal to the last arrives', () => {
@@ -40,7 +43,7 @@ it('starts the two minutes again when an answer equal to the last arrives', () =
   act(() => { vi.advanceTimersByTime(119_000); });
   expect(screen.getByText('live')).toBeInTheDocument();
   act(() => { vi.advanceTimersByTime(2_000); });
-  expect(screen.getByText(`stale since ${new Date(T + 60_000).toISOString()}`)).toBeInTheDocument();
+  expect(screen.getByText('loading')).toBeInTheDocument();
 });
 
 it('dates a first load that failed from its first render', () => {
@@ -65,16 +68,16 @@ it('is loading before the first answer', () => {
   expect(screen.getByText('loading')).toBeInTheDocument();
 });
 
-it('goes stale, live while a refresh is under way, stale when it fails, then live and stale again on new data', () => {
+it('waits while a refresh is under way, stale when it fails, then live and waiting again on new data', () => {
   const settled = { isError: false, isFetching: false, failureCount: 0, errorUpdateCount: 0 };
   fixture.query = { ...settled, data: { left: status }, dataUpdatedAt: T };
   const { rerender } = render(<Probe/>);
   act(() => { vi.advanceTimersByTime(121_000); });
-  expect(screen.getByText(`stale since ${new Date(T).toISOString()}`)).toBeInTheDocument();
+  expect(screen.getByText('loading')).toBeInTheDocument();
 
   fixture.query = { ...fixture.query, isFetching: true };
   rerender(<Probe/>);
-  expect(screen.getByText('live')).toBeInTheDocument();
+  expect(screen.getByText('loading')).toBeInTheDocument();
 
   fixture.query = { ...fixture.query, isFetching: false, isError: true, failureCount: 1, errorUpdateCount: 1 };
   rerender(<Probe/>);
@@ -87,11 +90,55 @@ it('goes stale, live while a refresh is under way, stale when it fails, then liv
   act(() => { vi.advanceTimersByTime(119_000); });
   expect(screen.getByText('live')).toBeInTheDocument();
   act(() => { vi.advanceTimersByTime(2_000); });
-  expect(screen.getByText(`stale since ${new Date(fresh).toISOString()}`)).toBeInTheDocument();
+  expect(screen.getByText('loading')).toBeInTheDocument();
 });
 
 it('keeps a failed first load stale while it is asked again', () => {
   fixture.query = { data: undefined, dataUpdatedAt: 0, isError: false, isFetching: true, failureCount: 0, errorUpdateCount: 1 };
   render(<Probe/>);
   expect(screen.getByText(`stale since ${new Date(T).toISOString()}`)).toBeInTheDocument();
+});
+
+// Reopened after eight minutes in the background, with the socket suspended meanwhile.
+const away = T - 480_000;
+
+it('waits, without claiming a failure, while the refresh of a reopened app is under way, then shows the answer', () => {
+  fixture.query = { data: { left: status }, dataUpdatedAt: away, isError: false, isFetching: true, failureCount: 0 };
+  const { rerender } = render(<Probe/>);
+  expect(screen.getByText('loading')).toBeInTheDocument();
+  fixture.query = { ...fixture.query, isFetching: false, dataUpdatedAt: Date.now() };
+  rerender(<Probe/>);
+  expect(screen.getByText('live')).toBeInTheDocument();
+});
+
+it('asks again when a reopened app renders before its refresh has started', () => {
+  fixture.query = { data: { left: status }, dataUpdatedAt: away, isError: false, isFetching: false, failureCount: 0 };
+  render(<Probe/>);
+  expect(screen.getByText('loading')).toBeInTheDocument();
+  expect(fixture.refetch).toHaveBeenCalledWith({ cancelRefetch: false });
+});
+
+it('turns stale when the refresh of a reopened app fails', () => {
+  fixture.query = { data: { left: status }, dataUpdatedAt: away, isError: false, isFetching: true, failureCount: 0 };
+  const { rerender } = render(<Probe/>);
+  fixture.query = { ...fixture.query, isFetching: false, isError: true, failureCount: 1, errorUpdateCount: 1 };
+  rerender(<Probe/>);
+  expect(screen.getByText(`stale since ${new Date(away).toISOString()}`)).toBeInTheDocument();
+});
+
+it('turns stale on its own when the refresh of a reopened app goes five seconds without an answer', () => {
+  fixture.query = { data: { left: status }, dataUpdatedAt: away, isError: false, isFetching: true, failureCount: 0 };
+  render(<Probe/>);
+  act(() => { vi.advanceTimersByTime(5_000); });
+  expect(screen.getByText('loading')).toBeInTheDocument();
+  act(() => { vi.advanceTimersByTime(2); });
+  expect(screen.getByText(`stale since ${new Date(away).toISOString()}`)).toBeInTheDocument();
+});
+
+it('turns stale five seconds after a refresh the browser holds back while offline', () => {
+  fixture.query = { data: { left: status }, dataUpdatedAt: away, isError: false, isFetching: false, isPaused: true, failureCount: 0 };
+  render(<Probe/>);
+  expect(screen.getByText('loading')).toBeInTheDocument();
+  act(() => { vi.advanceTimersByTime(5_002); });
+  expect(screen.getByText(`stale since ${new Date(away).toISOString()}`)).toBeInTheDocument();
 });

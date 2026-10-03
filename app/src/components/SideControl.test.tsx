@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { ThemeProvider } from '@mui/material/styles';
+import { temperatureColor } from '@lib/temperatureColor';
+import { palette } from '@design/tokens';
+import { theme } from '../theme';
+import { fahrenheitToLevel } from '@lib/temperatureConversions';
 import SideControl from './SideControl';
 
 const fixture = vi.hoisted(() => ({
@@ -8,12 +13,17 @@ const fixture = vi.hoisted(() => ({
     left: { name: 'Alex', awayMode: false, scheduleOverrides: { pause: { active: false, expiresAt: '' } } },
     right: { name: 'Sam', awayMode: false, scheduleOverrides: { pause: { active: false, expiresAt: '' } } },
   },
-  status: { left: { isOn: false }, right: { isOn: false } } as Record<string, unknown>,
+  status: { left: { isOn: false }, right: { isOn: false } } as Record<string, unknown> | undefined,
+  statusAge: 0, statusError: false,
   presence: { left: { present: true, lastUpdatedAt: '2026-09-28T05:00:00Z', stateChangedAt: '2026-09-28T04:48:00Z' } },
 }));
 vi.mock('@state/appStore.tsx', () => ({ useAppStore: () => ({ side: 'left', setSide: fixture.setSide }) }));
 vi.mock('@api/settings.ts', () => ({ useSettings: () => ({ data: fixture.settings }) }));
-vi.mock('@api/deviceStatus.ts', () => ({ useDeviceStatus: () => ({ data: fixture.status }) }));
+vi.mock('@api/deviceStatus.ts', () => ({ useDeviceStatus: () => ({
+  data: fixture.status, dataUpdatedAt: fixture.status ? Date.now() - fixture.statusAge : 0, isError: fixture.statusError,
+  isFetching: false, failureCount: fixture.statusError ? 1 : 0, errorUpdateCount: fixture.statusError ? 1 : 0, errorUpdatedAt: 0,
+  refetch: () => Promise.resolve(),
+}) }));
 vi.mock('@api/presence.ts', async importOriginal => ({
   ...(await importOriginal<typeof import('@api/presence.ts')>()),
   usePresence: () => ({ data: fixture.presence }),
@@ -28,6 +38,8 @@ beforeEach(() => {
   fixture.settings.left.scheduleOverrides.pause = { active: false, expiresAt: '' };
   fixture.settings.right.scheduleOverrides.pause = { active: false, expiresAt: '' };
   fixture.status = { left: { isOn: false }, right: { isOn: false } };
+  fixture.statusAge = 0;
+  fixture.statusError = false;
   fixture.setSide.mockClear();
   vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-28T05:00:00Z'));
 });
@@ -133,4 +145,51 @@ it('names only the side while the bed status loads', () => {
   expect(screen.getByRole('radio', { name: 'Alex.' })).toBeChecked();
   expect(screen.getByRole('radio', { name: 'Sam.' })).toBeInTheDocument();
   expect(screen.queryByText('Off')).not.toBeInTheDocument();
+});
+
+const scale = (fahrenheit: number) => temperatureColor(fahrenheitToLevel(fahrenheit));
+const renderThemed = (ui: React.ReactElement) => render(<ThemeProvider theme={ theme }>{ ui }</ThemeProvider>);
+
+it('colours a live temperature on the compact tiles', () => {
+  fixture.status = { left: { isOn: true, targetTemperatureF: 84, currentTemperatureF: 82 }, right: { isOn: false } };
+  render(<SideControl/>);
+  expect(screen.getByText('84°F')).toHaveStyle({ color: scale(84) });
+});
+
+it('draws a paused side that is on in grey, since the schedule is not driving it', () => {
+  fixture.settings.left.scheduleOverrides.pause = { active: true, expiresAt: '' };
+  fixture.status = { left: { isOn: true, targetTemperatureF: 84, currentTemperatureF: 82 }, right: { isOn: false } };
+  renderThemed(<SideControl/>);
+  expect(screen.getByText('Paused · 84°F')).toHaveStyle({ color: palette.text.secondary });
+});
+
+it('shows no temperature for a status older than two minutes while it is asked for again', () => {
+  fixture.status = { left: { isOn: true, targetTemperatureF: 84, currentTemperatureF: 82 }, right: { isOn: false } };
+  fixture.statusAge = 3 * 60_000;
+  render(<SideControl/>);
+  expect(screen.getByRole('radio', { name: 'Alex.' })).toBeChecked();
+  expect(screen.queryByText('84°F')).not.toBeInTheDocument();
+  expect(screen.queryByText('Not responding')).not.toBeInTheDocument();
+});
+
+it('says an old status is not responding, in grey, once a refresh fails', () => {
+  fixture.status = { left: { isOn: true, targetTemperatureF: 84, currentTemperatureF: 82 }, right: { isOn: false } };
+  fixture.statusAge = 3 * 60_000;
+  fixture.statusError = true;
+  renderThemed(<SideControl/>);
+  expect(screen.getByRole('radio', { name: 'Alex. Not responding.' })).toBeChecked();
+  expect(screen.getByRole('radio', { name: 'Sam. Not responding.' })).toBeInTheDocument();
+  expect(screen.queryByText('84°F')).not.toBeInTheDocument();
+  for (const line of screen.getAllByText('Not responding')) expect(line).toHaveStyle({ color: palette.text.secondary });
+});
+
+it('names only the side while the first status loads', () => {
+  fixture.status = undefined;
+  render(<SideControl/>);
+  expect(screen.getByRole('radio', { name: 'Alex.' })).toBeChecked();
+  // The empty state line keeps its height, so the name does not move when the status arrives.
+  const line = screen.getByRole('radio', { name: 'Alex.' }).closest('label')!.querySelector('.MuiTypography-caption');
+  expect(line).toBeEmptyDOMElement();
+  expect(line).toHaveStyle({ minHeight: '1.2em' });
+  expect(screen.queryByText('Status unavailable')).not.toBeInTheDocument();
 });

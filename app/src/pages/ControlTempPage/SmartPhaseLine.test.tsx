@@ -3,14 +3,16 @@ import { render, screen } from '@testing-library/react';
 import type { ResolvedSleepResponse, RhythmsLive } from '@api/rhythmsResponse';
 import SmartPhaseLine from './SmartPhaseLine';
 
-const fixture = vi.hoisted(() => ({ live: null as RhythmsLive | null, liveError: false, statusAge: 0 }));
-vi.mock('@api/rhythms', () => ({ useRhythmsLive: () => ({ data: fixture.live, isError: fixture.liveError }) }));
+const fixture = vi.hoisted(() => ({ live: null as RhythmsLive | null | undefined, liveError: false, liveAge: 0, statusAge: 0 }));
+vi.mock('@api/rhythms', () => ({ useRhythmsLive: () => ({
+  data: fixture.live, isError: fixture.liveError, dataUpdatedAt: fixture.live === undefined ? 0 : Date.now() - fixture.liveAge,
+}) }));
 vi.mock('@api/settings', () => ({ useSettings: () => ({ data: { timeZone: 'America/Los_Angeles', temperatureFormat: 'level' } }) }));
-vi.mock('@state/appStore', () => ({ useAppStore: () => ({ side: 'left' }) }));
 // -1 in levels: the level the manual change set.
 vi.mock('@api/deviceStatus', () => ({ useDeviceStatus: () => ({
   data: { left: { isOn: true, targetTemperatureF: 80, currentTemperatureF: 80 } },
   dataUpdatedAt: Date.now() - fixture.statusAge, isError: false, isFetching: false, failureCount: 0, errorUpdateCount: 0, errorUpdatedAt: 0,
+  refetch: () => Promise.resolve(),
 }) }));
 
 const alarm = { time: '06:30', enabled: true, vibrationIntensity: 30, vibrationPattern: 'rise' as const, duration: 30, alarmTemperature: 83 };
@@ -31,6 +33,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-09-29T09:00:00Z'));
   fixture.live = null;
   fixture.liveError = false;
+  fixture.liveAge = 0;
   fixture.statusAge = 0;
 });
 afterEach(() => vi.useRealTimers());
@@ -69,24 +72,53 @@ it('says when the server went back to the base', () => {
   expect(screen.getByText('Back at your base, 0, since 5:50 AM')).toBeInTheDocument();
 });
 
-it('drops the presence-driven cool-down when the live answer could not be read', () => {
+// The line's slot stays on the card, empty, while the line waits for an answer, so the card below never moves.
+const slot = (container: HTMLElement) => container.querySelector('p[aria-hidden="true"]');
+
+it('keeps an empty slot instead of the cool-down when the live answer could not be read', () => {
   vi.setSystemTime(new Date('2026-09-29T05:45:00Z'));
   fixture.live = live({ phase: 'bedtime', waiting: true });
   fixture.liveError = true;
   const { container } = render(<SmartPhaseLine sleep={ sleep } side="left"/>);
-  expect(container).toBeEmptyDOMElement();
+  expect(slot(container)).not.toBeNull();
+  expect(container.textContent?.trim()).toBe('');
 });
 
-it('drops the cool-down while there is no live answer for tonight', () => {
+it('keeps an empty slot while the live answer for tonight is still loading', () => {
   vi.setSystemTime(new Date('2026-09-29T05:45:00Z'));
+  fixture.live = undefined;
   const { container } = render(<SmartPhaseLine sleep={ sleep } side="left"/>);
   expect(container).not.toHaveTextContent('Cooling step by step');
-  expect(container).toBeEmptyDOMElement();
+  expect(slot(container)).not.toBeNull();
+  expect(container.textContent?.trim()).toBe('');
 });
 
-it('shows no line while the bed has not reported for two minutes', () => {
+it('treats a live answer older than two minutes as no answer', () => {
+  vi.setSystemTime(new Date('2026-09-29T05:45:00Z'));
+  fixture.live = live({ phase: 'bedtime', waiting: true });
+  fixture.liveAge = 3 * 60_000;
+  const { container } = render(<SmartPhaseLine sleep={ sleep } side="left"/>);
+  expect(container).not.toHaveTextContent("Starts cooling once you've settled in bed");
+  expect(slot(container)).not.toBeNull();
+});
+
+it('keeps an empty slot while the bed status is older than two minutes', () => {
   fixture.statusAge = 3 * 60_000;
   fixture.live = live({ hold: { until: '2026-09-29T12:00:00.000Z' } });
   const { container } = render(<SmartPhaseLine sleep={ sleep } side="left"/>);
+  expect(slot(container)).not.toBeNull();
+  expect(container.textContent?.trim()).toBe('');
+});
+
+it('says nothing, with no slot, outside the night\'s curve', () => {
+  vi.setSystemTime(new Date('2026-09-29T20:00:00Z'));
+  const { container } = render(<SmartPhaseLine sleep={ sleep } side="left"/>);
   expect(container).toBeEmptyDOMElement();
+});
+
+it('makes no present-tense claim during the warm-up without a live answer', () => {
+  vi.setSystemTime(new Date('2026-09-29T13:10:00Z'));
+  const { container } = render(<SmartPhaseLine sleep={ sleep } side="left"/>);
+  expect(container).not.toHaveTextContent('Warming step by step');
+  expect(slot(container)).not.toBeNull();
 });

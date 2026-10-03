@@ -3,13 +3,14 @@ import { Box, Radio, RadioGroup, Typography } from '@mui/material';
 import CheckCircleOutline from '@mui/icons-material/CheckCircleOutline';
 import { useAppStore } from '@state/appStore.tsx';
 import { useSettings } from '@api/settings.ts';
-import { useDeviceStatus } from '@api/deviceStatus.ts';
 import { useServices } from '@api/services.ts';
 import { isPresenceFresh, usePresence, PresenceSide } from '@api/presence.ts';
 import { isSchedulePaused } from '@api/schedulePause.ts';
 import { displayTemperature, fahrenheitToLevel } from '@lib/temperatureConversions.ts';
 import { temperatureColor } from '@lib/temperatureColor';
 import { media, palette, radius } from '@design/tokens';
+import { useDeviceFreshness } from '../pages/ControlTempPage/useDeviceFreshness';
+import { NOT_RESPONDING } from '../pages/ControlTempPage/bedText';
 
 function presenceLabel(observation: PresenceSide | undefined): string | undefined {
   const elapsed = Date.now() - Date.parse(observation?.stateChangedAt ?? '');
@@ -48,7 +49,7 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
 }) {
   const { side, setSide } = useAppStore();
   const { data: settings } = useSettings();
-  const { data: deviceStatus } = useDeviceStatus();
+  const { frameFor } = useDeviceFreshness();
   const { data: services } = useServices();
   const { data: presence } = usePresence();
   const [, setTick] = useState(0);
@@ -73,7 +74,9 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
       } }>
       { keys.map(key => {
         const selected = side === key;
-        const status = deviceStatus?.[key];
+        // Colour means live: only a status from the last two minutes is shown as one.
+        const frame = frameFor(key);
+        const status = frame.kind === 'live' ? frame.status : undefined;
         const name = settings?.[key]?.name || (key === 'left' ? 'Left side' : 'Right side');
         const away = settings?.[key]?.awayMode;
         // Away mode wins over a pause.
@@ -81,7 +84,8 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
         const temperature = status ? displayTemperature(status.targetTemperatureF, format) : '';
         const direction = status && (status.currentTemperatureF > status.targetTemperatureF ? 'cooling'
           : status.currentTemperatureF < status.targetTemperatureF ? 'warming' : 'holding');
-        const live = away ? 'Away' : !status ? 'Status unavailable' : !status.isOn ? 'Off' : `${temperature}, ${direction}`;
+        const live = frame.kind === 'stale' ? NOT_RESPONDING : away ? 'Away' : !status ? '' : !status.isOn ? 'Off'
+          : `${temperature}, ${direction}`;
         const state = captions?.[key] ?? (paused && status ? `Paused · ${status.isOn ? temperature : 'Off'}` : live);
         const calibration = services?.biometrics?.jobs?.[key === 'left' ? 'calibrateLeft' : 'calibrateRight'];
         const occupancy = !captions && !compact && !away && services?.biometrics?.enabled && calibration?.status === 'healthy'
@@ -90,7 +94,7 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
         const spoken = state.replace(' · ', ', ');
         const title = both ? 'Both sides' : name;
         const shown = captions?.[key] ?? (compact && status?.isOn && !away ? `${paused ? 'Paused · ' : ''}${temperature}` : state);
-        const stateColor = !captions?.[key] && status?.isOn && !away
+        const stateColor = !captions?.[key] && status?.isOn && !away && !paused
           ? temperatureColor(fahrenheitToLevel(status.targetTemperatureF)) : 'text.secondary';
         const check = selected && <CheckCircleOutline
           aria-hidden
@@ -114,7 +118,9 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
               <Typography fontWeight={ 600 } sx={ { fontSize: 16, pr: 2.5, overflowWrap: 'anywhere', lineHeight: 1.2 } }>
                 <bdi>{ title }</bdi>
               </Typography>
-              <Typography variant="caption" color={ stateColor } sx={ { display: 'block', lineHeight: 1.2 } }>{ shown }</Typography>
+              <Typography variant="caption" color={ stateColor } sx={ { display: 'block', lineHeight: 1.2, minHeight: '1.2em' } }>
+                { shown }
+              </Typography>
             </Box>
             { check }
           </> : <>

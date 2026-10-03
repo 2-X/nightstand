@@ -1,5 +1,7 @@
 import moment from 'moment-timezone';
 
+export const NOT_RESPONDING = 'Not responding';
+
 // Non-breaking, so a time never splits from its AM or PM.
 export const NBSP = '\u00a0';
 
