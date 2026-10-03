@@ -396,7 +396,7 @@ systemctl start free-sleep || { restore_and_report "our service failed to start"
 systemctl start free-sleep-stream >/dev/null 2>&1 || true
 systemctl enable --now free-sleep-archive-raw.timer >/dev/null 2>&1 || true
 # NB: free-sleep-rollback.service is a STATIC, on-demand oneshot that swaps
-# $LIVE <-> $PREV when the user clicks "Roll back". Never `enable --now` it:
+# $LIVE <-> $PREV when the user goes back from the app. Never `enable --now` it:
 # that would run a rollback right now, before the health check. It is
 # installed, without being started, by setup_services.sh after the check passes.
 
@@ -490,7 +490,7 @@ disarm_sentinel
 rm -rf "$IPTABLES_SNAPSHOT" "$BASELINE_FILE" "$RESTORE_SCRIPT_DEST" "$PREEXISTING_PREV"
 rm -f "$SWAP_MARKER"
 write_status "install" "success" "migrated to v$STAGED_VERSION; previous fork kept at $PREV (in-app instant rollback)"
-say "SUCCESS: migrated to v$STAGED_VERSION. Their original install is kept at $PREV, the app's Settings > Software & updates > Roll back button uses it."
+say "SUCCESS: migrated to v$STAGED_VERSION. Their original install is kept at $PREV; Settings > Software > Recovery in the app can go back to it."
 
 # Last: its first arming can reset the Pod, so the migration is already
 # recorded as a success and the sentinel is disarmed before it runs.

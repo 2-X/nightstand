@@ -139,7 +139,7 @@ if [ -n "$RESTORE_TARBALL" ]; then
       [ -f \"\$STAGE/free-sleep/server/package.json\" ] &&
       [ -d \"\$STAGE/free-sleep/server/node_modules\" ] &&
       [ -n \"\$(ls -A \"\$STAGE/free-sleep/server/node_modules\")\" ] || {
-        echo 'Backup is incomplete or lacks installed dependencies; live install untouched. Use the in-app Roll back if available, or supply a complete backup created with the current migration script.' >&2
+        echo 'Backup is incomplete or lacks installed dependencies; live install untouched. Use the rollback in the app (Settings > Software > Recovery) if available, or supply a complete backup created with the current migration script.' >&2
         exit 1
       }
     chown -R dac:dac \"\$STAGE/free-sleep\"
@@ -275,7 +275,7 @@ THIS_FORK_REPO="LTimothy/nightstand"
 ONDISK_UPDATER=$(ssh_cmd "$SSH_PORT" "cat '$REMOTE_REPO/scripts/update.sh' 2>/dev/null; cat '$REMOTE_REPO/scripts/install.sh' 2>/dev/null" || true)
 ONDISK_FORK_REPO=$(printf '%s' "$ONDISK_UPDATER" | grep -oE 'github(usercontent)?\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+' | head -n1 | sed -E 's#.*\.com/##')
 if [ "$ONDISK_FORK_REPO" = "$THIS_FORK_REPO" ]; then
-  fail "this pod's own updater already points at $THIS_FORK_REPO, it is already on this fork. Use the in-app updater (Settings > Software & updates) instead; this tool is only for migrating FROM another fork."
+  fail "this pod's own updater already points at $THIS_FORK_REPO, it is already on this fork. Use the in-app updater (Settings > Software) instead; this tool is only for migrating FROM another fork."
 fi
 if [ -n "$ONDISK_FORK_REPO" ]; then
   say "The pod's updater points at '$ONDISK_FORK_REPO', treating this as a migration to $THIS_FORK_REPO."
@@ -485,7 +485,7 @@ What changes about behavior:
   - ${DETECTED_MODEL_NOTE:-}
 
 How to get back, in order of preference:
-  - The in-app "Roll back" button (Settings > Software & updates) once
+  - The rollback in the app (Settings > Software > Recovery) once
     migrated, instant, no download.
   - The laptop-side backup tarball this tool is about to create, restorable
     with: switch-to-this-fork.sh --restore <tarball> --ip $POD_IP
@@ -640,8 +640,8 @@ Pod:              http://$POD_IP:3000/
 Backup (pod):      $REMOTE_BACKUP_TARBALL
 Backup (laptop):    $LOCAL_BACKUP_TARBALL
 Migration log:      /persistent/free-sleep-data/logs/migration-*.log (on the pod)
-Instant rollback to your old fork now lives in the app: Settings > Software &
-updates > Roll back.
+Instant rollback to your old fork is now in the app:
+Settings > Software > Recovery.
 
 Keep the laptop backup tarball for at least a few nights.
 =================================================================================

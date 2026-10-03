@@ -441,3 +441,20 @@ describe('pod-installer.sh and serverInfo.json agree about the fork field', () =
     );
   });
 });
+
+// The tool's report and success text send people to the app's rollback, so
+// they must name the labels the app shows today.
+describe('the fork-switch tool names the app\'s real rollback path', () => {
+  const tool = ['scripts/migrate/switch-to-this-fork.sh', 'scripts/migrate/pod-installer.sh'].map(readScript).join('\n');
+
+  it('points at Settings > Software > Recovery', () => {
+    assert.doesNotMatch(tool, /Software & updates/);
+    assert.doesNotMatch(tool, /"Roll back"|> Roll back|in-app Roll back/);
+    assert.equal(tool.split('Settings > Software > Recovery').length - 1, 4, tool.match(/Settings >[^\n]*/g)?.join('\n'));
+  });
+
+  it('uses labels the app shows', () => {
+    assert.match(readScript('app/src/pages/SettingsPage/settingsCategories.ts'), /key: 'versions', title: 'Software'/);
+    assert.match(readScript('app/src/pages/SettingsPage/VersionsPage/VersionsPage.tsx'), />Recovery<\/AccordionSummary>/);
+  });
+});
