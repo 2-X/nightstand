@@ -2,6 +2,84 @@
 
 echo "Blocking internet access..."
 
+# Upstream resolvers as "4 ADDR" or "6 ADDR" lines. Local stubs (127.0.0.53,
+# 127.0.0.1) are skipped because loopback is already allowed, so the real
+# upstream list systemd-resolved keeps is read as well.
+list_wan_resolvers() {
+  set --
+  for file in /etc/resolv.conf /run/systemd/resolve/resolv.conf; do
+    [ -r "$file" ] && set -- "$@" "$file"
+  done
+  [ $# -gt 0 ] || return 0
+  awk '
+    function ipv4(address, octets, count, partIndex) {
+      count = split(address, octets, ".")
+      if (count != 4) return 0
+      for (partIndex = 1; partIndex <= count; partIndex++)
+        if (octets[partIndex] !~ /^[0-9]+$/ || length(octets[partIndex]) > 3 || octets[partIndex] + 0 > 255) return 0
+      return 1
+    }
+    function groups(address, parts, count, partIndex) {
+      if (address == "") return 0
+      count = split(address, parts, ":")
+      for (partIndex = 1; partIndex <= count; partIndex++)
+        if (parts[partIndex] !~ /^[0-9a-f]+$/ || length(parts[partIndex]) > 4) return -1
+      return count
+    }
+    function ipv6(address, halves, count, left, right, tail) {
+      if (address ~ /[.]/) {
+        tail = address
+        sub(/^.*:/, "", tail)
+        if (!ipv4(tail)) return 0
+        sub(/[0-9.]+$/, "0:0", address)
+      }
+      count = split(address, halves, "::")
+      if (count == 1) return groups(address) == 8
+      if (count != 2) return 0
+      left = groups(halves[1]); right = groups(halves[2])
+      return left >= 0 && right >= 0 && left + right < 8
+    }
+    $1 == "nameserver" {
+      resolver = tolower($2)
+      # An IPv4-mapped address leaves as IPv4, so treat it as one.
+      if (resolver ~ /^::ffff:[0-9.]+$/) sub(/^::ffff:/, "", resolver)
+      if (ipv4(resolver)) {
+        family = 4
+        split(resolver, octets, ".")
+        if (octets[1] == 127 || octets[1] == 10 ||
+            (octets[1] == 172 && octets[2] >= 16 && octets[2] <= 31) ||
+            (octets[1] == 192 && octets[2] == 168) || resolver == "0.0.0.0") next
+      } else if (ipv6(resolver)) {
+        family = 6
+        if (resolver ~ /^fe[89ab]/ || resolver ~ /^fd/ ||
+            resolver ~ /^(0*:)*0*1$/ || resolver ~ /^[0:]+$/) next
+      } else next
+      if (!seen[resolver]++) print family, resolver
+    }
+  ' "$@"
+}
+
+WAN_RESOLVERS=$(list_wan_resolvers)
+if [ -n "$WAN_RESOLVERS" ]; then
+  echo "Allowing DNS to resolvers: $(echo "$WAN_RESOLVERS" | awk '{ printf "%s%s", sep, $2; sep = " " }')"
+else
+  echo "No WAN DNS resolver found in /etc/resolv.conf or /run/systemd/resolve/resolv.conf; DNS stays blocked"
+fi
+
+# Resolver rules are added separately, after each address family's flush.
+allow_dns_to_configured_resolvers() {
+  echo "$WAN_RESOLVERS" | while read -r family resolver; do
+    [ "$family" = "$1" ] || continue
+    if [ "$1" = 4 ]; then
+      iptables -A OUTPUT -d "$resolver" -p udp --dport 53 -j ACCEPT
+      iptables -A OUTPUT -d "$resolver" -p tcp --dport 53 -j ACCEPT
+    else
+      ip6tables -A OUTPUT -d "$resolver" -p udp --dport 53 -j ACCEPT
+      ip6tables -A OUTPUT -d "$resolver" -p tcp --dport 53 -j ACCEPT
+    fi
+  done
+}
+
 # IPv4 Rules
 echo "Configuring IPv4 rules..."
 
@@ -35,6 +113,8 @@ iptables -A OUTPUT -d 172.16.0.0/12 -j ACCEPT
 # Allow LAN traffic Class C (192.168.0.0/16)
 iptables -A INPUT -s 192.168.0.0/16 -j ACCEPT
 iptables -A OUTPUT -d 192.168.0.0/16 -j ACCEPT
+
+allow_dns_to_configured_resolvers 4
 
 # Allow NTP traffic - this allows us to synchronize the system time
 iptables -I OUTPUT -p udp --dport 123 -j ACCEPT
@@ -108,11 +188,17 @@ iptables-save > /etc/iptables/iptables.rules
 echo "Configuring IPv6 rules..."
 ip6tables -F INPUT
 ip6tables -F OUTPUT
+# DNS replies use the same return-traffic rule as IPv4.
+ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+ip6tables -A INPUT -i lo -j ACCEPT
+ip6tables -A OUTPUT -o lo -j ACCEPT
 # Allow local traffic for IPv6
 ip6tables -A INPUT -s fe80::/10 -j ACCEPT
 ip6tables -A OUTPUT -d fe80::/10 -j ACCEPT
 ip6tables -A INPUT -s fd00::/8 -j ACCEPT
 ip6tables -A OUTPUT -d fd00::/8 -j ACCEPT
+
+allow_dns_to_configured_resolvers 6
 
 # Allow NTP traffic (IPv6)
 ip6tables -I OUTPUT -p udp --dport 123 -j ACCEPT

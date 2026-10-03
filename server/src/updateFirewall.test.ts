@@ -146,7 +146,10 @@ function fixture(tailscale = false, blockScripts: 'live' | 'prev' | 'none' = 'li
     writeFileSync(path.join(bin, name), body);
     chmodSync(path.join(bin, name), 0o755);
   }
+  writeFileSync(path.join(dir, 'resolv.conf'), 'nameserver 9.9.9.9\nnameserver 2606:4700:4700::1111\n');
   const block = read('scripts/block_internet_access.sh')
+    .replaceAll('/etc/resolv.conf', `${dir}/resolv.conf`)
+    .replaceAll('/run/systemd/resolve/resolv.conf', `${dir}/resolved.conf`)
     .replaceAll('/etc/systemd/timesyncd.conf', `${dir}/timesyncd.conf`)
     .replaceAll('/etc/iptables/', `${dir}/`);
   for (const tree of ['live', 'prev']) {
@@ -541,6 +544,22 @@ describe('after the update or revert unit stops', () => {
       cleanup(f);
     }
   });
+
+  for (const tailscale of [false, true]) {
+    it(`preserves resolver allowances when cleanup cannot reapply the block${tailscale ? ' with Tailscale' : ''}`, () => {
+      const f = fixture(tailscale, 'none');
+      try {
+        assert.match(f.before, /-d 9\.9\.9\.9 -p udp -m udp --dport 53 -j ACCEPT/);
+        assert.match(f.before, /-d 2606:4700:4700::1111 -p tcp -m tcp --dport 53 -j ACCEPT/);
+        killInWindow('scripts/update.sh', f);
+        const result = runCloseScript(f);
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.equal(rules(f.dir), f.before);
+      } finally {
+        cleanup(f);
+      }
+    });
+  }
 
   it('changes nothing when no window is left, even with matching Tailscale rules', () => {
     const f = fixture(true);

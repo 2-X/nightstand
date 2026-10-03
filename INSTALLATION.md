@@ -392,7 +392,12 @@ sh /home/dac/free-sleep/scripts/unblock_internet_access.sh
 Updates open internet access for downloads and reapply the block afterward,
 even if you skipped this step. Rerun the block script after changing Tailscale
 setup: start Tailscale first to keep remote access, or stop it first to remove
-those broad exceptions. The rules stay in place until reapplied or changed.
+those broad exceptions. DNS is allowed only to the resolvers listed in
+`/etc/resolv.conf` (and in `/run/systemd/resolve/resolv.conf` when it exists)
+at the time the script runs, unless Tailscale allows it broadly. The script
+prints the resolvers it allowed. Rerun it after moving to a network with
+different resolvers so time sync can resolve its servers. The rules stay in
+place until reapplied or changed.
 Keep the firmware update services disabled as described in step 11.
 
 ---

@@ -115,6 +115,12 @@ is a hard fork; for the history of the projects it descends from, see
   confirm when a side is on, an alarm is due within 15 minutes, or the bed's
   state cannot be read. The update dialog now says that Nightstand restarts,
   not the Pod.
+- Time sync can resolve its servers without Tailscale when the network uses
+  DNS resolvers outside the LAN. The firewall allows DNS only to the
+  resolvers configured when the block script last ran (Tailscale still
+  allows it everywhere), and the script prints which resolvers it allowed.
+  Adapted from [EpicPi's pull request 51 to
+  throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep/pull/51).
 
 ## [3.5.1] - 2026-10-01
 
