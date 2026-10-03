@@ -171,7 +171,41 @@ run_limited() {
   wait "$watchdog" 2>/dev/null
   return "$status"
 }
-cleanup() { local status=$?; trap '' HUP INT TERM; close_wan; restore_switch_data || say "WARNING: restore settings from $BK/lowdb before restarting"; rm -rf "$STAGE" "$STAGE.unzip" "$STAGE.health" "$ZIP"; record_result "$status"; }
+# Set while the services are stopped for a swap: the tree that goes back to
+# LIVE if the run ends before the services start again. SWAP_NEW is the tree
+# being swapped in; once it has left its place it sits at LIVE not yet set up
+# (its dependencies can still be in the previous tree), so it goes back.
+RESTORE_TREE=
+SWAP_NEW=
+finish_interrupted_swap() {
+  [ -n "${RESTORE_TREE:-}" ] || return 0
+  local moved=no
+  if [ -n "${SWAP_NEW:-}" ] && [ ! -d "$SWAP_NEW" ] && [ -d "$LIVE" ] && [ -d "$RESTORE_TREE" ]; then
+    mv "$LIVE" "$SWAP_NEW" || { say "Could not move the new tree at $LIVE aside; manual recovery required"; return 0; }
+  fi
+  if [ ! -d "$LIVE" ]; then
+    mv "$RESTORE_TREE" "$LIVE" || { say "Could not move $RESTORE_TREE back to $LIVE; manual recovery required"; return 0; }
+    moved=yes
+  fi
+  if [ "${MOVED_MODULES:-no}" = yes ] && [ ! -d "$LIVE/server/node_modules" ] && [ -d "$FAILED/server/node_modules" ]; then
+    mv "$FAILED/server/node_modules" "$LIVE/server/node_modules"
+  fi
+  if [ "${ARCHIVE_WAS_ACTIVE:-}" = active ]; then
+    systemctl start free-sleep-archive-raw.timer >/dev/null 2>&1 || true
+  fi
+  # The previous version runs again: an interrupted swap whose settings came
+  # back changed nothing, and an interrupted swap back is a restore.
+  if [ "${RESULT_PHASE:-}" = swapping ] && [ "${DATA_CHANGED:-no}" = no ]; then
+    RESULT_PHASE=preflight
+  elif [ "$moved" = yes ] && [ "${RESULT_PHASE:-}" = swapped ]; then
+    RESULT_PHASE=restored
+  fi
+  systemctl is-active free-sleep >/dev/null 2>&1 || systemctl start free-sleep
+  if [ "${STREAM_WAS_ACTIVE:-}" = active ] && ! systemctl is-active free-sleep-stream >/dev/null 2>&1; then
+    systemctl start free-sleep-stream
+  fi
+}
+cleanup() { local status=$?; trap '' HUP INT TERM; close_wan; restore_switch_data || say "WARNING: restore settings from $BK/lowdb before restarting"; finish_interrupted_swap; rm -rf "$STAGE" "$STAGE.unzip" "$STAGE.health" "$ZIP"; record_result "$status"; }
 
 fail() { say "FATAL: $*"; [ -n "${RESULT_REASON:-}" ] || RESULT_REASON="$*"; exit 1; }
 
@@ -387,6 +421,8 @@ curl -fsS --max-time 60 -X POST -H 'content-type: application/json' -d '{"reason
   http://127.0.0.1:3000/api/update/prepare-to-stop >/dev/null \
   || say "WARNING: the server could not prepare to stop; continuing"
 STREAM_WAS_ACTIVE=$(systemctl is-active free-sleep-stream 2>/dev/null || true)
+RESTORE_TREE=$PREV
+SWAP_NEW=$STAGE
 systemctl stop free-sleep-stream 2>/dev/null || true
 systemctl stop free-sleep || fail "could not stop the server before converting settings"
 RESULT_PHASE=swapping
@@ -433,6 +469,8 @@ mv "$STAGE" "$LIVE" || {
   fail "swap failed; fork restored"
 }
 RESULT_PHASE=swapped
+RESTORE_TREE=
+SWAP_NEW=
 MOVED_MODULES=no
 if [ "$LOCK_SAME" = yes ]; then
   mv "$PREV/server/node_modules" "$LIVE/server/node_modules"
@@ -514,6 +552,7 @@ restored_version_answers() {
 say "Health check FAILED: rolling back to this fork v$CUR_VERSION"
 say "Last 60 server log lines from the failed upstream free-sleep build (for diagnosis):"
 tail -n 60 /persistent/free-sleep-data/logs/free-sleep.log 2>/dev/null || say "  (no server log available)"
+RESTORE_TREE=$PREV
 systemctl stop free-sleep || true
 systemctl stop free-sleep-stream 2>/dev/null || true
 rm -rf "$FAILED"
@@ -544,6 +583,7 @@ systemctl start free-sleep
 if [ "$STREAM_WAS_ACTIVE" = active ]; then
   systemctl restart free-sleep-stream 2>/dev/null || true
 fi
+RESTORE_TREE=
 if restored_version_answers; then
   fail "revert to upstream free-sleep failed but rollback OK (pod back on this fork v$CUR_VERSION). Failed tree kept at $FAILED; see journalctl -u free-sleep"
 else

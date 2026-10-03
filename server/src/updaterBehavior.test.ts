@@ -53,6 +53,7 @@ ${fixtureScript}`], { env, encoding: 'utf8', input: 'y\n', timeout: 5000 });
   const output = {
     ...result, services: read('services'), ssh: read('ssh'), restored: read('restored'),
     liveVersion: read('live/version'), previousVersion: read('prev/version'), marker: read('marker'),
+    serverState: read('state-free-sleep').trim(), streamState: read('state-free-sleep-stream').trim(), phase: read('phase'),
   };
   rmSync(dir, { recursive: true, force: true });
   return output;
@@ -488,7 +489,7 @@ const recordCurl = (status: number) => `curl() { echo "curl $*" >> "$FIXTURE/ser
 for (const [file, from, to, reason, setup] of [
   ['scripts/update.sh', '# --- atomic swap', 'rm -rf "$PREV"', 'downgrade', 'IS_DOWNGRADE=yes; STAGED_VERSION=3.0.0; STAGE="$FIXTURE/stage"'],
   ['scripts/rollback_pod.sh', '# --- swap', 'rm -rf "$TMP"', 'rollback', ''],
-  ['scripts/revert-to-stock.sh', '# --- atomic swap', 'ARCHIVE_WAS_ACTIVE=', 'revert', 'STAGED_VERSION=1.0.0'],
+  ['scripts/revert-to-stock.sh', '# --- atomic swap', 'ARCHIVE_WAS_ACTIVE=', 'revert', 'STAGED_VERSION=1.0.0; STAGE="$FIXTURE/stage"'],
 ]) {
   for (const status of [0, 7]) {
     it(`${file} lets the server prepare just before it stops${status ? ', even when that fails' : ''}`, () => {
@@ -541,4 +542,81 @@ for (const [file, from, to, reason, setup, tree] of [
     assert.ok(prepared >= 0, result.services);
     assert.ok(prepared < calls.findIndex(line => line.startsWith('stop free-sleep ')), result.services);
   });
+}
+
+// Keeps each unit's state, so a test can see what runs when the script ends.
+// A command equal to TERM_ON interrupts the script once it has run.
+const statefulServices = `
+for unit in free-sleep free-sleep-stream; do echo active > "$FIXTURE/state-$unit"; done
+systemctl() {
+  case "$1" in
+    is-active) [ "$(cat "$FIXTURE/state-$2" 2>/dev/null)" = active ] && echo active && return; echo inactive; return 3;;
+    show) echo LoadState=loaded; return;;
+  esac
+  echo "$* $(cat "$LIVE/version" 2>/dev/null)" >> "$FIXTURE/services"
+  case "$1" in
+    stop) echo inactive > "$FIXTURE/state-$2";;
+    start|restart) echo active > "$FIXTURE/state-$2";;
+  esac
+  [ "$*" != "\${TERM_ON:-}" ] || kill -TERM $$
+}`;
+const termAfterMovingLive = 'mv() { command mv "$@" || return; [ "$1" != "$LIVE" ] || kill -TERM $$; }';
+
+// The script's own exit handling around one of its swaps.
+function withExitHandling(file: string, swap: string) {
+  const end = file === 'scripts/rollback_pod.sh' ? '\n# --- preflight' : '\nfail() {';
+  const traps = file === 'scripts/rollback_pod.sh' ? "trap 'status=$?" : 'trap cleanup EXIT';
+  return `${section(file, 'finish_interrupted_swap() {', end)}\n${section(file, traps, '\n\n')}\n${swap}`;
+}
+
+const stubs = [
+  'close_wan() { :; }',
+  'record_result() { printf "%s" "${RESULT_REASON:-}" > "$FIXTURE/marker"; printf "%s" "${RESULT_PHASE:-}" > "$FIXTURE/phase"; }',
+  'python3() { :; }', 'ZIP="$FIXTURE/zip"; STAGE="$FIXTURE/stage"',
+].join('\n');
+const staged = 'STAGE="$FIXTURE/stage"; mkdir -p "$STAGE/server"; echo staged > "$STAGE/version"';
+for (const [file, from, to, setup, liveAfterMove] of [
+  ['scripts/update.sh', '# --- atomic swap', 'MOVED_MODULES=no', `IS_DOWNGRADE=no; STAGED_VERSION=3.2.0; ${staged}`, 'failed'],
+  ['scripts/update.sh', '# --- automatic rollback', '', 'RESULT_PHASE=swapped', 'restored'],
+  ['scripts/rollback_pod.sh', '# --- swap', '# --- health check', '', 'failed'],
+  ['scripts/rollback_pod.sh', '# --- swap back on failure', '', '', 'restored'],
+  ['scripts/revert-to-stock.sh', '# --- atomic swap', 'MOVED_MODULES=no',
+    `RESULT_PHASE=preflight; STAGED_VERSION=1.0.0; BK="$FIXTURE/bk"; mkdir -p "$BK/lowdb"
+restore_switch_data() { DATA_CHANGED=no; }; ${staged}`, 'failed'],
+  ['scripts/revert-to-stock.sh', '# --- automatic rollback', '', 'RESULT_PHASE=swapped', 'restored'],
+]) {
+  const swap = section(file, from, to || undefined);
+  for (const [phase, interrupt, liveVersion] of [
+    ['while stopping the server', 'TERM_ON="stop free-sleep"', 'failed'],
+    ['after moving the live tree', termAfterMovingLive, liveAfterMove],
+  ]) {
+    it(`${file} (${from}) interrupted ${phase} leaves a live tree and its services running`, () => {
+      const result = run(withExitHandling(file, swap), `${stubs}\n${statefulServices}\n${setup}\n${interrupt}`);
+      assert.equal(result.status, 143, result.stdout + result.stderr);
+      assert.equal(result.liveVersion, liveVersion, result.stdout + result.stderr);
+      assert.equal(result.serverState, 'active', result.services);
+      assert.equal(result.streamState, 'active', result.services);
+      // Nothing changed when the forward swap is undone; the swap back is a restore.
+      if (from === '# --- atomic swap') assert.equal(result.phase, 'preflight', result.stdout + result.stderr);
+      else if (phase !== 'while stopping the server' && file !== 'scripts/rollback_pod.sh') {
+        assert.equal(result.phase, 'restored', result.stdout + result.stderr);
+      }
+    });
+  }
+
+  if (from === '# --- atomic swap' && file !== 'scripts/rollback_pod.sh') {
+    // With an unchanged lockfile the new tree has no node_modules until after
+    // the swap, so the previous tree, with its own, must be the one started.
+    it(`${file} interrupted right after moving the new tree in starts the previous one`, () => {
+      const result = run(withExitHandling(file, swap), `${stubs}\n${statefulServices}\n${setup}
+LOCK_SAME=yes; mkdir -p "$LIVE/server/node_modules"
+mv() { command mv "$@" || return; [ "$1 $2" != "$STAGE $LIVE" ] || kill -TERM $$; }`);
+      assert.equal(result.status, 143, result.stdout + result.stderr);
+      assert.equal(result.liveVersion, 'failed', result.stdout + result.stderr);
+      assert.equal(result.serverState, 'active', result.services);
+      assert.equal(result.streamState, 'active', result.services);
+      assert.match(result.services, /^start free-sleep failed$/m);
+      assert.equal(result.phase, 'preflight');
+    });
+  }
 }

@@ -122,9 +122,12 @@ describe('how each script records its ending', () => {
       const src = read(file);
       assert.match(src, /^fail\(\) \{ say "FATAL: \$\*"; \[ -n "\$\{RESULT_REASON:-\}" \] \|\| RESULT_REASON="\$\*"; exit 1; \}$/m, file);
     }
-    assert.match(read('scripts/update.sh'), /^cleanup\(\) \{ local status=\$\?;.*record_result "\$status"; \}$/m);
-    assert.match(read('scripts/revert-to-stock.sh'), /^cleanup\(\) \{ local status=\$\?;.*record_result "\$status"; \}$/m);
-    assert.match(read('scripts/rollback_pod.sh'), /^trap 'status=\$\?; trap "" HUP INT TERM; record_result "\$status"' EXIT$/m);
+    // An interrupted swap is put right before the staged tree is removed.
+    const cleanup = /^cleanup\(\) \{ local status=\$\?;.*finish_interrupted_swap; rm -rf "\$STAGE".*record_result "\$status"; \}$/m;
+    assert.match(read('scripts/update.sh'), cleanup);
+    assert.match(read('scripts/revert-to-stock.sh'), cleanup);
+    assert.match(read('scripts/rollback_pod.sh'),
+      /^trap 'status=\$\?; trap "" HUP INT TERM; finish_interrupted_swap; record_result "\$status"' EXIT$/m);
   });
 
   // The outcome from where the run stood when it ended.

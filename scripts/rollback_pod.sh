@@ -63,7 +63,7 @@ if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
   fi
   export NIGHTSTAND_OPERATION_OWNER=$$
 fi
-trap 'status=$?; trap "" HUP INT TERM; record_result "$status"' EXIT
+trap 'status=$?; trap "" HUP INT TERM; finish_interrupted_swap; record_result "$status"' EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -95,6 +95,24 @@ restart_services() {
   systemctl start free-sleep
   if [ "$STREAM_WAS_ACTIVE" = active ]; then
     systemctl restart free-sleep-stream 2>/dev/null || true
+  fi
+}
+
+# Set while the services are stopped for a swap: the tree that goes back to
+# LIVE if the run ends before the services start again.
+RESTORE_TREE=
+finish_interrupted_swap() {
+  [ -n "${RESTORE_TREE:-}" ] || return 0
+  if [ ! -d "$LIVE" ]; then
+    mv "$RESTORE_TREE" "$LIVE" || { say "Could not move $RESTORE_TREE back to $LIVE; manual recovery required"; return 0; }
+  fi
+  [ -d "$PREV" ] || [ ! -d "$TMP" ] || mv "$TMP" "$PREV" || say "WARNING: could not preserve rollback slot; tree remains at $TMP"
+  fix_shared_node_modules "$TMP"
+  fix_shared_node_modules
+  if ! systemctl is-active free-sleep >/dev/null 2>&1; then
+    restart_services
+  elif [ "${STREAM_WAS_ACTIVE:-}" = active ] && ! systemctl is-active free-sleep-stream >/dev/null 2>&1; then
+    systemctl start free-sleep-stream
   fi
 }
 
@@ -136,6 +154,7 @@ if [ -n "$PREPARE" ]; then
 fi
 RESULT_PHASE=swapping
 STREAM_WAS_ACTIVE=$(systemctl is-active free-sleep-stream 2>/dev/null || true)
+RESTORE_TREE=$TMP
 systemctl stop free-sleep-stream 2>/dev/null || true
 systemctl stop free-sleep
 rm -rf "$TMP"
@@ -171,6 +190,7 @@ RESULT_PHASE=swapped
 fix_shared_node_modules
 
 restart_services
+RESTORE_TREE=
 
 # --- health check (same shape as update.sh) -----------------------------------
 say "Health check (up to 90s)"
@@ -233,6 +253,7 @@ restored_version_answers() {
 
 [ -n "${RESULT_REASON:-}" ] || RESULT_REASON="the previous version did not pass its health check"
 say "Health check FAILED: swapping back to v$CUR_VERSION"
+RESTORE_TREE=$PREV
 systemctl stop free-sleep || true
 systemctl stop free-sleep-stream 2>/dev/null || true
 rm -rf "$TMP"
@@ -252,6 +273,7 @@ mv "$TMP" "$PREV" || {
 }
 fix_shared_node_modules
 restart_services
+RESTORE_TREE=
 if restored_version_answers; then
   fail "rollback to v$TARGET_VERSION failed health check; restored v$CUR_VERSION (still running). Check journalctl -u free-sleep-rollback"
 else
