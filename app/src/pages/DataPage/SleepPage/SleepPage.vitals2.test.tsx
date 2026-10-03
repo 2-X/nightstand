@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import moment from 'moment-timezone';
@@ -68,6 +68,14 @@ describe('Sleep page vitals', () => {
     expect(await within(heart).findByText('60 bpm')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /HRV/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Breathing rate/ })).not.toBeInTheDocument();
+  });
+
+  it('opens heart rate when a saved link names HRV', async () => {
+    serve(false);
+    renderWithProviders(<SleepPage/>, { initialRoute: '/sleep?metric=hrv' });
+    const heart = await screen.findByRole('button', { name: /Heart rate/ });
+    await waitFor(() => expect(heart).toHaveAttribute('aria-expanded', 'true'));
+    expect(screen.queryByText(/HRV/)).not.toBeInTheDocument();
   });
 
   it('shows the seven night breathing average, and leaves it out when the server reports none', async () => {

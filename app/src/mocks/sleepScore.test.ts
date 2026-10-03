@@ -10,3 +10,9 @@ it('describes the demo duration contribution by time asleep, like the server', (
   expect(value).toBe(`${Math.floor(asleepMinutes / 60)}h ${asleepMinutes % 60}m asleep`);
   expect(asleepMinutes).toBeLessThan(7 * 60 + 12);
 });
+
+it('gives the demo score no HRV contribution, like the server', () => {
+  const { components } = getSleepScore('2026-09-28T06:00:00Z', '2026-09-28T13:12:00Z');
+  const hrv = (components as Record<string, { available: boolean; value: string } | undefined>).hrv;
+  expect(hrv === undefined || (!hrv.available && hrv.value === '')).toBe(true);
+});

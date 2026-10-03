@@ -20,9 +20,9 @@ is a hard fork; for the history of the projects it descends from, see
   still pick up the partner's heart rate. These remain estimates from bed
   sensors, not medical measurements. With the switch off, the estimates are
   the same as before.
-- HRV is no longer shown in the app. Checked against chest-strap recordings,
-  the stored estimate was no more accurate than a fixed guess. It is still
-  stored and returned by the API.
+- HRV is no longer shown in the app, and the sleep score no longer uses it.
+  Checked against chest-strap recordings, the stored estimate was no more
+  accurate than a fixed guess. It is still stored and returned by the API.
 - Settings > Software now says when you are running a beta while your update
   channel is Stable, and offers to switch. Releases are marked Stable or Beta
   in the version list and the release notes, and installing a beta says so.

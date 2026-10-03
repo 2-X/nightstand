@@ -51,7 +51,9 @@ function NightVitals({ record, side, timeZone, biometricsV2 }: {
 }) {
   const metrics = biometricsV2 ? V2_METRICS : METRICS;
   const [params, setParams] = useSearchParams();
-  const metric = params.get('metric');
+  const requested = params.get('metric');
+  // A saved link to a measurement that is no longer listed opens the first one.
+  const metric = requested && !metrics.some(item => item.key === requested) ? metrics[0].key : requested;
   const query = { side, startTime: record.entered_bed_at, endTime: record.left_bed_at };
   const { data: vitals, isPending, isError, refetch } = useVitalsRecords(query);
   const { data: weekSummary } = useVitalsSummary({

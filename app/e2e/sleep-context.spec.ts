@@ -4,16 +4,17 @@ test('Monday opens the latest recorded night and expanded charts fill their pane
   await page.clock.install({ time: new Date('2026-09-28T19:00:00Z') });
   await page.goto('/sleep');
   await expect(page.getByText(/Woke Sun, Sep 27/)).toBeVisible();
-  const hrv = page.getByRole('button', { name: /^HRV/ });
-  await expect(hrv).toContainText(/\d+ ms/);
-  await hrv.click();
+  await expect(page.getByRole('button', { name: /HRV/ })).toHaveCount(0);
+  const heartRate = page.getByRole('button', { name: /^Heart rate/ });
+  await expect(heartRate).toContainText(/\d+ bpm/);
+  await heartRate.click();
   const region = page.getByRole('region');
   await expect(region).toContainText('7-night average');
   const chart = region.getByRole('img');
   await expect(chart).toBeVisible();
   await expect.poll(async () => (await chart.boundingBox())?.width ?? 0).toBeGreaterThan(250);
-  await page.getByRole('button', { name: /^Heart rate/ }).click();
-  await expect(page.locator('[id="detail-heart_rate"]')).toHaveCount(1);
+  await heartRate.click();
+  await expect(page.locator('[id="detail-heart_rate"]')).toHaveCount(0);
 });
 
 test('week strip days are at least 44px wide at 320px', async ({ page }) => {
@@ -32,7 +33,7 @@ test('week strip days are at least 44px wide at 320px', async ({ page }) => {
 
 test('expanded measurements fit a 320px screen without widening the page', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 700 });
-  await page.goto('/sleep?metric=hrv');
+  await page.goto('/sleep?metric=heart_rate');
   const chart = page.getByRole('region').getByRole('img');
   await expect(chart).toBeVisible();
   await expect.poll(async () => {

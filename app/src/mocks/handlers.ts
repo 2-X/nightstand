@@ -237,10 +237,9 @@ export const handlers = [
       return HttpResponse.json({
         score: 0,
         components: {
-          duration: { score: 0, weight: 0.35, value: '', available: false },
-          continuity: { score: 0, weight: 0.25, value: '', available: false },
-          hrv: { score: 0, weight: 0.2, value: '', available: false },
-          restingHr: { score: 0, weight: 0.2, value: '', available: false },
+          duration: { score: 0, weight: 0.4, value: '', available: false },
+          continuity: { score: 0, weight: 0.3, value: '', available: false },
+          restingHr: { score: 0, weight: 0.15, value: '', available: false },
         },
       });
     }

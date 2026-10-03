@@ -19,7 +19,6 @@ export type SleepScore = {
   components: Partial<{
     duration: SleepScoreComponent;
     continuity: SleepScoreComponent;
-    hrv: SleepScoreComponent;
     restingHr: SleepScoreComponent;
   }>;
 };

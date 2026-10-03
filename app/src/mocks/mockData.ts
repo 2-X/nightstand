@@ -164,12 +164,11 @@ const createSleepScore = (startTime: string, endTime: string): SleepScore => {
   const durationHours = Math.max(0, (new Date(endTime).getTime() - new Date(startTime).getTime()) / HOURS_TO_MS);
   const durationScore = clamp(Math.round(55 + durationHours * 5), 40, 100);
   const continuityScore = 84;
-  const hrvScore = 76;
   const restingHrScore = 88;
   const { totals } = createSleepStages(startTime, endTime);
   const asleepMinutes = Math.round((totals.light + totals.rem + totals.deep) / 60);
   const score = Math.round(
-    durationScore * 0.35 + continuityScore * 0.25 + hrvScore * 0.2 + restingHrScore * 0.2
+    (durationScore * 0.4 + continuityScore * 0.3 + restingHrScore * 0.15) / 0.85
   );
 
   return {
@@ -177,12 +176,11 @@ const createSleepScore = (startTime: string, endTime: string): SleepScore => {
     score,
     components: {
       duration: {
-        score: durationScore, weight: 0.35, available: true,
+        score: durationScore, weight: 0.4, available: true,
         value: `${Math.floor(asleepMinutes / 60)}h ${asleepMinutes % 60}m asleep`,
       },
-      continuity: { score: continuityScore, weight: 0.25, value: '1 awakening', available: true },
-      hrv: { score: hrvScore, weight: 0.2, value: '63 ms', available: true },
-      restingHr: { score: restingHrScore, weight: 0.2, value: '52bpm', available: true },
+      continuity: { score: continuityScore, weight: 0.3, value: '1 awakening', available: true },
+      restingHr: { score: restingHrScore, weight: 0.15, value: '52bpm', available: true },
     },
   };
 };

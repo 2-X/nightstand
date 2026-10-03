@@ -219,7 +219,6 @@ const responseSchemas: Record<string, z.ZodTypeAny> = {
     components: z.object({
       duration: scoreComponent.optional(),
       continuity: scoreComponent.optional(),
-      hrv: scoreComponent.optional(),
       restingHr: scoreComponent.optional(),
     }),
   }),

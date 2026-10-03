@@ -35,7 +35,8 @@ it('leads with the estimate and shows all contributors with unavailable data in 
   expect(screen.getByText('6h 30m asleep')).toBeInTheDocument();
   expect(screen.getByText('Resting HR')).toBeInTheDocument();
   expect(screen.getByText('Not enough data')).toBeInTheDocument();
-  expect(screen.getAllByRole('progressbar')).toHaveLength(3);
+  expect(screen.getAllByRole('progressbar')).toHaveLength(2);
+  expect(screen.queryByText('HRV')).not.toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'About the sleep estimate' }));
   expect(screen.getByRole('dialog')).toHaveTextContent('has not been validated');
   expect(screen.getByRole('dialog')).toHaveTextContent('not a medical measurement');
@@ -59,15 +60,15 @@ it('shows contributor bands and keeps their measurements in the info sheet', asy
   fixture.restingHr = '52bpm';
   const { user } = renderWithProviders(<SleepFitnessCard sleepRecord={ record } timeZone="UTC"/>);
   expect(screen.getByText('Good')).toBeInTheDocument();
-  expect(screen.getAllByText('Fair')).toHaveLength(3);
+  expect(screen.getAllByText('Fair')).toHaveLength(2);
   expect(screen.queryByText('63 ms')).not.toBeInTheDocument();
   expect(screen.queryByText('52 bpm')).not.toBeInTheDocument();
-  expect(screen.getByRole('progressbar', { name: 'HRV contribution' })).toHaveAttribute('aria-valuenow', '70');
+  expect(screen.queryByRole('progressbar', { name: 'HRV contribution' })).not.toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'About the sleep estimate' }));
   const dialog = screen.getByRole('dialog');
   expect(within(dialog).getByText('Duration: 6h 30m asleep')).toBeInTheDocument();
-  expect(within(dialog).getByText('HRV: 63 ms')).toBeInTheDocument();
   expect(within(dialog).getByText('Resting HR: 52 bpm')).toBeInTheDocument();
+  expect(dialog).not.toHaveTextContent('HRV');
 });
 
 it('shows time in bed in the headline and duration when vitals coverage is low', async () => {
@@ -84,7 +85,7 @@ it('says the score is unavailable, not that data is missing, when the score requ
   fixture.scoreError = true;
   renderWithProviders(<SleepFitnessCard sleepRecord={ record } timeZone="UTC"/>);
   expect(screen.getByText('Score unavailable')).toBeInTheDocument();
-  expect(screen.getAllByText('Unavailable')).toHaveLength(4);
+  expect(screen.getAllByText('Unavailable')).toHaveLength(3);
   expect(screen.queryByText('Not enough data')).not.toBeInTheDocument();
 });
 
