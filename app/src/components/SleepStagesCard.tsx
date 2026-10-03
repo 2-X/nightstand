@@ -10,7 +10,7 @@ import { useAppStore } from '@state/appStore.tsx';
 import { useSleepStages, SleepStage, StageEpoch } from '@api/sleepStages.ts';
 import { useSleepScoreEnabled } from '@api/sleepScore.ts';
 import GlassCard from '@design/GlassCard';
-import { palette, typography } from '@design/tokens';
+import { palette, radius, typography } from '@design/tokens';
 
 type Props = {
   startTime: string;
@@ -27,6 +27,8 @@ const SHOWN_LABEL: Record<ShownStage, string> = { awake: 'Awake', asleep: 'Aslee
 const SHOWN_COLOR: Record<ShownStage, string> = { awake: palette.stage.awake, asleep: palette.stage.light };
 
 type ShownEpoch = { startUnix: number; endUnix: number; stage: ShownStage };
+// The look's mark corner, no rounder than a bar's own half width or height.
+const markCorner = (width: number, height: number) => Math.min(radius.mark, width / 2, height / 2);
 
 // Merge consecutive epochs of the same row into a single segment so we
 // don't render hundreds of overlapping blocks.
@@ -126,8 +128,8 @@ function StagesChart({ epochs, periodStart, periodEnd }: {
                 height={ bottom - top }
                 fill={ color }
                 opacity={ 0.85 }
-                rx={ 1.5 }
-                ry={ 1.5 }
+                rx={ markCorner(w, bottom - top) }
+                ry={ markCorner(w, bottom - top) }
               />
             );
           }
@@ -140,8 +142,8 @@ function StagesChart({ epochs, periodStart, periodEnd }: {
               width={ w }
               height={ SEGMENT_THICKNESS }
               fill={ color }
-              rx={ 4 }
-              ry={ 4 }
+              rx={ markCorner(w, SEGMENT_THICKNESS) }
+              ry={ markCorner(w, SEGMENT_THICKNESS) }
             />
           );
         }) }

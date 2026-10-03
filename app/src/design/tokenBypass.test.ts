@@ -14,6 +14,7 @@ const UNREACHABLE = new Set([
 const PILL_BY_HEIGHT = new Set([
   "components/SideControl.tsx '24px'", "pages/ControlTempPage/powerPill.ts '27px'", "pages/ControlTempPage/powerPill.ts '24px'",
   "pages/SchedulePage/DraftBar.tsx '24px'", "pages/SchedulePage/rhythms/UndoBar.tsx '24px'",
+  'components/BedVisualization.tsx rx={ 5 }',
 ]);
 
 const walk = (dir: string): string[] => readdirSync(dir).flatMap(name => {
@@ -41,6 +42,9 @@ it('reads every corner from the look', () => {
       ? literalTemplateSize(hit)
       : !/ ('0( !important)?'|0|1|2|'50%')$/.test(hit) && !PILL_BY_HEIGHT.has(hit));
   expect(corners).toEqual([]);
+  // An SVG rect's corners too; an ellipse's rx and ry are its size, not a corner.
+  const svgCorners = hits(/<rect\b[^>]*?\b(r[xy]=\{ *[\d.]+ *\})/g).filter(hit => !PILL_BY_HEIGHT.has(hit));
+  expect(svgCorners).toEqual([]);
 });
 
 it('reads every font weight and family from the look', () => {
