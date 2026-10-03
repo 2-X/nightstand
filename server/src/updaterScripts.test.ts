@@ -339,6 +339,15 @@ describe('the hardware watchdog is turned on only after a successful install or 
     assert.match(read('scripts/setup_watchdog.sh'), /NIGHTSTAND_WATCHDOG_TRIAL/);
   });
 
+  // Without --auto the script takes the run as the owner's and clears a
+  // note left by --remove, turning the watchdog back on.
+  it('install.sh and update.sh run it with --auto, so an owner\'s --remove stays in force', () => {
+    const update = read('scripts/update.sh');
+    const fn = update.slice(update.indexOf('arm_watchdog() {'), update.indexOf('\n}\n', update.indexOf('arm_watchdog() {')));
+    assert.match(fn, /bash "\$script" --auto /);
+    assert.match(read('scripts/install.sh'), /bash "\$REPO_DIR\/scripts\/setup_watchdog\.sh" --auto /);
+  });
+
   it('setup_services.sh never arms it, since it runs before the update is checked', () => {
     assert.doesNotMatch(read('scripts/setup_services.sh'), /setup_watchdog/);
   });

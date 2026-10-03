@@ -205,6 +205,7 @@ describe('fork-switch tool scripts', () => {
       assert.ok(arm > success.indexOf('say "SUCCESS: migrated'), 'arm after the SUCCESS line');
       assert.ok(arm > success.indexOf('rm -f "$SWAP_MARKER"'), 'arm after the swap marker is cleared');
       assert.equal(src.split('setup_watchdog.sh').length - 1, 2, 'one guard and one call, both after the swap succeeded');
+      assert.match(success, /bash "\$LIVE\/scripts\/setup_watchdog\.sh" --auto /, 'an owner\'s --remove stays in force');
     });
 
     it('applies this fork\'s WAN policy only after the health check succeeds', () => {

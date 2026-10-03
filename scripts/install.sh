@@ -408,5 +408,5 @@ fi
 # Last, since its first arming can reset the Pod; skipped when the database
 # did not migrate, so a broken install is not made worse.
 if [ "$migration_failed" != "true" ] && [ -f "$REPO_DIR/scripts/setup_watchdog.sh" ]; then
-  bash "$REPO_DIR/scripts/setup_watchdog.sh" || echo "WARNING: the hardware watchdog could not be turned on; see above"
+  bash "$REPO_DIR/scripts/setup_watchdog.sh" --auto || echo "WARNING: the hardware watchdog could not be turned on; see above"
 fi

@@ -432,7 +432,7 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     description: 'After a successful install or update, sets systemd\'s RuntimeWatchdogSec to 30 seconds through a drop-in, '
       + 'after a one-minute trial from /run, so a frozen kernel or PID 1 resets the Pod. Pod 5 only (mtk-wdt, 31 s '
       + 'maximum, hub revision G53 or later); skipped where the device, systemd or the driver\'s timeout limits cannot '
-      + 'hold it, and after a trial that did not finish.',
+      + 'hold it, after a trial that did not finish, and after the owner turned it off with --remove.',
     category: 'safety',
     version: 'n/a',
     flag: null,
@@ -443,7 +443,10 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     ],
     depends_on: ['agent'],
     reversible: true,
-    tests: ['server/src/watchdogScript.test.ts', 'server/src/updaterScripts.test.ts', 'server/src/migrationScripts.test.ts'],
+    tests: [
+      'server/src/watchdogScript.test.ts', 'server/src/updaterScripts.test.ts', 'server/src/migrationScripts.test.ts',
+      'server/src/rollbackScript.test.ts', 'server/src/revertToStockScript.test.ts',
+    ],
     upstream_offer: false,
     rationale: 'Safety: a frozen system otherwise leaves the Pod with no server and no cooling until it is unplugged. '
       + 'Switching to upstream free-sleep removes the drop-in; it never overrides a watchdog set up some other way.',

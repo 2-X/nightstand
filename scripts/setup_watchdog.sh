@@ -2,14 +2,14 @@
 #
 # Turns on the Pod's hardware watchdog, so a frozen kernel or PID 1 resets the
 # Pod instead of leaving it with no server and no cooling. install.sh,
-# update.sh and pod-installer.sh run it once they have succeeded; safe to run
-# again.
+# update.sh and pod-installer.sh run it with --auto once they have succeeded;
+# safe to run again.
 #
-# Background: the stock Wi-Fi driver hit a kernel oops, processes wedged in
-# uninterruptible sleep, and the nightly reboot hung with PID 1 frozen.
-# systemd arms its reboot watchdog only at the final reboot handoff, which
-# that shutdown never reached, so nothing reset the board. RuntimeWatchdogSec
-# is the layer that was missing: PID 1 pets /dev/watchdog at half the timeout.
+# Background: a kernel fault (for example in the Wi-Fi driver) can leave
+# processes stuck and PID 1 frozen during a reboot. systemd arms its reboot
+# watchdog only at the final reboot handoff, which a hung shutdown never
+# reaches, so nothing resets the board. RuntimeWatchdogSec covers that case:
+# PID 1 pets /dev/watchdog at half the timeout.
 #
 # 30 seconds stays inside mtk-wdt's 31 second hardware maximum. A longer value
 # depends on the kernel extending the timeout in software, and where it cannot,
@@ -30,10 +30,15 @@
 # does not take PID 1's pets therefore resets the Pod once rather than at
 # every boot. The trial file in the data folder, kept after a reset or a
 # failed attempt, stops it from trying again. The drop-in in /etc is the
-# record of what this did: "--remove" deletes it and the trial files, and
-# nothing else.
+# record of what this did: "--remove" deletes it and the trial copy in /run,
+# and nothing else.
 #
-# Usage: setup_watchdog.sh [--remove]   (run as root)
+# "--remove" by hand also leaves a note in the trial file, so --auto runs
+# leave the watchdog off; running this script by hand without arguments
+# clears the note and turns it on again. Rollback to another fork and the
+# switch to upstream use "--remove --switching", which records no choice.
+#
+# Usage: setup_watchdog.sh [--auto | --remove [--switching]]   (run as root)
 set -u
 
 CONF_DIR="${NIGHTSTAND_SYSTEM_CONF_DIR:-/etc/systemd/system.conf.d}"
@@ -48,6 +53,7 @@ SYSFS="${NIGHTSTAND_WATCHDOG_SYSFS:-/sys/class/watchdog/watchdog0}"
 PROC="${NIGHTSTAND_PROC:-/proc}"
 WAIT="${NIGHTSTAND_WATCHDOG_WAIT:-10}"
 MARKER="# Managed by scripts/setup_watchdog.sh."
+OWNER_NOTE="turned off by the owner with --remove"
 RUNTIME=30
 POD5_IDENTITY=mtk-wdt
 POD5_MAX_TIMEOUT=31
@@ -121,11 +127,38 @@ abandon() {
   exit 1
 }
 
-if [ "${1:-}" = --remove ]; then
-  rm -f "$TRIAL_MARK"
+MODE=hand
+case "${1:-}" in
+  '') ;;
+  --auto) MODE=auto ;;
+  --remove) MODE=remove; [ "${2:-}" != --switching ] || MODE=switching ;;
+  *) echo "Usage: setup_watchdog.sh [--auto | --remove [--switching]]" >&2; exit 2 ;;
+esac
+
+# Says whether later installs and updates leave the watchdog off.
+removed() {
+  [ "$MODE" = remove ] || exit 0
+  if [ "$NOTE" = failed ]; then
+    echo "WARNING: could not write $TRIAL_MARK, so the next install or update turns the watchdog on again" >&2
+    exit 1
+  fi
+  if [ "$(head -n 1 "$TRIAL_MARK" 2>/dev/null)" = "$OWNER_NOTE" ]; then
+    echo "Hardware watchdog: installs and updates leave it off; run this script without arguments to turn it on again."
+  else
+    echo "Hardware watchdog: installs and updates leave it off after the earlier trial; delete $TRIAL_MARK to try again."
+  fi
+  exit 0
+}
+
+if [ "$MODE" = remove ] || [ "$MODE" = switching ]; then
+  # An earlier failed trial already keeps it off, and its reason is kept.
+  NOTE=kept
+  if [ "$MODE" = remove ] && [ ! -e "$TRIAL_MARK" ]; then
+    echo "$OWNER_NOTE" 2>/dev/null > "$TRIAL_MARK" || NOTE=failed
+  fi
   if ! ours && [ ! -f "$TRIAL_DROPIN" ]; then
     echo "Hardware watchdog: no Nightstand setting to remove."
-    exit 0
+    removed
   fi
   if ours; then
     rm -f "$DROPIN" || { echo "WARNING: could not remove $DROPIN" >&2; exit 1; }
@@ -139,7 +172,7 @@ if [ "${1:-}" = --remove ]; then
   else
     echo "Hardware watchdog: Nightstand's setting removed; it turns off at the next restart."
   fi
-  exit 0
+  removed
 fi
 
 if [ -f "$DROPIN" ]; then
@@ -148,9 +181,15 @@ if [ -f "$DROPIN" ]; then
   exit 0
 fi
 if [ -e "$TRIAL_MARK" ]; then
-  rm -f "$TRIAL_DROPIN"
   REASON=$(head -n 1 "$TRIAL_MARK" 2>/dev/null)
-  skip "${REASON:-an earlier trial did not finish, so the Pod may have reset during it}; delete $TRIAL_MARK to try again"
+  if [ "$REASON" = "$OWNER_NOTE" ] && [ "$MODE" = hand ]; then
+    rm -f "$TRIAL_MARK" || { echo "WARNING: could not remove $TRIAL_MARK; the hardware watchdog stays off" >&2; exit 1; }
+    echo "Hardware watchdog: cleared the note left by --remove."
+  else
+    rm -f "$TRIAL_DROPIN"
+    [ "$REASON" != "$OWNER_NOTE" ] || skip "$OWNER_NOTE; run this script without arguments to turn it on again"
+    skip "${REASON:-an earlier trial did not finish, so the Pod may have reset during it}; delete $TRIAL_MARK to try again"
+  fi
 fi
 
 [ -e "$DEVICE" ] || skip "no watchdog device at $DEVICE"

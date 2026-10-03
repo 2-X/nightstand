@@ -495,5 +495,5 @@ say "SUCCESS: migrated to v$STAGED_VERSION. Their original install is kept at $P
 # Last: its first arming can reset the Pod, so the migration is already
 # recorded as a success and the sentinel is disarmed before it runs.
 if [ -f "$LIVE/scripts/setup_watchdog.sh" ]; then
-  bash "$LIVE/scripts/setup_watchdog.sh" || say "WARNING: the hardware watchdog could not be turned on; see above"
+  bash "$LIVE/scripts/setup_watchdog.sh" --auto || say "WARNING: the hardware watchdog could not be turned on; see above"
 fi

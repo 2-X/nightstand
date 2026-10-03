@@ -41,6 +41,8 @@ type Pod = {
   trialMark?: string;
   // Contents of the Pod's device label, or null for none.
   label?: string | null;
+  // The data folder holding the trial file is missing.
+  noDataFolder?: boolean;
 };
 
 function pod(opts: Pod = {}) {
@@ -55,7 +57,7 @@ function pod(opts: Pod = {}) {
   const bin = path.join(dir, 'bin');
   const conf = path.join(dir, 'system.conf.d');
   const runConf = path.join(dir, 'run-system.conf.d');
-  const mark = path.join(dir, 'watchdog-trial');
+  const mark = path.join(dir, ...(opts.noDataFolder ? ['missing'] : []), 'watchdog-trial');
   const sysfs = path.join(dir, 'sysfs');
   const proc = path.join(dir, 'proc');
   const devicePath = path.join(dir, 'watchdog');
@@ -302,6 +304,35 @@ describe('setup_watchdog.sh', () => {
     p.cleanup();
   });
 
+  it('turns it on the same way when an install or update runs it', () => {
+    const p = pod();
+    const result = p.run('--auto');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(p.dropin() ?? '', /RuntimeWatchdogSec=30s/);
+    p.cleanup();
+  });
+
+  it('does not clear a failed trial when run by hand', () => {
+    const p = pod({ trialMark: 'PID 1 did not take the device\n' });
+    const result = p.run();
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /left off: PID 1 did not take the device; delete .* to try again/);
+    assert.equal(p.reexecs(), 0);
+    assert.equal(p.mark(), 'PID 1 did not take the device\n');
+    p.cleanup();
+  });
+
+  it('refuses an argument it does not know rather than arming', () => {
+    const p = pod();
+    const result = p.run('--remvoe');
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /Usage/);
+    assert.equal(p.dropin(), null);
+    assert.equal(p.reexecs(), 0);
+    assert.equal(p.mark(), null);
+    p.cleanup();
+  });
+
   it('takes its setting back out when the re-exec fails', () => {
     const p = pod({ reexecFails: true });
     const result = p.run();
@@ -321,13 +352,79 @@ describe('setup_watchdog.sh', () => {
       p.cleanup();
     });
 
-    it('removes a trial copy and a trial file too', () => {
-      const p = pod({ runtime: '30s', pid1Holds: true, trialMark: 'PID 1 did not take the device' });
+    it('removes a trial copy and keeps the reason an earlier trial failed', () => {
+      const p = pod({ runtime: '30s', pid1Holds: true, trialMark: 'PID 1 did not take the device\n' });
       p.writeTrialDropin();
       assert.equal(p.run('--remove').status, 0);
       assert.equal(p.trialDropin(), false);
+      assert.equal(p.mark(), 'PID 1 did not take the device\n', 'a failed trial is not tried again');
+      assert.match(p.run('--remove').stdout, /leave it off after the earlier trial; delete .*watchdog-trial to try again/);
+      p.cleanup();
+    });
+
+    it('leaves a note that keeps installs and updates from turning it on again', () => {
+      const p = pod({ dropin: MANUAL_DROPIN, runtime: '30s', pid1Holds: true });
+      const removed = p.run('--remove');
+      assert.equal(removed.status, 0, removed.stdout + removed.stderr);
+      assert.match(p.mark() ?? '', /^turned off by the owner with --remove$/m);
+      assert.match(removed.stdout, /installs and updates leave it off/);
+      const reexecs = p.reexecs();
+      const update = p.run('--auto');
+      assert.equal(update.status, 0);
+      assert.match(update.stdout, /Hardware watchdog left off: turned off by the owner/);
+      assert.equal(p.dropin(), null);
+      assert.equal(p.reexecs(), reexecs, 'an install or update must not re-exec PID 1');
+      assert.match(p.mark() ?? '', /turned off by the owner/, 'the note stays for the next update');
+      p.cleanup();
+    });
+
+    it('leaves the note even when there was nothing to remove', () => {
+      const p = pod();
+      assert.equal(p.run('--remove').status, 0);
+      assert.match(p.mark() ?? '', /turned off by the owner/);
+      assert.equal(p.run('--auto').status, 0);
+      assert.equal(p.dropin(), null);
+      assert.equal(p.reexecs(), 0);
+      p.cleanup();
+    });
+
+    it('says so when the note cannot be written, and still removes the setting', () => {
+      const p = pod({ dropin: MANUAL_DROPIN, runtime: '30s', pid1Holds: true, noDataFolder: true });
+      const result = p.run('--remove');
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /WARNING: could not write .*watchdog-trial, so the next install or update turns the watchdog on again/);
+      assert.equal(p.dropin(), null);
+      p.cleanup();
+    });
+
+    it('turns it on again, and clears the note, when run by hand', () => {
+      const p = pod();
+      p.run('--remove');
+      const result = p.run();
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(p.dropin() ?? '', /RuntimeWatchdogSec=30s/);
+      assert.equal(p.mark(), null);
+      assert.match(result.stdout, /Hardware watchdog on/);
+      p.cleanup();
+    });
+
+    it('records no choice when Nightstand is leaving the Pod', () => {
+      // Rolling back to another fork or switching to upstream takes the
+      // setting out; a later install of Nightstand turns it on as usual.
+      const p = pod({ dropin: MANUAL_DROPIN, runtime: '30s', pid1Holds: true });
+      const result = p.run('--remove', '--switching');
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(p.dropin(), null);
       assert.equal(p.mark(), null);
       p.cleanup();
+
+      // An owner's note or a failed trial stays as it was.
+      for (const trialMark of ['turned off by the owner with --remove\n', 'PID 1 did not take the device\n', '']) {
+        const kept = pod({ trialMark });
+        assert.equal(kept.run('--remove', '--switching').status, 0);
+        assert.equal(kept.mark(), trialMark);
+        kept.cleanup();
+      }
     });
 
     it('leaves PID 1 petting until the next restart where the watchdog cannot be stopped', () => {

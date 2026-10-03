@@ -62,7 +62,8 @@ describe('rollback_pod.sh', () => {
     assert.match(otherFork, /\/etc\/systemd\/system\/free-sleep-health\.service/);
     assert.match(otherFork, /\/etc\/systemd\/system\/free-sleep-health\.timer/);
     // After the swap, $PREV holds the Nightstand tree that was running.
-    assert.match(otherFork, /bash "\$PREV\/scripts\/setup_watchdog\.sh" --remove/);
+    // --switching records no owner choice, so a later install turns it on.
+    assert.match(otherFork, /bash "\$PREV\/scripts\/setup_watchdog\.sh" --remove --switching /);
     assert.equal(success.match(/setup_watchdog/g)?.length, 2, 'a Nightstand target keeps the watchdog');
   });
 

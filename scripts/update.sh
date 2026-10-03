@@ -673,7 +673,7 @@ fi
 arm_watchdog() {
   local script="$LIVE/scripts/setup_watchdog.sh"
   grep -q NIGHTSTAND_WATCHDOG_TRIAL "$script" 2>/dev/null || return 0
-  bash "$script" || say "WARNING: the hardware watchdog could not be turned on; see above"
+  bash "$script" --auto || say "WARNING: the hardware watchdog could not be turned on; see above"
 }
 
 if [ "$HEALTHY" = yes ]; then
