@@ -16,6 +16,10 @@ import type { ChangelogEntry } from '@api/changelogSchema.ts';
 import { demoOffersUpdate, demoRhythmsDefault } from './demoPreferences';
 import { DEMO_TIME_ZONE, createSampleNights, createSleepStages, createVitalsSamples, nightScore, type SampleNight } from './sampleNights';
 import serverInfo from '../../../server/src/serverInfo.json';
+import releasesJson from '../../../releases.json';
+import changelogMarkdown from '../../../CHANGELOG.md?raw';
+import { parseChangelog } from '../../../server/src/routes/changelog/changelogParser.ts';
+import { ReleasesManifestSchema } from '@api/releases.ts';
 import semver from 'semver';
 
 type Side = 'left' | 'right';
@@ -27,6 +31,10 @@ type QueryFilters = {
   endTime?: string;
   side?: Side;
 };
+
+// The demo tells the same version story as the repository it was built from.
+const realManifest = ReleasesManifestSchema.parse(releasesJson);
+const runningChannel = realManifest.releases.find(release => release.version === serverInfo.version)?.channel ?? 'stable';
 
 const now = new Date();
 const HOURS_TO_MS = 60 * 60 * 1000;
@@ -241,7 +249,7 @@ const createSettings = (): Settings => ({
   temperatureFormat: 'level',
   rebootDaily: true,
   rawArchiveRetentionDays: 14,
-  updateChannel: 'stable',
+  updateChannel: runningChannel,
   features: { ...defaultFeatures, rhythms: demoRhythmsDefault() },
   left: {
     name: 'Alex',
@@ -724,19 +732,7 @@ export const setMemoryInfo = (next: MemoryInfo) => {
   return memoryInfo;
 };
 
-const changelogEntries: ChangelogEntry[] = [
-  {
-    version: '3.2.0',
-    date: '2026-07-09',
-    body: '### Added\n- **In-app changelog.** See what changed right from the update alert, '
-      + 'or browse\n  full history on the new Changelog page in Settings.',
-  },
-  {
-    version: '3.1.0',
-    date: '2026-07-10',
-    body: '### Added\n- Pump-stall detection, surfaced on the Status page.',
-  },
-];
+const changelogEntries: ChangelogEntry[] = parseChangelog(changelogMarkdown).slice(0, 8);
 
 export const getChangelog = () => changelogEntries;
 
@@ -806,48 +802,25 @@ const sampleRelease = () => (demoOffersUpdate() ? [{
   kind: 'bundle', version: demoNextVersion, channel: 'stable', date: '2026-10-01', upstreamBase: serverInfo.upstreamBase, features: [],
 }] : []);
 
-// Mock of the release manifest the app fetches raw from GitHub. Newest first,
-// matching ReleasesManifestSchema (bundle releases name their upstream base).
+// Mock of the release manifest the app fetches raw from GitHub: the real one.
 export const getReleasesManifest = () => ({
-  channels: ['stable', 'beta'],
-  releases: [
-    ...sampleRelease(),
-    {
-      kind: 'bundle',
-      version: '3.1.0',
-      channel: 'beta',
-      date: '2026-07-15',
-      upstreamBase: '2.1.5',
-      features: ['presence-detection', 'sleep-score'],
-    },
-    {
-      kind: 'bundle',
-      version: '3.0.0',
-      channel: 'stable',
-      date: '2026-07-10',
-      upstreamBase: '2.1.5',
-      features: ['presence-detection'],
-    },
-  ],
+  ...realManifest,
+  releases: [...sampleRelease(), ...realManifest.releases],
 });
 
 // Mock of the newest published build, fetched raw from GitHub. The hook reads
 // version and branch only.
 export const getRemoteServerInfo = () => ({ version: demoOffersUpdate() ? demoNextVersion : serverInfo.version, branch: 'main' });
 
-// Mock of CHANGELOG.md fetched raw from GitHub, in the "## [x.y.z] - date"
-// format parseChangelog expects.
-export const getRemoteChangelogMarkdown = () => [
-  '# Changelog',
-  '',
-  ...(demoOffersUpdate() ? [`## [${demoNextVersion}] - 2026-10-01`, 'Sample release offered by the demo.', ''] : []),
-  '## [3.1.0] - 2026-07-15',
-  'Beta build with presence detection and sleep score.',
-  '',
-  '## [3.0.0] - 2026-07-10',
-  'First Nightstand release.',
-  '',
-].join('\n');
+// Mock of CHANGELOG.md fetched raw from GitHub: the real file, with the
+// sample release's notes ahead of the first section when the demo offers one.
+export const getRemoteChangelogMarkdown = () => {
+  if (!demoOffersUpdate()) return changelogMarkdown;
+  const found = changelogMarkdown.search(/^## /m);
+  const firstSection = found < 0 ? changelogMarkdown.length : found;
+  const sample = `## [${demoNextVersion}] - 2026-10-01\nSample release offered by the demo.\n\n`;
+  return changelogMarkdown.slice(0, firstSection) + sample + changelogMarkdown.slice(firstSection);
+};
 
 // Mock of the pod's rollback availability.
 export const rollbackInfo = { available: true, version: '2.9.0' };

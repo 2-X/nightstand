@@ -18,7 +18,9 @@ for (const path of ['', 'schedules', 'sleep', 'settings']) {
   });
 }
 
+// A nested route answers 200 from its own copy of the app, not the 404 fallback.
 test('deployed demo reports the version just released', async ({ page }) => {
-  await page.goto('settings/versions');
+  const response = await page.goto('settings/versions');
+  expect(response?.status()).toBe(200);
   await expect(page.getByText(`v${version}`).first()).toBeVisible();
 });

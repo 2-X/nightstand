@@ -12,6 +12,8 @@ export default defineConfig({
     searchForWorkspaceRoot(process.cwd()),
     fileURLToPath(new URL('../LICENSE.md', import.meta.url)),
     `${fileURLToPath(new URL('../LICENSE.md', import.meta.url))}?raw`,
+    fileURLToPath(new URL('../CHANGELOG.md', import.meta.url)),
+    `${fileURLToPath(new URL('../CHANGELOG.md', import.meta.url))}?raw`,
   ] } },
   test: {
     environment: 'jsdom',

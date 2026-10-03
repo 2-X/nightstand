@@ -9,6 +9,9 @@ import { useUpdateAttentionStore } from '@state/updateAttentionStore';
 
 beforeEach(() => useUpdateAttentionStore.getState().setUpdateAttention(false));
 
+// The demo saves the running release's channel, which may be beta.
+const savedOnStable = () => http.get('*/api/settings', () => HttpResponse.json({ ...getSettings(), updateChannel: 'stable' }));
+
 describe('VersionsPage', () => {
   it('renders the versions page', async () => {
     renderWithProviders(<VersionsPage />, { initialRoute: '/settings/versions' });
@@ -17,7 +20,7 @@ describe('VersionsPage', () => {
 });
 
 it('shows a failed channel save and retains the saved channel', async () => {
-  server.use(http.post('*/settings', () => new HttpResponse(null, { status: 500 })));
+  server.use(savedOnStable(), http.post('*/settings', () => new HttpResponse(null, { status: 500 })));
   const { user } = renderWithProviders(<VersionsPage />);
   await user.click(await screen.findByRole('button', { name: /Update channel Stable/ }));
   await waitFor(() => expect(screen.getByRole('radio', { name: 'Beta' })).toBeEnabled());
@@ -144,6 +147,7 @@ it('disables update channel selection when the server omits the setting', async 
 });
 
 it('describes the channels in the channel drawer', async () => {
+  server.use(savedOnStable());
   const { user } = renderWithProviders(<VersionsPage />);
   await user.click(await screen.findByRole('button', { name: /Update channel Stable/ }));
   expect(await screen.findByText(
@@ -155,6 +159,7 @@ it('describes the channels in the channel drawer', async () => {
 it('tells someone running a beta on the stable channel, and switches them', async () => {
   let posted: unknown;
   server.use(
+    savedOnStable(),
     http.get('*/api/deviceStatus', () => HttpResponse.json({
       ...getDeviceStatus(), freeSleep: { ...getDeviceStatus().freeSleep, version: '3.5.1' },
     })),
