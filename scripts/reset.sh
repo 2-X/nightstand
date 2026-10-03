@@ -7,6 +7,7 @@ set -uo pipefail
 
 DATA_DIR=/persistent/free-sleep-data
 SOCK_FILE="$DATA_DIR/dac_sock_path.txt"
+WATCHDOG_MARK="$DATA_DIR/watchdog-trial"
 SERVER_DIR=/home/dac/free-sleep/server
 NPM=/home/dac/.volta/bin/npm
 
@@ -23,6 +24,10 @@ fi
 
 SOCK_PATH=""
 [ -f "$SOCK_FILE" ] && SOCK_PATH=$(cat "$SOCK_FILE")
+# The watchdog's trial file is kept too, byte for byte, so a failed trial or
+# an owner's --remove still keeps it off. Empty means a trial never finished.
+MARK=""
+[ ! -f "$WATCHDOG_MARK" ] || MARK="$(cat "$WATCHDOG_MARK"; printf x)"
 STREAM_WAS_ACTIVE=$(systemctl is-active free-sleep-stream 2>/dev/null || true)
 ARCHIVE_WAS_ACTIVE=$(systemctl is-active free-sleep-archive-raw.timer 2>/dev/null || true)
 
@@ -43,6 +48,7 @@ echo "Deleting Nightstand data..."
 rm -rf "$DATA_DIR"
 mkdir -p "$DATA_DIR/lowdb" "$DATA_DIR/logs"
 [ -z "$SOCK_PATH" ] || printf '%s\n' "$SOCK_PATH" > "$SOCK_FILE"
+[ -z "$MARK" ] || printf '%s' "${MARK%x}" > "$WATCHDOG_MARK"
 chown -R dac:dac "$DATA_DIR"
 chmod 770 "$DATA_DIR"
 chmod g+s "$DATA_DIR"

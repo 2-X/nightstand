@@ -439,13 +439,13 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     default: true,
     touchpoints: [
       'scripts/setup_watchdog.sh', 'scripts/update.sh', 'scripts/install.sh', 'scripts/migrate/pod-installer.sh',
-      'scripts/revert-to-stock.sh', 'scripts/rollback_pod.sh',
+      'scripts/revert-to-stock.sh', 'scripts/rollback_pod.sh', 'scripts/reset.sh',
     ],
     depends_on: ['agent'],
     reversible: true,
     tests: [
       'server/src/watchdogScript.test.ts', 'server/src/updaterScripts.test.ts', 'server/src/migrationScripts.test.ts',
-      'server/src/rollbackScript.test.ts', 'server/src/revertToStockScript.test.ts',
+      'server/src/rollbackScript.test.ts', 'server/src/revertToStockScript.test.ts', 'server/src/resetScript.test.ts',
     ],
     upstream_offer: false,
     rationale: 'Safety: a frozen system otherwise leaves the Pod with no server and no cooling until it is unplugged. '

@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const SOCK = '/persistent/deviceinfo/dac.sock';
 
-function run(answer: string, { migrateExit = 0, stopFails = false } = {}) {
+function run(answer: string, { migrateExit = 0, stopFails = false, watchdogMark = undefined as string | undefined } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-reset-'));
   const persistent = path.join(dir, 'persistent');
   const data = path.join(persistent, 'free-sleep-data');
@@ -21,6 +21,7 @@ function run(answer: string, { migrateExit = 0, stopFails = false } = {}) {
   writeFileSync(path.join(data, 'lowdb', 'settingsDB.json'), '{"timeZone":"UTC"}');
   writeFileSync(path.join(data, 'free-sleep.db'), 'db');
   writeFileSync(path.join(data, 'dac_sock_path.txt'), `${SOCK}\n`);
+  if (watchdogMark !== undefined) writeFileSync(path.join(data, 'watchdog-trial'), watchdogMark);
   const siblings = ['free-sleep-backups', 'free-sleep-database-backups', 'free-sleep-data-extra'];
   for (const name of siblings) {
     mkdirSync(path.join(persistent, name));
@@ -45,6 +46,7 @@ function run(answer: string, { migrateExit = 0, stopFails = false } = {}) {
   const out = {
     ...result, log,
     sock: read('dac_sock_path.txt'),
+    watchdogMark: read('watchdog-trial'),
     settingsLeft: existsSync(path.join(data, 'lowdb', 'settingsDB.json')),
     dbLeft: existsSync(path.join(data, 'free-sleep.db')),
     lowdbDir: existsSync(path.join(data, 'lowdb')),
@@ -84,6 +86,20 @@ describe('reset.sh', () => {
     assert.ok(stopAt >= 0 && stopAt < migrateAt && migrateAt < startAt, result.log.join('\n'));
     assert.ok(result.log.includes('systemctl restart free-sleep-stream'));
     assert.match(result.stdout, /Backups in \S*\/persistent\/free-sleep-backups and \S*\/persistent\/free-sleep-database-backups are kept/);
+  });
+
+  // A failed watchdog trial can reset the Pod; trying it again after a
+  // reset could reset it once more. An owner's --remove note stays too.
+  it('keeps the watchdog trial record as it was', () => {
+    for (const mark of ['PID 1 did not take the device\n', 'turned off by the owner with --remove\n', '']) {
+      const result = run('y', { watchdogMark: mark });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(result.settingsLeft, false);
+      assert.equal(result.watchdogMark, mark);
+    }
+    assert.equal(run('y').watchdogMark, null, 'a Pod without one does not get one');
+    const watchdog = readFileSync(path.join(repoRoot, 'scripts/setup_watchdog.sh'), 'utf8');
+    assert.match(watchdog, /:-\/persistent\/free-sleep-data\/watchdog-trial\}/, 'the file setup_watchdog.sh reads');
   });
 
   it('still starts the server when the database cannot be created', () => {
