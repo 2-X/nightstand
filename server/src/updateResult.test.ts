@@ -325,7 +325,7 @@ describe('where each script marks its progress', () => {
 
   it('update.sh does not call a rollback whose own health check failed a success', () => {
     const src = read('scripts/update.sh');
-    const tail = src.slice(src.indexOf('if curl -sf --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" >/dev/null; then'));
+    const tail = src.slice(src.indexOf('if restored_version_answers; then'));
     assert.match(tail, /else\n {2}RESULT_PHASE=swapped\n {2}fail "update failed AND rollback health check failed/);
   });
 
@@ -469,6 +469,81 @@ ${section}
       });
     }
   }
+
+  // Runs a script's own rollback to the end with the moves stubbed and the
+  // previous version starting as given, and returns the record and how long
+  // the script waited for it.
+  function restoreRecord(file: string, operation: string, header: string, answers: (second: number) => string) {
+    const src = read(file);
+    const start = src.indexOf(header);
+    assert.ok(start >= 0, `missing ${header}`);
+    const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-restore-'));
+    try {
+      copyFileSync(path.join(repoRoot, 'scripts/write_result.py'), path.join(dir, 'write_result.py'));
+      const clock = path.join(dir, 'clock');
+      writeFileSync(clock, '0');
+      const codes = Array.from({ length: 200 }, (_, second) => answers(second)).join(' ');
+      writeFileSync(path.join(dir, 'harness.sh'), `set -uo pipefail
+say() { echo "$*"; }
+RESULT_OPERATION=${operation}
+${resultBlock(src).replaceAll('/persistent/free-sleep-data', dir)}
+fail() { say "FATAL: $*"; [ -n "\${RESULT_REASON:-}" ] || RESULT_REASON="$*"; exit 1; }
+trap 'record_result $?' EXIT
+CUR_VERSION=3.6.0; EXPECTED_VERSION=3.5.1; STAGED_VERSION=1.0.0; TARGET_VERSION=3.5.1
+LIVE=live; PREV=prev; TMP=tmp; FAILED=failed; BK=bk; MOVED_MODULES=no; STREAM_WAS_ACTIVE=no
+RESULT_PHASE=swapped
+systemctl() { :; }; rm() { :; }; mv() { :; }; sh() { :; }; tail() { :; }
+restore_switch_data_or_fail() { :; }; restart_services() { :; }; fix_shared_node_modules() { :; }
+sleep() { echo $(( $(cat '${clock}') + $1 )) > '${clock}'; }
+# The server answers with the code for the current second; 000 is no answer.
+curl() {
+  local codes=(${codes}) code
+  code=\${codes[$(cat '${clock}')]}
+  case " $* " in *" -w "*) printf '%s' "$code" ;; esac
+  [ "$code" = 000 ] && return 7
+  case " $* " in *" -sf "*|*" -f "*) [ "$code" -ge 400 ] && return 22 ;; esac
+  return 0
+}
+${src.slice(start)}
+`);
+      spawnSync('bash', [path.join(dir, 'harness.sh')], { encoding: 'utf8' });
+      return {
+        record: JSON.parse(readFileSync(path.join(dir, 'update-result.json'), 'utf8')) as Record<string, string>,
+        waited: Number(readFileSync(clock, 'utf8')),
+      };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  const restores: [string, string, string][] = [
+    ['scripts/update.sh', 'update', '# --- automatic rollback'],
+    ['scripts/rollback_pod.sh', 'rollback', '# --- swap back on failure'],
+    ['scripts/revert-to-stock.sh', 'switch', '# --- automatic rollback to this fork'],
+  ];
+  for (const [file, operation, header] of restores) {
+    it(`${operation}: a previous version that takes 30 s to reach the Pod is restored`, () => {
+      // It answers 503 until the firmware connects, as a cold start does.
+      const { record } = restoreRecord(file, operation, header, second => (second < 30 ? '503' : '200'));
+      assert.equal(record.outcome, 'rolled-back');
+    });
+
+    it(`${operation}: a previous version that never answers is not restored`, () => {
+      const { record, waited } = restoreRecord(file, operation, header, () => '000');
+      assert.equal(record.outcome, 'failed');
+      assert.ok(waited >= 90 && waited <= 100, `waited ${waited} s`);
+    });
+  }
+
+  it('the three scripts wait for the restored version the same way', () => {
+    const helper = (src: string) => {
+      const start = src.indexOf('restored_version_answers() {');
+      assert.ok(start >= 0, 'missing restored_version_answers');
+      return src.slice(start, src.indexOf('\n}\n', start) + 3);
+    };
+    const [reference] = restores.map(([file]) => helper(read(file)));
+    for (const [file] of restores) assert.equal(helper(read(file)), reference, file);
+  });
 
   it('ships the writer in the overlay for stock installs', () => {
     const entry = AGENT_MANIFEST.find(item => item.path === 'scripts/write_result.py');

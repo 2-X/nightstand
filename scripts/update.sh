@@ -697,6 +697,21 @@ if [ "$HEALTHY" = yes ]; then
 fi
 
 # --- automatic rollback ---------------------------------------------------------
+
+# The previous version answers 503 until it reaches the firmware, up to 30 s
+# after a cold start, so it gets as long as the forward check to answer.
+restored_version_answers() {
+  local code
+  say "Checking the restored version (up to 90s)"
+  for _ in $(seq 1 30); do
+    sleep 3
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" 2>/dev/null) || true
+    say "  restore attempt: HTTP ${code:-000}"
+    [ "$code" = 200 ] && return 0
+  done
+  return 1
+}
+
 [ -n "${RESULT_REASON:-}" ] || RESULT_REASON="the new version did not pass its health check"
 say "Health check FAILED: rolling back to v$CUR_VERSION"
 say "Last 60 server log lines from the failed build (for diagnosis):"
@@ -727,9 +742,8 @@ systemctl start free-sleep
 if [ "$STREAM_WAS_ACTIVE" = active ]; then
   systemctl restart free-sleep-stream 2>/dev/null || true
 fi
-sleep 8
 sh "$LIVE/scripts/block_internet_access.sh" || say "WARNING: restored firewall could not be applied"
-if curl -sf --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" >/dev/null; then
+if restored_version_answers; then
   fail "update failed but rollback OK (pod back on v$CUR_VERSION). Failed tree kept at $FAILED; see journalctl -u free-sleep"
 else
   RESULT_PHASE=swapped

@@ -207,6 +207,21 @@ fi
 # --- swap back on failure --------------------------------------------------------
 # A rollback that fails leaves the version that was running BEFORE this
 # script started still running. Never leave the pod on neither tree.
+
+# The previous version answers 503 until it reaches the firmware, up to 30 s
+# after a cold start, so it gets as long as the forward check to answer.
+restored_version_answers() {
+  local code
+  say "Checking the restored version (up to 90s)"
+  for _ in $(seq 1 30); do
+    sleep 3
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" 2>/dev/null) || true
+    say "  restore attempt: HTTP ${code:-000}"
+    [ "$code" = 200 ] && return 0
+  done
+  return 1
+}
+
 [ -n "${RESULT_REASON:-}" ] || RESULT_REASON="the previous version did not pass its health check"
 say "Health check FAILED: swapping back to v$CUR_VERSION"
 systemctl stop free-sleep || true
@@ -228,8 +243,7 @@ mv "$TMP" "$PREV" || {
 }
 fix_shared_node_modules
 restart_services
-sleep 8
-if curl -sf --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" >/dev/null; then
+if restored_version_answers; then
   fail "rollback to v$TARGET_VERSION failed health check; restored v$CUR_VERSION (still running). Check journalctl -u free-sleep-rollback"
 else
   RESULT_PHASE=swapped
