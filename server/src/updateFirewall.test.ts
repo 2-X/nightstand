@@ -486,6 +486,62 @@ describe('after the update or revert unit stops', () => {
     }
   });
 
+  // Another firewall manager may insert its own rule above the window.
+  const FOREIGN = '-o wg0 -j ACCEPT';
+  const insertAbove = (f: Fixture) => {
+    const inserted = spawnSync('iptables', ['-I', 'OUTPUT', '1', ...FOREIGN.split(' ')], { env: f.env, encoding: 'utf8' });
+    assert.equal(inserted.status, 0, inserted.stderr);
+    rmSync(path.join(f.dir, 'fw/calls'), { force: true });
+  };
+  const withForeign = (before: string) => before.replace(/^(-A OUTPUT )/m, `-A OUTPUT ${FOREIGN}\n$1`);
+
+  for (const tailscale of [false, true]) {
+    it(`closes a window left below another rule and blocks again${tailscale ? ' with Tailscale' : ''}`, () => {
+      const f = fixture(tailscale);
+      try {
+        killInWindow('scripts/update.sh', f);
+        insertAbove(f);
+        const result = runCloseScript(f);
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.match(result.stdout, /Removed the download rules/);
+        assert.match(calls(f), /iptables -F OUTPUT/, 'the block script should run again');
+        assert.equal(rules(f.dir), f.before);
+      } finally {
+        cleanup(f);
+      }
+    });
+
+    it(`removes only the window's own rules, wherever they are${tailscale ? ', keeping Tailscale\'s' : ''}`, () => {
+      // Without a block script to run again, what is left shows what was removed.
+      const f = fixture(tailscale, 'none');
+      try {
+        killInWindow('scripts/update.sh', f);
+        insertAbove(f);
+        const result = runCloseScript(f);
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.equal(rules(f.dir), withForeign(f.before));
+        assert.doesNotMatch(calls(f), new RegExp(`-D OUTPUT ${FOREIGN}`));
+      } finally {
+        cleanup(f);
+      }
+    });
+  }
+
+  it('removes a window left below another rule when internet was unblocked on purpose', () => {
+    const f = fixture(false, 'live', true);
+    try {
+      killInWindow('scripts/update.sh', f);
+      insertAbove(f);
+      const result = runCloseScript(f);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      // The IPv4 OUTPUT chain was empty, apart from the window, before the rule was added.
+      assert.equal(rules(f.dir), f.before.replace(/^-P OUTPUT ACCEPT$/m, `-P OUTPUT ACCEPT\n-A OUTPUT ${FOREIGN}`));
+      assert.doesNotMatch(calls(f), / -F | -A | -I /);
+    } finally {
+      cleanup(f);
+    }
+  });
+
   it('changes nothing when no window is left, even with matching Tailscale rules', () => {
     const f = fixture(true);
     try {
