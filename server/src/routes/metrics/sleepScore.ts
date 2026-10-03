@@ -30,14 +30,6 @@ function scoreContinuity(timesExited: number): number {
   return Math.max(0, 100 - timesExited * 15);
 }
 
-function scoreHrv(avgHrv: number): number {
-  // Bands tuned for sleep HRV (RMSSD-ish, ms)
-  if (avgHrv >= 70) return 95;
-  if (avgHrv >= 50) return 85;
-  if (avgHrv >= 30) return 70;
-  return 50;
-}
-
 function scoreRestingHr(minHr: number): number {
   // Lower min HR during sleep = deeper rest
   if (minHr === 0) return 0;
@@ -101,16 +93,11 @@ router.get(
       where: vitalsQuery,
       _min: { heart_rate: true },
     });
-    const hrvAgg = await prisma.vitals.aggregate({
-      where: { ...vitalsQuery, hrv: { not: 0, lte: 120, gte: 30 } },
-      _avg: { hrv: true },
-    });
 
     const inBedSec = sleepRecord?.sleep_period_seconds ?? endUnix - startUnix;
     const stages = await loadStageSummary(side, startUnix, endUnix);
     const exits = sleepRecord?.times_exited_bed ?? 0;
     const minHr = hrAgg._min.heart_rate ?? 0;
-    const avgHrv = hrvAgg._avg.hrv ?? 0;
 
     const components: Record<string, Component> = {
       duration: durationComponent(inBedSec, stages),
@@ -120,12 +107,9 @@ router.get(
         value: `${exits} ${exits === 1 ? 'exit' : 'exits'}`,
         available: true,
       },
-      hrv: {
-        score: scoreHrv(avgHrv),
-        weight: 0.15,
-        value: avgHrv > 0 ? `${Math.round(avgHrv)} ms` : '\u2014',
-        available: avgHrv > 0,
-      },
+      // Kept in the response for older apps. The estimate is not used in the
+      // score, so its weight goes to the other components.
+      hrv: { score: 0, weight: 0.15, value: '', available: false },
       restingHr: {
         score: scoreRestingHr(minHr),
         weight: 0.15,

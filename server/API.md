@@ -755,7 +755,7 @@ Repeated keys in one request run once. If an analysis or calibration for the sam
 
 ### GET
 
-- Returns an aggregate sleep score for a given sleep period, broken down into component contributions (duration, continuity, HRV, resting heart rate).
+- Returns an aggregate sleep score for a given sleep period, broken down into component contributions (duration, continuity, resting heart rate). The `hrv` component is kept for older apps and is always unavailable.
 - Query parameters (all required): `side`, `startTime`, `endTime`.
 
 #### Response
@@ -767,13 +767,13 @@ Repeated keys in one request run once. If an analysis or calibration for the sam
   "components": {
     "duration": { "score": 90, "weight": 0.4, "value": "7h 45m", "available": true },
     "continuity": { "score": 70, "weight": 0.3, "value": "2 exits", "available": true },
-    "hrv": { "score": 85, "weight": 0.15, "value": "58 ms", "available": true },
+    "hrv": { "score": 0, "weight": 0.15, "value": "", "available": false },
     "restingHr": { "score": 85, "weight": 0.15, "value": "58 bpm", "available": true }
   }
 }
 ```
 
-A component's `weight` is redistributed proportionally across the other components when it is `available: false` (e.g. no HRV data for the window). `active` is false (with `score: null` and empty `components`) when the sleep-score feature is disabled or biometrics is off.
+A component's `weight` is redistributed proportionally across the other components when it is `available: false` (always the case for `hrv`). `active` is false (with `score: null` and empty `components`) when the sleep-score feature is disabled or biometrics is off.
 
 ---
 
