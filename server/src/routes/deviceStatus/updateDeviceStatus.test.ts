@@ -65,7 +65,10 @@ describe('updateDeviceStatus', () => {
       .find(call => call.arguments[0] === command)?.arguments[2] as { latest?: boolean } | undefined;
     assert.equal(options('LEFT_TEMP_DURATION')?.latest, true);
     assert.equal(options('TEMP_LEVEL_LEFT')?.latest, true);
-    assert.equal(options('ALARM_CLEAR')?.latest, undefined);
+    for (const command of ['ALARM_LEFT', 'ALARM_CLEAR']) {
+      assert.ok(executeFunctionMock.mock.calls.some(call => call.arguments[0] === command), `${command} was never sent`);
+      assert.equal(options(command)?.latest, undefined);
+    }
   });
 
   it('stops quietly when a newer update replaced this one while the Pod was unreachable', async () => {

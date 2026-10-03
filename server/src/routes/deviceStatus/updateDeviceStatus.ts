@@ -4,6 +4,7 @@ import cbor from 'cbor';
 
 import { DeviceStatus, MAX_ON_DURATION_SECONDS, SideStatus } from './deviceStatusSchema.js';
 import { executeFunction } from '../../8sleep/deviceApi.js';
+import { dismissAlarm } from '../../8sleep/dismissAlarm.js';
 import { FrankenSupersededError } from '../../8sleep/frankenErrors.js';
 import type { CommandOptions } from '../../8sleep/frankenServer.js';
 import logger from '../../logger.js';
@@ -11,6 +12,7 @@ import settingsDB from '../../db/settings.js';
 import memoryDB from '../../db/memoryDB.js';
 import { INVERTED_SETTINGS_KEY_MAPPING } from '../../8sleep/loadDeviceStatus.js';
 import { forgetKeptAlarms } from '../../jobs/rhythms/keptAlarms.js';
+import { forgetActiveAlarm } from '../../jobs/activeAlarms.js';
 import { firmwareSecondsUntil } from '../../jobs/firmwareTimer.js';
 
 export type DeviceUpdateOptions = CommandOptions & {
@@ -86,7 +88,10 @@ const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideSt
 
   if (isAlarmVibrating !== undefined) {
     logger.debug('Can only set isAlarmVibrating to false for now...');
-    if (!isAlarmVibrating) await executeFunction('ALARM_CLEAR', 'empty', options);
+    if (!isAlarmVibrating) {
+      await dismissAlarm(side, options);
+      forgetActiveAlarm(side);
+    }
     await memoryDB.read();
     memoryDB.data[side].isAlarmVibrating = false;
     await memoryDB.write();

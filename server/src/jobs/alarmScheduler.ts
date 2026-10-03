@@ -21,11 +21,11 @@ import { describePause, isAlarmPaused } from './schedulePause.js';
 import { ALARM_LATE_LIMIT_MS, trackAlarm } from './alarmActivity.js';
 import { alarmPatternFor } from './alarmPattern.js';
 import { missedReasonForError, noteMissedAlarm, setAlarmSuppression } from './alarmLedger.js';
+import { activeAlarms } from './activeAlarms.js';
 import { alarmOverrideSilences } from './alarmOverrideGate.js';
 
 
 const alarmOccurrences = new Map<string, number>();
-const activeAlarms = new Map<Side, symbol>();
 // Overrides that have already run, so a rebuild cannot ring them again.
 const overrideRuns = new Map<string, number>();
 const OCCURRENCE_RETENTION_MS = 48 * 60 * 60 * 1000;

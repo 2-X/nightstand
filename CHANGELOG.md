@@ -121,6 +121,9 @@ is a hard fork; for the history of the projects it descends from, see
   allows it everywhere), and the script prints which resolvers it allowed.
   Adapted from [EpicPi's pull request 51 to
   throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep/pull/51).
+- Alarm dismiss now sends a one-second replacement alarm before clearing the
+  armed alarm and invalidates the dismissed alarm timer. Reported by caseyWebb
+  in [upstream issue 54](https://github.com/throwaway31265/free-sleep/issues/54).
 
 ## [3.5.1] - 2026-10-01
 
