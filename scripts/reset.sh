@@ -60,10 +60,22 @@ stop_writer() {
   esac
   return 1
 }
+# Shared with the updaters; after a reset the stream restarts only if no
+# data was deleted.
+# Until the server has stopped, its Biometrics switch can start the stream
+# again, so the stream is checked once more after the server stops. A stream
+# started meanwhile is stopped for the swap and started again after it.
+stop_late_stream() {
+  case "$(systemctl is-active free-sleep-stream 2>/dev/null)" in
+    inactive|failed|unknown) return 0 ;;
+  esac
+  STREAM_WAS_ACTIVE=active
+  stop_writer free-sleep-stream
+}
 
 echo "Stopping Nightstand"
 systemctl stop free-sleep-archive-raw.timer 2>/dev/null || true
-if ! stop_writer free-sleep-stream || ! stop_writer free-sleep; then
+if ! stop_writer free-sleep-stream || ! stop_writer free-sleep || ! stop_late_stream; then
   echo "Nightstand did not stop, so no data was deleted."
   exit 1
 fi

@@ -14,6 +14,7 @@ const SOCK = '/persistent/deviceinfo/dac.sock';
 function run(answer: string, {
   migrateExit = 0, stopFails = false, watchdogMark = undefined as string | undefined, rmKeepsServices = false,
   streamStopFails = false, staysActive = '', streamMissing = false, streamBroken = false,
+  lateStream = 'none' as 'none' | 'stops' | 'stays',
 } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-reset-'));
   const persistent = path.join(dir, 'persistent');
@@ -44,6 +45,9 @@ function run(answer: string, {
     streamMissing || streamBroken ? `touch "${stopped}free-sleep-stream"` : ':',
     stopFails ? '[ "$1 $2" = "stop free-sleep" ] && exit 1' : ':',
     streamStopFails || streamMissing || streamBroken ? '[ "$1 $2" = "stop free-sleep-stream" ] && exit 5' : ':',
+    // Biometrics switched on while the server shuts down starts the stream again.
+    lateStream === 'none' ? ':' : `[ "$1 $2" = "stop free-sleep" ] && { /bin/rm -f "${stopped}free-sleep-stream"; touch "${dir}/late"; }`,
+    lateStream === 'stays' ? `[ "$1 $2" = "stop free-sleep-stream" ] && [ -e "${dir}/late" ] && exit 0` : ':',
     `[ "$1" = stop ] && [ "$2" != "${staysActive}" ] && touch "${stopped}$2"`,
     'exit 0',
   ].join('\n'));
@@ -53,6 +57,11 @@ function run(answer: string, {
   if (rmKeepsServices) {
     writeFileSync(path.join(data, 'lowdb', 'servicesDB.json'), '{"biometrics":{"enabled":true}}');
     stub('rm', 'find "$2" -type f ! -name servicesDB.json -delete; exit 1');
+  }
+  // Records whether the stream was running when the data was deleted.
+  if (lateStream !== 'none') {
+    stub('rm', `[ -e "${stopped}free-sleep-stream" ] && echo "rm stream=inactive" >> "${calls}" || echo "rm stream=active" >> "${calls}"
+exec /bin/rm "$@"`);
   }
   const script = readFileSync(path.join(repoRoot, 'scripts/reset.sh'), 'utf8')
     .replaceAll('/persistent', persistent)
@@ -165,6 +174,27 @@ describe('reset.sh', () => {
       assert.match(result.stdout, /did not stop, so no data was deleted/);
     });
   }
+
+  it('stops a stream switched on during the server stop before deleting anything', () => {
+    const result = run('y', { lateStream: 'stops' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(result.settingsLeft, false);
+    assert.ok(result.log.includes('rm stream=inactive'), result.log.join('\n'));
+    assert.ok(!result.log.includes('rm stream=active'), result.log.join('\n'));
+    const serverStop = result.log.indexOf('systemctl stop free-sleep');
+    assert.ok(result.log.indexOf('systemctl stop free-sleep-stream', serverStop) > serverStop, result.log.join('\n'));
+    assert.ok(!result.log.some(line => /(start|restart|enable) free-sleep-stream/.test(line)), result.log.join('\n'));
+  });
+
+  it('deletes nothing when a stream switched on during the server stop keeps running', () => {
+    const result = run('y', { lateStream: 'stays' });
+    assert.notEqual(result.status, 0);
+    assert.equal(result.settingsLeft, true);
+    assert.equal(result.dbLeft, true);
+    assert.ok(!result.log.some(line => line.startsWith('rm ')), result.log.join('\n'));
+    assert.match(result.stdout, /Nightstand did not stop, so no data was deleted\./);
+    assert.ok(result.log.includes('systemctl start free-sleep'), result.log.join('\n'));
+  });
 
   it('resets a Pod whose stream unit does not load but is stopped', () => {
     const result = run('y', { streamBroken: true });

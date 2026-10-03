@@ -777,7 +777,8 @@ read -r server stream <<< "${states}"; echo "$server" > "$FIXTURE/state-free-sle
 it('the writer stop is the same in every script that stops the writers', () => {
   const stopWriter = (file: string) => section(file, '# Stops a service that writes the data', '\n}\n');
   const lateStream = (file: string) => section(file, '# Until the server has stopped, its Biometrics', '\n}\n');
-  const [firstLate, ...restLate] = ['scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh'].map(lateStream);
+  const [firstLate, ...restLate] = ['scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh',
+    'scripts/reset.sh'].map(lateStream);
   for (const helper of restLate) assert.equal(helper, firstLate);
   const scripts = ['scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh', 'scripts/reset.sh',
     'scripts/install.sh'];
