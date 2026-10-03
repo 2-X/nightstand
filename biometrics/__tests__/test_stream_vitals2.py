@@ -188,6 +188,24 @@ class VitalsSwitchTest(unittest.TestCase):
         self.assertIsNone(processor.vitals2.sides['left'].last_present)
         self.assertIsNone(processor.vitals2.sides['right'].last_present)
 
+    def test_a_side_swap_writes_the_rows_the_previous_occupant_still_owes_first(self):
+        processor = self._processor()
+        processor.use_vitals_v2(True)
+        owed = {'side': 'left', 'timestamp': 1_790_600_040, 'estimator': 2}
+        events = []
+        with unittest.mock.patch.object(processor.vitals2, 'flush', return_value=[owed]) as flush, \
+                unittest.mock.patch.object(processor.vitals2, 'reset_side',
+                                           side_effect=lambda side: events.append(('reset', side))), \
+                unittest.mock.patch.object(stream_processor, 'insert_vitals',
+                                           side_effect=lambda row: events.append(('insert', row))), \
+                unittest.mock.patch.object(stream_processor, 'is_side_swap', return_value=True):
+            processor.use_presence_v2((stream_fixture.PARAMS, stream_fixture.BASELINES))
+            with unittest.mock.patch.object(processor.presence, 'step', return_value={'left': True, 'right': False}):
+                record = next(stream_fixture.records(1))
+                processor._step_presence(record)
+        flush.assert_called_once_with(int(record['ts']), processor.piezo_layout)
+        self.assertEqual(events, [('insert', owed), ('reset', 'left'), ('reset', 'right')])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -303,6 +303,8 @@ class StreamProcessor:
         if right_swap:
             left.reset()
         if (left_swap or right_swap) and self.vitals2 is not None:
+            # Rows the previous occupants still owe are written before the sides start over.
+            self._insert_vitals2(self.vitals2.flush(epoch, self.piezo_layout))
             self.vitals2.reset_side('left')
             self.vitals2.reset_side('right')
         left.apply_presence(states['left'], epoch, reset_state=left_swap)
