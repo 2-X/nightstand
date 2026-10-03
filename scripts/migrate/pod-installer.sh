@@ -315,7 +315,12 @@ write_status "swap" "in_progress" "stopping original service"
 say "Stopping their service (their tree is untouched up to this point)"
 systemctl stop free-sleep >/dev/null 2>&1 \
   || { restore_and_report "could not stop original server"; exit 1; }
+STREAM_WAS_ACTIVE=no
 if systemctl cat free-sleep-stream >/dev/null 2>&1; then
+  # A stream between restarts reads activating; it was running too.
+  case "$(systemctl is-active free-sleep-stream 2>/dev/null)" in
+    active | activating | reloading) STREAM_WAS_ACTIVE=active ;;
+  esac
   systemctl stop free-sleep-stream >/dev/null 2>&1 \
     || { restore_and_report "could not stop original streamer"; exit 1; }
 fi
@@ -390,10 +395,12 @@ PY
 systemctl start free-sleep || { restore_and_report "our service failed to start"; exit 1; }
 # The swap above stopped free-sleep-stream (its ExecStart lives inside the tree
 # we just moved). It's a continuously-running biometrics/presence streamer
-# (enabled, Restart=always) that nothing else brings back, so start it here or
-# live biometrics stay dark until the next reboot. Best-effort: a pod without a
-# separate stream service (older layouts) simply has nothing to start.
-systemctl start free-sleep-stream >/dev/null 2>&1 || true
+# (Restart=always) that nothing else brings back, so start it here or live
+# biometrics stay dark until the next reboot. As update.sh does, only a stream
+# that was running before the swap starts again.
+if [ "$STREAM_WAS_ACTIVE" = active ]; then
+  systemctl start free-sleep-stream >/dev/null 2>&1 || true
+fi
 systemctl enable --now free-sleep-archive-raw.timer >/dev/null 2>&1 || true
 # NB: free-sleep-rollback.service is a STATIC, on-demand oneshot that swaps
 # $LIVE <-> $PREV when the user goes back from the app. Never `enable --now` it:

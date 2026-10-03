@@ -285,6 +285,32 @@ describe('fork-switch tool scripts', () => {
       ], 'pod-installer.sh stream restart');
     });
 
+    // As update.sh does: only a stream that was running before the swap is
+    // started again. The other fork's Biometrics flag is not read, since a
+    // first install there can leave it off while the stream runs.
+    it('starts free-sleep-stream again only if it was running before the swap', () => {
+      const before = src.indexOf('systemctl stop free-sleep-stream');
+      const captured = src.lastIndexOf('systemctl is-active free-sleep-stream', before);
+      assert.ok(captured > 0 && captured < before, 'read whether it ran before stopping it');
+      // Run that part with each state systemd can report. A stream between
+      // restarts reads activating, and it was running too.
+      const from = src.indexOf('STREAM_WAS_ACTIVE=no');
+      const block = src.slice(from, src.indexOf('if [ -f "$DATABASE" ]', from));
+      for (const [state, expected] of [['active', 'active'], ['activating', 'active'], ['reloading', 'active'],
+        ['inactive', 'no'], ['failed', 'no']]) {
+        const out = execFileSync('bash', ['-c', `systemctl() { [ "$1" = is-active ] && echo ${state}; return 0; }
+restore_and_report() { :; }
+${block}
+echo "$STREAM_WAS_ACTIVE"`], { encoding: 'utf8' });
+        assert.equal(out.trim().split('\n').pop(), expected, state);
+      }
+      const start = src.indexOf('systemctl start free-sleep-stream', before);
+      const gate = src.lastIndexOf('\n', start);
+      assert.match(src.slice(src.lastIndexOf('\n', gate - 1), start), /if \[ "\$STREAM_WAS_ACTIVE" = active \]; then\s*$/);
+      assert.equal(src.split('systemctl start free-sleep-stream').length - 1, 1, 'no other start');
+      assert.doesNotMatch(src, /servicesDB/, 'the other fork\'s flag is not consulted');
+    });
+
     // A fork moving here has no update channel yet; the server would default
     // to stable and offer a Pod on a beta nothing until a stable passed it.
     it('saves the installed release\'s channel after the swap, before the server starts', () => {
