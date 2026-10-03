@@ -21,7 +21,7 @@ it('gives the night and timeline sections consistent level-two headings', async 
   await screen.findByRole('heading', { name: 'Bedtime' });
   for (const name of [/^[A-Z][a-z]+ night/, 'Bedtime', 'Through the night', 'Wake up']) {
     const heading = screen.getByRole('heading', { level: 2, name });
-    expect(heading).toHaveStyle({ fontSize: '1.125rem', fontWeight: 600 });
+    expect(heading).toHaveStyle({ fontSize: '1.125rem', fontWeight: 500 });
   }
 });
 

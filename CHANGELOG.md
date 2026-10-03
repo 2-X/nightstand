@@ -8,6 +8,15 @@ is a hard fork; for the history of the projects it descends from, see
 
 ## [Unreleased]
 
+- Settings > Bed and sides has a Look setting with four looks, saved on
+  each device. Nightstand, the new default, is the look of 3.3.2 with its
+  contrast raised to AA and its cards drawn flat. Lamp keeps the warm white
+  colours of the previous release. free-sleep classic follows the original
+  free-sleep app, and Glass follows jmew's fork of it. Every look has the
+  same screens, layout and 44 px targets, keeps level 0 neutral, and draws
+  last known and off states in grey. Roboto and Geist are bundled with
+  the app, so no look loads anything from another site. Thanks to
+  throwaway31265 and jmew for the looks these are based on.
 - Settings > Features says that biometrics are estimates checked only on a
   Pod 5, and marks other models, or a Pod whose model has not loaded yet, as
   not checked.

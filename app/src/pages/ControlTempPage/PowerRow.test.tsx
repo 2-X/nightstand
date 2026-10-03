@@ -28,12 +28,12 @@ it('points to where away mode is changed instead of leaving a blank gap', async 
 it('draws Turn on and Turn off as matching full width dark pills', async () => {
   const { unmount } = renderWithProviders(<PowerRow isOn={ false } refetch={ refetch }/>);
   const turnOn = await screen.findByRole('button', { name: 'Turn on' });
-  expect(turnOn).toHaveStyle({ backgroundColor: '#1C1915', color: '#E9E3D5', width: '100%', minHeight: '54px' });
-  expect(turnOn).toHaveStyle({ boxShadow: 'inset 0 0 0 1.5px rgba(233,227,213,0.7)' });
+  expect(turnOn).toHaveStyle({ backgroundColor: '#000000', color: '#90CAF9', width: '100%', minHeight: '54px' });
+  expect(turnOn).toHaveStyle({ boxShadow: 'inset 0 0 0 1.5px rgba(144,202,249,0.7)' });
   unmount();
   renderWithProviders(<PowerRow isOn refetch={ refetch }/>);
   const turnOff = await screen.findByRole('button', { name: 'Turn off' });
-  expect(turnOff).toHaveStyle({ backgroundColor: '#2A251F', width: '100%', minHeight: '54px' });
+  expect(turnOff).toHaveStyle({ backgroundColor: '#000000', width: '100%', minHeight: '54px' });
 });
 
 it('holds the button in a row of fixed height', async () => {
@@ -54,7 +54,7 @@ it('puts Try again in the calm pill while the Pod does not answer', async () => 
   const retry = vi.fn();
   const { user } = renderWithProviders(<PowerRow isOn refetch={ refetch } onRetry={ retry }/>);
   const button = await screen.findByRole('button', { name: 'Try again' });
-  expect(button).toHaveStyle({ backgroundColor: '#1C1915', color: '#E9E3D5', width: '100%' });
+  expect(button).toHaveStyle({ backgroundColor: '#000000', color: '#90CAF9', width: '100%' });
   expect(screen.queryByRole('button', { name: 'Turn off' })).not.toBeInTheDocument();
   await user.click(button);
   expect(retry).toHaveBeenCalledOnce();

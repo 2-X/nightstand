@@ -8,7 +8,7 @@ import { useBedCaption } from './useBedCaption';
 // and nothing under it moves. Under 360 px the type steps down so the not responding lines still take two.
 export const captionSlotSx = {
   width: '100%', height: 42, mt: '2px', fontSize: 15, lineHeight: 1.4, color: 'text.secondary', textAlign: 'center',
-  textWrap: 'balance', [media.narrow]: { fontSize: 14 },
+  letterSpacing: 'normal', textWrap: 'balance', [media.narrow]: { fontSize: 14 },
 } as const;
 
 const line = (text: string) => <Box component="span" key={ text } sx={ { display: 'block' } }>{ text }</Box>;

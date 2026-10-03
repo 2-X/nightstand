@@ -34,13 +34,13 @@ test('a change still unconfirmed after two seconds is drawn in the last known gr
   const numeral = page.locator('[data-dial] h2');
   await expect(dot).toHaveCount(1);
   const colour = await dot.getAttribute('stroke');
-  expect(colour).not.toBe('#848C95');
+  expect(colour).not.toBe('#9E9E9E');
 
   await page.clock.fastForward(1000);
   await expect(dot).toHaveAttribute('stroke', colour!);
   await page.clock.fastForward(1100);
-  await expect(dot).toHaveAttribute('stroke', '#848C95');
-  await expect(numeral).toHaveCSS('color', 'rgb(163, 170, 178)');
+  await expect(dot).toHaveAttribute('stroke', '#9E9E9E');
+  await expect(numeral).toHaveCSS('color', 'rgba(255, 255, 255, 0.7)');
   await expect(lead(page)).toHaveText('Set to');
 });
 

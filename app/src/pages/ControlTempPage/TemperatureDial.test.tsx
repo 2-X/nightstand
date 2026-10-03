@@ -103,9 +103,9 @@ it('puts the caption in its own slot between the dial and the controls row', () 
   expect(slot.nextElementSibling).toHaveAttribute('data-controls-row');
 });
 
-it('sets a level in the large light numeral', () => {
+it('sets a level in the large numeral', () => {
   render(<TemperatureDial status={ on } refetch={ vi.fn() } format="level"/>);
-  expect(screen.getByRole('heading', { level: 2 })).toHaveStyle({ fontSize: '100px', fontWeight: '300' });
+  expect(screen.getByRole('heading', { level: 2 })).toHaveStyle({ fontSize: '100px', fontWeight: '500' });
   expect(screen.getByText('Warming to')).toHaveStyle({ fontSize: '15px' });
 });
 
@@ -116,9 +116,9 @@ it('writes °F at the smaller numeral size', () => {
   expect(numeral).toHaveStyle({ fontSize: '64px' });
 });
 
-it('says Off in the large light face while off', () => {
+it('says Off in the large numeral face while off', () => {
   render(<TemperatureDial status={ { ...on, isOn: false } } refetch={ vi.fn() } format="level"/>);
-  expect(screen.getByText('Off')).toHaveStyle({ fontSize: '84px', fontWeight: '300' });
+  expect(screen.getByText('Off')).toHaveStyle({ fontSize: '84px', fontWeight: '500' });
 });
 
 it('says "Set to" and draws a hollow dot while an edit waits for the Pod', () => {
