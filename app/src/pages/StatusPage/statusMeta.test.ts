@@ -22,3 +22,9 @@ it('requires every core service in the metadata to be ready', () => {
   expect(coreServicesReady(data)).toBe(true);
   expect(coreServicesReady({ ...data, pumpHealthLeft: { ...data.pumpHealthLeft!, status: 'not_started' } })).toBe(false);
 });
+
+it('describes the biometrics add-on without naming HRV', () => {
+  expect(STATUS_META.biometricsInstallation.blurb).toBe(
+    'Whether the biometrics add-on (heart rate and sleep estimates) is installed on the Pod.',
+  );
+});

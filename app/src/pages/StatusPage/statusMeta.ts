@@ -47,7 +47,7 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
   },
   biometricsInstallation: {
     group: 'biometrics',
-    blurb: 'Whether the biometrics add-on (heart rate, HRV, sleep stages) is installed on the Pod.',
+    blurb: 'Whether the biometrics add-on (heart rate and sleep estimates) is installed on the Pod.',
     meaning: { healthy: 'Installed and available.' },
   },
   biometricsStream: {
