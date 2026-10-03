@@ -22,13 +22,17 @@ beforeEach(() => {
 });
 
 describe('Sleep stages card', () => {
-  it('keeps the first and last time labels inside the card', async () => {
+  it.each([320, 1280])('spaces the time labels evenly at %i px and keeps them off the right edge', async (width) => {
     server.use(http.get('*/metrics/sleep-stages', () => HttpResponse.json(stages())));
     renderWithProviders(<SleepStagesCard startTime={ START } endTime={ END } timeZone="America/Los_Angeles"/>);
-    // 11 PM sits 7% in, 5 AM sits 97% in; the middle label stays centred.
-    expect(await screen.findByText('11:00 PM')).toHaveStyle({ transform: 'translateX(0)' });
-    expect(screen.getByText('2:00 AM')).toHaveStyle({ transform: 'translateX(-50%)' });
-    expect(screen.getByText('5:00 AM')).toHaveStyle({ transform: 'translateX(-100%)' });
+    // 11 PM sits 7% in and 2 AM 52% in; 5 AM would sit 97% in, past where a centred label fits.
+    const first = await screen.findByText('11:00 PM');
+    const second = screen.getByText('2:00 AM');
+    expect(screen.queryByText('5:00 AM')).toBeNull();
+    for (const label of [first, second]) expect(label).toHaveStyle({ transform: 'translateX(-50%)' });
+    const px = (label: HTMLElement) => parseFloat(getComputedStyle(label).left) / 100 * width;
+    const expected = 3 * 3600 / (Date.parse(END) / 1000 - Date.parse(START) / 1000) * width;
+    expect(Math.abs(px(second) - px(first) - expected)).toBeLessThanOrEqual(2);
   });
 
   it('shows estimated sleep and wake, without deep sleep or REM', async () => {

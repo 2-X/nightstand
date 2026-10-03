@@ -165,7 +165,9 @@ export default function SleepStagesCard({ startTime, endTime, timeZone }: Props)
   if (firstHour.unix() < periodStart) firstHour.add(1, 'hour');
   const stepHours = Math.max(1, Math.ceil((periodEnd - periodStart) / 3600 / 3));
   const ticks: number[] = [];
-  for (const tick = firstHour.clone(); tick.unix() <= periodEnd; tick.add(stepHours, 'hours')) ticks.push(tick.unix());
+  // Every label is centred on its tick, so a tick too close to the right edge for its label is left out.
+  const lastTick = periodStart + 0.9 * (periodEnd - periodStart);
+  for (const tick = firstHour.clone(); tick.unix() <= lastTick; tick.add(stepHours, 'hours')) ticks.push(tick.unix());
 
   return (
     <GlassCard>
@@ -189,14 +191,12 @@ export default function SleepStagesCard({ startTime, endTime, timeZone }: Props)
           <Box sx={ { position: 'relative', height: 20, ml: '44px' } }>
             { ticks.map(tick => {
               const fraction = (tick - periodStart) / (periodEnd - periodStart);
-              // Labels near either end anchor to it so they stay inside the card.
-              const shift = fraction < 0.1 ? '0' : fraction > 0.9 ? '-100%' : '-50%';
               return (
                 <Typography
                   key={ tick }
                   sx={ {
                     position: 'absolute', left: `${fraction * 100}%`,
-                    transform: `translateX(${shift})`, fontSize: 12, color: palette.text.tertiary,
+                    transform: 'translateX(-50%)', fontSize: 12, color: palette.text.tertiary,
                     fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
                   } }>
                   { (timeZone ? moment.unix(tick).tz(timeZone) : moment.unix(tick)).format('h:mm A') }

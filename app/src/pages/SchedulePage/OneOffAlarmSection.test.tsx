@@ -21,14 +21,14 @@ describe('OneOffAlarmSection', () => {
     // The section renders its heading once settings load.
     expect(await screen.findByText(/Rings once for/)).toHaveTextContent('Rings once for Alex');
 
-    const save = await screen.findByRole('button', { name: 'Save one-time alarm' });
-    await user.click(save);
+    await user.click(await screen.findByRole('switch', { name: 'Enable one-time alarm' }));
+    fireEvent.change(screen.getByLabelText('Ring at'), { target: { value: '2099-01-02T07:30' } });
+    await user.click(screen.getByRole('button', { name: 'Save one-time alarm' }));
 
     await waitFor(() => expect(posted).toBeTruthy());
     expect(posted.left).toBeTruthy();
     expect(posted.left.oneOffAlarm).toBeTruthy();
-    // Default mock state is disabled; the payload carries the full shape.
-    expect(posted.left.oneOffAlarm).toHaveProperty('enabled');
+    expect(posted.left.oneOffAlarm.enabled).toBe(true);
     expect(posted.left.oneOffAlarm).toHaveProperty('vibrationPattern');
     expect(posted.left.oneOffAlarm).toHaveProperty('duration');
   });
@@ -79,5 +79,29 @@ describe('pattern by Pod model', () => {
     expect(pattern).toHaveTextContent('Double pulse');
     fireEvent.mouseDown(pattern);
     expect(screen.getByRole('option', { name: 'Builds up' })).toHaveAttribute('aria-disabled', 'true');
+  });
+});
+
+describe('Save while the alarm is off', () => {
+  it('stays unavailable until Enabled is on', async () => {
+    renderWithProviders(<OneOffAlarmSection/>);
+    const toggle = await screen.findByRole('switch', { name: 'Enable one-time alarm' });
+    expect(screen.getByRole('button', { name: 'Save one-time alarm' })).toBeDisabled();
+    fireEvent.click(toggle);
+    fireEvent.change(screen.getByLabelText('Ring at'), { target: { value: '2099-01-02T07:30' } });
+    expect(screen.getByRole('button', { name: 'Save one-time alarm' })).toBeEnabled();
+    fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: 'Save one-time alarm' })).toBeDisabled();
+  });
+
+  it('is available to switch a saved alarm off', async () => {
+    const settings = getSettings();
+    settings.left.oneOffAlarm = { ...settings.left.oneOffAlarm, enabled: true, fireAt: '2099-01-02T07:30:00-08:00' };
+    server.use(http.get('*/settings', () => HttpResponse.json(settings)));
+    renderWithProviders(<OneOffAlarmSection/>);
+    const toggle = await screen.findByRole('switch', { name: 'Enable one-time alarm' });
+    await waitFor(() => expect(toggle).toBeChecked());
+    fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: 'Save one-time alarm' })).toBeEnabled();
   });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { http, HttpResponse } from 'msw';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import OneOffAlarmSection from './OneOffAlarmSection';
@@ -28,8 +28,9 @@ describe('OneOffAlarmSection save error recovery', () => {
 
     const { user } = renderWithProviders(<OneOffAlarmSection />, { initialRoute: '/schedules' });
 
-    const save = await screen.findByRole('button', { name: 'Save one-time alarm' }) as HTMLButtonElement;
-    await user.click(save);
+    await user.click(await screen.findByRole('switch', { name: 'Enable one-time alarm' }));
+    fireEvent.change(screen.getByLabelText('Ring at'), { target: { value: '2099-01-02T07:30' } });
+    await user.click(screen.getByRole('button', { name: 'Save one-time alarm' }));
 
     // After the failed save settles, the button must return to its normal,
     // enabled state - not remain stuck in the saving spinner.

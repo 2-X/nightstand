@@ -1,5 +1,5 @@
 export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024) return `${bytes}\u00a0B`;
   const units = ['KB', 'MB', 'GB', 'TB'];
   let value = bytes / 1024;
   let unitIndex = 0;
@@ -7,5 +7,5 @@ export function formatBytes(bytes: number): string {
     value /= 1024;
     unitIndex += 1;
   }
-  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unitIndex]}`;
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)}\u00a0${units[unitIndex]}`;
 }

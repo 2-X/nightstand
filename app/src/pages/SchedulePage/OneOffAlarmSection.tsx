@@ -74,8 +74,10 @@ export default function OneOffAlarmSection() {
   const durations = [...new Set([duration, ...Array.from({ length: 18 }, (_, index) => (index + 1) * 10)])]
     .filter(value => Number.isInteger(value) && value >= 0 && value <= 180)
     .sort((first, second) => first - second);
+  // Switching a saved alarm off is a change to save; an alarm that is off and stays off has nothing to save.
+  const hasChange = enabled || !!settings[side]?.oneOffAlarm?.enabled;
   const canSave =
-    !saving && Number.isInteger(duration) && duration >= 0 && duration <= 180 &&
+    !saving && hasChange && Number.isInteger(duration) && duration >= 0 && duration <= 180 &&
     (!enabled || (!!fireAtLocal && !isInPast));
 
   const handleSave = async () => {
