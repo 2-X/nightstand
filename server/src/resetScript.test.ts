@@ -11,7 +11,9 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const SOCK = '/persistent/deviceinfo/dac.sock';
 
-function run(answer: string, { migrateExit = 0, stopFails = false, watchdogMark = undefined as string | undefined } = {}) {
+function run(answer: string, {
+  migrateExit = 0, stopFails = false, watchdogMark = undefined as string | undefined, rmKeepsServices = false,
+} = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-reset-'));
   const persistent = path.join(dir, 'persistent');
   const data = path.join(persistent, 'free-sleep-data');
@@ -35,6 +37,11 @@ function run(answer: string, { migrateExit = 0, stopFails = false, watchdogMark 
   stub('systemctl', `[ "$1" = is-active ] && echo active\n${stopFails ? '[ "$1 $2" = "stop free-sleep" ] && exit 1\n' : ''}exit 0`);
   stub('sudo', `exit ${migrateExit}`);
   stub('chown', 'exit 0');
+  // A removal that fails partway and leaves the Biometrics switch behind.
+  if (rmKeepsServices) {
+    writeFileSync(path.join(data, 'lowdb', 'servicesDB.json'), '{"biometrics":{"enabled":true}}');
+    stub('rm', 'find "$2" -type f ! -name servicesDB.json -delete; exit 1');
+  }
   const script = readFileSync(path.join(repoRoot, 'scripts/reset.sh'), 'utf8')
     .replaceAll('/persistent', persistent)
     .replaceAll('/home/dac', path.join(dir, 'home'));
@@ -84,7 +91,10 @@ describe('reset.sh', () => {
     const migrateAt = result.log.findIndex(line => line.startsWith('sudo') && line.includes('run migrate'));
     const startAt = result.log.lastIndexOf('systemctl start free-sleep');
     assert.ok(stopAt >= 0 && stopAt < migrateAt && migrateAt < startAt, result.log.join('\n'));
-    assert.ok(result.log.includes('systemctl restart free-sleep-stream'));
+    // Biometrics reads off once its settings are deleted, so the stream
+    // stays stopped and is not started at boot either.
+    assert.ok(result.log.includes('systemctl disable free-sleep-stream'), result.log.join('\n'));
+    assert.ok(!result.log.some(line => /(start|restart|enable) free-sleep-stream/.test(line)), result.log.join('\n'));
     assert.match(result.stdout, /Backups in \S*\/persistent\/free-sleep-backups and \S*\/persistent\/free-sleep-database-backups are kept/);
   });
 
@@ -102,6 +112,12 @@ describe('reset.sh', () => {
     assert.match(watchdog, /:-\/persistent\/free-sleep-data\/watchdog-trial\}/, 'the file setup_watchdog.sh reads');
   });
 
+  it('restores the stream when the removal left the Biometrics switch behind', () => {
+    const result = run('y', { rmKeepsServices: true });
+    assert.ok(result.log.includes('systemctl restart free-sleep-stream'), result.log.join('\n'));
+    assert.ok(!result.log.includes('systemctl disable free-sleep-stream'), result.log.join('\n'));
+  });
+
   it('still starts the server when the database cannot be created', () => {
     const result = run('y', { migrateExit: 1 });
     assert.notEqual(result.status, 0);
@@ -117,5 +133,8 @@ describe('reset.sh', () => {
     assert.equal(result.sock, `${SOCK}\n`);
     assert.equal(result.siblingsKept, true);
     assert.ok(result.log.includes('systemctl start free-sleep'));
+    // Nothing was deleted, so Biometrics still reads as it did.
+    assert.ok(result.log.includes('systemctl restart free-sleep-stream'), result.log.join('\n'));
+    assert.ok(!result.log.includes('systemctl disable free-sleep-stream'));
   });
 });

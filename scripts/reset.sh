@@ -32,9 +32,19 @@ STREAM_WAS_ACTIVE=$(systemctl is-active free-sleep-stream 2>/dev/null || true)
 ARCHIVE_WAS_ACTIVE=$(systemctl is-active free-sleep-archive-raw.timer 2>/dev/null || true)
 
 # Whatever happens below, the server and the services it had start again.
+# Once the data is gone, Biometrics reads off in the app, so the stream stays
+# stopped and is disabled to match; enable_biometrics.sh turns it back on.
+DATA_DELETED=no
 restart_services() {
   systemctl start free-sleep
-  [ "$STREAM_WAS_ACTIVE" != active ] || systemctl restart free-sleep-stream
+  if [ "$DATA_DELETED" = yes ]; then
+    if systemctl cat free-sleep-stream >/dev/null 2>&1; then
+      systemctl disable free-sleep-stream
+      echo "Biometrics is off after the reset, so the biometrics stream stays stopped and disabled."
+    fi
+  elif [ "$STREAM_WAS_ACTIVE" = active ]; then
+    systemctl restart free-sleep-stream
+  fi
   [ "$ARCHIVE_WAS_ACTIVE" != active ] || systemctl start free-sleep-archive-raw.timer
 }
 trap restart_services EXIT
@@ -46,6 +56,8 @@ systemctl stop free-sleep || exit 1
 
 echo "Deleting Nightstand data..."
 rm -rf "$DATA_DIR"
+# Only once its settings are really gone does Biometrics read off.
+[ -e "$DATA_DIR/lowdb/servicesDB.json" ] || DATA_DELETED=yes
 mkdir -p "$DATA_DIR/lowdb" "$DATA_DIR/logs"
 [ -z "$SOCK_PATH" ] || printf '%s\n' "$SOCK_PATH" > "$SOCK_FILE"
 [ -z "$MARK" ] || printf '%s' "${MARK%x}" > "$WATCHDOG_MARK"
