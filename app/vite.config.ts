@@ -2,6 +2,7 @@ import { defineConfig, searchForWorkspaceRoot, type Plugin } from 'vite';
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import tsconfigPaths from 'vite-tsconfig-paths';
+import { themeBootScript } from './src/design/themeBoot';
 
 const isDemoMode = process.env.VITE_ENV === 'demo';
 
@@ -23,8 +24,14 @@ const demoMeta = (): Plugin => ({
   ] : []),
 });
 
+// Sets the stored look on <html> before the first paint, so the page never flashes another one.
+const themeBoot = (): Plugin => ({
+  name: 'theme-boot',
+  transformIndexHtml: () => [{ tag: 'script', children: themeBootScript(), injectTo: 'head' as const }],
+});
+
 export default defineConfig({
-  plugins: [react(), tsconfigPaths(), demoMeta()],
+  plugins: [react(), tsconfigPaths(), demoMeta(), themeBoot()],
   server: {
     fs: { allow: [
       searchForWorkspaceRoot(process.cwd()),
