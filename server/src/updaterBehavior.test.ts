@@ -831,7 +831,7 @@ touch -t 202001010000 "$FIXTURE/persistent/free-sleep-data/operation-request.jso
   assert.match(result.stdout, /recheck=no/);
 });
 
-const IN_USE_REASON = 'the bed came into use while the update was getting ready';
+const IN_USE_REASON = 'the bed came into use while it was getting ready';
 
 for (const [file, from, to, setup] of [
   ['scripts/update.sh', '# --- atomic swap', 'MOVED_MODULES=no', `IS_DOWNGRADE=no; STAGED_VERSION=3.2.0; ${staged}`],

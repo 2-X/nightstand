@@ -204,8 +204,8 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
   {
     id: 'design-system',
     title: 'Design system',
-    description: 'Four looks, chosen per device in Settings > Bed and sides: one token set per look for colour, type voice and '
-      + 'corners, a temperature scale per look with a neutral zero, and the same layout and 44 px targets in each.',
+    description: 'Four themes, chosen per device in Settings > Bed and sides: one token set per theme for colour, type voice and '
+      + 'corners, a temperature scale per theme with a neutral zero, and the same layout and 44 px targets in each.',
     category: 'ui',
     version: 'n/a',
     flag: null,

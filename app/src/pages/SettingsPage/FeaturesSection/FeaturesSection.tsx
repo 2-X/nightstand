@@ -20,8 +20,8 @@ const BIOMETRICS_ESTIMATES = 'Estimates heart rate and sleep from the bed\'s sen
   + 'These are estimates, not medical measurements, and have only been checked on a Pod 5.';
 const BIOMETRICS_UNCHECKED_MODEL = 'Not checked on this Pod model. Numbers may be further off than on a Pod 5.';
 const NEW_SLEEP_TRACKING_CHECKED = 'Tells the two sides apart with the bed\'s capacitance sensors, for bed times, '
-  + 'the in-bed indicator, auto-off and Smart Schedule. Checked on one Pod 5 so far. '
-  + 'Heart rate and breathing are estimated with newer methods.';
+  + 'the in-bed indicator, auto-off and Smart Schedule; that part has been checked on one Pod 5. '
+  + 'Heart rate and breathing use newer estimates, which also change the score.';
 
 export default function FeaturesSection() {
   const [error, setError] = useState<string | null>(null);

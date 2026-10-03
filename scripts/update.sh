@@ -231,7 +231,7 @@ fail() { say "FATAL: $*"; [ -n "${RESULT_REASON:-}" ] || RESULT_REASON="$*"; exi
 # was left by a request whose run never started, so it is ignored too.
 REQUEST_FILE=/persistent/free-sleep-data/operation-request.json
 RECHECK_IN_USE=no
-IN_USE_REASON="the bed came into use while the update was getting ready"
+IN_USE_REASON="the bed came into use while it was getting ready"
 read_request() {
   [ -f "$REQUEST_FILE" ] || return 0
   RECHECK_IN_USE=$(python3 -c '
