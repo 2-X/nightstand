@@ -576,10 +576,11 @@ function withExitHandling(file: string, swap: string) {
   return `${section(file, 'finish_interrupted_swap() {', end)}\n${section(file, traps, '\n\n')}\n${swap}`;
 }
 
+// Inline python runs; helper scripts given by path do not.
 const stubs = [
   'close_wan() { :; }',
   'record_result() { printf "%s" "${RESULT_REASON:-}" > "$FIXTURE/marker"; printf "%s" "${RESULT_PHASE:-}" > "$FIXTURE/phase"; }',
-  'python3() { :; }', 'ZIP="$FIXTURE/zip"; STAGE="$FIXTURE/stage"',
+  'python3() { [ "$1" != -c ] || command python3 "$@"; }', 'ZIP="$FIXTURE/zip"; STAGE="$FIXTURE/stage"',
 ].join('\n');
 const staged = 'STAGE="$FIXTURE/stage"; mkdir -p "$STAGE/server"; echo staged > "$STAGE/version"';
 for (const [file, from, to, setup, liveAfterMove] of [
@@ -682,4 +683,110 @@ it('the writer stop is the same in every script that stops the writers', () => {
   const scripts = ['scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh', 'scripts/reset.sh'];
   const [first, ...rest] = scripts.map(stopWriter);
   for (const helper of rest) assert.equal(helper, first);
+});
+
+// The bed-in-use helpers each script carries.
+function inUseHelpers(file: string) {
+  const src = readFileSync(path.join(root, file), 'utf8');
+  const start = src.indexOf('# Bed-in-use helpers');
+  assert.ok(start >= 0, `${file} has no bed-in-use helpers`);
+  const last = src.indexOf('recheck_in_use() {', start);
+  return src.slice(start, src.indexOf('\n}\n', last) + 3);
+}
+const OPERATIONS = ['scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh'];
+
+it('the bed-in-use helpers are the same in every script', () => {
+  const [first, ...rest] = OPERATIONS.map(inUseHelpers);
+  for (const helpers of rest) assert.equal(helpers, first);
+});
+
+for (const [request, recheck] of [
+  [null, 'no'],
+  ['{"source":"app","confirmInUse":false}', 'yes'],
+  ['{"source":"app","confirmInUse":true}', 'no'],
+  ['{"source":"app"}', 'no'],
+  ['{"confirmInUse":false}', 'no'],
+  ['{not json', 'no'],
+] as const) {
+  it(`a request of ${request ?? 'none'} is checked again: ${recheck}`, () => {
+    const result = run(`${inUseHelpers('scripts/update.sh')}
+read_request
+echo "recheck=$RECHECK_IN_USE"
+if [ -e "$REQUEST_FILE" ]; then echo kept; fi`, request === null ? '' : `mkdir -p "$FIXTURE/persistent/free-sleep-data"
+printf '%s' '${request}' > "$FIXTURE/persistent/free-sleep-data/operation-request.json"`);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, new RegExp(`recheck=${recheck}`));
+    assert.doesNotMatch(result.stdout, /kept/);
+  });
+}
+
+it('a request left from a run that never started is not checked again', () => {
+  const result = run(`${inUseHelpers('scripts/update.sh')}
+read_request
+echo "recheck=$RECHECK_IN_USE"`, `mkdir -p "$FIXTURE/persistent/free-sleep-data"
+printf '%s' '{"source":"app","confirmInUse":false}' > "$FIXTURE/persistent/free-sleep-data/operation-request.json"
+touch -t 202001010000 "$FIXTURE/persistent/free-sleep-data/operation-request.json"`);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /recheck=no/);
+});
+
+const IN_USE_REASON = 'the bed came into use while the update was getting ready';
+
+for (const [file, from, to, setup] of [
+  ['scripts/update.sh', '# --- atomic swap', 'MOVED_MODULES=no', `IS_DOWNGRADE=no; STAGED_VERSION=3.2.0; ${staged}`],
+  // A rollback to another fork stops the archive timer first, so it is checked before that.
+  ['scripts/rollback_pod.sh', '# Before the archive timer below stops', '# --- health check', 'ARCHIVE_WAS_ACTIVE=active'],
+  ['scripts/revert-to-stock.sh', '# --- atomic swap', 'MOVED_MODULES=no',
+    `STAGED_VERSION=1.0.0; BK="$FIXTURE/bk"; mkdir -p "$BK/lowdb"; ${staged}`],
+]) {
+  const script = (recheck: string) => `${inUseHelpers(file)}\nRECHECK_IN_USE=${recheck}\n${withExitHandling(file, section(file, from, to))}`;
+  const answer = (body: string, status = 0) =>
+    `curl() { echo "curl $*" >> "$FIXTURE/services"; case "$*" in *in-use*) printf '%s' '${body}'; return ${status};; esac; }`;
+  for (const [what, curl] of [
+    ['a side came on', answer('{"reasons":["left-on"]}')],
+    ['an alarm became due', answer('{"reasons":["alarm-soon"]}')],
+    ['the bed cannot be read', answer('', 7)],
+    ['the answer is not readable', answer('<html>')],
+  ] as const) {
+    it(`${file} stops before any service when ${what} since an unconfirmed request`, () => {
+      const result = run(script('yes'), `${stubs}\n${statefulServices()}\n${setup}\n${curl}`);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.doesNotMatch(result.services, /^stop |prepare-to-stop/m);
+      assert.equal(result.liveVersion, 'failed');
+      assert.match(result.stdout, /the bed may be in use/);
+      assert.equal(result.marker, IN_USE_REASON);
+      assert.equal(result.serverState, 'active');
+    });
+  }
+
+  it(`${file} goes on when the bed is still idle`, () => {
+    const result = run(script('yes'), `${stubs}\n${statefulServices()}\n${setup}\n${answer('{"reasons":[]}')}`);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.services, /in-use/);
+    assert.match(result.services, /^stop free-sleep /m);
+  });
+
+  it(`${file} does not ask again for a confirmed request or one from outside the app`, () => {
+    const result = run(script('no'), `${stubs}\n${statefulServices()}\n${setup}\n${answer('{"reasons":["left-on"]}')}`);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.doesNotMatch(result.services, /in-use/);
+    assert.match(result.services, /^stop free-sleep /m);
+  });
+}
+
+it('update.sh carries the request across the handoff, and an older updater means no check', () => {
+  const src = readFileSync(path.join(root, 'scripts/update.sh'), 'utf8');
+  const handoff = src.slice(src.indexOf('if [ "$HANDOFF" = 1 ]; then'), src.indexOf('else', src.indexOf('if [ "$HANDOFF" = 1 ]; then')));
+  assert.match(handoff, /RECHECK_IN_USE="\$\{NIGHTSTAND_HANDOFF_RECHECK_IN_USE:-no\}"/);
+  assert.match(src, /export NIGHTSTAND_HANDOFF_RECHECK_IN_USE="\$RECHECK_IN_USE"\n\s*exec bash "\$STAGE\/scripts\/update\.sh"/);
+  const consume = src.slice(src.indexOf('# --- consume the target-version request file'), src.indexOf('# --- preflight'));
+  assert.match(consume, /^read_request$/m);
+});
+
+it('rollback and switch read the request before anything else', () => {
+  for (const file of ['scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh']) {
+    const src = readFileSync(path.join(root, file), 'utf8');
+    const read = src.search(/^read_request$/m);
+    assert.ok(read > 0 && read < src.indexOf('# --- preflight'), file);
+  }
 });

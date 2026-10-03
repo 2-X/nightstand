@@ -211,6 +211,43 @@ cleanup() { local status=$?; trap '' HUP INT TERM; close_wan; finish_interrupted
 
 fail() { say "FATAL: $*"; [ -n "${RESULT_REASON:-}" ] || RESULT_REASON="$*"; exit 1; }
 
+# Bed-in-use helpers, kept identical in update.sh, rollback_pod.sh and
+# revert-to-stock.sh. The app writes REQUEST_FILE as it starts one of them.
+# A request the owner did not confirm while the bed was in use is checked
+# again just before the services stop, as the bed may have come into use
+# since. Without the file or its field, as from an older server, an older
+# updater or SSH, nothing is checked again. A file older than ten minutes
+# was left by a request whose run never started, so it is ignored too.
+REQUEST_FILE=/persistent/free-sleep-data/operation-request.json
+RECHECK_IN_USE=no
+IN_USE_REASON="the bed came into use while the update was getting ready"
+read_request() {
+  [ -f "$REQUEST_FILE" ] || return 0
+  RECHECK_IN_USE=$(python3 -c '
+import json, os, sys, time
+try:
+    if time.time() - os.path.getmtime(sys.argv[1]) > 600:
+        raise ValueError("stale")
+    with open(sys.argv[1]) as handle:
+        request = json.load(handle)
+    print("yes" if request.get("source") == "app" and request.get("confirmInUse") is False else "no")
+except Exception:
+    print("no")' "$REQUEST_FILE" 2>/dev/null) || RECHECK_IN_USE=no
+  rm -f "$REQUEST_FILE"
+}
+recheck_in_use() {
+  [ "$RECHECK_IN_USE" = yes ] || return 0
+  local reasons
+  reasons=$(curl -fsS --max-time 20 http://127.0.0.1:3000/api/update/in-use 2>/dev/null | python3 -c '
+import json, sys
+reasons = json.load(sys.stdin)["reasons"]
+assert isinstance(reasons, list)
+print(" ".join(str(reason) for reason in reasons))' 2>/dev/null) || reasons=status-unknown
+  [ -n "$reasons" ] || return 0
+  RESULT_REASON=$IN_USE_REASON
+  fail "the bed may be in use ($reasons); live install untouched"
+}
+
 # Compares the staged tree with the digest releases.json publishes for it,
 # using the installed copy of the digest script, never the downloaded one. A
 # release published before digests existed has none, and installs as before.
@@ -312,6 +349,7 @@ if [ -f "$TARGET_FILE" ]; then
   [ "$ALLOW_DOWNGRADE_RAW" = True ] && ALLOW_DOWNGRADE=yes
   [ -n "$TARGET_VERSION" ] && say "Target-version request: v$TARGET_VERSION (allowDowngrade=$ALLOW_DOWNGRADE)"
 fi
+read_request
 
 fi
 
@@ -350,7 +388,8 @@ if [ "$HANDOFF" = 1 ]; then
   # dependencies. Pick up from the backup.
   TARGET_VERSION="${NIGHTSTAND_HANDOFF_TARGET:-}"
   IS_DOWNGRADE="${NIGHTSTAND_HANDOFF_IS_DOWNGRADE:-no}"
-  unset NIGHTSTAND_UPDATE_HANDOFF NIGHTSTAND_HANDOFF_TARGET NIGHTSTAND_HANDOFF_IS_DOWNGRADE
+  RECHECK_IN_USE="${NIGHTSTAND_HANDOFF_RECHECK_IN_USE:-no}"
+  unset NIGHTSTAND_UPDATE_HANDOFF NIGHTSTAND_HANDOFF_TARGET NIGHTSTAND_HANDOFF_IS_DOWNGRADE NIGHTSTAND_HANDOFF_RECHECK_IN_USE
   [ -d "$STAGE" ] || fail "handed off without a staged tree at $STAGE"
   say "Continuing with the new version's updater (running v$CUR_VERSION)"
 else
@@ -512,6 +551,7 @@ if [ "$HANDOFF" != 1 ]; then
     export NIGHTSTAND_UPDATE_HANDOFF=1
     export NIGHTSTAND_HANDOFF_TARGET="$TARGET_VERSION"
     export NIGHTSTAND_HANDOFF_IS_DOWNGRADE="$IS_DOWNGRADE"
+    export NIGHTSTAND_HANDOFF_RECHECK_IN_USE="$RECHECK_IN_USE"
     exec bash "$STAGE/scripts/update.sh"
   fi
 fi
@@ -540,6 +580,7 @@ cp -r /persistent/free-sleep-data/lowdb "$BK/lowdb" || fail "settings backup fai
 ls -1dt "$BACKUPS"/*/ | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -rf
 
 # --- atomic swap ---------------------------------------------------------------
+recheck_in_use
 say "Installing v$STAGED_VERSION (service stops now)"
 # The running server hands back what the next version may not continue. A
 # target that has the same route continues it itself. One without the alarm

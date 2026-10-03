@@ -266,6 +266,44 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# Bed-in-use helpers, kept identical in update.sh, rollback_pod.sh and
+# revert-to-stock.sh. The app writes REQUEST_FILE as it starts one of them.
+# A request the owner did not confirm while the bed was in use is checked
+# again just before the services stop, as the bed may have come into use
+# since. Without the file or its field, as from an older server, an older
+# updater or SSH, nothing is checked again. A file older than ten minutes
+# was left by a request whose run never started, so it is ignored too.
+REQUEST_FILE=/persistent/free-sleep-data/operation-request.json
+RECHECK_IN_USE=no
+IN_USE_REASON="the bed came into use while the update was getting ready"
+read_request() {
+  [ -f "$REQUEST_FILE" ] || return 0
+  RECHECK_IN_USE=$(python3 -c '
+import json, os, sys, time
+try:
+    if time.time() - os.path.getmtime(sys.argv[1]) > 600:
+        raise ValueError("stale")
+    with open(sys.argv[1]) as handle:
+        request = json.load(handle)
+    print("yes" if request.get("source") == "app" and request.get("confirmInUse") is False else "no")
+except Exception:
+    print("no")' "$REQUEST_FILE" 2>/dev/null) || RECHECK_IN_USE=no
+  rm -f "$REQUEST_FILE"
+}
+recheck_in_use() {
+  [ "$RECHECK_IN_USE" = yes ] || return 0
+  local reasons
+  reasons=$(curl -fsS --max-time 20 http://127.0.0.1:3000/api/update/in-use 2>/dev/null | python3 -c '
+import json, sys
+reasons = json.load(sys.stdin)["reasons"]
+assert isinstance(reasons, list)
+print(" ".join(str(reason) for reason in reasons))' 2>/dev/null) || reasons=status-unknown
+  [ -n "$reasons" ] || return 0
+  RESULT_REASON=$IN_USE_REASON
+  fail "the bed may be in use ($reasons); live install untouched"
+}
+read_request
+
 # Tests can ask for more room than this needs, to see the refusal without
 # filling a partition. The amounts only add to the need, and anything but a
 # plain whole number of MB stops the run before it changes anything, so a
@@ -427,6 +465,7 @@ cp -r /persistent/free-sleep-data/lowdb "$BK/lowdb" || fail "settings backup fai
 ls -1dt "$BACKUPS"/*/ | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -rf
 
 # --- atomic swap -----------------------------------------------------------------
+recheck_in_use
 say "Installing upstream free-sleep v$STAGED_VERSION (service stops now)"
 # The running server hands back what the next version may not continue.
 curl -fsS --max-time 60 -X POST -H 'content-type: application/json' -d '{"reason":"revert"}' \

@@ -8,7 +8,7 @@ import { triggerRevertToStockService } from '../../jobs/revertToStock.js';
 import { UpdateRequestSchema, UpdateResultSchema, OperationRequestSchema, RollbackInfo } from './updateSchema.js';
 import { inUseText, type InUseReasonText } from './inUseText.js';
 
-import { PrivilegedCommandError, privilegedErrorStatus } from '../../jobs/privilegedCommand.js';
+import { PrivilegedCommandError, privilegedErrorStatus, type StartHooks } from '../../jobs/privilegedCommand.js';
 
 const router = express.Router();
 
@@ -20,6 +20,20 @@ const PREV_SERVER_INFO_PATH = '/home/dac/free-sleep-prev/server/src/serverInfo.j
 // Consumed once by scripts/update.sh (deleted immediately after reading), so
 // a stale file can never redirect a future plain update.
 const TARGET_FILE = '/persistent/free-sleep-data/update-target.json';
+
+// Read and removed by the update, rollback and switch scripts, which check
+// the bed again just before they stop the server unless the owner confirmed.
+// Without it, as from an older server or over SSH, they do not check again.
+const REQUEST_FILE = '/persistent/free-sleep-data/operation-request.json';
+
+// A request that cannot be saved still starts, as it did before the file existed.
+function requestHooks(confirmInUse: boolean | undefined): Required<StartHooks> {
+  return {
+    beforeStart: () => fs.promises.writeFile(REQUEST_FILE, JSON.stringify({ source: 'app', confirmInUse: confirmInUse === true }))
+      .catch((error) => { logger.warn('Could not save the operation request', error); }),
+    onStartFailure: () => fs.promises.unlink(REQUEST_FILE).catch(() => undefined),
+  };
+}
 
 // Written by the update, rollback and switch scripts when they end, so the
 // app can report a failure at once instead of waiting out a timeout.
@@ -115,10 +129,12 @@ router.post('/', async (req, res) => {
 
   const { targetVersion, allowDowngrade, confirmInUse } = parsed.data;
   if (await refusedWhileInUse(res, confirmInUse)) return;
+  const request = requestHooks(confirmInUse);
   let ownsTarget = false;
   try {
     await triggerUpdateService({
       beforeStart: async () => {
+        await request.beforeStart();
         if (targetVersion) {
           ownsTarget = true;
           await fs.promises.writeFile(
@@ -128,6 +144,7 @@ router.post('/', async (req, res) => {
         }
       },
       onStartFailure: async () => {
+        await request.onStartFailure();
         if (ownsTarget) await fs.promises.unlink(TARGET_FILE).catch(() => undefined);
       },
     });
@@ -165,20 +182,22 @@ router.get('/rollback-info', async (_req, res) => {
 });
 
 // Parses the optional body of rollback and switch, and answers 400 or 409
-// itself, returning false, when the request must not go ahead.
-async function admitted(req: express.Request, res: express.Response): Promise<boolean> {
+// itself, returning undefined, when the request must not go ahead.
+async function admitted(req: express.Request, res: express.Response): Promise<StartHooks | undefined> {
   const parsed = OperationRequestSchema.safeParse(req.body ?? {});
   if (!parsed.success) {
     res.status(400).json({ error: 'Invalid request data', details: parsed.error.errors });
-    return false;
+    return undefined;
   }
-  return !(await refusedWhileInUse(res, parsed.data.confirmInUse));
+  if (await refusedWhileInUse(res, parsed.data.confirmInUse)) return undefined;
+  return requestHooks(parsed.data.confirmInUse);
 }
 
 router.post('/rollback', async (req, res) => {
-  if (!(await admitted(req, res))) return;
+  const hooks = await admitted(req, res);
+  if (!hooks) return;
   try {
-    await triggerRollbackService();
+    await triggerRollbackService(hooks);
     res.status(204).end();
   } catch (error) {
     logger.error('Failed to start rollback', error);
@@ -192,9 +211,10 @@ router.post('/rollback', async (req, res) => {
 // Reversible only by re-adopting via scripts/migrate/switch-to-this-fork.sh
 // afterward. There's no in-app way back once upstream free-sleep is running.
 router.post('/revert-to-stock', async (req, res) => {
-  if (!(await admitted(req, res))) return;
+  const hooks = await admitted(req, res);
+  if (!hooks) return;
   try {
-    await triggerRevertToStockService();
+    await triggerRevertToStockService(hooks);
     res.status(204).end();
   } catch (error) {
     logger.error('Could not start switching to upstream free-sleep.', error);

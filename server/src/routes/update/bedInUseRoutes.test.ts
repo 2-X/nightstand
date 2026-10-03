@@ -16,13 +16,19 @@ process.env.DATA_FOLDER = `${folder}/`;
 process.env.ENV = 'local';
 
 const TARGET_FILE = '/persistent/free-sleep-data/update-target.json';
+const REQUEST_FILE = '/persistent/free-sleep-data/operation-request.json';
 let reasons: InUseReasonText[] = [];
 const started: string[] = [];
 const targetWrites: string[] = [];
+const requestWrites: string[] = [];
+let requestWriteFails = false;
 const writeFile = fs.promises.writeFile.bind(fs.promises);
 mock.method(fs.promises, 'writeFile', async (...args: Parameters<typeof fs.promises.writeFile>) => {
   if (args[0] === TARGET_FILE) targetWrites.push(String(args[1]));
-  else await writeFile(...args);
+  else if (args[0] === REQUEST_FILE) {
+    if (requestWriteFails) throw new Error('read-only');
+    requestWrites.push(String(args[1]));
+  } else await writeFile(...args);
 });
 const trigger = async (hooks: StartHooks = {}) => {
   await hooks.beforeStart?.();
@@ -55,6 +61,8 @@ beforeEach(() => {
   reasons = [];
   started.length = 0;
   targetWrites.length = 0;
+  requestWrites.length = 0;
+  requestWriteFails = false;
 });
 
 const send = async (method: string, route: string, body?: unknown) => {
@@ -109,6 +117,22 @@ for (const [route, body] of routes) {
     });
     it('goes ahead without confirmation when the bed is idle', async () => {
       reasons = [];
+      assert.equal((await post(route, body)).status, 204);
+      assert.equal(started.length, 1);
+    });
+    // The script checks the bed again just before it stops the server,
+    // unless the owner already confirmed.
+    it('passes the confirmation on to the script', async () => {
+      reasons = [];
+      await post(route, body);
+      reasons = ['left-on'];
+      await post(route, { ...(body ?? {}), confirmInUse: true });
+      assert.deepEqual(requestWrites.map(text => JSON.parse(text) as unknown), [
+        { source: 'app', confirmInUse: false }, { source: 'app', confirmInUse: true },
+      ]);
+    });
+    it('still starts when the request cannot be saved', async () => {
+      requestWriteFails = true;
       assert.equal((await post(route, body)).status, 204);
       assert.equal(started.length, 1);
     });

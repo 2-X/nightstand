@@ -68,6 +68,44 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# Bed-in-use helpers, kept identical in update.sh, rollback_pod.sh and
+# revert-to-stock.sh. The app writes REQUEST_FILE as it starts one of them.
+# A request the owner did not confirm while the bed was in use is checked
+# again just before the services stop, as the bed may have come into use
+# since. Without the file or its field, as from an older server, an older
+# updater or SSH, nothing is checked again. A file older than ten minutes
+# was left by a request whose run never started, so it is ignored too.
+REQUEST_FILE=/persistent/free-sleep-data/operation-request.json
+RECHECK_IN_USE=no
+IN_USE_REASON="the bed came into use while the update was getting ready"
+read_request() {
+  [ -f "$REQUEST_FILE" ] || return 0
+  RECHECK_IN_USE=$(python3 -c '
+import json, os, sys, time
+try:
+    if time.time() - os.path.getmtime(sys.argv[1]) > 600:
+        raise ValueError("stale")
+    with open(sys.argv[1]) as handle:
+        request = json.load(handle)
+    print("yes" if request.get("source") == "app" and request.get("confirmInUse") is False else "no")
+except Exception:
+    print("no")' "$REQUEST_FILE" 2>/dev/null) || RECHECK_IN_USE=no
+  rm -f "$REQUEST_FILE"
+}
+recheck_in_use() {
+  [ "$RECHECK_IN_USE" = yes ] || return 0
+  local reasons
+  reasons=$(curl -fsS --max-time 20 http://127.0.0.1:3000/api/update/in-use 2>/dev/null | python3 -c '
+import json, sys
+reasons = json.load(sys.stdin)["reasons"]
+assert isinstance(reasons, list)
+print(" ".join(str(reason) for reason in reasons))' 2>/dev/null) || reasons=status-unknown
+  [ -n "$reasons" ] || return 0
+  RESULT_REASON=$IN_USE_REASON
+  fail "the bed may be in use ($reasons); live install untouched"
+}
+read_request
+
 # node_modules can live in only one of the two trees: when the update that
 # produced this LIVE/PREV pair reused node_modules (identical lockfiles), it
 # moved the single copy into whichever tree became LIVE, leaving PREV without
@@ -141,6 +179,8 @@ TARGET_VERSION=$(python3 -c 'import json;print(json.load(open("'"$PREV"'/server/
 CUR_VERSION=$(python3 -c 'import json;print(json.load(open("'"$LIVE"'/server/src/serverInfo.json"))["version"])' 2>/dev/null) \
   || fail "cannot read the running version"
 say "Rolling back v$CUR_VERSION -> v$TARGET_VERSION"
+# Before the archive timer below stops, the first service this run stops.
+recheck_in_use
 
 # Other forks cannot run Nightstand's archive timer or its memory drop-ins.
 TARGET_IS_NIGHTSTAND=no
