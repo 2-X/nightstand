@@ -3,6 +3,7 @@ import { Alert, Box, Button, Stack } from '@mui/material';
 import moment from 'moment-timezone';
 import { useSettings } from '@api/settings';
 import { MissedAlarm, useDismissMissedAlarms, useMissedAlarms } from '@api/missedAlarms';
+import { bannerRailSx } from './pageRail';
 
 const ENDING: Record<MissedAlarm['reason'], string> = {
   'not-running': 'did not ring because Nightstand was not running.',
@@ -21,7 +22,7 @@ const isShown = (item: MissedAlarm | null | undefined) => (
 // The live region is always mounted and empty until alarms arrive, so a screen
 // reader announces them once instead of missing a region that appears with its
 // text already inside.
-export default function MissedAlarmBanner() {
+export default function MissedAlarmBanner({ wide = false }: { wide?: boolean }) {
   const { data } = useMissedAlarms();
   const { data: settings, isPending } = useSettings();
   const dismiss = useDismissMissedAlarms();
@@ -34,7 +35,7 @@ export default function MissedAlarmBanner() {
       role="status"
       aria-live="polite"
       tabIndex={ -1 }
-      sx={ { width: '100%', maxWidth: 600, boxSizing: 'border-box', px: 2, outline: 'none', '&:empty': { mb: -2 } } }
+      sx={ { ...bannerRailSx(wide), outline: 'none', '&:empty': { mb: -2 } } }
     >
       { missed.length > 0 && (
         <Alert

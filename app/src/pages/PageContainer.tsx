@@ -2,6 +2,7 @@ import React from 'react';
 import { Container, ContainerProps } from '@mui/material';
 import { SxProps } from '@mui/material';
 import ErrorBoundary from '@components/ErrorBoundary.tsx';
+import { PAGE_MAX_WIDTH } from '@components/pageRail';
 
 
 type PageContainerProps = {
@@ -25,7 +26,7 @@ export default function PageContainer({ children, sx, containerProps }: React.Pr
           gap: 2,
           mx: 'auto',
           width: '100%',
-          maxWidth: 720,
+          maxWidth: PAGE_MAX_WIDTH,
           padding: { xs: 2, sm: 3 },
           justifyContent: 'flex-start',
           ...sx,

@@ -16,6 +16,12 @@ describe('DemoBanner', () => {
     expect(screen.getByRole('link', { name: 'View on GitHub' })).toHaveAttribute('href', 'https://github.com/LTimothy/nightstand');
   });
 
+  it('sits in the same column as the page below it', () => {
+    renderWithProviders(<DemoBanner/>);
+    const rail = screen.getByRole('link', { name: 'View on GitHub' }).closest('.MuiAlert-root')!.parentElement!;
+    expect(rail).toHaveStyle({ maxWidth: '720px', width: '100%' });
+  });
+
   it('stays dismissed for the rest of the session', async () => {
     const view = renderWithProviders(<DemoBanner/>);
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));

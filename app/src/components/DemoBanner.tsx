@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Alert, Box, Link } from '@mui/material';
+import { bannerRailSx } from './pageRail';
 
 const DISMISSED_KEY = 'nightstand-demo-banner-dismissed';
 
@@ -11,7 +12,7 @@ const wasDismissed = () => {
   }
 };
 
-export default function DemoBanner() {
+export default function DemoBanner({ wide = false }: { wide?: boolean }) {
   const [dismissed, setDismissed] = useState(wasDismissed);
   if (dismissed) return null;
   const dismiss = () => {
@@ -23,7 +24,7 @@ export default function DemoBanner() {
     }
   };
   return (
-    <Box sx={ { width: '100%', maxWidth: 600, boxSizing: 'border-box', px: 2 } }>
+    <Box sx={ bannerRailSx(wide) }>
       <Alert role="none" severity="info" icon={ false } onClose={ dismiss } sx={ { py: 0, fontSize: 14 } }>
         Demo with sample data. Nothing here controls a real Pod.{ ' ' }
         <Link

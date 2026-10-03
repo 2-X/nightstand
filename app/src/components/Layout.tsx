@@ -7,6 +7,7 @@ import Navbar from './Navbar';
 import Box from '@mui/material/Box';
 import MissedAlarmBanner from './MissedAlarmBanner';
 import DemoBanner from './DemoBanner';
+import { isBedPath } from './pageRail';
 
 
 export default function Layout() {
@@ -63,8 +64,8 @@ export default function Layout() {
         tabIndex={ -1 }
         sx={ { display: 'flex', flexDirection: 'column', flexGrow: 1, alignItems: 'center', gap: 2, width: '100%', outline: 'none' } }
       >
-        { import.meta.env.VITE_ENV === 'demo' && <DemoBanner/> }
-        <MissedAlarmBanner/>
+        { import.meta.env.VITE_ENV === 'demo' && <DemoBanner wide={ isBedPath(pathname) }/> }
+        <MissedAlarmBanner wide={ isBedPath(pathname) }/>
         <ErrorBoundary key={ pathname } componentName={ pageName }>
           <Suspense fallback={ <RouteFallback/> }><Outlet/></Suspense>
         </ErrorBoundary>
