@@ -34,7 +34,6 @@ describe('SideSettings error handling', () => {
 
     const { user } = renderWithProviders(<SettingsPage/>, { initialRoute: '/settings/bed' });
 
-    // Wait for the Side settings section (rendered after settings load).
     await screen.findByText('Left side');
 
     // Default mock awayMode is false for both sides. Find the away-mode
@@ -46,6 +45,8 @@ describe('SideSettings error handling', () => {
     expect(awaySwitches.length).toBeGreaterThan(0);
     const awaySwitch = awaySwitches[0] as HTMLInputElement;
     expect(awaySwitch.checked).toBe(false);
+    // The switches stay disabled until the settings load.
+    await waitFor(() => expect(awaySwitch).toBeEnabled());
 
     await user.click(awaySwitch);
 

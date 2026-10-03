@@ -40,6 +40,7 @@ export default function SideSettings({ side, settings, updateSettings }: AwayMod
   const [savingName, setSavingName] = useState(false);
   const [nameError, setNameError] = useState(false);
   const savedName = settings?.[side]?.name;
+  const loaded = !!settings;
   const title = side.charAt(0).toUpperCase() + side.slice(1);
 
   // Local state to manage the text field value
@@ -49,8 +50,8 @@ export default function SideSettings({ side, settings, updateSettings }: AwayMod
   const lastSubmitted = useRef<string | undefined>(undefined);
   useEffect(() => {
     lastSubmitted.current = undefined;
-    setSideName(savedName ?? side);
-  }, [savedName, side]);
+    setSideName(loaded ? savedName ?? side : '');
+  }, [loaded, savedName, side]);
 
   const handleBlur = async () => {
     const name = sideName.trim();
@@ -94,7 +95,7 @@ export default function SideSettings({ side, settings, updateSettings }: AwayMod
       <FeatureToggleRow
         label="Away mode"
         ariaLabel={ `${title} away mode` }
-        disabled={ isUpdating }
+        disabled={ isUpdating || !settings }
         checked={ settings?.[side]?.awayMode || false }
         onChange={ next => updateSettings({ [side]: { awayMode: next } }) }
       />

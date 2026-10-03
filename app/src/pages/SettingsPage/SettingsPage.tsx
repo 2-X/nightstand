@@ -64,6 +64,8 @@ export default function SettingsPage() {
   const categories = SETTINGS_CATEGORIES.map(item => ({ ...item, detail: details[item.key] }));
   const selected = category === 'about' ? { title: 'About and license' } : categories.find((item) => item.key === category);
   const updateSettings = (patch: DeepPartial<Settings>) => {
+    // Nothing is sent until the current settings are known.
+    if (!settings) return Promise.resolve(false);
     setError(null);
     pendingSaves.current += 1;
     setIsUpdating(true);

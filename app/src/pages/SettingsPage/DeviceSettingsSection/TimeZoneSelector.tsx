@@ -32,7 +32,7 @@ export default function TimeZoneSelector({ settings, updateSettings }: TimeZoneS
         <Select
           labelId="time-zone-label"
           error={ settings?.timeZone === null }
-          disabled={ isUpdating }
+          disabled={ isUpdating || !settings }
           value={ settings?.timeZone || '' }
           label="Time zone"
           onChange={ handleChange }

@@ -14,22 +14,23 @@ export default function DailyPriming({ settings, updateSettings }: PrimePodSched
   return <Box sx={ { display: 'flex', flexDirection: 'column', gap: 2, mb: 2 } }>
     <FeatureToggleRow
       label="Prime daily"
-      disabled={ isUpdating }
+      disabled={ isUpdating || !settings }
       checked={ settings?.primePodDaily?.enabled ?? false }
       onChange={ next => updateSettings({ primePodDaily: { enabled: next } }) }
     />
     <TextField
       label="Prime time"
       type="time"
-      value={ settings?.primePodDaily?.time || '12:00' }
+      value={ settings ? settings.primePodDaily?.time || '12:00' : '' }
       onChange={ event => updateSettings({ primePodDaily: { time: event.target.value } }) }
-      disabled={ isUpdating || settings?.primePodDaily?.enabled === false }
+      disabled={ isUpdating || !settings || settings.primePodDaily?.enabled === false }
+      slotProps={ { inputLabel: { shrink: true } } }
       fullWidth
     />
     <FeatureToggleRow
       label="Restart the Pod an hour before priming"
       disabled={ isUpdating || settings?.rebootDaily === undefined || settings?.primePodDaily?.enabled === false }
-      checked={ settings?.rebootDaily ?? true }
+      checked={ settings ? settings.rebootDaily ?? true : false }
       onChange={ next => updateSettings({ rebootDaily: next }) }
     />
   </Box>;

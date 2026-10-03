@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
@@ -18,6 +18,7 @@ it('reports a rejected settings save and lets the user try again', async () => {
   server.use(http.post('*/api/settings', () => new HttpResponse(null, { status: 500 })));
   const { user } = renderWithProviders(<SettingsPage/>, { initialRoute: '/settings/bed' });
   const toggle = await screen.findByRole('switch', { name: 'Left away mode' });
+  await waitFor(() => expect(toggle).toBeEnabled());
   await user.click(toggle);
   expect(await screen.findByText(/Could not save settings/)).toBeVisible();
   expect(toggle).not.toBeChecked();

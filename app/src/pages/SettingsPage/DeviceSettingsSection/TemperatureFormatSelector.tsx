@@ -11,7 +11,7 @@ type TemperatureFormatSelectorProps = {
 
 export default function TemperatureFormatSelector({ settings, updateSettings }: TemperatureFormatSelectorProps) {
   const { isUpdating } = useAppStore();
-  const format = settings?.temperatureFormat ?? 'fahrenheit';
+  const format = settings ? settings.temperatureFormat ?? 'fahrenheit' : null;
 
   return (
     <Box>
@@ -21,7 +21,7 @@ export default function TemperatureFormatSelector({ settings, updateSettings }: 
         color="primary"
         exclusive
         value={ format }
-        disabled={ isUpdating }
+        disabled={ isUpdating || !settings }
         onChange={ (_event, next) => {
           if (next) updateSettings({ temperatureFormat: next });
         } }
