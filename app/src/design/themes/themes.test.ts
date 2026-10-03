@@ -53,12 +53,14 @@ function drawnPairs(p: ThemePalette): Pair[] {
   add('border.control', p.border.control, page, MARK);
   add('step.cool', p.step.cool, { base: p.bg.base }, MARK);
   add('step.warm', p.step.warm, { base: p.bg.base }, MARK);
-  add('tile.selectedBorder', p.tile.selectedBorder, { base: p.bg.base, nightBg: p.power.nightBg, ember: p.ember }, MARK);
   add('dial.tickZero', p.dial.tickZero, { base: p.bg.base }, MARK);
   add('stage.awake', p.stage.awake, { elevated: p.bg.elevated }, MARK);
   add('stage.light', p.stage.light, { elevated: p.bg.elevated }, MARK);
-  // An outlined Turn off has no fill of its own, so its outline is its boundary.
-  if (p.power.offBg === p.bg.base) add('power.offBorder', p.power.offBorder, { base: p.bg.base }, MARK);
+  // A control's outline is its boundary, so it stands apart from the control's own fill and from the page around it.
+  const outlined = (name: string, outline: string, fill: string) => add(name, outline, { fill, page: p.bg.base }, MARK);
+  outlined('Turn off: power.offBorder', p.power.offBorder, p.power.offBg);
+  outlined('Turn on: tile.selectedBorder', p.tile.selectedBorder, p.power.nightBg);
+  outlined('selected tile: tile.selectedBorder', p.tile.selectedBorder, p.ember);
   return pairs;
 }
 

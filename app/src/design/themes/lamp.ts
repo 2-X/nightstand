@@ -20,7 +20,7 @@ export const lamp: ThemeTokens = {
       ghostOpacity: 0.22, haloOpacity: 0.4,
     },
     step: { cool: '#3E6A92', warm: '#8F673A', disabled: '#2E3338' },
-    power: { offBg: '#2A251F', offText: '#E4E7EA', offBorder: '#3A332A', nightBg: '#1C1915' },
+    power: { offBg: '#2A251F', offText: '#E4E7EA', offBorder: '#80786C', nightBg: '#1C1915' },
     tile: { selectedBorder: 'rgba(233,227,213,0.7)' },
     status: { ok: '#6CCB8E', warn: '#E8C95A', error: '#FF7A8A', info: '#A3AAB2' },
     stage: { awake: '#E9E3D5', rem: '#C3B5FF', light: '#8E80F0', deep: '#6A58E6' },
