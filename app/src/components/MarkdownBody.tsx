@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Box } from '@mui/material';
 import { Marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { palette } from '@design/tokens';
+import { palette, radius } from '@design/tokens';
 
 // Renders changelog-entry markdown (bold, lists, code spans, links, nothing
 // fancier). Sanitized because remote entries come from a raw GitHub fetch;
@@ -43,7 +43,7 @@ export default function MarkdownBody({ markdown }: { markdown: string }) {
           fontFamily: 'monospace',
           fontSize: '0.8em',
           backgroundColor: palette.bg.hover,
-          borderRadius: '4px',
+          borderRadius: `${radius.mark}px`,
           px: '4px',
         },
         '& a': { color: palette.text.primary },

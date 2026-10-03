@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import type { SideRhythms } from '@api/rhythmsSchema';
 import type { ResolvedSleepResponse } from '@api/rhythmsResponse';
-import { palette } from '@design/tokens';
+import { palette, radius } from '@design/tokens';
 import { BOTTOM_SHEET, INACTIVE } from './sheetStyles';
 import MultiDateSheet from './MultiDateSheet';
 import RhythmPicker from './RhythmPicker';
@@ -71,7 +71,7 @@ export default function ComingUp({
   };
   return <>
     <Box
-      sx={ { width: '100%', border: `1px solid ${palette.border.subtle}`, borderRadius: '12px',
+      sx={ { width: '100%', border: `1px solid ${palette.border.subtle}`, borderRadius: `${radius.base}px`,
         bgcolor: palette.bg.elevated, overflow: 'hidden' } }>
       <List disablePadding>
         { dates.map(date => {

@@ -1,5 +1,5 @@
 import { Box, Typography } from '@mui/material';
-import { palette, typography } from './tokens';
+import { palette, typography, weight } from './tokens';
 
 type StatusDotColor = 'green' | 'yellow' | 'orange' | 'red' | 'pink' | 'blue' | 'none';
 
@@ -58,7 +58,7 @@ export default function MetricRow({
       <Typography
         sx={ {
           fontSize: '1.05rem',
-          fontWeight: 500,
+          fontWeight: weight.medium,
           color: palette.text.primary,
           flex: 1,
           mr: 2,

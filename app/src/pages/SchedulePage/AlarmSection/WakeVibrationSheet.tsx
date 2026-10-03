@@ -3,6 +3,7 @@ import { useScheduleStore } from '../scheduleStore';
 import { useAppStore } from '@state/appStore';
 import AlarmTest from './AlarmTest';
 import { RISE_PATTERN_NOTE } from '@api/alarmPattern.ts';
+import { radius } from '@design/tokens';
 
 export default function WakeVibrationSheet({ open, onClose, risePattern = false }: {
   open: boolean;
@@ -23,7 +24,7 @@ export default function WakeVibrationSheet({ open, onClose, risePattern = false 
     fullWidth
     maxWidth="sm"
     sx={ { '& .MuiDialog-container': { alignItems: 'flex-end' },
-      '& .MuiDialog-paper': { m: 0, width: '100%', borderRadius: '20px 20px 0 0' } } }>
+      '& .MuiDialog-paper': { m: 0, width: '100%', borderRadius: `${radius.base}px ${radius.base}px 0 0` } } }>
     <DialogTitle id="wake-vibration-title">Wake-up vibration</DialogTitle>
     <DialogContent><Stack spacing={ 2 } sx={ { pt: 1 } }>
       <TextField

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Typography } from '@mui/material';
-import { palette } from '@design/tokens';
+import { palette, weight } from '@design/tokens';
 
 const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -32,7 +32,7 @@ export default function Clock() {
     <Typography
       sx={ {
         fontSize: '0.9rem',
-        fontWeight: 500,
+        fontWeight: weight.medium,
         color: palette.text.tertiary,
         fontVariantNumeric: 'tabular-nums',
       } }

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Box, List, ListItemButton, ListItemText } from '@mui/material';
 import type { DayOfWeek } from '@api/schedulesSchema';
 import type { SideRhythms } from '@api/rhythmsSchema';
-import { palette } from '@design/tokens';
+import { palette, radius, weight } from '@design/tokens';
 import RhythmPicker from './RhythmPicker';
 import { describeDays, rhythmName, rhythmOptions, weekRuns, type DateChoice } from './rhythmsModel';
 import { INACTIVE } from './sheetStyles';
@@ -29,7 +29,7 @@ export default function WeekList({ sideData, disabled, onPick, onSheetOpen }: Pr
   };
   return <>
     <Box
-      sx={ { width: '100%', border: `1px solid ${palette.border.subtle}`, borderRadius: '12px',
+      sx={ { width: '100%', border: `1px solid ${palette.border.subtle}`, borderRadius: `${radius.base}px`,
         bgcolor: palette.bg.elevated, overflow: 'hidden' } }>
       <List disablePadding>
         { runs.map((run, index) => {
@@ -52,7 +52,7 @@ export default function WeekList({ sideData, disabled, onPick, onSheetOpen }: Pr
             <ListItemText
               primary={ label }
               sx={ { flex: '0 0 auto', my: 0 } }
-              slotProps={ { primary: { sx: { fontWeight: 500, whiteSpace: 'nowrap' } } } }/>
+              slotProps={ { primary: { sx: { fontWeight: weight.medium, whiteSpace: 'nowrap' } } } }/>
             <ListItemText
               primary={ <bdi>{ name }</bdi> }
               sx={ { textAlign: 'right', my: 0, minWidth: 0 } }

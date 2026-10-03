@@ -5,7 +5,7 @@ import {
   Paper, Typography, Box, MenuItem, Select, FormControl, InputLabel,
   Alert, Button, Menu, TextField, IconButton, Tooltip, Chip,
 } from '@mui/material';
-import { palette } from '@design/tokens';
+import { palette, radius } from '@design/tokens';
 import axios from '@api/api';
 import { SubpageShell } from '../Header.tsx';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -297,11 +297,11 @@ export default function LogsPage() {
             },
             '&::-webkit-scrollbar-track': {
               background: palette.bg.elevated,
-              borderRadius: '5px',
+              borderRadius: `${radius.mark}px`,
             },
             '&::-webkit-scrollbar-thumb': {
               background: palette.border.control,
-              borderRadius: '5px',
+              borderRadius: `${radius.mark}px`,
             },
             '&::-webkit-scrollbar-thumb:hover': {
               background: palette.text.tertiary,

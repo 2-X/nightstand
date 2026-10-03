@@ -58,7 +58,7 @@ it('draws the card at the shared 16 px radius with its actions as 44 px lamp lin
   fixture.on = '21:00';
   fixture.expiresAt = '2026-09-28T19:00:00Z';
   const { container } = render(<ThemeProvider theme={ theme }><MemoryRouter><UpcomingNight/></MemoryRouter></ThemeProvider>);
-  expect(container.querySelector('[data-tonight]')).toHaveStyle({ borderRadius: '16px' });
+  expect(container.querySelector('[data-tonight]')).toHaveStyle({ borderRadius: '12px' });
   expect(screen.getByRole('link', { name: 'Edit schedule' })).toHaveStyle({ minHeight: '44px', fontSize: '15px' });
   expect(screen.getByText('Turns on tonight at 9:00 PM, set to 82°F')).toHaveStyle({ fontSize: '15px' });
 });

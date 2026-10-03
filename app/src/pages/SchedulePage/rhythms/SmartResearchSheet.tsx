@@ -3,7 +3,7 @@
 import { useId, useState } from 'react';
 import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Link, Stack, Typography } from '@mui/material';
 import ExpandMore from '@mui/icons-material/ExpandMore';
-import { palette } from '@design/tokens';
+import { palette, radius, weight } from '@design/tokens';
 
 type Source = { cite: string; title: string; href: string; tested: string };
 type Phase = { heading: string; does: string; why: string; sources: Source[] };
@@ -85,7 +85,7 @@ function PhaseSection({ phase }: { phase: Phase }) {
   const [open, setOpen] = useState(false);
   const listId = useId();
   return <Box component="section" sx={ { mt: 3 } }>
-    <Typography component="h3" sx={ { fontSize: 16, fontWeight: 600 } }>{ phase.heading }</Typography>
+    <Typography component="h3" sx={ { fontSize: 16, fontWeight: weight.heading } }>{ phase.heading }</Typography>
     <Typography variant="body2" sx={ { mt: 0.5 } }>{ phase.does }</Typography>
     <Typography variant="body2" sx={ { mt: 1 } }>{ phase.why }</Typography>
     <Button
@@ -121,7 +121,7 @@ export default function SmartResearchSheet({ onClose }: { onClose: () => void })
     maxWidth="sm"
     scroll="paper"
     sx={ { '& .MuiDialog-container': { alignItems: 'flex-end' },
-      '& .MuiDialog-paper': { m: 0, width: '100%', maxHeight: '90%', borderRadius: '20px 20px 0 0' } } }>
+      '& .MuiDialog-paper': { m: 0, width: '100%', maxHeight: '90%', borderRadius: `${radius.base}px ${radius.base}px 0 0` } } }>
     <DialogTitle id={ titleId }>The research behind it</DialogTitle>
     <DialogContent dividers>
       <Typography variant="body2" color="text.secondary">

@@ -5,7 +5,7 @@ import {
   formatTemperature, levelToFahrenheit, MAX_TEMP_LEVEL, MIN_TEMP_LEVEL, type TemperatureFormat,
 } from '@lib/temperatureConversions';
 import { temperatureColor } from '@lib/temperatureColor';
-import { palette } from '@design/tokens';
+import { palette, weight } from '@design/tokens';
 
 const buttonSx = { width: 44, height: 44, color: 'inherit', border: '1px solid', borderColor: palette.border.control };
 
@@ -38,7 +38,7 @@ export default function LevelStepper({ level, format, label, disabled, onChange 
         step(event.key === 'ArrowUp' ? 1 : -1);
       } }
       sx={ { minWidth: 62, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 24, fontWeight: 500, fontVariantNumeric: 'tabular-nums', opacity: disabled ? 0.5 : 1,
+        fontSize: 24, fontWeight: weight.medium, fontVariantNumeric: 'tabular-nums', opacity: disabled ? 0.5 : 1,
         '&:focus-visible': { outline: '2px solid', outlineOffset: 3, borderRadius: 1 } } }>{ text }</Box>
     <IconButton
       aria-label={ `Increase ${label.toLowerCase()}` }

@@ -2,7 +2,7 @@ import { useId, useState } from 'react';
 import { Box, Button, List, ListItem, ListItemText } from '@mui/material';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import type { SideRhythms } from '@api/rhythmsSchema';
-import { palette } from '@design/tokens';
+import { palette, radius } from '@design/tokens';
 import { dayLabel, rhythmName, upcomingChanges, weekLabel, type DateChoice } from './rhythmsModel';
 import { INACTIVE } from './sheetStyles';
 
@@ -31,7 +31,7 @@ export default function DateChanges({ sideData, from, today, disabled, onChoose 
     </Button>
     { open && <Box
       id={ listId }
-      sx={ { width: '100%', border: `1px solid ${palette.border.subtle}`, borderRadius: '12px', bgcolor: palette.bg.elevated,
+      sx={ { width: '100%', border: `1px solid ${palette.border.subtle}`, borderRadius: `${radius.base}px`, bgcolor: palette.bg.elevated,
         overflow: 'hidden' } }>
       <List disablePadding>
         { changes.map((change, index) => {

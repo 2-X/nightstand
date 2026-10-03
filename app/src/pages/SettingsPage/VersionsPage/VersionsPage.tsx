@@ -27,6 +27,7 @@ import { useRollbackInfo } from '@api/update.ts';
 import { useServerStatus } from '@api/serverStatus.ts';
 import { UPDATE_CHANNELS, UpdateChannelType } from '@api/settingsSchema.ts';
 import currentServerInfo from '../../../../../server/src/serverInfo.json';
+import { weight } from '@design/tokens';
 
 // First release that understands update-target.json. Older update.sh
 // ignores the file and always installs the branch tip instead, which is
@@ -117,7 +118,7 @@ export default function VersionsPage() {
               >
                 { whatsNew.map(entry => (
                   <Box key={ entry.version }>
-                    <Typography variant="body2" sx={ { fontWeight: 600 } }>
+                    <Typography variant="body2" sx={ { fontWeight: weight.heading } }>
                       v{ entry.version }, { entry.date }
                     </Typography>
                     <MarkdownBody markdown={ entry.body }/>

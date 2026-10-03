@@ -9,7 +9,7 @@ import { useCalibration } from '@api/calibration.ts';
 import { Link } from 'react-router-dom';
 import { isConflict } from '@lib/requestError.ts';
 import { useId, useState } from 'react';
-import { palette } from '@design/tokens';
+import { palette, weight } from '@design/tokens';
 import { STATUS_META, GENERIC_MEANING, statusName } from './statusMeta.ts';
 import CalibrationSubline from './CalibrationSubline.tsx';
 
@@ -63,7 +63,7 @@ export default function StatusRow({ job, statusInfo, divider }: StatusRowProps) 
   return (
     <Box sx={ { pt: divider ? 1.5 : 0, pb: 1.5, borderTop: divider ? `1px solid ${palette.border.subtle}` : 'none' } }>
       <Box sx={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 } }>
-        <Typography sx={ { fontSize: '1rem', fontWeight: 600, color: palette.text.primary, flex: 1, minWidth: 0 } }>
+        <Typography sx={ { fontSize: '1rem', fontWeight: weight.heading, color: palette.text.primary, flex: 1, minWidth: 0 } }>
           { statusName(job, statusInfo) }
         </Typography>
         <StatusChip info={ statusInfo } optional={ job === 'biometricsInstallation' && statusInfo.status === 'not_started' } />

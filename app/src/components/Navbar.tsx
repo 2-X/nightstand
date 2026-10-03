@@ -14,6 +14,7 @@ import { useUpdateAttentionStore } from '@state/updateAttentionStore';
 import { useDeviceStatus } from '@api/deviceStatus';
 import { useStatusSummary } from '../pages/StatusPage/useStatusSummary';
 import { PAGES, primaryRoute } from './pages';
+import { weight } from '@design/tokens';
 
 export default function Navbar() {
   const { pathname } = useLocation();
@@ -60,7 +61,7 @@ export default function Navbar() {
         } }
       >
         <Box sx={ { width: '100%', maxWidth: 672, mx: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' } }>
-          <Typography sx={ { fontWeight: 600 } }>Nightstand</Typography>
+          <Typography sx={ { fontWeight: weight.heading } }>Nightstand</Typography>
           <Box sx={ { display: 'flex', gap: 1 } }>
             { PAGES.map((page) => (
               <Button
@@ -70,7 +71,10 @@ export default function Navbar() {
                 aria-current={ selected === page.route ? 'page' : undefined }
                 aria-label={ page.route === '/settings' && settingsAttention ? settingsLabel : undefined }
                 variant="text"
-                sx={ { color: selected === page.route ? 'primary.main' : 'text.secondary', fontWeight: selected === page.route ? 600 : 500 } }
+                sx={ {
+                  color: selected === page.route ? 'primary.main' : 'text.secondary',
+                  fontWeight: selected === page.route ? weight.heading : weight.medium,
+                } }
               >
                 <Badge color={ unhealthy ? 'error' : 'warning' } variant="dot" invisible={ !(page.route === '/settings' && settingsAttention) }>
                   { page.title }
@@ -118,7 +122,9 @@ export default function Navbar() {
               flex: 1,
               px: 0.5,
               color: 'text.secondary',
-              '& .MuiBottomNavigationAction-label': { fontSize: '0.75rem', '&.Mui-selected': { fontSize: '0.75rem', fontWeight: 600 } },
+              '& .MuiBottomNavigationAction-label': {
+                fontSize: '0.75rem', '&.Mui-selected': { fontSize: '0.75rem', fontWeight: weight.heading },
+              },
             } }
           />
         )) }

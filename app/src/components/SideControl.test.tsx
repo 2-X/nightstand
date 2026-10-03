@@ -136,7 +136,7 @@ it('names the level of a paused side that is on, on the Bed tiles and the compac
 it('draws the selected Bed tile warm, from the top, with room for three lines', () => {
   render(<SideControl compact={ false }/>);
   const selected = screen.getByRole('radio', { name: /^Alex/ }).closest('label')!;
-  expect(selected).toHaveStyle({ backgroundColor: '#2A251F', minHeight: '84px', borderRadius: '16px', justifyContent: 'flex-start' });
+  expect(selected).toHaveStyle({ backgroundColor: '#2A251F', minHeight: '84px', borderRadius: '12px', justifyContent: 'flex-start' });
   expect(screen.getByRole('radio', { name: /^Sam/ }).closest('label')).toHaveStyle({ backgroundColor: '#121518' });
 });
 

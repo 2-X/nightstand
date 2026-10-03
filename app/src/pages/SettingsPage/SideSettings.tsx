@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Settings } from '@api/settingsSchema.ts';
 import { Side, useAppStore } from '@state/appStore.tsx';
+import { weight } from '@design/tokens';
 
 const MAX_NAME_LENGTH = 20;
 
@@ -71,7 +72,7 @@ export default function SideSettings({ side, settings, updateSettings }: AwayMod
 
   return (
     <Box sx={ { display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 2 } }>
-      <Typography variant="body2" color="text.secondary" fontWeight={ 600 }>{ title } side</Typography>
+      <Typography variant="body2" color="text.secondary" fontWeight={ weight.heading }>{ title } side</Typography>
       <TextField
         label="Name"
         placeholder="Enter side name"

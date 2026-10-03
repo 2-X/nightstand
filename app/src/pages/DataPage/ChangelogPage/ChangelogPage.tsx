@@ -12,7 +12,7 @@ import { useSettings } from '@api/settings';
 import { useReleases } from '@api/releases.ts';
 import { summary } from '@api/releaseSummary.ts';
 import { useLatestVersion } from '@api/useLatestVersion.ts';
-import { palette } from '@design/tokens';
+import { palette, weight } from '@design/tokens';
 
 export default function ChangelogPage() {
   const { data: localEntries, isError, isPending, refetch } = useChangelog();
@@ -57,7 +57,7 @@ export default function ChangelogPage() {
             <AccordionSummary expandIcon={ <ExpandMoreIcon/> }>
               <Box sx={ { minWidth: 0 } }>
                 <Box sx={ { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 } }>
-                  <Typography component="span" variant="subtitle1" sx={ { fontWeight: 600 } }>v{ entry.version }</Typography>
+                  <Typography component="span" variant="subtitle1" sx={ { fontWeight: weight.heading } }>v{ entry.version }</Typography>
                   <Typography variant="caption" color="text.secondary">{ entry.date }</Typography>
                   { channelOf.has(entry.version) && <Chip
                     label={ channelOf.get(entry.version) === 'beta' ? 'Beta' : 'Stable' }

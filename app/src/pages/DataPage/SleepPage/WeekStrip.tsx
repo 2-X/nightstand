@@ -4,7 +4,7 @@ import moment from 'moment-timezone';
 import type { SleepRecord } from '@api/sleepSchema';
 import { useSleepStages } from '@api/sleepStages';
 import { useSleepScoreEnabled } from '@api/sleepScore';
-import { palette } from '@design/tokens';
+import { palette, radius, weight } from '@design/tokens';
 import { formatSleepDuration, nightDuration, nightMarkHeight, recordForNight } from './sleepContext';
 import type { MissingNightState } from './MissingNightCard';
 
@@ -40,7 +40,7 @@ function NightButton({ day, selected, record, disabled, onSelect, missingState }
       sx={ {
         flex: 1, minWidth: 0, minHeight: 84, px: 0, py: 0, flexDirection: 'column',
         border: '1px solid', borderColor: selected ? palette.accent : 'transparent',
-        color: selected ? palette.text.primary : palette.text.secondary, fontWeight: 400,
+        color: selected ? palette.text.primary : palette.text.secondary, fontWeight: weight.regular,
       } }>
       <Typography component="span" variant="caption" sx={ { lineHeight: 1.2 } }>{ day.format('ddd') }</Typography>
       <Typography component="span" sx={ { fontWeight: 'inherit', lineHeight: 1.2 } }>{ day.date() }</Typography>
@@ -49,7 +49,7 @@ function NightButton({ day, selected, record, disabled, onSelect, missingState }
           component="span"
           sx={ {
             height: duration === undefined ? 6 : nightMarkHeight(duration),
-            width: 12, borderRadius: '2px', border: `1px ${pending ? 'dashed' : 'solid'}`,
+            width: 12, borderRadius: `${radius.mark}px`, border: `1px ${pending ? 'dashed' : 'solid'}`,
             borderColor: missingState === 'failed' ? palette.status.error : 'currentColor',
             bgcolor: duration === undefined || duration === 0 ? 'transparent' : palette.lamp,
           } }/> }

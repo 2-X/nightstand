@@ -7,7 +7,7 @@ import {
 } from '@lib/temperatureConversions';
 import { stepTemperature, TemperatureStepState } from '@lib/temperatureStep';
 import { temperatureColor } from '@lib/temperatureColor';
-import { palette } from '@design/tokens';
+import { palette, weight } from '@design/tokens';
 
 export default function TemperatureStepper({ value, format, label, disabled, onChange }: {
   value: number; format: TemperatureFormat; label: string; disabled: boolean; onChange: (value: number) => void;
@@ -73,7 +73,7 @@ export default function TemperatureStepper({ value, format, label, disabled, onC
         }
       } }
       sx={ { minWidth: 62, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
-        fontSize: 24, fontWeight: 500, fontVariantNumeric: 'tabular-nums', opacity: disabled ? 0.5 : 1,
+        fontSize: 24, fontWeight: weight.medium, fontVariantNumeric: 'tabular-nums', opacity: disabled ? 0.5 : 1,
         '&:focus-visible': { outline: '2px solid', outlineOffset: 3, borderRadius: 1 } } }>{ formatTemperature(value, format) }</Box>
     <IconButton
       aria-label={ `Increase ${label.toLowerCase()}` }

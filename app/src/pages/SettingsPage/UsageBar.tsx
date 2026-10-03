@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Box, LinearProgress, Typography } from '@mui/material';
-import { palette } from '@design/tokens';
+import { palette, radius } from '@design/tokens';
 import { formatBytes } from '../../lib/formatBytes.ts';
 
 type UsageBarProps = {
@@ -34,9 +34,9 @@ export default function UsageBar({ label, usedBytes, totalBytes, usedPercent, ca
         value={ Math.min(usedPercent, 100) }
         sx={ {
           height: 6,
-          borderRadius: 999,
+          borderRadius: radius.pill,
           backgroundColor: palette.border.subtle,
-          '& .MuiLinearProgress-bar': { backgroundColor: barColor, borderRadius: 999 },
+          '& .MuiLinearProgress-bar': { backgroundColor: barColor, borderRadius: radius.pill },
         } }
       />
 

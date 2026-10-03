@@ -4,7 +4,7 @@ import { Box, Button, ButtonBase, Dialog, DialogActions, DialogContent, DialogTi
 import ChevronLeft from '@mui/icons-material/ChevronLeft';
 import ChevronRight from '@mui/icons-material/ChevronRight';
 import type { SideRhythms } from '@api/rhythmsSchema';
-import { palette } from '@design/tokens';
+import { palette, radius, weight } from '@design/tokens';
 import { changeFor, formatDate, MAX_CHANGE_DAYS_AHEAD } from './rhythmsModel';
 import { BOTTOM_SHEET } from './sheetStyles';
 
@@ -71,7 +71,7 @@ export default function MultiDateSheet({ sideData, today, onNext, onClose }: Pro
           disabled={ shownMonth <= today.slice(0, 7) }
           onClick={ () => setMonth(month.clone().subtract(1, 'month')) }
           sx={ { width: 44, height: 44 } }><ChevronLeft/></IconButton>
-        <Typography id={ monthId } aria-live="polite" sx={ { fontWeight: 600 } }>{ month.format('MMMM YYYY') }</Typography>
+        <Typography id={ monthId } aria-live="polite" sx={ { fontWeight: weight.heading } }>{ month.format('MMMM YYYY') }</Typography>
         <IconButton
           aria-label="Next month"
           disabled={ shownMonth >= last.slice(0, 7) }
@@ -108,7 +108,7 @@ export default function MultiDateSheet({ sideData, today, onNext, onClose }: Pro
             } }
             onKeyDown={ event => onKey(event, date) }
             sx={ {
-              minHeight: 44, minWidth: 44, borderRadius: '12px', fontSize: 15, position: 'relative',
+              minHeight: 44, minWidth: 44, borderRadius: `${radius.base}px`, fontSize: 15, position: 'relative',
               color: !usable ? 'text.disabled' : on ? palette.bg.base : 'text.primary',
               bgcolor: on ? palette.accent : 'transparent',
               border: date === today ? `1px solid ${palette.border.control}` : '1px solid transparent',

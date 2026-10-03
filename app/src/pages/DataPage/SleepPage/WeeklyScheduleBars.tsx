@@ -1,7 +1,7 @@
 import moment from 'moment-timezone';
 import { Box, ButtonBase, Typography } from '@mui/material';
 import type { SleepRecord } from '@api/sleepSchema';
-import { palette } from '@design/tokens';
+import { palette, radius } from '@design/tokens';
 import { recordForNight } from './sleepContext';
 
 type Props = { records: SleepRecord[]; weekStart: moment.Moment; timeZone: string; onSelectDay?: (date: string) => void };
@@ -42,7 +42,7 @@ export default function WeeklyScheduleBars({ records, weekStart, timeZone, onSel
               { record && <Box
                 aria-hidden
                 sx={ {
-                  mt: 0.5, height: 8, borderRadius: '4px', bgcolor: palette.lamp,
+                  mt: 0.5, height: 8, borderRadius: `${radius.mark}px`, bgcolor: palette.lamp,
                   ml: `${(start - minimum) / (maximum - minimum) * 100}%`,
                   width: `${(end - start) / (maximum - minimum) * 100}%`,
                 } }/> }

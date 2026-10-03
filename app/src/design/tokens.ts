@@ -5,14 +5,22 @@ import { activeThemeId } from './themePreference';
 export const themeTokens = THEMES[activeThemeId()];
 export const palette = themeTokens.palette;
 
+// One corner per look. A mark is a small bar or code chip, cornered in proportion.
 export const radius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: themeTokens.radius, // primary card radius
-  xxl: 24,
+  base: themeTokens.radius,
+  mark: Math.max(2, Math.round(themeTokens.radius / 3)),
   pill: 9999,
 };
+
+export const weight = {
+  regular: 400,
+  medium: themeTokens.type.mediumWeight,
+  heading: themeTokens.type.headingWeight,
+  numeral: themeTokens.type.numeralWeight,
+};
+
+// The temperature numeral's tracking; the level numeral sits a little tighter.
+export const numeralTracking = (offsetEm = 0) => `${Math.round((themeTokens.type.numeralTrackingEm + offsetEm) * 1000) / 1000}em`;
 
 // Bed's extra breakpoints: phones under 360 px, the two column desktop, and two steps of screens too short for
 // the full layout to keep the power row above the bottom bar or the window's edge.
@@ -29,19 +37,19 @@ export const media = {
 export const typography = {
   hero: {
     fontSize: 'clamp(3.5rem, 16vw, 4.5rem)',
-    fontWeight: themeTokens.type.numeralWeight,
+    fontWeight: weight.numeral,
     lineHeight: 1,
-    letterSpacing: `${themeTokens.type.numeralTrackingEm}em`,
+    letterSpacing: numeralTracking(),
   },
-  metricLarge: { fontSize: '3.5rem', fontWeight: 500 },
+  metricLarge: { fontSize: '3.5rem', fontWeight: weight.medium },
   metricValue: {
     fontSize: '1.5rem',
-    fontWeight: 500,
+    fontWeight: weight.medium,
     fontVariantNumeric: 'tabular-nums',
   },
   caption: {
     fontSize: '0.8125rem',
-    fontWeight: 400,
+    fontWeight: weight.regular,
   },
   sectionLabel: {
     fontSize: '0.875rem',
@@ -53,7 +61,7 @@ export const typography = {
 export const sx = {
   glassCard: {
     width: '100%',
-    borderRadius: `${radius.xl}px`,
+    borderRadius: `${radius.base}px`,
     p: 2,
     background: palette.bg.elevated,
     border: `1px solid ${palette.border.subtle}`,
@@ -64,14 +72,14 @@ export const sx = {
   // Shared accordion surface and spacing.
   glassAccordion: {
     width: '100%',
-    borderRadius: `${radius.xl}px`,
+    borderRadius: `${radius.base}px`,
     background: palette.bg.elevated,
     border: `1px solid ${palette.border.subtle}`,
     boxShadow: 'none',
     '&:before': { display: 'none' },
     '&.Mui-expanded': { margin: 0 },
     '& .MuiAccordionSummary-root': {
-      borderRadius: `${radius.xl}px`,
+      borderRadius: `${radius.base}px`,
       px: 2,
     },
     '& .MuiAccordionDetails-root': {
@@ -94,7 +102,7 @@ export const sx = {
     px: '10px',
     color: palette.accent,
     fontSize: 15,
-    fontWeight: 600,
+    fontWeight: weight.heading,
     textTransform: 'none' as const,
   },
 };

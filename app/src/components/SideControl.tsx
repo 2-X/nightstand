@@ -8,7 +8,7 @@ import { isPresenceFresh, usePresence, PresenceSide } from '@api/presence.ts';
 import { isSchedulePaused } from '@api/schedulePause.ts';
 import { displayTemperature, fahrenheitToLevel } from '@lib/temperatureConversions.ts';
 import { temperatureColor } from '@lib/temperatureColor';
-import { media, palette, radius } from '@design/tokens';
+import { media, palette, radius, weight } from '@design/tokens';
 import { useDeviceFreshness } from '../pages/ControlTempPage/useDeviceFreshness';
 import { NOT_RESPONDING } from '../pages/ControlTempPage/bedText';
 
@@ -24,7 +24,7 @@ const focusRing = { '&:has(input:focus-visible)': { outline: `2px solid ${palett
 // The shorter heights keep the power row above the bottom bar on short screens.
 const bedTileSx = (selected: boolean) => ({
   position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', minWidth: 0, minHeight: 84,
-  p: '11px 12px 10px 14px', cursor: 'pointer', borderRadius: `${radius.lg}px`,
+  p: '11px 12px 10px 14px', cursor: 'pointer', borderRadius: `${radius.base}px`,
   bgcolor: selected ? palette.ember : palette.bg.elevated,
   border: `1.5px solid ${selected ? palette.tile.selectedBorder : palette.border.subtle}`,
   ...focusRing,
@@ -115,7 +115,7 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
             sx={ { position: 'absolute', inset: 0, opacity: 0, p: 0, '& input': { width: '100%', height: '100%' } } }/>
           { compact ? <>
             <Box sx={ { minWidth: 0, flex: 1 } }>
-              <Typography fontWeight={ 600 } sx={ { fontSize: 16, pr: 2.5, overflowWrap: 'anywhere', lineHeight: 1.2 } }>
+              <Typography fontWeight={ weight.heading } sx={ { fontSize: 16, pr: 2.5, overflowWrap: 'anywhere', lineHeight: 1.2 } }>
                 <bdi>{ title }</bdi>
               </Typography>
               <Typography variant="caption" color={ stateColor } sx={ { display: 'block', lineHeight: 1.2, minHeight: '1.2em' } }>
@@ -126,7 +126,7 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
           </> : <>
             <Box sx={ { display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 } }>
               <Typography
-                fontWeight={ 600 }
+                fontWeight={ weight.heading }
                 sx={ {
                   fontSize: 17, lineHeight: 1.3, letterSpacing: '-0.005em', overflowWrap: 'anywhere',
                   [media.narrow]: { fontSize: 16 }, [media.tight]: { lineHeight: 1.2 },

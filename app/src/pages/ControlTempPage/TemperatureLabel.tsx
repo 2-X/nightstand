@@ -1,5 +1,5 @@
 import { Box, Typography } from '@mui/material';
-import { media, palette } from '@design/tokens';
+import { media, numeralTracking, palette, weight } from '@design/tokens';
 import { displayTemperature, type TemperatureFormat } from '@lib/temperatureConversions.ts';
 
 type TemperatureLabelProps = {
@@ -24,9 +24,9 @@ const tinyDial = '@container (max-width: 219.95px)';
 const lineSx = { fontSize: 15, lineHeight: 1.3, color: 'text.secondary', [smallDial]: { fontSize: 14 }, [tinyDial]: { fontSize: 13 } } as const;
 // The third line is the longest ("Currently at 21.5°C"), so it steps down once more on the smallest dial.
 const currentSx = { ...lineSx, [tinyDial]: { fontSize: 12 } } as const;
-const signSx = { fontSize: '0.5em', fontWeight: 300, verticalAlign: '0.55em', mr: '0.02em', letterSpacing: 0 } as const;
+const signSx = { fontSize: '0.5em', fontWeight: weight.numeral, verticalAlign: '0.55em', mr: '0.02em', letterSpacing: 0 } as const;
 const offSx = {
-  color: 'text.secondary', fontWeight: 300, letterSpacing: '-0.03em', lineHeight: 0.95,
+  color: 'text.secondary', fontWeight: weight.numeral, letterSpacing: numeralTracking(), lineHeight: 0.95,
   fontSize: 84, [media.narrow]: { fontSize: 76 }, [smallDial]: { fontSize: 64 }, [tinyDial]: { fontSize: 52 },
 } as const;
 // °F and °C run to four or five characters, so they get a smaller numeral than a level.
@@ -36,7 +36,7 @@ const numeralSize = (format: TemperatureFormat) => format === 'level'
     [smallDial]: { fontSize: 70, m: '2px 0 4px' }, [tinyDial]: { fontSize: 56, m: '2px 0 4px' },
   }
   : {
-    fontSize: 64, letterSpacing: '-0.03em', [media.narrow]: { fontSize: 56 }, [media.desktop]: { fontSize: 72 },
+    fontSize: 64, letterSpacing: numeralTracking(), [media.narrow]: { fontSize: 56 }, [media.desktop]: { fontSize: 72 },
     [smallDial]: { fontSize: 46, m: '2px 0 4px' }, [tinyDial]: { fontSize: 38, m: '2px 0 4px' },
   };
 
@@ -54,7 +54,7 @@ export default function TemperatureLabel({
       <Typography
         component="h2"
         sx={ {
-          fontWeight: 300, letterSpacing: '-0.04em', lineHeight: 0.95, m: '4px 0 6px', whiteSpace: 'nowrap',
+          fontWeight: weight.numeral, letterSpacing: numeralTracking(-0.01), lineHeight: 0.95, m: '4px 0 6px', whiteSpace: 'nowrap',
           fontVariantNumeric: 'tabular-nums', color: lastKnownAt ? palette.text.secondary : sliderColor, ...numeralSize(format),
         } }>
         { sign && <Box component="span" sx={ signSx }>{ sign }</Box> }

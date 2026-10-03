@@ -1,6 +1,6 @@
 import { useRef, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { media, palette } from '@design/tokens';
+import { media, palette, weight } from '@design/tokens';
 import { Button, Box } from '@mui/material';
 import { Add, Remove } from '@mui/icons-material';
 import { useControlTempStore } from './controlTempStore.tsx';
@@ -183,7 +183,7 @@ export default function TemperatureButtons({ refetch, currentTargetTemp, statusU
   }) as const;
   const labelSx = {
     position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', mt: '5px', whiteSpace: 'nowrap',
-    fontSize: 12.5, fontWeight: 600, lineHeight: 1.3, color: palette.text.secondary,
+    fontSize: 12.5, fontWeight: weight.heading, lineHeight: 1.3, color: palette.text.secondary,
     [media.narrow]: { fontSize: 12 },
     [media.tight]: { mt: '3px', fontSize: 12 },
   } as const;

@@ -4,7 +4,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import StatusRow from './StatusRow.tsx';
 import { ServerStatusKey, ServerStatus, StatusInfo, Status } from '@api/serverStatusSchema.ts';
 import { needsAttention } from './statusMeta';
-import { sx } from '@design/tokens';
+import { sx, weight } from '@design/tokens';
 
 const STATUS_ORDER: Record<Status, number> = {
   failed: 0, retrying: 1, restarting: 1, not_started: 2, waiting_for_data: 3, started: 4, healthy: 5,
@@ -50,7 +50,7 @@ export default function GroupCard({ label, keys, data, attentionKeys = [] }: Gro
       slotProps={ { transition: { unmountOnExit: true }, heading: { component: 'h2' } } }
     >
       <AccordionSummary expandIcon={ <ExpandMoreIcon/> }>
-        <Typography sx={ { fontSize: 16, fontWeight: 500 } }>
+        <Typography sx={ { fontSize: 16, fontWeight: weight.medium } }>
           { label } · { counts }
         </Typography>
       </AccordionSummary>

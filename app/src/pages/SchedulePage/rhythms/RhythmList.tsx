@@ -2,7 +2,7 @@ import { Box, Button, ButtonBase, Stack, Typography } from '@mui/material';
 import Add from '@mui/icons-material/Add';
 import ChevronRight from '@mui/icons-material/ChevronRight';
 import type { SideRhythms } from '@api/rhythmsSchema';
-import { palette, sx as tokens } from '@design/tokens';
+import { palette, sx as tokens, weight } from '@design/tokens';
 import { describeUsage, MAX_RHYTHMS_PER_SIDE, rhythmDetail, rhythmUsage } from './rhythmsModel';
 
 type Props = {
@@ -31,7 +31,7 @@ export default function RhythmList({ sideData, today, disabled, onOpen, onNew, o
           sx={ { ...tokens.glassCard, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, textAlign: 'left',
             '&.Mui-focusVisible': { outline: `2px solid ${palette.accent}`, outlineOffset: 2 } } }>
           <Box sx={ { minWidth: 0 } }>
-            <Typography sx={ { fontSize: 16, fontWeight: 600, overflowWrap: 'anywhere' } }><bdi>{ rhythm.name }</bdi></Typography>
+            <Typography sx={ { fontSize: 16, fontWeight: weight.heading, overflowWrap: 'anywhere' } }><bdi>{ rhythm.name }</bdi></Typography>
             { detail !== rhythm.name && <Typography variant="body2" color="text.secondary">{ detail }</Typography> }
             <Typography variant="caption" color="text.secondary" sx={ { display: 'block' } }>
               { describeUsage(usage) }

@@ -1,4 +1,4 @@
-import { media, palette } from '@design/tokens';
+import { media, palette, weight } from '@design/tokens';
 
 export type PillKind = 'off' | 'on';
 
@@ -15,7 +15,7 @@ export function powerPillSx(kind: PillKind) {
     minHeight: 54,
     borderRadius: '27px',
     fontSize: 17,
-    fontWeight: 600,
+    fontWeight: weight.heading,
     letterSpacing: '-0.005em',
     textTransform: 'none',
     ...look,

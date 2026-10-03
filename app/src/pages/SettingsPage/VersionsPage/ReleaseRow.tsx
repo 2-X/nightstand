@@ -12,7 +12,7 @@ import { summary } from '@api/releaseSummary.ts';
 import { downgradeWarnings } from './downgradeWarnings';
 import InUseConfirm from '../../../components/InUseConfirm';
 import RhythmsLeaveNote from './RhythmsLeaveNote';
-import { palette } from '@design/tokens';
+import { palette, weight } from '@design/tokens';
 
 type Props = {
   release: Release;
@@ -44,7 +44,7 @@ export default function ReleaseRow({ release, runningVersion, body, offerReinsta
   return (
     <Box sx={ { py: 1.5, borderBottom: `1px solid ${palette.border.subtle}` } }>
       <Box sx={ { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, mb: 0 } }>
-        <Typography sx={ { fontWeight: 600 } }>v{ release.version }</Typography>
+        <Typography sx={ { fontWeight: weight.heading } }>v{ release.version }</Typography>
         <Typography variant="caption" color="text.secondary">{ release.date }</Typography>
         <Chip label={ release.channel === 'beta' ? 'Beta' : 'Stable' } size="small" variant="outlined"/>
         { isRunning && <Chip label="Running" size="small" color="success"/> }

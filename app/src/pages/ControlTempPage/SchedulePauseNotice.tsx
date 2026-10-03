@@ -4,7 +4,7 @@ import { Alert, Box, Button, Typography } from '@mui/material';
 import { postSettings, useSettings } from '@api/settings.ts';
 import { isSchedulePaused, pauseEndsAt } from '@api/schedulePause.ts';
 import { serverMessage } from '@lib/requestError';
-import { sx as shared } from '@design/tokens';
+import { sx as shared, weight } from '@design/tokens';
 import { useAppStore } from '@state/appStore.tsx';
 import { formatPauseEnd } from './pauseTimes';
 
@@ -53,7 +53,7 @@ export default function SchedulePauseNotice({ note, detail, framed = false, onRe
         width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5,
         ...(framed ? { p: 2, border: 1, borderColor: 'divider', borderRadius: 1 } : {}),
       } }>
-      <Typography variant="body2" fontWeight={ 600 }>{ title }</Typography>
+      <Typography variant="body2" fontWeight={ weight.heading }>{ title }</Typography>
       { detail && <Typography variant="body2" color="text.secondary">{ detail }</Typography> }
       { note && <Typography variant="caption" color="text.secondary">{ note }</Typography> }
       { error && <Alert severity="error" sx={ { width: '100%' } }>{ error }</Alert> }

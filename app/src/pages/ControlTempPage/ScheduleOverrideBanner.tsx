@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useSettings, postSettings } from '@api/settings.ts';
 import { isSchedulePaused } from '@api/schedulePause.ts';
 import { useAppStore } from '@state/appStore.tsx';
+import { weight } from '@design/tokens';
 
 function formatRemaining(expiresAt: string): string {
   const diffMs = moment(expiresAt).diff(moment());
@@ -70,7 +71,7 @@ export default function ScheduleOverrideBanner() {
     >
       <Box display="flex" alignItems="center" justifyContent="space-between" gap={ 2 }>
         <Box>
-          <Typography variant="body2" fontWeight={ 600 }>
+          <Typography variant="body2" fontWeight={ weight.heading }>
             Schedule paused
           </Typography>
           <Typography variant="caption" color="text.secondary">

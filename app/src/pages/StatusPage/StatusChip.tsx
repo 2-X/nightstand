@@ -7,6 +7,7 @@ import InfoRoundedIcon from '@mui/icons-material/InfoRounded';
 import SensorsRoundedIcon from '@mui/icons-material/SensorsRounded';
 import { Chip } from '@mui/material';
 import { StatusInfo, Status } from '@api/serverStatusSchema.ts';
+import { weight } from '@design/tokens';
 
 
 const statusMeta: Record<
@@ -58,7 +59,7 @@ export default function StatusChip({ info, optional = false }: { info: StatusInf
       color={ meta.color }
       variant={ meta.color === 'default' ? 'outlined' : 'filled' }
       size="small"
-      sx={ { fontWeight: 600, ml: 'auto' } }
+      sx={ { fontWeight: weight.heading, ml: 'auto' } }
     />
   );
 }

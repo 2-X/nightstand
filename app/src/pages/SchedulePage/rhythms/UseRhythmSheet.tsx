@@ -3,7 +3,7 @@ import { Button, Dialog, DialogActions, DialogContent, DialogTitle, ToggleButton
 import Check from '@mui/icons-material/Check';
 import type { DayOfWeek } from '@api/schedulesSchema';
 import { describeDays, WEEK_DAYS } from '@api/rhythmDays';
-import { palette } from '@design/tokens';
+import { palette, radius } from '@design/tokens';
 import { dayName } from './rhythmsModel';
 import { BOTTOM_SHEET } from './sheetStyles';
 
@@ -27,7 +27,7 @@ export default function UseRhythmSheet({ name, onUse, onClose }: Props) {
         value={ days }
         onChange={ (_event, next: DayOfWeek[]) => setDays(WEEK_DAYS.filter(day => next.includes(day))) }
         sx={ { flexWrap: 'wrap', gap: 0.5,
-          '& .MuiToggleButtonGroup-grouped': { border: 1, borderColor: 'divider', borderRadius: '12px !important', m: 0 },
+          '& .MuiToggleButtonGroup-grouped': { border: 1, borderColor: 'divider', borderRadius: `${radius.base}px !important`, m: 0 },
           '& .MuiToggleButtonGroup-grouped.Mui-selected, & .MuiToggleButtonGroup-grouped.Mui-selected:hover': {
             bgcolor: palette.accent, borderColor: palette.accent, color: palette.bg.base } } }>
         { WEEK_DAYS.map(day => <ToggleButton

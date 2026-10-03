@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import PageContainer from '../PageContainer';
 import BedTabs from '@components/BedTabs';
 import PageHeader from '@components/PageHeader';
+import { weight } from '@design/tokens';
 
 interface BasePosition { head: number; feet: number }
 const presets = {
@@ -172,7 +173,7 @@ export default function BaseControlPage() {
                   onClick={ () => updatePosition({ ...position, [axis]: Math.max(0, position[axis] - 1) }) }>
                   <RemoveIcon />
                 </IconButton>
-                <Typography sx={ { minWidth: 40, fontSize: '1.5rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums' } }>
+                <Typography sx={ { minWidth: 40, fontSize: '1.5rem', fontWeight: weight.medium, fontVariantNumeric: 'tabular-nums' } }>
                   { position[axis] }°
                 </Typography>
                 <IconButton

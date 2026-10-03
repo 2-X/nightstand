@@ -12,6 +12,7 @@ import { AccordionExpanded } from './SchedulePage.types.ts';
 import { DayOfWeek } from '@api/schedulesSchema.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { useScheduleStore } from './scheduleStore';
+import { radius } from '@design/tokens';
 
 export const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -78,7 +79,7 @@ export default function ApplyToOtherDaysAccordion() {
               selected={ selectedDays[lowerCaseDay] }
               disabled={ isUpdating }
               onChange={ () => toggleSelectedDay(lowerCaseDay) }
-              sx={ { minWidth: 44, height: 44, px: 1, borderRadius: '999px' } }>{ day.slice(0, 3) }</ToggleButton>;
+              sx={ { minWidth: 44, height: 44, px: 1, borderRadius: radius.pill } }>{ day.slice(0, 3) }</ToggleButton>;
           }) }
         </Box>
       </AccordionDetails>
