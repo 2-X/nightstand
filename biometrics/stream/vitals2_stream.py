@@ -10,8 +10,10 @@ only from the records since the last gap in their stamps.
 
 Capacitance presence alone decides which side an estimate belongs to: a
 window counts only when its side was occupied, by a capacitance reading at
-most CAP_MAX_AGE_SECONDS old, at the window's end. Windows that overlap the
-pump running at high speed are dropped on both sides.
+most CAP_MAX_AGE_SECONDS old, for every record the window reads, with no
+reset of the side in between, so no window mixes one stay in bed with the
+empty bed or the occupant before it. Windows that overlap the pump running
+at high speed are dropped on both sides.
 """
 from __future__ import annotations
 
@@ -88,6 +90,19 @@ class _SideState:
         for epoch, occupied in reversed(self.status):
             if epoch < moment:
                 return occupied and moment - epoch <= record_seconds
+        return False
+
+    def occupied_throughout(self, start: float, end: float, record_seconds: float) -> bool:
+        """Whether unbroken records since this side last started over placed it in bed for all of [start, end)."""
+        reach, step = end, record_seconds
+        for epoch, occupied in reversed(self.status):
+            if epoch >= end:
+                continue
+            if not occupied or reach - epoch > step:
+                return False
+            if epoch <= start:
+                return True
+            reach, step = min(reach, epoch), MAX_RECORD_STEP * record_seconds
         return False
 
 
@@ -255,7 +270,7 @@ class Vitals2Stream:
             other = windows.get(other_side, {})
             for start, window in found.items():
                 window_end = start + hr.WINDOW_SECONDS
-                keep = (state.occupied_at(window_end, clock.record_seconds)
+                keep = (state.occupied_throughout(start, window_end, clock.record_seconds)
                         and not self.pump.high_during(start, window_end))
                 # Attribution only settles a heart both occupied sides hear.
                 if keep and start in other and self.sides[other_side].occupied_at(window_end, clock.record_seconds):
@@ -294,7 +309,8 @@ class Vitals2Stream:
             if not state.active(epoch):
                 continue
             centre = epoch - RESP_LAG_SECONDS
-            if not state.occupied_at(centre + resp.WINDOW_SECONDS / 2, clock.record_seconds):
+            analysed_end = epoch + clock.record_seconds - resp.EDGE_SECONDS
+            if not state.occupied_throughout(analysed_end - resp.WINDOW_SECONDS, analysed_end, clock.record_seconds):
                 continue
             cleaned, bad = mask_artifacts(buffer.get_signal(side, clock.records(RESP_SECONDS)))
             if hr.central(bad, clock.fs, resp.WINDOW_SECONDS).mean() > RESP_MAX_BAD_FRACTION:
@@ -307,7 +323,8 @@ class Vitals2Stream:
                      minute: int, bpm: float) -> Optional[HrvEstimate]:
         """Five-minute HRV for a minute the tracker reported, seeded with that minute's rate."""
         state = self.sides[side]
-        if available < hrv.WINDOW_SECONDS or not state.occupied_at(end, clock.record_seconds):
+        if available < hrv.WINDOW_SECONDS or not state.occupied_throughout(end - hrv.WINDOW_SECONDS, end,
+                                                                           clock.record_seconds):
             return None
         if self.pump.high_during(end - hrv.WINDOW_SECONDS, end):
             return None

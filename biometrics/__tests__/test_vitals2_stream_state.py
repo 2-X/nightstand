@@ -127,8 +127,11 @@ class Vitals2StreamStateTest(unittest.TestCase):
         self.assertTrue(all(row['timestamp'] < START + 400 for row in absent))
         self.assertIs(self.stream.sides['left'].tracker, tracker)
         self.assertIs(self.stream.sides['left'].template, template)
-        rows = drive(self.stream, self.buffer, self.left, 520, 120, True)
+        rows = drive(self.stream, self.buffer, self.left, 520, 400, True)
         self.assertTrue(rows)
+        # HRV comes back once five minutes in bed follow the return.
+        for row in rows:
+            self.assertEqual(row['rmssd'] is not None, row['written'] - START >= 520 + hrv.WINDOW_SECONDS, row)
         self.assertIsNotNone(rows[-1]['rmssd'])
 
     def test_the_absence_reset_matches_the_legacy_processors(self):
@@ -176,6 +179,80 @@ class Vitals2StreamStateTest(unittest.TestCase):
         self.assertLessEqual(abs(after[0]['heart_rate'] - 60), 1)
         self.assertIsNot(self.stream.sides['left'].tracker, tracker)
         self.assertEqual(self.stream.sides['left'].hr_windows, {})
+
+
+class OccupancyTest(unittest.TestCase):
+    """Every window is read from one stay in bed, never from before a swap or across an absence."""
+
+    def spy(self, stream):
+        """(side, window end, estimate) for each HRV the stream computes."""
+        seen = []
+        real = stream._variability
+
+        def variability(epoch, clock, buffer, side, available, end, minute, bpm):
+            out = real(epoch, clock, buffer, side, available, end, minute, bpm)
+            if out is not None and out.rmssd is not None:
+                seen.append((side, end - START, out))
+            return out
+        stream._variability = variability
+        return seen
+
+    def assert_windows_inside(self, recorder, seen, stays):
+        def inside(start, end):
+            return any(first <= start and end <= last for first, last in stays)
+        for window in recorder.windows():
+            if window.usable:
+                start = window.timestamp - START
+                self.assertTrue(inside(start, start + hr.WINDOW_SECONDS), window)
+        for breath in recorder.breaths():
+            centre = breath.timestamp - START
+            self.assertTrue(inside(centre - 30, centre + 30), breath)
+        for side, end, _ in seen:
+            if side == 'left':
+                self.assertTrue(inside(end - hrv.WINDOW_SECONDS, end), end)
+
+    def test_a_newcomer_after_a_swap_never_gets_the_previous_occupants_variability(self):
+        swap, seconds = 400, 1100
+        before = piezo(seconds, bpm=60, per_minute=15, jitter_ms=60, seed=11)
+        after = piezo(seconds, bpm=60, per_minute=15, jitter_ms=0, seed=12)
+        left = np.where(np.arange(seconds * 500) < swap * 500, before, after).astype(np.int32)
+        stream, buffer, recorder = Vitals2Stream(), Buffer(3, 30, 300), Recorder()
+        seen = self.spy(stream)
+        with unittest.mock.patch.object(vitals2_stream, 'minute_row', recorder):
+            drive(stream, buffer, left, 0, swap, True)
+            # As the stream processor does when presence reports a swap.
+            stream.flush(START + swap, LAYOUT)
+            stream.reset_side('left')
+            stream.reset_side('right')
+            drive(stream, buffer, left, swap, seconds - swap, True)
+        newcomer = [(end, estimate) for side, end, estimate in seen if side == 'left' and end > swap]
+        self.assertTrue(newcomer)
+        self.assertGreaterEqual(min(end for end, _ in newcomer), swap + hrv.WINDOW_SECONDS)
+        # The newcomer's beats are regular; the previous occupant's varied by 60 ms.
+        self.assertTrue(all(estimate.rmssd < 15 for _, estimate in newcomer), newcomer)
+        self.assertTrue(any(estimate.rmssd > 40 for side, end, estimate in seen if end <= swap))
+        self.assertTrue(recorder.breaths())
+        self.assert_windows_inside(recorder, seen, [(0, swap), (swap, seconds)])
+
+    def test_an_absence_with_the_partners_heart_on_the_empty_side_is_never_read(self):
+        away, back, seconds = 400, 520, 1200
+        mine = bcg(seconds, 60, jitter_ms=25, seed=13, modulation=0.3)
+        partner = bcg(seconds, 75, jitter_ms=25, seed=14, modulation=0.3)
+        in_bed = mine + breathing(seconds, 14) + noise(seconds, seed=15)
+        empty = 0.3 * partner + noise(seconds, seed=16)
+        t = np.arange(seconds * 500) / 500
+        left = np.round(np.where((t >= away) & (t < back), empty, in_bed) + 400_000).astype(np.int32)
+        right = np.round(partner + breathing(seconds, 17) + noise(seconds, seed=17) + 300_000).astype(np.int32)
+        stream, buffer, recorder = Vitals2Stream(), Buffer(3, 30, 300), Recorder()
+        seen = self.spy(stream)
+        with unittest.mock.patch.object(vitals2_stream, 'minute_row', recorder):
+            drive(stream, buffer, left, 0, seconds, lambda s: not away <= s < back, right=right, right_present=True)
+        returned = [(end, estimate) for side, end, estimate in seen if side == 'left' and end > away]
+        self.assertTrue(returned)
+        self.assertGreaterEqual(min(end for end, _ in returned), back + hrv.WINDOW_SECONDS)
+        # The sleeper's intervals vary by 25 ms; the partner's heart read as theirs gives about 100.
+        self.assertTrue(all(estimate.sdnn < 40 for _, estimate in returned), returned)
+        self.assert_windows_inside(recorder, seen, [(0, away), (back, seconds)])
 
 
 class ClockStepBackTest(unittest.TestCase):
@@ -238,13 +315,16 @@ class CapacitanceGateTest(unittest.TestCase):
         windows = recorder.windows()
         self.assertTrue(windows)
         for window in windows:
-            # The record covering the window's last second decides it.
-            last = window.timestamp - START + hr.WINDOW_SECONDS - 1
-            self.assertEqual(window.usable, last not in stale and last not in empty, window)
+            # Every record the window reads decides it.
+            first = window.timestamp - START
+            seconds = set(range(first, first + hr.WINDOW_SECONDS))
+            self.assertEqual(window.usable, not seconds & (set(stale) | set(empty)), window)
+        self.assertTrue(recorder.breaths())
         for breath in recorder.breaths():
-            last = breath.timestamp - START + 29
-            self.assertNotIn(last, stale)
-            self.assertNotIn(last, empty)
+            centre = breath.timestamp - START
+            for second in range(centre - 30, centre + 30):
+                self.assertNotIn(second, stale)
+                self.assertNotIn(second, empty)
 
     def test_each_window_reaches_the_minute_rule_with_its_movement(self):
         recorder = Recorder()
