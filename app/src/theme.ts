@@ -1,4 +1,6 @@
-import { alpha, createTheme, type Theme, type ThemeOptions, type TypographyVariantsOptions } from '@mui/material/styles';
+import {
+  alpha, createTheme, darken, getLuminance, lighten, type Theme, type ThemeOptions, type TypographyVariantsOptions,
+} from '@mui/material/styles';
 
 import { themeTokens } from '@design/tokens';
 import type { ThemeTokens } from '@design/themes/types';
@@ -150,6 +152,12 @@ const buildComponents = ({ palette: p, radius, type }: ThemeTokens) => {
   } satisfies ThemeOptions['components'];
 };
 
+// A filled button's label is set per look, not left to MUI's 3:1 pick. Its hover fill moves away from the label,
+// so the pair keeps its contrast.
+const filled = (main: string, label: string) => ({
+  main, contrastText: label, dark: getLuminance(label) < 0.5 ? lighten(main, 0.2) : darken(main, 0.3),
+});
+
 export const buildMuiTheme = (tokens: ThemeTokens) => {
   const p = tokens.palette;
   return createTheme({
@@ -157,11 +165,11 @@ export const buildMuiTheme = (tokens: ThemeTokens) => {
     palette: {
       mode: 'dark',
       divider: p.border.subtle,
-      primary: { main: p.accent },
-      secondary: { main: p.accent },
+      primary: filled(p.accent, p.text.onAccent),
+      secondary: filled(p.accent, p.text.onAccent),
       success: { main: p.status.ok },
       warning: { main: p.status.warn },
-      error: { main: p.status.error },
+      error: filled(p.status.error, p.text.onError),
       info: { main: p.status.info },
       action: { active: p.text.secondary, disabled: p.text.disabled, hover: p.bg.hover },
       text: { primary: p.text.primary, secondary: p.text.secondary, disabled: p.text.disabled },

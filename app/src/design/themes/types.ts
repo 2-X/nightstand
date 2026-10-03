@@ -11,7 +11,7 @@ export type TextCase = 'none' | 'uppercase';
 export interface ThemePalette {
   bg: { base: string; elevated: string; raised: string; selected: string; hover: string };
   border: { subtle: string; control: string; medium: string };
-  text: { primary: string; secondary: string; tertiary: string; disabled: string };
+  text: { primary: string; secondary: string; tertiary: string; disabled: string; onAccent: string; onError: string };
   /** Controls only: buttons, switches, tabs, focus, selection. Never a value. */
   accent: string;
   /** The neutral marker for values: the now notch, chart lines and bars. */

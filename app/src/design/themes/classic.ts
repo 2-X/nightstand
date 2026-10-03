@@ -8,7 +8,10 @@ export const classic: ThemeTokens = {
   palette: {
     bg: { base: '#010101', elevated: '#1E1E1E', raised: '#232323', selected: '#182129', hover: 'rgba(255,255,255,0.08)' },
     border: { subtle: 'rgba(255,255,255,0.12)', control: 'rgba(255,255,255,0.4)', medium: 'rgba(255,255,255,0.12)' },
-    text: { primary: '#FFFFFF', secondary: 'rgba(255,255,255,0.7)', tertiary: '#88878C', disabled: 'rgba(255,255,255,0.5)' },
+    text: {
+      primary: '#FFFFFF', secondary: 'rgba(255,255,255,0.7)', tertiary: '#88878C', disabled: 'rgba(255,255,255,0.5)',
+      onAccent: 'rgba(0,0,0,0.87)', onError: 'rgba(0,0,0,0.87)',
+    },
     accent: '#90CAF9',
     lamp: '#E8EAED',
     ember: '#182129',
@@ -20,7 +23,7 @@ export const classic: ThemeTokens = {
     step: { cool: '#6B6B6B', warm: '#6B6B6B', disabled: '#2E2E2E' },
     power: { offBg: '#010101', offText: '#90CAF9', offBorder: 'rgba(144,202,249,0.5)', nightBg: '#010101' },
     tile: { selectedBorder: 'rgba(144,202,249,0.7)' },
-    status: { ok: '#66BB6A', warn: '#FFA726', error: '#F44336', info: '#29B6F6' },
+    status: { ok: '#66BB6A', warn: '#FFA726', error: '#F6574C', info: '#29B6F6' },
     stage: { awake: '#E9E3D5', rem: '#C3B5FF', light: '#8E80F0', deep: '#6A58E6' },
     scale: STEPPED_SCALE,
   },

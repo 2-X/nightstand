@@ -1,9 +1,9 @@
-// Colour maths for the contrast tests. Colours are '#rrggbb' or 'rgba(r,g,b,a)' without spaces.
+// Colour maths for the contrast tests. Colours are '#rrggbb', or rgb() or rgba() as MUI or a browser writes them.
 type Rgb = [number, number, number];
 
 function parse(colour: string): { rgb: Rgb; alpha: number } {
-  const rgba = colour.match(/^rgba\((\d+),(\d+),(\d+),([\d.]+)\)$/);
-  if (rgba) return { rgb: [Number(rgba[1]), Number(rgba[2]), Number(rgba[3])], alpha: Number(rgba[4]) };
+  const rgba = colour.match(/^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)(?:[\s,/]+([\d.]+))?\s*\)$/);
+  if (rgba) return { rgb: [Number(rgba[1]), Number(rgba[2]), Number(rgba[3])], alpha: rgba[4] === undefined ? 1 : Number(rgba[4]) };
   const hex = colour.match(/^#([0-9a-f]{6})$/i);
   if (!hex) throw new Error(`Not a hex or rgba colour: ${colour}`);
   return { rgb: [0, 2, 4].map(i => parseInt(hex[1].slice(i, i + 2), 16)) as Rgb, alpha: 1 };
