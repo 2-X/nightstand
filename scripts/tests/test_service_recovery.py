@@ -113,16 +113,21 @@ MISSING_UNITS=""" + ('0' if existing else '1'))
         script = read('reset_db.sh').replace('/persistent/free-sleep-data', '$FIXTURE/data').replace('/persistent/free-sleep-database-backups', '$FIXTURE/backups')
         script = script.replace('read -p "Are you sure you want to continue? (y/N): " confirm', 'confirm=y')
         for failure in ('checkpoint', 'backup', 'sqlite_module', 'migration'):
-            with self.subTest(failure=failure):
-                result, log = self.run_shell(script, '''
+            for biometrics in ('on', 'off'):
+                with self.subTest(failure=failure, biometrics=biometrics):
+                    result, log = self.run_shell(script, '''
 mkdir -p "$FIXTURE/data"
 touch "$FIXTURE/data/free-sleep.db"
-python3() { [ "$FAILURE" != sqlite_module ] && [ "$2" != "$FAILURE" ]; }
+python3() {
+  if [ "$1" = -c ]; then [ "$BIOMETRICS" = on ]; return; fi
+  [ "$FAILURE" != sqlite_module ] && [ "$2" != "$FAILURE" ]
+}
 su() { [ "$FAILURE" != migration ]; }
-''' + '\nFAILURE=' + failure)
-                self.assertNotEqual(result.returncode, 0)
-                self.assertRegex(log, r'start free-sleep(?: free-sleep-stream)?\n')
-                self.assertIn('free-sleep-stream', log[log.index('start '):])
+''' + '\nFAILURE=' + failure + '\nBIOMETRICS=' + biometrics)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn('start free-sleep\n', log)
+                    # The stream follows the app's Biometrics switch.
+                    self.assertEqual('start free-sleep-stream\n' in log, biometrics == 'on')
 
     def test_sentry_install_is_pinned_and_uses_writable_venv_owner(self):
         script = read('revert-to-stock.sh')

@@ -5,6 +5,19 @@ print_yellow() {
   echo -e "\033[0;33m$1\033[0m"
 }
 
+SERVICES_DB=/persistent/free-sleep-data/lowdb/servicesDB.json
+
+# The stream starts again only while Biometrics is on in the app.
+biometrics_on() {
+  python3 -c 'import json, sys; sys.exit(0 if json.load(open(sys.argv[1]))["biometrics"]["enabled"] is True else 1)' "$SERVICES_DB" 2>/dev/null
+}
+start_services() {
+  systemctl start free-sleep
+  if biometrics_on; then
+    systemctl start free-sleep-stream
+  fi
+}
+
 
 print_yellow "WARNING: This will permanently delete all Nightstand biometric data!"
 print_yellow "After deleting, this will recreate the DB"
@@ -16,7 +29,7 @@ if [[ "$confirm" =~ ^[Yy]$ ]]; then
   restart_on_failure() {
     result=$?
     if [ "$result" -ne 0 ]; then
-      systemctl start free-sleep free-sleep-stream || true
+      start_services || true
     fi
   }
   trap restart_on_failure EXIT
@@ -37,7 +50,7 @@ if [[ "$confirm" =~ ^[Yy]$ ]]; then
 
   su - dac -c "cd /home/dac/free-sleep/server && /home/dac/.volta/bin/npx dotenv -e .env.pod -- npx prisma migrate deploy && exit"
 
-  systemctl start free-sleep free-sleep-stream
+  start_services
 else
     echo "Cancelled"
 fi
