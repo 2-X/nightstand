@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { shouldDisableBiometrics } from './biometrics.js';
+import { shouldDisableBiometrics, shouldEnableBiometrics } from './biometrics.js';
 
 // Regression test: toggling the Settings biometrics switch off used to only
 // write `biometrics.enabled: false` to the DB, leaving free-sleep-stream.service
@@ -22,5 +22,16 @@ describe('shouldDisableBiometrics', () => {
     // entirely: must not misread absence as "turn it off".
     assert.equal(shouldDisableBiometrics({}), false);
     assert.equal(shouldDisableBiometrics({ biometrics: {} }), false);
+  });
+});
+
+// Turning the switch on starts the stream, so a switch that reads on never
+// leaves the stream stopped or disabled.
+describe('shouldEnableBiometrics', () => {
+  it('is true only when the request explicitly turns biometrics on', () => {
+    assert.equal(shouldEnableBiometrics({ biometrics: { enabled: true } }), true);
+    assert.equal(shouldEnableBiometrics({ biometrics: { enabled: false } }), false);
+    assert.equal(shouldEnableBiometrics({}), false);
+    assert.equal(shouldEnableBiometrics({ biometrics: {} }), false);
   });
 });

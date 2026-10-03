@@ -22,16 +22,22 @@ const takeStart = async () => {
   return finish;
 };
 
-it('runs one disable for concurrent requests and reports it to each', async () => {
-  const requests = Array.from({ length: 5 }, () => triggerBiometricsDisable());
-  (await takeStart())();
+// Requests are not merged, so a later request never shares an earlier one's
+// result; they run one at a time instead.
+it('runs concurrent disables one after another', async () => {
+  const requests = Array.from({ length: 3 }, () => triggerBiometricsDisable());
+  for (let i = 1; i <= 3; i++) {
+    const finish = await takeStart();
+    assert.equal(starts.length, i, 'the next one starts only after this one finished');
+    finish();
+  }
   await Promise.all(requests);
-  assert.equal(starts.length, 1);
+  assert.equal(starts.length, 3);
 });
 
 it('runs again once the previous disable finished', async () => {
   const request = triggerBiometricsDisable();
   (await takeStart())();
   await request;
-  assert.equal(starts.length, 2);
+  assert.equal(starts.length, 4);
 });

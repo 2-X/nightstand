@@ -44,6 +44,8 @@ for (const [file, name] of [
 mock.module(new URL('../../jobs/biometrics.js', import.meta.url).href, { namedExports: {
   triggerBiometricsDisable: trigger,
   shouldDisableBiometrics: (body: { biometrics?: { enabled?: boolean } }) => body.biometrics?.enabled === false,
+  triggerBiometricsEnable: trigger,
+  shouldEnableBiometrics: (body: { biometrics?: { enabled?: boolean } }) => body.biometrics?.enabled === true,
 } });
 const handoffs: string[] = [];
 let handoffFails = false;

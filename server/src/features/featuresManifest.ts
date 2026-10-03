@@ -112,13 +112,20 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     version: '3.0.0',
     flag: 'services.biometrics.enabled',
     default: false,
-    touchpoints: ['server/src/db/servicesSchema.ts', 'server/src/jobs/biometrics.ts', 'app/src/pages/SettingsPage/FeaturesSection'],
+    touchpoints: [
+      'server/src/db/servicesSchema.ts', 'server/src/jobs/biometrics.ts', 'server/src/routes/services/services.ts',
+      'scripts/setup_services.sh', 'app/src/pages/SettingsPage/FeaturesSection',
+    ],
     depends_on: ['agent'],
     reversible: true,
-    tests: ['server/src/db/services.test.ts'],
+    tests: [
+      'server/src/db/services.test.ts', 'server/src/jobs/biometrics.test.ts', 'server/src/jobs/privilegedJobs.test.ts',
+      'server/src/jobs/biometricsSwitchOrder.test.ts',
+      'server/src/routes/services/servicesBiometricsSwitch.test.ts', 'server/src/setupServicesScript.test.ts',
+    ],
     upstream_offer: false,
     rationale: 'Real, existing, user-facing toggle, but with install-precondition and '
-      + 'systemd-stop side effects a plain settings.features boolean does not fit, so it '
+      + 'systemd start and stop side effects a plain settings.features boolean does not fit, so it '
       + 'stays in its own store rather than joining FeaturesSchema. One coarse feature, not '
       + 'many: the presence-accuracy fixes within it are baseline correctness, not '
       + 'separately toggleable.',

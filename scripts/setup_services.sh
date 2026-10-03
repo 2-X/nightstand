@@ -74,6 +74,8 @@ RULES=(
   "$USERNAME ALL=(root) NOPASSWD: /bin/systemctl start free-sleep-revert.service --no-block"
   "$USERNAME ALL=(ALL) NOPASSWD: /bin/sh /home/dac/free-sleep/scripts/enable_biometrics.sh"
   "$USERNAME ALL=(ALL) NOPASSWD: /bin/sh /home/dac/free-sleep/scripts/disable_biometrics.sh"
+  # The app's Biometrics switch turns the stream on with exactly this command.
+  "$USERNAME ALL=(root) NOPASSWD: /bin/systemctl enable --now free-sleep-stream.service"
 )
 
 # Build the new file beside the old one and check it before it goes live: a

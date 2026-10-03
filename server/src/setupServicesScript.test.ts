@@ -140,6 +140,25 @@ describe('setup_services.sh', () => {
     }
   });
 
+  it('grants exactly these rules, and only enable --now on the stream unit', () => {
+    // The Biometrics switch turns the stream on through one fixed command.
+    // A broader grant (a wildcard, another verb or unit) would let the server
+    // user control any service as root.
+    const box = sandbox();
+    box.run();
+    const rules = box.read(box.sudoers).trim().split('\n');
+    assert.deepEqual(rules, [
+      'dac ALL=(ALL) NOPASSWD: /sbin/reboot',
+      'dac ALL=(root) NOPASSWD: /bin/systemctl start free-sleep-update.service --no-block',
+      'dac ALL=(root) NOPASSWD: /bin/systemctl start free-sleep-rollback.service --no-block',
+      'dac ALL=(root) NOPASSWD: /bin/systemctl start free-sleep-revert.service --no-block',
+      'dac ALL=(ALL) NOPASSWD: /bin/sh /home/dac/free-sleep/scripts/enable_biometrics.sh',
+      'dac ALL=(ALL) NOPASSWD: /bin/sh /home/dac/free-sleep/scripts/disable_biometrics.sh',
+      'dac ALL=(root) NOPASSWD: /bin/systemctl enable --now free-sleep-stream.service',
+    ]);
+    assert.ok(rules.every((rule) => !/[*?[\]]/.test(rule.split('NOPASSWD:')[1])), 'no wildcards');
+  });
+
   it('keeps existing rules and adds nothing twice', () => {
     const existing = 'dac ALL=(ALL) NOPASSWD: /sbin/reboot\ndac ALL=(ALL) NOPASSWD: /usr/bin/something-else\n';
     const box = sandbox({ existingSudoers: existing });
