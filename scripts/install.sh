@@ -7,6 +7,8 @@ set -euo pipefail
 ZIP_FILE="free-sleep.zip"
 UNZIP_DIR="free-sleep-unzip"
 REPO_DIR="/home/dac/free-sleep"
+PREV_DIR="/home/dac/free-sleep-prev"
+FAILED_DIR="/home/dac/free-sleep-failed"
 SERVER_DIR="$REPO_DIR/server"
 USERNAME="dac"
 
@@ -126,8 +128,18 @@ fi
 # normal on a first install; a failed stop for an existing unit is fatal.
 # Restart services on any refusal after stopping writers, including set -e exits.
 STOPPED_SERVICES=()
+# Set while the previous install waits at PREV_DIR, until the new server starts.
+RESTORE_PREVIOUS=no
 restart_on_failure() {
   result=$?
+  if [ "$result" -ne 0 ] && [ "$RESTORE_PREVIOUS" = yes ]; then
+    rm -rf "$FAILED_DIR"
+    if { [ ! -d "$REPO_DIR" ] || mv "$REPO_DIR" "$FAILED_DIR"; } && mv "$PREV_DIR" "$REPO_DIR"; then
+      echo "The install did not finish, so the previous install was put back. The new files are in $FAILED_DIR."
+    else
+      echo "WARNING: the previous install could not be put back. It is in $PREV_DIR."
+    fi
+  fi
   if [ "$result" -ne 0 ] && [ "${#STOPPED_SERVICES[@]}" -gt 0 ]; then
     for stopped_service in "${STOPPED_SERVICES[@]}"; do
       systemctl start "$stopped_service" || true
@@ -156,7 +168,13 @@ if [ -f "$SRC" ]; then
   echo "Database backup saved to $DEST"
   bash "$SRC_DIR/scripts/prune_db_snapshots.sh" /persistent/free-sleep-database-backups "$DEST" || true
 fi
-rm -rf "$REPO_DIR"
+# The previous install is kept until the new server starts, and becomes the
+# rollback slot after that.
+rm -rf "$PREV_DIR"
+if [ -d "$REPO_DIR" ]; then
+  mv "$REPO_DIR" "$PREV_DIR"
+  RESTORE_PREVIOUS=yes
+fi
 mv "$SRC_DIR" "$REPO_DIR"
 rm -rf "$UNZIP_DIR"
 
@@ -347,6 +365,7 @@ bash "$REPO_DIR/scripts/setup_resource_limits.sh" || echo "WARNING: failed to in
 
 echo "Starting free-sleep.service..."
 systemctl start free-sleep.service
+RESTORE_PREVIOUS=no
 
 echo "Checking free-sleep service status..."
 systemctl status free-sleep.service --no-pager || true

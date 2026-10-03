@@ -72,7 +72,7 @@ restore_switch_data_or_fail "restore failed"
 
     def test_install_backup_refusals_restart_stopped_services(self):
         script = read('install.sh')
-        block = section(script, '# Stop both database writers', 'rm -rf "$REPO_DIR"')
+        block = section(script, '# Stop both database writers', '# The previous install is kept')
         for failure in ('checkpoint', 'backup', 'sqlite_module'):
             with self.subTest(failure=failure):
                 setup = '''

@@ -241,7 +241,7 @@ describe('install.sh release choice', () => {
     assert.ok(choose >= 0 && choose < download, 'choose before the download');
     assert.ok(download < check, 'check after the download');
     assert.ok(check < stop, 'check before any service stops');
-    assert.ok(check < src.indexOf('rm -rf "$REPO_DIR"'), 'check before the live tree is replaced');
+    assert.ok(check < src.indexOf('mv "$REPO_DIR" "$PREV_DIR"'), 'check before the live tree is replaced');
   });
 });
 
@@ -353,5 +353,72 @@ describe('install.sh saved channel', () => {
     const save = src.indexOf('# Save the update channel');
     assert.ok(save > src.indexOf('for entry in "${FILES_TO_MOVE[@]}"'), 'after the old settings move');
     assert.ok(save < src.indexOf('chown -R "$USERNAME":"$USERNAME" /persistent/free-sleep-data/'), 'before the chown');
+  });
+});
+
+// From stopping the services to the step after Node: the stretch where a
+// reinstall replaces the live tree and can still fail.
+function replaceTree({ live = true, nodeFails = true } = {}) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-reinstall-'));
+  const tree = (name: string, version: string) => {
+    mkdirSync(path.join(dir, name, 'scripts'), { recursive: true });
+    writeFileSync(path.join(dir, name, 'version'), version);
+  };
+  if (live) tree('free-sleep', 'old');
+  tree('unzip/nightstand', 'new');
+  writeFileSync(path.join(dir, 'unzip/nightstand/scripts/ensure-node.sh'), nodeFails ? 'exit 1\n' : 'exit 0\n');
+  const result = spawnSync('bash', ['-c', `set -euo pipefail
+REPO_DIR="$FIXTURE/free-sleep"; PREV_DIR="$FIXTURE/free-sleep-prev"; FAILED_DIR="$FIXTURE/free-sleep-failed"
+UNZIP_DIR="$FIXTURE/unzip"; SRC_DIR="$UNZIP_DIR/nightstand"; USERNAME=dac
+systemctl() {
+  case "$1" in
+    is-active) return 3;;
+    cat) [ "$2" = free-sleep ];;
+    *) echo "$* $(cat "$REPO_DIR/version" 2>/dev/null)" >> "$FIXTURE/services";;
+  esac
+}
+chown() { :; }
+${between('# Stop both database writers', '# Setup /persistent/free-sleep-data')}
+echo continued`], { env: envWith({ FIXTURE: dir }), encoding: 'utf8' });
+  const read = (name: string) => (existsSync(path.join(dir, name)) ? readFileSync(path.join(dir, name), 'utf8') : '');
+  const output = {
+    ...result, live: read('free-sleep/version'), previous: read('free-sleep-prev/version'),
+    failed: read('free-sleep-failed/version'), services: read('services'),
+  };
+  rmSync(dir, { recursive: true, force: true });
+  return output;
+}
+
+describe('install.sh over an existing install', () => {
+  it('puts the previous install back and starts it when a later step fails', () => {
+    const result = replaceTree();
+    assert.notEqual(result.status, 0);
+    assert.doesNotMatch(result.stdout, /continued/);
+    assert.equal(result.live, 'old');
+    assert.equal(result.failed, 'new');
+    assert.match(result.services, /^stop free-sleep old$/m);
+    assert.match(result.services, /^start free-sleep old$/m);
+  });
+
+  it('keeps the previous install aside while the new one is set up', () => {
+    const result = replaceTree({ nodeFails: false });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /continued/);
+    assert.equal(result.live, 'new');
+    assert.equal(result.previous, 'old');
+  });
+
+  it('a failed first install has nothing to put back', () => {
+    const result = replaceTree({ live: false });
+    assert.notEqual(result.status, 0);
+    assert.equal(result.live, 'new');
+    assert.equal(result.previous, '');
+  });
+
+  it('gives up the previous install only once the new server has started', () => {
+    const started = src.indexOf('systemctl start free-sleep.service');
+    assert.ok(started > 0);
+    assert.ok(src.indexOf('RESTORE_PREVIOUS=no', started) > started);
+    assert.equal(src.slice(src.indexOf('RESTORE_PREVIOUS=yes')).indexOf('RESTORE_PREVIOUS=no') > 0, true);
   });
 });
