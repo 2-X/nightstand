@@ -586,7 +586,7 @@ class TestPumpSpeedFeed(StreamHelpersTestCase):
         frame = pump_frame()
         self.follow(frame)
         self.assertTrue(self.pump.fed)
-        self.assertTrue(self.pump.high_during(frame['ts'] - 1, frame['ts']))
+        self.assertEqual(self.pump.speed_during(frame['ts'], frame['ts'] + 1), 'fast')
         self.health.assert_called_once_with(frame)
 
     def test_a_frame_the_pump_speed_cannot_read_still_reaches_pump_health(self):
@@ -636,7 +636,7 @@ class TestPumpSpeedFeed(StreamHelpersTestCase):
                 unittest.mock.patch.object(stream, 'update_health'):
             with self.assertRaises(Stop):
                 asyncio.run(stream.watch_nats_stream())
-        self.assertTrue(self.pump.high_during(frame['ts'] - 1, frame['ts']))
+        self.assertEqual(self.pump.speed_during(frame['ts'], frame['ts'] + 1), 'fast')
         self.health.assert_called_once_with(frame)
         message.ack.assert_awaited_once()
 

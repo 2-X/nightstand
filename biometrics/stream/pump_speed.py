@@ -1,4 +1,4 @@
-"""When the pump ran at high speed, from frzHealth frames.
+"""How fast the pump ran, from frzHealth frames.
 
 Kept apart from the newer vitals estimators so the stream can feed it with
 those estimators never loaded.
@@ -6,7 +6,7 @@ those estimators never loaded.
 from __future__ import annotations
 
 import math
-from typing import Optional, Tuple
+from typing import Tuple
 
 from service_health import frz_record_epoch
 
@@ -14,14 +14,14 @@ SIDES = ('left', 'right')
 # Our frzHealth frames show about 1900 to 2000 rpm while circulating and
 # about 3000 during the daily priming run.
 PUMP_HIGH_RPM = 2500
-# frzHealth frames come about every 10 s; the speed may change anywhere between two.
-PUMP_FRAME_SECONDS = 10
 PUMP_HISTORY_SECONDS = 900
-# A fast run with no frame for this long is unknown, not fast.
+# frzHealth frames come about every 10 s. A frame says the speed for this
+# long after it; past that the speed is unknown.
 PUMP_STALE_SECONDS = 30
 # A frame this much older than the newest is a clock change, not a replay: the history starts over.
 # The same size as the newer vitals' own limit.
 CLOCK_STEP_BACK_SECONDS = 600
+SLOW, FAST, UNKNOWN = 'slow', 'fast', 'unknown'
 
 
 def _number(value) -> bool:
@@ -29,47 +29,53 @@ def _number(value) -> bool:
 
 
 class PumpSpeed:
-    """Spans of time the pump ran at high speed, from frzHealth frames.
+    """The pump's speed over time, from frzHealth frames: slow, fast, or unknown.
 
-    note() runs on the reader thread and high_during() on the processing
-    thread, so the state is replaced in one assignment, never edited.
+    note() runs on the reader thread and speed_during() on the processing
+    thread, so the frames are replaced in one assignment, never edited.
     """
 
     def __init__(self):
-        # ((start, end) spans with end None while the newest frame says high
-        # speed, stamp of the newest frame with a reading).
-        self._state: Tuple[Tuple[Tuple[float, Optional[float]], ...], Optional[float]] = ((), None)
+        # (stamp, fast) of each frame with a reading, oldest first.
+        self._frames: Tuple[Tuple[float, bool], ...] = ()
 
     @property
     def fed(self) -> bool:
-        return self._state[1] is not None
+        return bool(self._frames)
 
     def note(self, frame: dict) -> None:
         ts = frz_record_epoch(frame) if isinstance(frame, dict) else None
-        spans, last_ts = self._state
+        frames = self._frames
         if ts is None or not math.isfinite(ts):
             return
-        if last_ts is not None and ts < last_ts:
-            if last_ts - ts <= CLOCK_STEP_BACK_SECONDS:
+        if frames and ts < frames[-1][0]:
+            if frames[-1][0] - ts <= CLOCK_STEP_BACK_SECONDS:
                 return
-            spans, last_ts = (), None
+            frames = ()
         rpms = [((frame.get(side) or {}).get('pump') or {}).get('rpm') for side in SIDES]
         rpms = [rpm for rpm in rpms if _number(rpm)]
         if not rpms:
             return
-        spans = [span for span in spans if span[1] is None or span[1] >= ts - PUMP_HISTORY_SECONDS]
-        running = bool(spans) and spans[-1][1] is None
-        if running and ts - last_ts > PUMP_STALE_SECONDS:
-            spans[-1] = (spans[-1][0], last_ts + PUMP_STALE_SECONDS)
-            running = False
-        if max(rpms) >= PUMP_HIGH_RPM:
-            if not running:
-                spans.append((ts - PUMP_FRAME_SECONDS, None))
-        elif running:
-            spans[-1] = (spans[-1][0], ts)
-        self._state = (tuple(spans), ts)
+        kept = tuple(item for item in frames if item[0] >= ts - PUMP_HISTORY_SECONDS)
+        self._frames = kept + ((ts, max(rpms) >= PUMP_HIGH_RPM),)
 
-    def high_during(self, start: float, end: float) -> bool:
-        spans, last_ts = self._state
-        return any(begin < end and (last_ts + PUMP_STALE_SECONDS if stop is None else stop) > start
-                   for begin, stop in spans)
+    def speed_during(self, start: float, end: float) -> str:
+        """FAST if the pump may have run fast in (start, end), SLOW if frames show it slow throughout, else UNKNOWN.
+
+        The speed may change anywhere between two frames, so the time between
+        them is fast if either frame is. A frame holds for PUMP_STALE_SECONDS;
+        before the first frame and after one goes stale nothing is known.
+        """
+        frames = self._frames
+        if not frames:
+            return UNKNOWN
+        unknown = start < frames[0][0]
+        for (ts, fast), (following, next_fast) in zip(frames, frames[1:]):
+            if ts < end and following > start:
+                if fast or next_fast:
+                    return FAST
+                unknown |= following - ts > PUMP_STALE_SECONDS and min(following, end) > ts + PUMP_STALE_SECONDS
+        newest, fast = frames[-1]
+        if fast and newest < end and start < newest + PUMP_STALE_SECONDS:
+            return FAST
+        return UNKNOWN if unknown or end > newest + PUMP_STALE_SECONDS else SLOW

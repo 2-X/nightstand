@@ -12,8 +12,9 @@ Capacitance presence alone decides which side an estimate belongs to: a
 window counts only when its side was occupied, by a capacitance reading at
 most CAP_MAX_AGE_SECONDS old, for every record the window reads, with no
 reset of the side in between, so no window mixes one stay in bed with the
-empty bed or the occupant before it. Windows that overlap the pump running
-at high speed are dropped on both sides.
+empty bed or the occupant before it. Windows are dropped on both sides
+unless the pump's frames show it slow throughout; a stream that never had a
+pump frame keeps them and says so once.
 """
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ from typing import Deque, Dict, List, Optional, Set, Tuple
 
 from get_logger import get_logger
 from presence.piezo import PiezoLayout
-from pump_speed import PUMP_HIGH_RPM, PUMP_STALE_SECONDS, PumpSpeed  # noqa: F401  (re-exported)
+from pump_speed import PUMP_HIGH_RPM, PUMP_STALE_SECONDS, SLOW, UNKNOWN, PumpSpeed  # noqa: F401  (re-exported)
 from vitals2 import hr, hrv, resp
 from vitals2.artifacts import mask_artifacts
 from vitals2.attribution import attribute
@@ -148,6 +149,7 @@ class Vitals2Stream:
         self.last_resp: Optional[int] = None
         self._warned_no_cap = False
         self._warned_no_pump = False
+        self._warned_pump_unknown = False
         self.first_epoch: Optional[int] = None
         self.last_epoch: Optional[int] = None
 
@@ -271,7 +273,7 @@ class Vitals2Stream:
             for start, window in found.items():
                 window_end = start + hr.WINDOW_SECONDS
                 keep = (state.occupied_throughout(start, window_end, clock.record_seconds)
-                        and not self.pump.high_during(start, window_end))
+                        and self._pump_slow(start, window_end))
                 # Attribution only settles a heart both occupied sides hear.
                 if keep and start in other and self.sides[other_side].occupied_at(window_end, clock.record_seconds):
                     pair = attribute(window, other[start]) if side == 'left' else attribute(other[start], window)
@@ -279,6 +281,17 @@ class Vitals2Stream:
                 estimate = WindowEstimate(start, _finite(window.bpm), _finite(window.quality) or 0.0, usable=keep,
                                           motion=window.motion)
                 state.hr_windows.setdefault(_minute(start), []).append(estimate)
+
+    def _pump_slow(self, start: float, end: float) -> bool:
+        """Whether the pump ran slow throughout; True for a stream that never had a pump frame."""
+        if not self.pump.fed:
+            return True
+        speed = self.pump.speed_during(start, end)
+        if speed == UNKNOWN and not self._warned_pump_unknown:
+            self._warned_pump_unknown = True
+            logger.warning(f'Newer vitals write nothing while the pump speed is unknown: no frzHealth frame '
+                           f'for more than {PUMP_STALE_SECONDS} s')
+        return speed == SLOW
 
     def _close_minutes(self, side: str, epoch: int, clock: _Clock, buffer, available: float, end: float,
                        final_before: Optional[int]) -> List[dict]:
@@ -290,7 +303,7 @@ class Vitals2Stream:
         for minute in sorted(m for m in state.hr_windows if m + 60 <= final_before):
             windows = state.hr_windows.pop(minute)
             breaths = [breath for breath in state.resp_windows.pop(minute, [])
-                       if not self.pump.high_during(breath.timestamp - half, breath.timestamp + half)]
+                       if self._pump_slow(breath.timestamp - half, breath.timestamp + half)]
             row = minute_row(side, minute, windows, breaths, None)
             if row is None:
                 continue
@@ -326,7 +339,7 @@ class Vitals2Stream:
         if available < hrv.WINDOW_SECONDS or not state.occupied_throughout(end - hrv.WINDOW_SECONDS, end,
                                                                            clock.record_seconds):
             return None
-        if self.pump.high_during(end - hrv.WINDOW_SECONDS, end):
+        if not self._pump_slow(end - hrv.WINDOW_SECONDS, end):
             return None
         cleaned, bad = mask_artifacts(buffer.get_signal(side, clock.records(hrv.WINDOW_SECONDS)))
         if state.template is None or state.template.is_stale(epoch):

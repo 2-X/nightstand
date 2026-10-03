@@ -12,6 +12,7 @@ import stream_fixture
 from buffer import Buffer
 from presence.piezo import PiezoLayout
 import vitals2_stream
+from pump_speed import FAST, SLOW, UNKNOWN
 from vitals2_stream import (ABSENCE_RESET_SECONDS, BATCH_PHASE_SECONDS, CAP_MAX_AGE_SECONDS, PUMP_HIGH_RPM,
                             PUMP_STALE_SECONDS, PumpSpeed, Vitals2Stream)
 from vitals2 import hr, hrv
@@ -431,29 +432,45 @@ class RecordStepTest(unittest.TestCase):
 
 
 class PumpTest(unittest.TestCase):
-    def test_pump_speed_spans_from_frames(self):
+    def test_pump_speed_from_frames(self):
         pump = PumpSpeed()
-        self.assertFalse(pump.high_during(0, 10_000))
+        self.assertEqual(pump.speed_during(0, 10_000), UNKNOWN)
         pump.note(_frame(100, 1950))
         pump.note(_frame(110, PUMP_HIGH_RPM))
-        # Fast until a slower frame, or until frames stop coming for a while.
-        self.assertTrue(pump.high_during(110 + PUMP_STALE_SECONDS - 1, 5_010))
-        self.assertFalse(pump.high_during(110 + PUMP_STALE_SECONDS, 5_010))
+        # Fast while the newest frame says so and is fresh, then unknown, never slow.
+        self.assertEqual(pump.speed_during(110, 110 + PUMP_STALE_SECONDS), FAST)
+        self.assertEqual(pump.speed_during(110 + PUMP_STALE_SECONDS, 5_010), UNKNOWN)
         pump.note(_frame(120, 3000))
         pump.note(_frame(130, 1900))
-        self.assertFalse(pump.high_during(80, 100))
-        self.assertTrue(pump.high_during(95, 101))
-        self.assertTrue(pump.high_during(125, 135))
-        self.assertFalse(pump.high_during(130, 200))
+        # Nothing is known before the first frame.
+        self.assertEqual(pump.speed_during(80, 100), UNKNOWN)
+        self.assertEqual(pump.speed_during(95, 101), FAST)
+        self.assertEqual(pump.speed_during(125, 135), FAST)
+        self.assertEqual(pump.speed_during(130, 130 + PUMP_STALE_SECONDS), SLOW)
+        self.assertEqual(pump.speed_during(130, 131 + PUMP_STALE_SECONDS), UNKNOWN)
         # A replayed older frame changes nothing; a frame without readings neither.
         pump.note(_frame(115, 3000))
         pump.note({'type': 'frzHealth', 'ts': 140, 'left': {}, 'right': {}})
         pump.note({'type': 'frzHealth', 'ts': 'soon', 'left': {'pump': {'rpm': 3000}}})
-        self.assertFalse(pump.high_during(130, 200))
+        self.assertEqual(pump.speed_during(130, 160), SLOW)
+        self.assertEqual(pump.speed_during(130, 170), UNKNOWN)
         one_side = _frame(150, 1950)
         one_side['right']['pump']['rpm'] = 3100
         pump.note(one_side)
-        self.assertTrue(pump.high_during(145, 150))
+        self.assertEqual(pump.speed_during(145, 150), FAST)
+
+    def test_a_feed_that_stops_is_unknown_until_frames_return(self):
+        pump = PumpSpeed()
+        for stamp in range(0, 110, 10):
+            pump.note(_frame(stamp, 1950))
+        self.assertEqual(pump.speed_during(0, 100 + PUMP_STALE_SECONDS), SLOW)
+        self.assertEqual(pump.speed_during(0, 101 + PUMP_STALE_SECONDS), UNKNOWN)
+        for stamp in range(300, 400, 10):
+            pump.note(_frame(stamp, 1950))
+        self.assertEqual(pump.speed_during(150, 160), UNKNOWN)
+        self.assertEqual(pump.speed_during(0, 400), UNKNOWN)
+        self.assertEqual(pump.speed_during(300, 390), SLOW)
+        self.assertTrue(pump.fed)
 
     def test_a_long_step_back_of_the_clock_starts_the_history_over(self):
         pump = PumpSpeed()
@@ -465,14 +482,14 @@ class PumpTest(unittest.TestCase):
         for stamp in range(1000 - 3600 + 30, 1000 - 3600 + 60, 10):
             pump.note(_frame(stamp, 3000))
         self.assertTrue(pump.fed)
-        self.assertTrue(pump.high_during(1000 - 3600 + 40, 1000 - 3600 + 60))
-        self.assertFalse(pump.high_during(1000 - 3600, 1000 - 3600 + 20))
+        self.assertEqual(pump.speed_during(1000 - 3600 + 40, 1000 - 3600 + 60), FAST)
+        self.assertEqual(pump.speed_during(1000 - 3600, 1000 - 3600 + 20), SLOW)
 
     def test_a_small_step_back_is_still_a_replayed_frame(self):
         pump = PumpSpeed()
         pump.note(_frame(1000, 1900))
         pump.note(_frame(1000 - vitals2_stream.CLOCK_STEP_BACK_SECONDS, 3000))
-        self.assertFalse(pump.high_during(0, 5_000))
+        self.assertEqual(pump.speed_during(1000, 1000 + PUMP_STALE_SECONDS), SLOW)
 
     def test_the_pump_and_the_stream_step_back_at_the_same_size(self):
         import pump_speed
@@ -484,8 +501,9 @@ class PumpTest(unittest.TestCase):
         # 1_790_600_400 is 2026-09-28 13:00:00 UTC.
         fast['ts'] = '2026-09-28 13:00:00'
         pump.note(fast)
-        self.assertTrue(pump.high_during(START - 5, START))
-        self.assertFalse(pump.high_during(START - 100, START - 20))
+        self.assertEqual(pump.speed_during(START, START + 5), FAST)
+        pump.note(dict(_frame(0, 1950), ts='2026-09-28 13:00:10'))
+        self.assertEqual(pump.speed_during(START + 10, START + 20), SLOW)
 
     def test_frame_stamps_are_read_by_the_public_service_health_reader(self):
         import pump_speed
@@ -502,10 +520,46 @@ class PumpTest(unittest.TestCase):
         self.assertTrue(rows)
         self.assertEqual(len([record for record in logs.records if 'pump' in record.getMessage()]), 1)
         fed = PumpSpeed()
-        fed.note(_frame(START, 1950))
         with unittest.mock.patch.object(vitals2_stream.logger, 'warning') as warning:
-            drive(Vitals2Stream(fed), Buffer(3, 30, 300), left, 0, 300, True)
+            drive(Vitals2Stream(fed), Buffer(3, 30, 300), left, 0, 300, True, pump=fed)
         self.assertFalse([call for call in warning.call_args_list if 'pump' in str(call)])
+
+    def test_one_fast_frame_and_then_silence_writes_nothing_and_says_so_once(self):
+        left = piezo(800, bpm=60, per_minute=15, jitter_ms=20, seed=4)
+        for rpm in (3000, 1950):
+            with self.subTest(rpm=rpm):
+                pump = PumpSpeed()
+                pump.note(_frame(START - 60, rpm))
+                with self.assertLogs(vitals2_stream.logger, 'WARNING') as logs:
+                    rows = drive(Vitals2Stream(pump), Buffer(3, 30, 300), left, 0, 480, True)
+                self.assertEqual(rows, [])
+                self.assertEqual(len([record for record in logs.records if 'pump' in record.getMessage()]), 1)
+
+    def test_a_fast_run_whose_frames_stop_is_dropped_until_a_slower_frame(self):
+        stop, resume, seconds = 300, 600, 1100
+        left = piezo(seconds, bpm=60, per_minute=15, jitter_ms=20, seed=4)
+        pump = PumpSpeed()
+        stream, buffer, recorder = Vitals2Stream(pump), Buffer(3, 30, 300), Recorder()
+        rows = []
+        with unittest.mock.patch.object(vitals2_stream, 'minute_row', recorder), \
+                unittest.mock.patch.object(vitals2_stream.logger, 'warning'):
+            for second in range(seconds):
+                if second % 10 == 0 and (second < stop or second >= resume):
+                    pump.note(_frame(START + second, 3000 if second < stop else 1950))
+                rows += drive(stream, buffer, left, second, 1, True)
+        windows = recorder.windows()
+        self.assertTrue(any(window.usable for window in windows))
+        for window in windows:
+            if window.usable:
+                self.assertGreaterEqual(window.timestamp - START, resume, window)
+        for breath in recorder.breaths():
+            self.assertGreaterEqual(breath.timestamp - START - 30, resume, breath)
+        self.assertTrue(rows)
+        for row in rows:
+            self.assertGreaterEqual(row['timestamp'] - START, resume)
+            if row['rmssd'] is not None:
+                self.assertGreaterEqual(row['written'] - START + 1 - hrv.WINDOW_SECONDS, resume)
+        self.assertTrue(any(row['rmssd'] is not None for row in rows))
 
     def test_windows_overlapping_a_fast_pump_are_dropped(self):
         left = piezo(800, bpm=60, per_minute=15, jitter_ms=20, seed=4)
