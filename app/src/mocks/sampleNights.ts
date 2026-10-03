@@ -18,7 +18,8 @@ export const DEMO_TIME_ZONE = 'America/Los_Angeles';
 
 const MINUTE_MS = 60_000;
 const NIGHTS = 3;
-const SAMPLE_STEP_SECONDS = 5 * 60;
+// One row a minute, as the Pod writes them.
+const SAMPLE_STEP_SECONDS = 60;
 
 export const mulberry32 = (seed: number): (() => number) => {
   let state = seed >>> 0;
@@ -89,9 +90,9 @@ export const createVitalsSamples = (startTime: string, endTime: string): VitalsS
   const samples: VitalsSample[] = [];
   for (let timestamp = startUnix; timestamp <= endUnix; timestamp += SAMPLE_STEP_SECONDS) {
     const awake = epochs.some(epoch => epoch.stage === 'awake' && timestamp >= epoch.startUnix && timestamp < epoch.endUnix);
-    heartRate = clamp(heartRate + (58 + (awake ? 5 : 0) - heartRate) * 0.04 + gaussian(rand) * 0.9, 46, 80);
-    hrv = clamp(hrv + (72 - hrv) * 0.05 + gaussian(rand) * 2, 30, 120);
-    breathing = clamp(breathing + (13.5 - breathing) * 0.08 + gaussian(rand) * 0.15, 10, 18);
+    heartRate = clamp(heartRate + (58 + (awake ? 5 : 0) - heartRate) * 0.008 + gaussian(rand) * 0.4, 46, 80);
+    hrv = clamp(hrv + (72 - hrv) * 0.01 + gaussian(rand) * 0.9, 30, 120);
+    breathing = clamp(breathing + (13.5 - breathing) * 0.016 + gaussian(rand) * 0.07, 10, 18);
     samples.push({
       timestamp,
       heartRate: Math.round(heartRate),

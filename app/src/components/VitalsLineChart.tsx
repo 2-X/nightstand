@@ -4,10 +4,10 @@ import { VitalsRecord } from '@api/vitals.ts';
 import { Box, Typography } from '@mui/material';
 import { palette } from '@design/tokens';
 import TimeSeriesChart, { TimeSeriesPoint } from '@design/TimeSeriesChart';
-import { vitalsRecordsToPoints, VitalsMetric as Metric } from '@lib/vitalsPoints.ts';
+import { splitAtGaps, vitalsRecordsToPoints, VitalsMetric as Metric } from '@lib/vitalsPoints.ts';
 type VitalsLineChartProps = {
   vitalsRecords?: VitalsRecord[];
-  points?: TimeSeriesPoint[];
+  points?: Point[];
   metric: Metric;
   /** Average of this metric over the 7 days leading up to the selected
    *  night, computed from the vitals-summary endpoint by the parent. */
@@ -17,26 +17,34 @@ type VitalsLineChartProps = {
   endTime?: string;
 };
 
-const METRIC_CONFIG: Record<Metric, { unit: string; targetRange?: [number, number] }> = {
-  heart_rate: { unit: 'bpm' },
-  hrv: { unit: 'ms' },
-  breathing_rate: { unit: 'breaths/min', targetRange: [12, 20] },
-  resp_rate: { unit: 'breaths/min', targetRange: [12, 20] },
+type Point = { timestamp: Date; value: number };
+
+const METRIC_UNITS: Record<Metric, string> = {
+  heart_rate: 'bpm',
+  hrv: 'ms',
+  breathing_rate: 'breaths/min',
+  resp_rate: 'breaths/min',
 };
 
 // Bucket-aggregate timestamped points: split into ~maxPoints contiguous
 // buckets and emit the mean of each bucket (using the bucket's middle
 // timestamp). Smoother trend than naive every-Nth-point decimation, since
 // it averages out jitter rather than just dropping in-between samples.
-function bucketAggregate(arr: TimeSeriesPoint[], maxPoints: number): TimeSeriesPoint[] {
-  if (arr.length <= maxPoints) return arr;
-  const bucketSize = Math.ceil(arr.length / maxPoints);
+// Each run between holes is bucketed on its own, and a null marks the hole.
+function bucketAggregate(arr: Point[], maxPoints: number): TimeSeriesPoint[] {
+  const bucketSize = Math.max(1, Math.ceil(arr.length / maxPoints));
   const out: TimeSeriesPoint[] = [];
-  for (let i = 0; i < arr.length; i += bucketSize) {
-    const slice = arr.slice(i, i + bucketSize);
-    const meanValue = slice.reduce((s, p) => s + p.value, 0) / slice.length;
-    const midIdx = Math.floor(slice.length / 2);
-    out.push({ timestamp: slice[midIdx].timestamp, value: meanValue });
+  for (const run of splitAtGaps(arr)) {
+    if (out.length) {
+      const last = out[out.length - 1].timestamp.getTime();
+      out.push({ timestamp: new Date((last + run[0].timestamp.getTime()) / 2), value: null });
+    }
+    for (let i = 0; i < run.length; i += bucketSize) {
+      const slice = run.slice(i, i + bucketSize);
+      const meanValue = slice.reduce((s, p) => s + p.value, 0) / slice.length;
+      const midIdx = Math.floor(slice.length / 2);
+      out.push({ timestamp: slice[midIdx].timestamp, value: meanValue });
+    }
   }
   return out;
 }
@@ -44,7 +52,7 @@ function bucketAggregate(arr: TimeSeriesPoint[], maxPoints: number): TimeSeriesP
 export default function VitalsLineChart({
   vitalsRecords, points: suppliedPoints, metric, sevenDayAvg, timeZone, startTime, endTime,
 }: VitalsLineChartProps) {
-  const cfg = METRIC_CONFIG[metric];
+  const unit = METRIC_UNITS[metric];
   const points = useMemo(() => bucketAggregate(
     suppliedPoints ?? vitalsRecordsToPoints(vitalsRecords ?? [], metric, { startTime, endTime }), 50,
   ), [suppliedPoints, vitalsRecords, metric, startTime, endTime]);
@@ -56,7 +64,7 @@ export default function VitalsLineChart({
     <Box>
       { !!sevenDayAvg && sevenDayAvg > 0 && (
         <Typography variant="body2" color="text.secondary" sx={ { mb: 1 } }>
-          7-night average { Math.round(sevenDayAvg) } { cfg.unit }
+          7-night average { Math.round(sevenDayAvg) } { unit }
         </Typography>
       ) }
       <TimeSeriesChart
@@ -64,7 +72,6 @@ export default function VitalsLineChart({
         startTime={ startTime }
         endTime={ endTime }
         lineColor={ palette.lamp }
-        targetRange={ cfg.targetRange }
         xValueFormatter={ date => (timeZone ? moment.tz(date, timeZone) : moment(date)).format(timeFormat) }
         yValueFormatter={ value => Math.round(value).toString() }/>
     </Box>

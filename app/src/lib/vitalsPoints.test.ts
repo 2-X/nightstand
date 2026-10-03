@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HRV_RANGE, vitalsRecordsToPoints } from './vitalsPoints.ts';
+import { HRV_RANGE, splitAtGaps, vitalsRecordsToPoints } from './vitalsPoints.ts';
 import type { VitalsRecord } from '@api/vitals.ts';
 
 const record = (overrides: Partial<VitalsRecord>): VitalsRecord => ({
@@ -72,5 +72,39 @@ describe('vitalsRecordsToPoints', () => {
       { ...record({}), timestamp: '2026-08-05T00:00:52-07:00' as unknown as number },
     ];
     expect(vitalsRecordsToPoints(stringly, 'heart_rate')).toEqual([]);
+  });
+});
+
+describe('splitAtGaps', () => {
+  const at = (seconds: number) => ({ timestamp: new Date(Date.UTC(2026, 8, 28) + seconds * 1000), value: 60 });
+  const minutes = (...offsets: number[]) => offsets.map(offset => at(offset * 60));
+  const offsets = (runs: { timestamp: Date }[][]) =>
+    runs.map(run => run.map(point => (point.timestamp.getTime() - Date.UTC(2026, 8, 28)) / 60_000));
+
+  it('breaks wherever a one-minute row is missing', () => {
+    expect(offsets(splitAtGaps(minutes(0, 1, 31)))).toEqual([[0, 1], [31]]);
+    expect(offsets(splitAtGaps(minutes(0, 1, 3, 4)))).toEqual([[0, 1], [3, 4]]);
+  });
+
+  it('keeps rows a few seconds off the minute together', () => {
+    expect(splitAtGaps([at(0), at(62), at(119), at(181)])).toHaveLength(1);
+  });
+
+  it('keeps the older writer\'s rows, 40 to 80 seconds apart, together', () => {
+    expect(splitAtGaps([at(0), at(40), at(120), at(165), at(245), at(285), at(360)])).toHaveLength(1);
+    expect(splitAtGaps([at(0), at(80), at(160), at(240)])).toHaveLength(1);
+  });
+
+  it('breaks at the two minutes one missing row leaves, and keeps up to 115 seconds joined', () => {
+    expect(splitAtGaps([at(0), at(115)])).toHaveLength(1);
+    expect(splitAtGaps([at(0), at(116)])).toHaveLength(2);
+  });
+
+  it('orders the rows by time first', () => {
+    expect(offsets(splitAtGaps(minutes(4, 1, 0, 3)))).toEqual([[0, 1], [3, 4]]);
+  });
+
+  it('returns nothing for no readings', () => {
+    expect(splitAtGaps([])).toEqual([]);
   });
 });
