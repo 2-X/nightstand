@@ -515,18 +515,30 @@ it('scripts/update.sh leaves the server alone before an upgrade', () => {
 // The target's own server continues what this one would hand back.
 const withRoute = (tree: string) => `mkdir -p "${tree}/server/dist/routes/update"
 echo "router.post('/prepare-to-stop', handler);" > "${tree}/server/dist/routes/update/update.js"`;
+const withLedger = (tree: string) => `mkdir -p "${tree}/server/dist/jobs" && touch "${tree}/server/dist/jobs/alarmLedger.js"`;
 
-for (const [file, from, to, setup] of [
+for (const [file, from, to, reason, setup, tree] of [
   [
-    'scripts/update.sh', '# --- atomic swap', 'rm -rf "$PREV"',
-    `IS_DOWNGRADE=yes; STAGED_VERSION=3.0.0; STAGE="$FIXTURE/stage"\n${withRoute('$STAGE')}`,
+    'scripts/update.sh', '# --- atomic swap', 'rm -rf "$PREV"', 'downgrade',
+    'IS_DOWNGRADE=yes; STAGED_VERSION=3.0.0; STAGE="$FIXTURE/stage"', '$STAGE',
   ],
-  ['scripts/rollback_pod.sh', '# --- swap', 'rm -rf "$TMP"', withRoute('$PREV')],
+  ['scripts/rollback_pod.sh', '# --- swap', 'rm -rf "$TMP"', 'rollback', '', '$PREV'],
 ]) {
-  it(`${file} leaves the server alone when the target has the same prepare-to-stop route`, () => {
-    const result = run(section(file, from, to), `${setup}\n${recordCurl(0)}`);
+  it(`${file} leaves the server alone when the target has the same prepare-to-stop route and alarm record`, () => {
+    const result = run(section(file, from, to), `${setup}\n${withRoute(tree)}\n${withLedger(tree)}\n${recordCurl(0)}`);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.doesNotMatch(result.services, /prepare-to-stop/);
     assert.match(result.services, /^stop free-sleep /m);
+  });
+
+  it(`${file} keeps Rhythms but lets the server forget its alarms when the target keeps no alarm record`, () => {
+    // Such a target rings the alarms without saving that they rang.
+    const result = run(section(file, from, to), `${setup}\n${withRoute(tree)}\n${recordCurl(0)}`);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const calls = result.services.trim().split('\n');
+    const prepared = calls.indexOf('curl -fsS --max-time 60 -X POST -H content-type: application/json '
+      + `-d {"reason":"${reason}","handBack":false} http://127.0.0.1:3000/api/update/prepare-to-stop`);
+    assert.ok(prepared >= 0, result.services);
+    assert.ok(prepared < calls.findIndex(line => line.startsWith('stop free-sleep ')), result.services);
   });
 }

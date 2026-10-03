@@ -340,3 +340,38 @@ describe('a ledger file that cannot be read right now', () => {
     assert.equal(existsSync(`${LEDGER}.bad`), false);
   });
 });
+
+describe('leaving for another version', () => {
+  // A rollback, a downgrade or a switch hands the alarms to a version that
+  // keeps no record of them, so coming back must not report them as missed.
+  it('forgets the saved alarms, so they are not reported on the way back', () => {
+    nodeSchedule.scheduleJob('left-one-off-alarm', at(70), () => undefined);
+    ledger.startAlarmLedger(at(55));
+    ledger.alarmLedgerHeartbeat(at(56));
+    assert.equal(saved().upcoming.length, 1);
+    ledger.leaveAlarmLedger();
+    assert.deepEqual(saved().upcoming, []);
+    // A heartbeat before the server stops does not save them again.
+    ledger.alarmLedgerHeartbeat(at(57));
+    assert.deepEqual(saved().upcoming, []);
+    nodeSchedule.cancelJob('left-one-off-alarm');
+    ledger.resetAlarmLedgerForTests();
+    assert.deepEqual(ledger.startAlarmLedger(at(24 * 60)), []);
+    assert.deepEqual(ledger.listMissedAlarms(at(24 * 60)), []);
+  });
+  it('also forgets saved alarms from before a restart that were still being judged', () => {
+    writeLedger({ aliveAt: T0.toISOString(), upcoming: [upcoming('left-one-off-alarm', 30)] });
+    ledger.startAlarmLedger(at(10));
+    ledger.leaveAlarmLedger();
+    ledger.resetAlarmLedgerForTests();
+    assert.deepEqual(ledger.startAlarmLedger(at(60)), []);
+  });
+  it('keeps the alarms already reported as missed', () => {
+    writeLedger({ aliveAt: T0.toISOString(), upcoming: [upcoming('left-one-off-alarm', 5)] });
+    ledger.startAlarmLedger(at(10));
+    ledger.leaveAlarmLedger();
+    ledger.resetAlarmLedgerForTests();
+    ledger.startAlarmLedger(at(60));
+    assert.deepEqual(ledger.listMissedAlarms(at(60)).map(m => m.at), [at(5).toISOString()]);
+  });
+});

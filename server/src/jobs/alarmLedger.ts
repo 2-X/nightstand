@@ -269,6 +269,22 @@ export function alarmLedgerHeartbeat(now: Date): void {
   guard('heartbeat', undefined, () => beat(now, true));
 }
 
+// Call before another version takes over. It keeps no record of the alarms
+// it rings, so the saved ones would read as missed when this version comes
+// back. Stops the heartbeat so they are not saved again before the server stops.
+export function leaveAlarmLedger(): void {
+  guard('leave', undefined, () => {
+    ensureLoaded();
+    running = false;
+    if (timer) clearInterval(timer);
+    timer = undefined;
+    pending = [];
+    ledger.aliveAt = null;
+    ledger.upcoming = [];
+    save();
+  });
+}
+
 export function noteAlarmStarted(jobName: string, at: Date): void {
   guard('start note', undefined, () => {
     if (!running || !isAlarmJobName(jobName)) return;

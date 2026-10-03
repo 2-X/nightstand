@@ -146,9 +146,22 @@ it('answers 204 to prepare-to-stop when the handoff fails', async () => {
   assert.deepEqual(handoffs, ['rollback']);
 });
 
+it('tells the hook whether to hand Rhythms sleeps back', async () => {
+  const update = await import('./update.js');
+  const seen: unknown[] = [];
+  update.setLeaveHook(async (reason, options) => { seen.push([reason, options]); });
+  try {
+    assert.equal((await postJson('/update/prepare-to-stop', { reason: 'rollback' })).status, 204);
+    assert.equal((await postJson('/update/prepare-to-stop', { reason: 'downgrade', handBack: false })).status, 204);
+  } finally {
+    update.setLeaveHook((await import('../../jobs/rhythms/handoff.js')).prepareToLeaveRhythms);
+  }
+  assert.deepEqual(seen, [['rollback', { handBack: true }], ['downgrade', { handBack: false }]]);
+});
+
 it('refuses a prepare-to-stop body it does not know', async () => {
   handoffs.length = 0;
-  for (const body of [{}, { reason: 'update' }, { reason: 'rollback', extra: true }]) {
+  for (const body of [{}, { reason: 'update' }, { reason: 'rollback', extra: true }, { reason: 'rollback', handBack: 'no' }]) {
     assert.equal((await postJson('/update/prepare-to-stop', body)).status, 400);
   }
   assert.deepEqual(handoffs, []);

@@ -120,9 +120,17 @@ fi
 
 # --- swap ----------------------------------------------------------------------
 # The running server hands back what the next version may not continue. A
-# target that has the same route continues it itself.
+# target that has the same route continues it itself. One without the alarm
+# record rings alarms without saving that they rang, so the server forgets
+# the alarms it saved rather than report them as missed on the way back.
+PREPARE=""
 if ! grep -qs prepare-to-stop "$PREV/server/dist/routes/update/update.js"; then
-  curl -fsS --max-time 60 -X POST -H 'content-type: application/json' -d '{"reason":"rollback"}' \
+  PREPARE='{"reason":"rollback"}'
+elif [ ! -f "$PREV/server/dist/jobs/alarmLedger.js" ]; then
+  PREPARE='{"reason":"rollback","handBack":false}'
+fi
+if [ -n "$PREPARE" ]; then
+  curl -fsS --max-time 60 -X POST -H 'content-type: application/json' -d "$PREPARE" \
     http://127.0.0.1:3000/api/update/prepare-to-stop >/dev/null \
     || say "WARNING: the server could not prepare to stop; continuing"
 fi

@@ -26,9 +26,13 @@ const TARGET_FILE = '/persistent/free-sleep-data/update-target.json';
 let resultFile = '/persistent/free-sleep-data/update-result.json';
 export const setResultFileForTests = (file: string) => { resultFile = file; };
 
-const PrepareToStopSchema = z.object({ reason: z.enum(['downgrade', 'rollback', 'revert']) }).strict();
+// handBack is false when the target continues Rhythms sleeps itself.
+const PrepareToStopSchema = z.object({
+  reason: z.enum(['downgrade', 'rollback', 'revert']),
+  handBack: z.boolean().default(true),
+}).strict();
 export type LeaveReason = 'downgrade' | 'rollback' | 'revert';
-type LeaveHook = (reason: LeaveReason) => Promise<unknown>;
+type LeaveHook = (reason: LeaveReason, options: { handBack: boolean }) => Promise<unknown>;
 let leaveHook: LeaveHook | undefined;
 
 // This file also ships in the updater overlay for stock installs, which has
@@ -76,8 +80,8 @@ export function isLoopbackAddress(address: string | undefined): boolean {
 // The update, rollback and switch scripts call this just before they stop
 // the server, after every check that could still abort them. The next
 // version may not know Rhythms, so this server hands any sleep it started
-// back to the weekly schedule. A failure never stops the script; the
-// firmware off time set at power-on is the backstop.
+// back to the weekly schedule unless handBack is false. A failure never
+// stops the script; the firmware off time set at power-on is the backstop.
 router.post('/prepare-to-stop', async (req, res) => {
   if (!isLoopbackAddress(req.socket.remoteAddress)) {
     res.status(403).json({ error: 'Only the Pod itself can prepare the server to stop' });
@@ -88,9 +92,9 @@ router.post('/prepare-to-stop', async (req, res) => {
     res.status(400).json({ error: 'Invalid request data', details: parsed.error.errors });
     return;
   }
-  const { reason } = parsed.data;
+  const { reason, handBack } = parsed.data;
   try {
-    await leaveHook?.(reason);
+    await leaveHook?.(reason, { handBack });
   } catch (error) {
     logger.error(`Rhythms handoff before ${reason} failed, continuing`, error);
   }
