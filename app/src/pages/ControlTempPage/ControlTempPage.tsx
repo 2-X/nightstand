@@ -22,6 +22,7 @@ import { useBedFrame } from './useBedFrame';
 import { NOT_RESPONDING } from './bedText';
 import { media } from '@design/tokens';
 import { useSettings } from '@api/settings.ts';
+import { isSchedulePaused } from '@api/schedulePause.ts';
 
 const STALE_TILES = { left: NOT_RESPONDING, right: NOT_RESPONDING };
 const LOADING_TILES = { left: '', right: '' };
@@ -56,6 +57,8 @@ export default function ControlTempPage() {
   const isOn = sideStatus?.isOn ?? false;
   const lastNight = useLastNight();
   const away = !!settings?.[side]?.awayMode;
+  // Away wins over a pause, as on the side tiles.
+  const paused = !away && !!settings && isSchedulePaused(settings, side, new Date());
   // While off or away, last night moves up into the steppers' row under the dial.
   const lastNightUnderDial = !!sideStatus && (!isOn || away);
 
@@ -93,6 +96,7 @@ export default function ControlTempPage() {
             loading={ loading }
             staleSince={ staleSince }
             away={ away }
+            paused={ paused }
             refetch={ refetch }
             format={ settings?.temperatureFormat ?? 'fahrenheit' }
             whenOff={ <ErrorBoundary componentName="Last night summary">

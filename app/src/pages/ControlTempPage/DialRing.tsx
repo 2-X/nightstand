@@ -7,6 +7,7 @@ import {
 
 type DialRingProps = {
   isOn: boolean; targetLevel: number; currentLevel: number; pending?: boolean; unconfirmed?: boolean; stale?: boolean; away?: boolean;
+  paused?: boolean;
 };
 
 const tickColor = (level: number, major: boolean, isOn: boolean) => isOn
@@ -38,7 +39,7 @@ const svgStyle = {
 
 // Every mark is a state: the faint scale, the span to the target, the notch for now, the dot for the target.
 export default function DialRing({
-  isOn, targetLevel, currentLevel, pending = false, unconfirmed = false, stale = false, away = false,
+  isOn, targetLevel, currentLevel, pending = false, unconfirmed = false, stale = false, away = false, paused = false,
 }: DialRingProps) {
   // Colour means live: a last known target, or an away side's, is drawn grey on the off track.
   const live = isOn && !stale && !away;
@@ -46,8 +47,9 @@ export default function DialRing({
   const current = clampLevel(currentLevel);
   const fill = fillRange(target);
   const dot = dialPoint(target);
-  // A pending target that has waited too long is drawn in the grey of a last known one, ring and all.
-  const grey = live && pending && unconfirmed;
+  // A paused side, or a pending target that has waited too long, is drawn in the grey of a last known one, ring and
+  // all, in the same places.
+  const grey = live && (paused || (pending && unconfirmed));
   const colour = grey ? palette.text.tertiary : temperatureColor(target);
   const notch = radialLine(current, NOTCH.inner, NOTCH.outer);
   return (

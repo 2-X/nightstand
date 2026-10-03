@@ -1,10 +1,18 @@
 import { test, expect } from '@playwright/test';
+import { THEMES } from '../src/design/themes';
+import { isThemeId } from '../src/design/themes/ids';
 
 // The narrowest supported phone width.
 test.use({ viewport: { width: 320, height: 720 } });
 
 test('pausing tonight shows the paused side and resuming brings the schedule back', async ({ page }) => {
   await page.goto('/');
+  const look = await page.locator('html').getAttribute('data-theme');
+  if (!isThemeId(look)) throw new Error(`No look: ${look}`);
+  // Colour means live: a paused side's target is drawn grey.
+  const target = page.locator('[data-dial] circle[data-target]');
+  const grey = THEMES[look].palette.text.tertiary;
+  await expect(target).not.toHaveAttribute('fill', grey);
   await page.getByRole('button', { name: 'Pause schedule' }).click();
 
   await expect(page.getByRole('heading', { name: "Pause Alex's schedule" })).toBeVisible();
@@ -23,6 +31,7 @@ test('pausing tonight shows the paused side and resuming brings the schedule bac
 
   await expect(page.getByText(/^Schedule paused until /)).toBeVisible();
   await expect(page.getByRole('radio', { name: /^Alex\. Paused, / })).toBeAttached();
+  await expect(target).toHaveAttribute('fill', grey);
   await expect(page.getByRole('button', { name: 'Pause schedule' })).toHaveCount(0);
   // The button that opened the sheet is gone, so focus moves to Resume.
   await expect(page.getByRole('button', { name: 'Resume schedule' })).toBeFocused();
@@ -31,4 +40,5 @@ test('pausing tonight shows the paused side and resuming brings the schedule bac
   await expect(page.getByRole('button', { name: 'Pause schedule' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Pause schedule' })).toBeFocused();
   await expect(page.getByText(/^Schedule paused until /)).toHaveCount(0);
+  await expect(target).not.toHaveAttribute('fill', grey);
 });

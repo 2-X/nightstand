@@ -23,6 +23,8 @@ type TemperatureDialProps = {
   loading?: boolean;
   // An away side that is on follows the other side; it shows last night instead of steppers.
   away?: boolean;
+  // A side whose schedule is paused: its value is drawn grey, like the side tile's.
+  paused?: boolean;
   refetch: () => unknown;
   format: TemperatureFormat;
   // Shown on the controls row while the side is off.
@@ -56,7 +58,9 @@ const controlsRowSx = {
   [media.tight]: { height: 67, mt: '2px' },
 } as const;
 
-export default function TemperatureDial({ status, staleSince, loading = false, away = false, refetch, format, whenOff }: TemperatureDialProps) {
+export default function TemperatureDial({
+  status, staleSince, loading = false, away = false, paused = false, refetch, format, whenOff,
+}: TemperatureDialProps) {
   const { side } = useAppStore();
   const { data: settings } = useSettings();
   const stored = useControlTempStore(state => state.deviceStatus?.[side]?.targetTemperatureF);
@@ -74,6 +78,7 @@ export default function TemperatureDial({ status, staleSince, loading = false, a
         isOn={ isOn }
         stale={ stale }
         away={ away }
+        paused={ paused }
         pending={ pending }
         unconfirmed={ unconfirmed }
         targetLevel={ targetLevel }
@@ -84,7 +89,7 @@ export default function TemperatureDial({ status, staleSince, loading = false, a
       { status && <TemperatureLabel
         isOn={ isOn }
         sliderTemp={ target }
-        sliderColor={ away || unconfirmed ? palette.text.secondary : temperatureColor(targetLevel) }
+        sliderColor={ away || paused || unconfirmed ? palette.text.secondary : temperatureColor(targetLevel) }
         currentTargetTemp={ status.targetTemperatureF }
         currentTemperatureF={ status.currentTemperatureF }
         format={ format }
