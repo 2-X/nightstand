@@ -3,7 +3,6 @@ import { distance, ratio, spread } from '@test/colour';
 import { fahrenheitToLevel, levelToFahrenheit } from '@lib/temperatureConversions';
 import { THEMES } from '.';
 import { DEFAULT_THEME_ID, THEME_IDS, isThemeId } from './ids';
-import type { ThemeId } from './ids';
 import { scaleColor } from './scale';
 import type { ThemePalette, ThemeTokens } from './types';
 
@@ -12,9 +11,6 @@ const COLOUR = /^(#[0-9A-F]{6}|rgba\(\d{1,3},\d{1,3},\d{1,3},(0|1|0?\.\d+)\))$/i
 // Text needs 4.5:1; control boundaries and marks need 3:1.
 const TEXT = 4.5;
 const MARK = 3;
-
-// Lamp's secondary text is close to the neutral scale colour.
-const STALE_NUMERAL_EXEMPT: readonly ThemeId[] = ['lamp'];
 
 // The token tree with every leaf replaced by its type, and the scale by its kind.
 const shape = (value: unknown): unknown => value && typeof value === 'object' && !Array.isArray(value)
@@ -126,14 +122,7 @@ describe.each(THEME_IDS)('the %s look', id => {
   });
 
   // Last known, away and unconfirmed numerals are drawn in text.secondary.
-  const closest = Math.min(...LEVELS.map(level => distance(scaleColor(p.scale, level), p.text.secondary, p.bg.base)));
-  if (STALE_NUMERAL_EXEMPT.includes(id)) {
-    it('is exempt from the stale numeral check, and still needs to be', () => {
-      expect(closest).toBeLessThan(80);
-    });
-  } else {
-    it('never draws a live value in a colour close to the stale numeral', () => {
-      expect(closest).toBeGreaterThanOrEqual(80);
-    });
-  }
+  it('never draws a live value in a colour close to the stale numeral', () => {
+    for (const level of LEVELS) expect(distance(scaleColor(p.scale, level), p.text.secondary, p.bg.base)).toBeGreaterThanOrEqual(80);
+  });
 });

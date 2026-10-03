@@ -8,7 +8,7 @@ export const lamp: ThemeTokens = {
     bg: { base: '#000000', elevated: '#121518', raised: '#1B2026', selected: '#303232', hover: 'rgba(255,255,255,0.08)' },
     border: { subtle: '#23282E', control: '#646D77', medium: 'rgba(255,255,255,0.12)', accent: 'rgba(233,227,213,0.5)' },
     text: {
-      primary: '#E4E7EA', secondary: '#A3AAB2', tertiary: '#848C95', disabled: '#565D65',
+      primary: '#E4E7EA', secondary: '#8D9D9A', tertiary: '#848C95', disabled: '#565D65',
       onAccent: 'rgba(0,0,0,0.87)', onError: 'rgba(0,0,0,0.87)',
     },
     accent: '#E9E3D5',
