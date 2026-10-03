@@ -64,6 +64,14 @@ ARCHIVE_WAS_ACTIVE=inactive
 restore_switch_data() {
   [ "$DATA_CHANGED" = yes ] || return 0
   [ "$RESTORE_ATTEMPTED" = no ] || return 0
+  # Never under a running writer, as when the run ends while upstream runs.
+  local unit
+  for unit in free-sleep free-sleep-stream; do
+    case "$(systemctl is-active "$unit" 2>/dev/null)" in
+      inactive|failed|unknown) ;;
+      *) say "$unit is running, so the settings were not put back"; return 1 ;;
+    esac
+  done
   RESTORE_ATTEMPTED=yes
   for name in settingsDB.json schedulesDB.json; do
     cp -p "$BK/lowdb/$name" "/persistent/free-sleep-data/lowdb/$name" || return 1
@@ -172,7 +180,7 @@ run_limited() {
   return "$status"
 }
 # Stops a service that writes the data and confirms it is not running. Kept
-# identical in the update, rollback, switch and reset scripts.
+# identical in the update, rollback, switch, reset and install scripts.
 # systemd refuses to stop a unit that is not installed or does not load, even
 # one that is not running, so the unit's state decides, not the stop.
 stop_writer() {
@@ -613,8 +621,18 @@ say "Health check FAILED: rolling back to this fork v$CUR_VERSION"
 say "Last 60 server log lines from the failed upstream free-sleep build (for diagnosis):"
 tail -n 60 /persistent/free-sleep-data/logs/free-sleep.log 2>/dev/null || say "  (no server log available)"
 RESTORE_TREE=$PREV
-systemctl stop free-sleep || true
-systemctl stop free-sleep-stream 2>/dev/null || true
+# Nothing moves and no settings are put back under a writer that will not
+# stop: upstream free-sleep keeps running on the settings it was given, and
+# both trees and the backup stay where they are.
+if ! stop_writer free-sleep || ! stop_writer free-sleep-stream; then
+  RESTORE_TREE=
+  DATA_CHANGED=no
+  systemctl is-active free-sleep >/dev/null 2>&1 || systemctl start free-sleep
+  if [ "$STREAM_WAS_ACTIVE" = active ] && ! systemctl is-active free-sleep-stream >/dev/null 2>&1; then
+    systemctl start free-sleep-stream
+  fi
+  fail "revert to upstream free-sleep failed and a service did not stop, so this fork was not put back. It is kept at $PREV; its settings are in $BK/lowdb. Manual recovery required"
+fi
 rm -rf "$FAILED"
 mv "$LIVE" "$FAILED" || {
   restore_switch_data_or_fail "could not restore settings from $BK/lowdb"

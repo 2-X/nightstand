@@ -358,7 +358,9 @@ describe('install.sh saved channel', () => {
 
 // From stopping the services to the step after Node: the stretch where a
 // reinstall replaces the live tree and can still fail.
-function replaceTree({ live = true, nodeFails = true } = {}) {
+// The failing step can first start units of the new install (started) and
+// leave one that then does not stop (stuck: "<unit> fails|stays|deactivating").
+function replaceTree({ live = true, nodeFails = true, started = [] as string[], stuck = '' } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-reinstall-'));
   const tree = (name: string, version: string) => {
     mkdirSync(path.join(dir, name, 'scripts'), { recursive: true });
@@ -366,15 +368,31 @@ function replaceTree({ live = true, nodeFails = true } = {}) {
   };
   if (live) tree('free-sleep', 'old');
   tree('unzip/nightstand', 'new');
-  writeFileSync(path.join(dir, 'unzip/nightstand/scripts/ensure-node.sh'), nodeFails ? 'exit 1\n' : 'exit 0\n');
+  const starts = started.map(unit => `echo active > "$FIXTURE/state-${unit}"\n`).join('');
+  writeFileSync(path.join(dir, 'unzip/nightstand/scripts/ensure-node.sh'),
+    `${starts}${stuck ? `echo '${stuck}' > "$FIXTURE/stuck"\n` : ''}exit ${nodeFails ? 1 : 0}\n`);
   const result = spawnSync('bash', ['-c', `set -euo pipefail
 REPO_DIR="$FIXTURE/free-sleep"; PREV_DIR="$FIXTURE/free-sleep-prev"; FAILED_DIR="$FIXTURE/free-sleep-failed"
 UNZIP_DIR="$FIXTURE/unzip"; SRC_DIR="$UNZIP_DIR/nightstand"; USERNAME=dac
 systemctl() {
+  local unit state stuck
   case "$1" in
-    is-active) return 3;;
+    is-active)
+      unit=$2; [ "$unit" != --quiet ] || unit=$3
+      state=$(cat "$FIXTURE/state-$unit" 2>/dev/null || echo inactive)
+      [ "$2" = --quiet ] || echo "$state"
+      [ "$state" = active ];;
     cat) [ "$2" = free-sleep ];;
-    *) echo "$* $(cat "$REPO_DIR/version" 2>/dev/null)" >> "$FIXTURE/services";;
+    *)
+      echo "$* $(cat "$REPO_DIR/version" 2>/dev/null)" >> "$FIXTURE/services"
+      stuck=$(cat "$FIXTURE/stuck" 2>/dev/null || true)
+      case "$1:$stuck" in
+        "stop:$2 fails") return 1;;
+        "stop:$2 stays") ;;
+        "stop:$2 deactivating") echo deactivating > "$FIXTURE/state-$2";;
+        stop:*) echo inactive > "$FIXTURE/state-$2";;
+        start:*|restart:*) echo active > "$FIXTURE/state-$2";;
+      esac;;
   esac
 }
 chown() { :; }
@@ -384,6 +402,7 @@ echo continued`], { env: envWith({ FIXTURE: dir }), encoding: 'utf8' });
   const output = {
     ...result, live: read('free-sleep/version'), previous: read('free-sleep-prev/version'),
     failed: read('free-sleep-failed/version'), services: read('services'),
+    serverState: read('state-free-sleep').trim(), streamState: read('state-free-sleep-stream').trim(),
   };
   rmSync(dir, { recursive: true, force: true });
   return output;
@@ -414,6 +433,33 @@ describe('install.sh over an existing install', () => {
     assert.equal(result.live, 'new');
     assert.equal(result.previous, '');
   });
+
+  // The new install starts the stream before its server, so a later failure
+  // finds a writer running from the new tree.
+  it('stops what the new install started before putting the previous install back', () => {
+    const result = replaceTree({ started: ['free-sleep-stream'] });
+    assert.notEqual(result.status, 0);
+    assert.equal(result.live, 'old');
+    assert.equal(result.failed, 'new');
+    assert.match(result.services, /^stop free-sleep-stream new$/m);
+    assert.equal(result.streamState, 'inactive');
+    assert.match(result.services, /^start free-sleep old$/m);
+  });
+
+  for (const unit of ['free-sleep', 'free-sleep-stream']) {
+    for (const [mode, what] of [['fails', 'fails to stop'], ['stays', 'stays active'], ['deactivating', 'is still deactivating']]) {
+      it(`keeps both installs where they are when ${unit} ${what}`, () => {
+        const result = replaceTree({ started: ['free-sleep', 'free-sleep-stream'], stuck: `${unit} ${mode}` });
+        assert.notEqual(result.status, 0);
+        assert.equal(result.live, 'new');
+        assert.equal(result.previous, 'old');
+        assert.equal(result.failed, '');
+        assert.match(result.stdout, /WARNING: the previous install could not be put back\. It is in .*free-sleep-prev\./);
+        assert.doesNotMatch(result.stdout, /previous install was put back/);
+        assert.doesNotMatch(result.services, /^start .* old$/m);
+      });
+    }
+  }
 
   it('gives up the previous install only once the new server has started', () => {
     const started = src.indexOf('systemctl start free-sleep.service');

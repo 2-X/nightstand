@@ -50,7 +50,7 @@ restart_services() {
 trap restart_services EXIT
 
 # Stops a service that writes the data and confirms it is not running. Kept
-# identical in the update, rollback, switch and reset scripts.
+# identical in the update, rollback, switch, reset and install scripts.
 # systemd refuses to stop a unit that is not installed or does not load, even
 # one that is not running, so the unit's state decides, not the stop.
 stop_writer() {

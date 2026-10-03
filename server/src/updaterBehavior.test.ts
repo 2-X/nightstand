@@ -54,6 +54,8 @@ ${fixtureScript}`], { env, encoding: 'utf8', input: 'y\n', timeout: 5000 });
     ...result, services: read('services'), ssh: read('ssh'), restored: read('restored'),
     liveVersion: read('live/version'), previousVersion: read('prev/version'), marker: read('marker'),
     serverState: read('state-free-sleep').trim(), streamState: read('state-free-sleep-stream').trim(), phase: read('phase'),
+    failedVersion: read('failed/version'), tmpVersion: read('tmp/version'),
+    settings: read('persistent/free-sleep-data/lowdb/settingsDB.json'),
   };
   rmSync(dir, { recursive: true, force: true });
   return output;
@@ -369,7 +371,10 @@ mkdir "$LIVE/server/node_modules"
 echo same > "$LIVE/server/package-lock.json"
 echo same > "$PREV/server/package-lock.json"
 mv() { if [ "$1" = "$TMP" ] && [ "$2" = "$PREV" ]; then return 1; else command mv "$@"; fi; }
-systemctl() { if [ "$1" = start ]; then [ -d "$LIVE/server/node_modules" ] && echo modules > "$FIXTURE/marker"; fi; }
+systemctl() {
+  [ "$1" != is-active ] || { echo inactive; return 3; }
+  if [ "$1" = start ]; then [ -d "$LIVE/server/node_modules" ] && echo modules > "$FIXTURE/marker"; fi
+}
 `);
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.equal(result.marker, 'modules\n');
@@ -714,12 +719,68 @@ for (const [file, from, to, setup] of [
   });
 }
 
+// A recovery swap moves nothing, and puts no settings back, under a writer
+// that does not stop. The version that failed keeps running.
+const revertSettings = `${section('scripts/revert-to-stock.sh', 'restore_switch_data() {', '\n# While downloading')}`;
+const switchedSettings = `DATA_CHANGED=yes; RESTORE_ATTEMPTED=no; ARCHIVE_WAS_ACTIVE=inactive; BK="$FIXTURE/bk"
+mkdir -p "$BK/lowdb"; echo original > "$BK/lowdb/settingsDB.json"; echo original > "$BK/lowdb/schedulesDB.json"`;
+const recordMoves = 'mv() { echo "mv $*" >> "$FIXTURE/ssh"; command mv "$@"; }';
+for (const [file, marker] of [
+  ['scripts/update.sh', '# --- automatic rollback'],
+  ['scripts/rollback_pod.sh', '# --- swap back on failure'],
+  ['scripts/revert-to-stock.sh', '# --- automatic rollback'],
+]) {
+  const revert = file === 'scripts/revert-to-stock.sh';
+  const recovery = `${revert ? `${revertSettings}\necho converted > /persistent/free-sleep-data/lowdb/settingsDB.json\n` : ''}`
+    + withExitHandling(file, section(file, marker));
+  const setup = `${stubs}\n${statefulServices()}\nRESULT_PHASE=swapped\n${revert ? switchedSettings : ''}
+mkdir -p "$FAILED" "$TMP"; echo earlier > "$FAILED/version"; echo earlier > "$TMP/version"\n${recordMoves}`;
+  for (const failure of ['STOP_FAILS=free-sleep', 'STAYS_ACTIVE=free-sleep', 'DEACTIVATING=free-sleep',
+    'STOP_FAILS=free-sleep-stream', 'STAYS_ACTIVE=free-sleep-stream', 'DEACTIVATING=free-sleep-stream']) {
+    it(`${file} keeps the failed version and both trees when ${failure} during recovery`, () => {
+      const result = run(recovery, `${setup}\n${failure}`);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.equal(result.ssh, '', 'no tree moved');
+      assert.equal(result.liveVersion, 'failed', result.stdout);
+      assert.equal(result.previousVersion, 'restored', result.stdout);
+      assert.equal(result.failedVersion, 'earlier\n');
+      assert.equal(result.tmpVersion, 'earlier\n');
+      assert.equal(result.serverState, 'active', result.services);
+      assert.equal(result.streamState, 'active', result.services);
+      assert.doesNotMatch(result.services, / restored$/m, 'nothing ran from the previous tree');
+      assert.equal(result.phase, 'swapped', 'recorded as failed');
+      assert.match(result.stdout, /a service did not stop, so .* was not put back/);
+      if (revert) assert.equal(result.settings, 'converted\n', 'settings left to the running version');
+    });
+  }
+
+  it(`${file} recovers as before once both writers stop`, () => {
+    const result = run(recovery, setup);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.equal(result.liveVersion, 'restored', result.stdout);
+    assert.match(result.services, /^start free-sleep restored$/m);
+    if (revert) assert.equal(result.settings, 'original\n');
+  });
+}
+
+it('revert-to-stock.sh puts no settings back while a writer still runs', () => {
+  for (const [states, settings] of [['active active', 'converted\n'], ['inactive active', 'converted\n'],
+    ['inactive inactive', 'original\n']]) {
+    const result = run(`${revertSettings}\necho converted > /persistent/free-sleep-data/lowdb/settingsDB.json
+restore_switch_data || echo refused`, `${statefulServices()}\n${switchedSettings}
+read -r server stream <<< "${states}"; echo "$server" > "$FIXTURE/state-free-sleep"; echo "$stream" > "$FIXTURE/state-free-sleep-stream"`);
+    assert.equal(result.settings, settings, `${states}: ${result.stdout}`);
+    assert.equal(/refused/.test(result.stdout), settings === 'converted\n', result.stdout);
+  }
+});
+
 it('the writer stop is the same in every script that stops the writers', () => {
   const stopWriter = (file: string) => section(file, '# Stops a service that writes the data', '\n}\n');
   const lateStream = (file: string) => section(file, '# Until the server has stopped, its Biometrics', '\n}\n');
   const [firstLate, ...restLate] = ['scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh'].map(lateStream);
   for (const helper of restLate) assert.equal(helper, firstLate);
-  const scripts = ['scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh', 'scripts/reset.sh'];
+  const scripts = ['scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh', 'scripts/reset.sh',
+    'scripts/install.sh'];
   const [first, ...rest] = scripts.map(stopWriter);
   for (const helper of rest) assert.equal(helper, first);
 });

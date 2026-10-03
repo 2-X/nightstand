@@ -495,7 +495,7 @@ trap 'record_result $?' EXIT
 CUR_VERSION=3.6.0; EXPECTED_VERSION=3.5.1; STAGED_VERSION=1.0.0; TARGET_VERSION=3.5.1
 LIVE=live; PREV=prev; TMP=tmp; FAILED=failed; BK=bk; MOVED_MODULES=no; STREAM_WAS_ACTIVE=no
 RESULT_PHASE=swapped
-systemctl() { :; }; rm() { :; }; mv() { :; }; sh() { :; }; tail() { :; }
+systemctl() { :; }; stop_writer() { :; }; rm() { :; }; mv() { :; }; sh() { :; }; tail() { :; }
 restore_switch_data_or_fail() { :; }; restart_services() { :; }; fix_shared_node_modules() { :; }
 sleep() { echo $(( $(cat '${clock}') + $1 )) > '${clock}'; }
 # The server answers with the code for the current second; 000 is no answer.

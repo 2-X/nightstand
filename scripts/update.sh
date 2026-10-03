@@ -166,7 +166,7 @@ run_limited() {
   return "$status"
 }
 # Stops a service that writes the data and confirms it is not running. Kept
-# identical in the update, rollback, switch and reset scripts.
+# identical in the update, rollback, switch, reset and install scripts.
 # systemd refuses to stop a unit that is not installed or does not load, even
 # one that is not running, so the unit's state decides, not the stop.
 stop_writer() {
@@ -832,8 +832,16 @@ say "Health check FAILED: rolling back to v$CUR_VERSION"
 say "Last 60 server log lines from the failed build (for diagnosis):"
 tail -n 60 /persistent/free-sleep-data/logs/free-sleep.log 2>/dev/null || say "  (no server log available)"
 RESTORE_TREE=$PREV
-systemctl stop free-sleep || true
-systemctl stop free-sleep-stream 2>/dev/null || true
+# Nothing moves under a writer that will not stop: the failed version keeps
+# running, and both trees and the backup stay where they are.
+if ! stop_writer free-sleep || ! stop_writer free-sleep-stream; then
+  RESTORE_TREE=
+  systemctl is-active free-sleep >/dev/null 2>&1 || systemctl start free-sleep
+  if [ "$STREAM_WAS_ACTIVE" = active ] && ! systemctl is-active free-sleep-stream >/dev/null 2>&1; then
+    systemctl start free-sleep-stream
+  fi
+  fail "update failed and a service did not stop, so v$CUR_VERSION was not put back. It is kept at $PREV; backup at $BK. Manual recovery required"
+fi
 rm -rf "$FAILED"
 mv "$LIVE" "$FAILED" || {
   systemctl start free-sleep

@@ -65,7 +65,7 @@ cp() { echo restore-attempt >> "$FIXTURE/services"; return 1; }
 rm() { :; }
 trap cleanup EXIT
 restore_switch_data_or_fail "restore failed"
-""")
+""", 'systemctl() { [ "$1" != is-active ] || { echo inactive; return 3; }; echo "$*" >> "$FIXTURE/services"; }')
         self.assertEqual(result.returncode, 1)
         self.assertEqual(log.count('restore-attempt'), 1)
         self.assertIn('start free-sleep-archive-raw.timer', log)

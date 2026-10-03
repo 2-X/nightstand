@@ -38,14 +38,17 @@ function stage(folder: string) {
   return staged;
 }
 
-for (const script of ['scripts/update.sh', 'scripts/migrate/pod-installer.sh']) {
+for (const [script, streamStop] of [
+  ['scripts/update.sh', 'stop_writer free-sleep-stream ||'],
+  ['scripts/migrate/pod-installer.sh', 'systemctl stop free-sleep-stream'],
+]) {
   describe(`${script} optional Python packages`, () => {
     const source = readFileSync(path.join(repoRoot, script), 'utf8');
     const step = helperCall(source);
 
     it('runs before stopping services, and re-runs itself under bash', () => {
       assert.ok(step.start > source.indexOf('trap cleanup'));
-      assert.ok(step.start < source.indexOf('systemctl stop free-sleep-stream'));
+      assert.ok(step.start < source.indexOf(streamStop));
       assert.match(source, /\[ -n "\$\{BASH_VERSION:-\}" \] \|\| exec bash "\$0" "\$@"/);
     });
 

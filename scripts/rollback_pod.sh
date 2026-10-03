@@ -137,7 +137,7 @@ restart_services() {
 }
 
 # Stops a service that writes the data and confirms it is not running. Kept
-# identical in the update, rollback, switch and reset scripts.
+# identical in the update, rollback, switch, reset and install scripts.
 # systemd refuses to stop a unit that is not installed or does not load, even
 # one that is not running, so the unit's state decides, not the stop.
 stop_writer() {
@@ -323,8 +323,16 @@ restored_version_answers() {
 [ -n "${RESULT_REASON:-}" ] || RESULT_REASON="the previous version did not pass its health check"
 say "Health check FAILED: swapping back to v$CUR_VERSION"
 RESTORE_TREE=$PREV
-systemctl stop free-sleep || true
-systemctl stop free-sleep-stream 2>/dev/null || true
+# Nothing moves under a writer that will not stop: the version rolled back
+# to keeps running, and both trees stay where they are.
+if ! stop_writer free-sleep || ! stop_writer free-sleep-stream; then
+  RESTORE_TREE=
+  systemctl is-active free-sleep >/dev/null 2>&1 || systemctl start free-sleep
+  if [ "$STREAM_WAS_ACTIVE" = active ] && ! systemctl is-active free-sleep-stream >/dev/null 2>&1; then
+    systemctl start free-sleep-stream
+  fi
+  fail "rollback failed and a service did not stop, so v$CUR_VERSION was not put back. It is kept at $PREV. Manual recovery required"
+fi
 rm -rf "$TMP"
 mv "$LIVE" "$TMP" || {
   restart_services

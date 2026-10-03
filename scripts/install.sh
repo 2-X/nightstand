@@ -130,14 +130,31 @@ fi
 STOPPED_SERVICES=()
 # Set while the previous install waits at PREV_DIR, until the new server starts.
 RESTORE_PREVIOUS=no
+# Stops a service that writes the data and confirms it is not running. Kept
+# identical in the update, rollback, switch, reset and install scripts.
+# systemd refuses to stop a unit that is not installed or does not load, even
+# one that is not running, so the unit's state decides, not the stop.
+stop_writer() {
+  systemctl stop "$1" 2>/dev/null
+  case "$(systemctl is-active "$1" 2>/dev/null)" in
+    inactive|failed|unknown) return 0 ;;
+  esac
+  return 1
+}
 restart_on_failure() {
   result=$?
   if [ "$result" -ne 0 ] && [ "$RESTORE_PREVIOUS" = yes ]; then
-    rm -rf "$FAILED_DIR"
-    if { [ ! -d "$REPO_DIR" ] || mv "$REPO_DIR" "$FAILED_DIR"; } && mv "$PREV_DIR" "$REPO_DIR"; then
-      echo "The install did not finish, so the previous install was put back. The new files are in $FAILED_DIR."
-    else
+    # The new install may have started the stream already. Nothing moves
+    # under a writer that will not stop.
+    if ! stop_writer free-sleep || ! stop_writer free-sleep-stream; then
       echo "WARNING: the previous install could not be put back. It is in $PREV_DIR."
+    else
+      rm -rf "$FAILED_DIR"
+      if { [ ! -d "$REPO_DIR" ] || mv "$REPO_DIR" "$FAILED_DIR"; } && mv "$PREV_DIR" "$REPO_DIR"; then
+        echo "The install did not finish, so the previous install was put back. The new files are in $FAILED_DIR."
+      else
+        echo "WARNING: the previous install could not be put back. It is in $PREV_DIR."
+      fi
     fi
   fi
   if [ "$result" -ne 0 ] && [ "${#STOPPED_SERVICES[@]}" -gt 0 ]; then
