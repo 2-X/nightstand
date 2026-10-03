@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SleepStagesResponse } from '@api/sleepStages';
-import { contributorBand, formatSleepDuration, nightDuration, nightMarkHeight, summarizeDurations } from './sleepContext';
+import { formatSleepDuration, nightDuration, nightMarkHeight, summarizeDurations } from './sleepContext';
 
 const stages: SleepStagesResponse = {
   active: true, epochs: [{ stage: 'light', startUnix: 0, endUnix: 23400 }],
@@ -27,10 +27,6 @@ describe('night duration presentation', () => {
   it.each([[0, '0h'], [25200, '7h'], [23400, '6h 30m']])('formats %s without zero minutes', (seconds, expected) => {
     expect(formatSleepDuration(seconds)).toBe(expected);
   });
-  it.each([[85, 'Good'], [100, 'Good'], [84, 'Fair'], [70, 'Fair'], [69, 'Low'], [0, 'Low']])(
-    'labels contributor score %s', (score, expected) => {
-      expect(contributorBand(score)).toBe(expected);
-    });
 });
 
 it('sizes week marks in proportion to sleep so short nights stay distinguishable', () => {

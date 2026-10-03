@@ -10,7 +10,7 @@ import { useSleepStages } from '@api/sleepStages';
 import GlassCard from '@design/GlassCard';
 import { palette, typography } from '@design/tokens';
 import {
-  contributorBand, formatSleepDuration, nightDuration, SLEEP_GOAL_MIN_SECONDS, SLEEP_GOAL_MAX_SECONDS,
+  formatSleepDuration, nightDuration, SLEEP_GOAL_MIN_SECONDS, SLEEP_GOAL_MAX_SECONDS,
 } from '../pages/DataPage/SleepPage/sleepContext';
 
 type Props = { sleepRecord: SleepRecord; timeZone?: string; title?: string; timeZoneLabel?: string };
@@ -19,6 +19,8 @@ const CONTRIBUTORS = [
   { key: 'continuity', label: 'Continuity' },
   { key: 'restingHr', label: 'Resting HR' },
 ] as const;
+
+const spaceUnit = (value: string) => value.replace(/\s*(ms|bpm)$/, ' $1');
 
 export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZoneLabel }: Props) {
   const { data: settings } = useSettings();
@@ -32,38 +34,29 @@ export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZon
   const asleep = duration.kind === 'asleep' ? duration.seconds : undefined;
   const hasScore = enabled && score?.active && score.score !== null && Number.isFinite(score?.score);
   const shownScore = hasScore ? Math.round(score.score!) : undefined;
-  const band = shownScore === undefined ? undefined : shownScore >= 85 ? 'Good night' : shownScore >= 70 ? 'Fair night' : 'Rough night';
 
   return (
     <GlassCard aria-label="Night summary">
       { title && <SectionHeading sx={ { color: 'text.secondary', mb: 1.5 } }>{ title }</SectionHeading> }
       { timeZoneLabel && <Typography variant="body2" color="text.secondary" sx={ { mb: 1 } }>{ timeZoneLabel }</Typography> }
-      { enabled && (
-        <>
-          { hasScore ? (
-            <Box sx={ { display: 'flex', gap: 2, alignItems: 'baseline' } }>
-              <Typography
-                sx={ {
-                  ...typography.metricLarge, lineHeight: 1.1, color: palette.lamp, fontVariantNumeric: 'tabular-nums',
-                } }>
-                { shownScore }
-              </Typography>
-              <Typography>{ band }</Typography>
-            </Box>
-          ) : <Typography>{ isError ? 'Score unavailable' : isPending ? 'Loading score' : 'Score not available' }</Typography> }
-          <Box sx={ { display: 'flex', alignItems: 'center', mb: 1 } }>
-            <Typography variant="body2" color="text.secondary">Estimate from bed sensors</Typography>
-            <IconButton aria-label="About the sleep estimate" onClick={ () => setInfoOpen(true) } sx={ { minWidth: 44, minHeight: 44 } }>
-              <InfoOutlinedIcon fontSize="small"/>
-            </IconButton>
-          </Box>
-        </>
-      ) }
       <Typography sx={ typography.metricValue }>
         { asleep !== undefined ? `${formatSleepDuration(asleep)} asleep` : formatSleepDuration(sleepRecord.sleep_period_seconds) }
       </Typography>
       { asleep === undefined && <Typography variant="body2" color="text.secondary">Detected time in bed</Typography> }
       { asleep === 0 && <Typography>No sleep detected</Typography> }
+      { enabled && (
+        <Box sx={ { display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 1 } }>
+          { hasScore
+            ? <Typography variant="body2" color="text.secondary">{ `Sleep score ${shownScore} (estimate)` }</Typography>
+            : <Typography variant="body2" color="text.secondary">
+              { isError ? 'Score unavailable' : isPending ? 'Loading score' : 'Score not available' }
+            </Typography> }
+          <Typography variant="body2" color="text.secondary">Estimate from bed sensors</Typography>
+          <IconButton aria-label="About the sleep estimate" onClick={ () => setInfoOpen(true) } sx={ { minWidth: 44, minHeight: 44 } }>
+            <InfoOutlinedIcon fontSize="small"/>
+          </IconButton>
+        </Box>
+      ) }
       <Typography variant="body2" color="text.secondary" sx={ { mt: 0.5 } }>
         <Box component="span">{ moment.tz(sleepRecord.entered_bed_at, zone).format('h:mm A') }</Box>
         { ' to ' }
@@ -85,7 +78,7 @@ export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZon
                 <Box sx={ { display: 'flex', justifyContent: 'space-between', gap: 1, mb: 0.5 } }>
                   <Typography variant="body2">{ label }</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    { component?.available ? contributorBand(component.score)
+                    { component?.available ? spaceUnit(component.value)
                       : isError ? 'Unavailable' : isPending ? 'Loading' : 'Not enough data' }
                   </Typography>
                 </Box>
@@ -106,14 +99,14 @@ export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZon
         <DialogTitle id="sleep-estimate-title">About this estimate</DialogTitle>
         <DialogContent>
           <Typography>
-            Estimated from movement and heart signals picked up by the bed. The score has not been validated
-            and is not a medical measurement. Use it to compare your own nights.
+            A rough summary of time asleep, trips out of bed and heart rate from the bed's sensors. It has not been
+            validated, rarely goes below 70, and is mostly driven by how long you slept. Use it to compare your own nights.
           </Typography>
           { CONTRIBUTORS.map(({ key, label }) => {
             const component = score?.components?.[key];
             return component?.available ? (
               <Typography key={ key } variant="body2" sx={ { mt: 2 } }>
-                { label }: { component.value.replace(/\s*(ms|bpm)$/, ' $1') }
+                { label }: { spaceUnit(component.value) }
               </Typography>
             ) : null;
           }) }

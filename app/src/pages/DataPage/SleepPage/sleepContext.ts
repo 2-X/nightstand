@@ -56,7 +56,3 @@ export function summarizeDurations(durations: NightDuration[]) {
     }] : [];
   });
 }
-
-export function contributorBand(score: number) {
-  return score >= 85 ? 'Good' : score >= 70 ? 'Fair' : 'Low';
-}

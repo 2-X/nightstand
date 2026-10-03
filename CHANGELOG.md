@@ -8,6 +8,10 @@ is a hard fork; for the history of the projects it descends from, see
 
 ## [Unreleased]
 
+- The sleep score no longer calls a night good, fair or rough. The Sleep
+  page leads with time asleep and shows the score as a small estimate,
+  because it is mostly a measure of how long you slept and has not been
+  validated.
 - With "New sleep tracking (beta)" on, heart rate and breathing rate come
   from newer estimators built for the bed's vibration sensors. They write a
   value only while the bed's presence sensor says that side is occupied, and
