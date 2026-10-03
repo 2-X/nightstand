@@ -256,6 +256,49 @@ class OccupancyTest(unittest.TestCase):
         self.assert_windows_inside(recorder, seen, [(0, away), (back, seconds)])
 
 
+class SupportTest(unittest.TestCase):
+    """Breathing and HRV estimates carry the time of the signal they were read from."""
+
+    def test_estimates_are_stamped_with_the_window_they_read(self):
+        for record_seconds in (1, 2):
+            with self.subTest(record_seconds=record_seconds):
+                per = 500 * record_seconds
+                layout = PiezoLayout(freq=500, samples=per, sensors_per_side=1)
+                left = piezo(800, bpm=60, per_minute=15, jitter_ms=20, seed=4)
+                stream, buffer, recorder = Vitals2Stream(), Buffer(3, 30, 300), Recorder()
+                read_until, hrv_found = [], []
+                real_resp, real_variability = vitals2_stream.resp.estimate_resp, stream._variability
+
+                def spy_resp(window, fs):
+                    read_until.append(now['end'])
+                    return real_resp(window, fs)
+
+                def spy_variability(epoch, clock, buffer, side, available, end, minute, bpm):
+                    out = real_variability(epoch, clock, buffer, side, available, end, minute, bpm)
+                    if out is not None:
+                        hrv_found.append((now['end'], end, out))
+                    return out
+                stream._variability = spy_variability
+                now = {}
+                with unittest.mock.patch.object(vitals2_stream, 'minute_row', recorder), \
+                        unittest.mock.patch.object(vitals2_stream.resp, 'estimate_resp', spy_resp):
+                    for index in range(800 // record_seconds):
+                        epoch = START + record_seconds * index
+                        now['end'] = epoch + record_seconds
+                        buffer.append({'ts': epoch, 'left1': left[index * per:(index + 1) * per],
+                                       'right1': left[index * per:(index + 1) * per] // 50})
+                        stream.step(epoch, layout, buffer, {'left': True, 'right': False}, cap_age=0)
+                # The newest record read ends at now['end']; the analysed minute sits one filter edge before it.
+                centres = sorted(end - vitals2_stream.RESP_LAG_SECONDS for end in read_until)
+                breaths = sorted(breath.timestamp for breath in recorder.breaths())
+                self.assertTrue(breaths)
+                self.assertTrue(set(breaths) <= set(centres), (breaths[:3], centres[:3]))
+                self.assertTrue(hrv_found)
+                for read_end, end, estimate in hrv_found:
+                    self.assertEqual(end, read_end)
+                    self.assertEqual(estimate.timestamp, read_end)
+
+
 class ClockStepBackTest(unittest.TestCase):
     STEP = 1800
 
@@ -322,7 +365,7 @@ class CapacitanceGateTest(unittest.TestCase):
             self.assertEqual(window.usable, not seconds & (set(stale) | set(empty)), window)
         self.assertTrue(recorder.breaths())
         for breath in recorder.breaths():
-            centre = breath.timestamp - START
+            centre = int(breath.timestamp) - START
             for second in range(centre - 30, centre + 30):
                 self.assertNotIn(second, stale)
                 self.assertNotIn(second, empty)

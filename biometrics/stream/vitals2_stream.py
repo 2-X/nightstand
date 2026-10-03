@@ -41,7 +41,7 @@ BATCH_PHASE_SECONDS = hr.REPORT_DELAY_SECONDS - hr.HOP_SECONDS
 HR_BATCH_SECONDS = hr.BUFFER_SECONDS + hr.HOP_SECONDS
 HR_MIN_SECONDS = hr.WINDOW_SECONDS + 2 * hr.EDGE_SECONDS
 RESP_SECONDS = resp.WINDOW_SECONDS + 2 * resp.EDGE_SECONDS
-# A breathing estimate describes the middle of its window, this long before it runs.
+# A breathing estimate describes the middle of its window, this long before the newest record ends.
 RESP_LAG_SECONDS = resp.EDGE_SECONDS + resp.WINDOW_SECONDS // 2
 # Breathing windows with more bad samples than this are movement, not breathing.
 RESP_MAX_BAD_FRACTION = 0.01
@@ -321,9 +321,9 @@ class Vitals2Stream:
             state = self.sides[side]
             if not state.active(epoch):
                 continue
-            centre = epoch - RESP_LAG_SECONDS
-            analysed_end = epoch + clock.record_seconds - resp.EDGE_SECONDS
-            if not state.occupied_throughout(analysed_end - resp.WINDOW_SECONDS, analysed_end, clock.record_seconds):
+            centre = epoch + clock.record_seconds - RESP_LAG_SECONDS
+            half = resp.WINDOW_SECONDS / 2
+            if not state.occupied_throughout(centre - half, centre + half, clock.record_seconds):
                 continue
             cleaned, bad = mask_artifacts(buffer.get_signal(side, clock.records(RESP_SECONDS)))
             if hr.central(bad, clock.fs, resp.WINDOW_SECONDS).mean() > RESP_MAX_BAD_FRACTION:
@@ -334,7 +334,7 @@ class Vitals2Stream:
 
     def _variability(self, epoch: int, clock: _Clock, buffer, side: str, available: float, end: float,
                      minute: int, bpm: float) -> Optional[HrvEstimate]:
-        """Five-minute HRV for a minute the tracker reported, seeded with that minute's rate."""
+        """HRV over the five minutes ending at `end`, stamped with `end`, seeded with the minute's rate."""
         state = self.sides[side]
         if available < hrv.WINDOW_SECONDS or not state.occupied_throughout(end - hrv.WINDOW_SECONDS, end,
                                                                            clock.record_seconds):
@@ -356,4 +356,4 @@ class Vitals2Stream:
         coverage = _finite(coverage)
         if coverage is None:
             return None
-        return HrvEstimate(epoch, _finite(rmssd), _finite(sdnn), coverage)
+        return HrvEstimate(end, _finite(rmssd), _finite(sdnn), coverage)

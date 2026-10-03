@@ -19,7 +19,7 @@ LEGACY_HRV_RANGE = (8, 200)
 
 @dataclass(frozen=True)
 class WindowEstimate:
-    timestamp: int
+    timestamp: float  # window start for heart rate, window centre for breathing
     value: float | None
     quality: float
     usable: bool = True
@@ -28,7 +28,7 @@ class WindowEstimate:
 
 @dataclass(frozen=True)
 class HrvEstimate:
-    timestamp: int
+    timestamp: float  # end of the five minutes analysed
     rmssd: float | None
     sdnn: float | None
     coverage: float
