@@ -606,46 +606,25 @@ class TestPumpSpeedFeed(StreamHelpersTestCase):
         self.assertIn('pump speed', logs.records[0].getMessage())
 
     def test_the_nats_consumer_feeds_both(self):
+        from test_live_nats import fake_client
         frame = pump_frame()
-
-        class Stop(Exception):
-            pass
-
-        message = unittest.mock.Mock(data=cbor2.dumps({'seq': 1, 'data': cbor2.dumps(frame)}))
-        message.ack = unittest.mock.AsyncMock()
-        batches = [[message]]
-
-        async def fetch(count, timeout):
-            if not batches:
-                raise Stop()
-            return batches.pop()
-
-        subscription = unittest.mock.Mock(fetch=fetch)
-        jetstream = unittest.mock.Mock()
-        jetstream.stream_info = unittest.mock.AsyncMock(
-            return_value=types.SimpleNamespace(config=types.SimpleNamespace(subjects=['raw'])))
-        jetstream.pull_subscribe = unittest.mock.AsyncMock(return_value=subscription)
-        connection = unittest.mock.Mock()
-        connection.jetstream.return_value = jetstream
-        connection.close = unittest.mock.AsyncMock()
-        modules = {name: unittest.mock.Mock() for name in ('nats', 'nats.js', 'nats.js.api')}
-        modules['nats'].connect = unittest.mock.AsyncMock(return_value=connection)
-        modules['nats.errors'] = types.SimpleNamespace(TimeoutError=type('NatsTimeout', (Exception,), {}))
+        modules, _, _, _, _, message = fake_client()
+        message.data = cbor2.dumps({'seq': 1, 'data': cbor2.dumps(frame)})
         with unittest.mock.patch.dict(sys.modules, modules), \
-                unittest.mock.patch.object(stream, 'process_biometrics', lambda: None), \
                 unittest.mock.patch.object(stream, 'update_health'):
-            with self.assertRaises(Stop):
-                asyncio.run(stream.watch_nats_stream())
+            with self.assertRaises(asyncio.CancelledError):
+                asyncio.run(stream._nats_session(unittest.mock.Mock()))
         self.assertEqual(self.pump.speed_during(frame['ts'], frame['ts'] + 1), 'fast')
         self.health.assert_called_once_with(frame)
-        message.ack.assert_awaited_once()
+        message.ack.assert_not_called()
 
 
 class TestStreamHealth(unittest.TestCase):
     def test_reports_healthy_while_the_processing_thread_runs(self):
         thread = unittest.mock.Mock()
         thread.is_alive.return_value = True
-        with unittest.mock.patch.object(stream, 'update_health') as update:
+        with unittest.mock.patch.object(stream, 'update_health') as update, \
+                unittest.mock.patch.object(stream, '_last_sensor_record', time.monotonic()):
             self.assertTrue(stream._report_stream_health(thread))
         update.assert_called_once_with('stream', 'healthy', '')
 
@@ -661,35 +640,13 @@ class TestDeadProcessingThread(unittest.TestCase):
     class Runaway(Exception):
         pass
 
-    def _fake_nats(self, fetches):
-        class NatsTimeout(Exception):
-            pass
-
-        async def fetch(count, timeout):
-            fetches.append(1)
-            if len(fetches) > 20:
-                raise self.Runaway()
-            raise NatsTimeout()
-
-        subscription = unittest.mock.Mock()
-        subscription.fetch = fetch
-        jetstream = unittest.mock.Mock()
-        jetstream.stream_info = unittest.mock.AsyncMock(return_value=types.SimpleNamespace(config=types.SimpleNamespace(subjects=['raw'])))
-        jetstream.pull_subscribe = unittest.mock.AsyncMock(return_value=subscription)
-        connection = unittest.mock.Mock()
-        connection.jetstream.return_value = jetstream
-        connection.close = unittest.mock.AsyncMock()
-        modules = {name: unittest.mock.Mock() for name in ('nats', 'nats.js', 'nats.js.api')}
-        modules['nats'].connect = unittest.mock.AsyncMock(return_value=connection)
-        modules['nats.errors'] = types.SimpleNamespace(TimeoutError=NatsTimeout)
-        return modules
-
     def test_the_nats_loop_ends_so_the_file_watcher_can_take_over(self):
         fetches = []
         stream.piezo_record_queue.put(recent_piezo())
         self.addCleanup(lambda: [stream.piezo_record_queue.get_nowait() for _ in range(stream.piezo_record_queue.qsize())])
-        with unittest.mock.patch.dict(sys.modules, self._fake_nats(fetches)), \
-                unittest.mock.patch.object(stream, 'process_biometrics', lambda: None), \
+        with unittest.mock.patch.dict(sys.modules, {'nats': types.SimpleNamespace()}), \
+                unittest.mock.patch.object(stream, '_nats_session', side_effect=RuntimeError('disconnected')), \
+                unittest.mock.patch.object(stream, 'process_biometrics', lambda stop_event=None: None), \
                 unittest.mock.patch.object(stream, 'update_health') as update, \
                 unittest.mock.patch.object(stream, 'STREAM_HEALTH_INTERVAL_SECONDS', 0):
             with self.assertRaises(RuntimeError):

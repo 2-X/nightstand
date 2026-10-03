@@ -21,8 +21,8 @@ _last_sensor_temps_update: float = 0
 SENSOR_TEMPS_UPDATE_INTERVAL = 30  # seconds
 # Both ingest paths can hand update_sensor_temps() records far older than
 # "now": the RAW-file fallback replays the current file from byte 0 on
-# startup, and the durable NATS consumer replays its acked backlog after a
-# restart. Posting those makes the API replay the old temperature history
+# startup, and the NATS reader starts up to two minutes back in the stream.
+# Posting those makes the API replay the old temperature history
 # instead of tracking the sensor, and the wall-clock throttle compounds it by
 # posting the oldest record of each 30s window. Mirrors RECENT_RECORD_WINDOW
 # in stream/stream.py, which applies the same guard to piezo records.
@@ -191,8 +191,8 @@ _PUMP_TEC_ACTIVE_AMPS = 1.0
 _PUMP_STALL_DWELL_FRAMES = 6
 _PUMP_RECOVERY_DWELL_FRAMES = 3
 # Same replay hazard as SENSOR_TEMPS_MAX_RECORD_AGE: the RAW-file fallback
-# re-reads the current file from byte 0 on startup and the durable NATS
-# consumer replays its acked backlog after a restart, so this function can
+# re-reads the current file from byte 0 on startup and the NATS reader
+# starts up to two minutes back in the stream, so this function can
 # receive frzHealth frames far older than "now". Each replayed frame
 # advances the per-side dwell counters as if it were live, so a stale burst
 # can trip a false pump-stall alert or clear a real latched one.

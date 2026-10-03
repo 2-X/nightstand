@@ -124,6 +124,11 @@ is a hard fork; for the history of the projects it descends from, see
 - Alarm dismiss now sends a one-second replacement alarm before clearing the
   armed alarm and invalidates the dismissed alarm timer. Reported by caseyWebb
   in [upstream issue 54](https://github.com/throwaway31265/free-sleep/issues/54).
+- On Pods whose firmware publishes sensor records to its local NATS stream,
+  live biometrics now read every sensor type from it, not only the first. If
+  the stream carries no sensor records for two minutes, the RAW files are
+  read as well. The Status page now shows sleep tracking as stopped after 30
+  minutes without new sensor data, and as running again once data returns.
 
 ## [3.5.1] - 2026-10-01
 

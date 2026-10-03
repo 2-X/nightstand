@@ -5,19 +5,19 @@ real-time.
 It consumes the pod firmware's own NATS JetStream ('raw' stream on
 localhost), which carries sensor records as they are produced. If NATS is
 unavailable (older firmware, nats-py not installed, or the stream is
-missing), it falls back to watching /persistent for the latest .RAW file and
-tailing it with the byte-accurate CBOR reader.
+missing), or connects but carries no sensor records for two minutes, it also
+reads the latest .RAW file in /persistent with the byte-accurate CBOR reader.
 
 Key functionalities:
-- Pulls records from NATS JetStream with a durable consumer, deduplicated by
-  firmware sequence number.
+- Pulls records from NATS JetStream with an ephemeral consumer, deduplicated by
+  stream and firmware sequence number.
 - Fallback: watches the `/persistent` directory for new .RAW files using
   `watchdog`, tracking only the most recently modified file.
 - Filters and processes `piezo-dual` sensor data, ensuring only recent
   entries are used; forwards `frzTemp` records as sensor temperatures.
 - Loads parsed piezoelectric sensor data into `load_piezo_row` and queues it
   for processing by `StreamProcessor` in a separate thread.
-- Handles graceful shutdown via KeyboardInterrupt.
+- Closes its consumer and file handles on shutdown.
 
 Usage:
 This is set up to run as a systemctl service, but you can manually run it with:
@@ -28,8 +28,9 @@ import sys
 import platform
 import cbor2
 import asyncio
-import inspect
-from datetime import datetime, timedelta
+from uuid import uuid4
+import math
+from datetime import datetime, timedelta, timezone
 from collections import deque
 
 if platform.system().lower() == 'linux':
@@ -56,8 +57,8 @@ from load_raw_files import load_piezo_row, _read_raw_record
 from service_health import update_health, update_sensor_temps, update_pump_health
 from pump_speed import PumpSpeed
 
-# Global queue for processing decoded biometric data
-piezo_record_queue = queue.Queue()
+# Bound pending work when processing falls behind.
+piezo_record_queue = queue.Queue(maxsize=120)
 # Newest capacitance reading, for capacitance presence.
 latest_cap = LatestCap()
 # When the pump ran fast, from frzHealth frames, for the newer vitals.
@@ -84,7 +85,20 @@ STREAM_HEALTH_INTERVAL_SECONDS = 60
 RECENT_RECORD_WINDOW = timedelta(minutes=2)
 NATS_URL = 'nats://127.0.0.1:4222'
 NATS_STREAM = 'raw'
-NATS_DURABLE = 'free_sleep_stream_live'
+SOURCE_IDLE_SECONDS = 30 * 60
+NATS_REQUEST_SECONDS = 5
+NATS_RETRY_MAX_SECONDS = 30
+# A connected stream that carries no sensor records this long gets RAW files read alongside it.
+NATS_SILENT_SECONDS = RECENT_RECORD_WINDOW.total_seconds()
+RAW_POLL_SECONDS = 1
+# The durable consumer earlier versions created; it never expires on its own.
+LEGACY_CONSUMER = 'free_sleep_stream_live'
+_legacy_consumer_checked = False
+_stream_started_at = time.monotonic()
+_last_sensor_record = None
+# Where a new session resumes, so a reconnect does not replay what was read.
+_last_stream_sequence = None
+_last_stream_message_at = 0.0
 PROCESSED_SEQUENCE_LIMIT = 5000
 processed_sequences = set()
 processed_sequence_order = deque(maxlen=PROCESSED_SEQUENCE_LIMIT)
@@ -139,7 +153,7 @@ def _queue_decoded_piezo_record(decoded_data) -> bool:
         return False
 
     load_piezo_row(decoded_data, 'right')
-    piezo_record_queue.put(decoded_data)
+    _put_latest(decoded_data)
     _mark_sequence_processed(sequence)
     return True
 
@@ -276,13 +290,50 @@ def _drop_stale_presence_v2(stream_processor) -> None:
         _switch_presence_mode(stream_processor, None)
 
 
+def _put_latest(record):
+    try:
+        piezo_record_queue.put_nowait(record)
+    except queue.Full:
+        try:
+            piezo_record_queue.get_nowait()
+            piezo_record_queue.task_done()
+        except queue.Empty:
+            pass
+        piezo_record_queue.put_nowait(record)
+
+
+def _ingest_live_record(record) -> bool:
+    """Hand a record on; True when it is a fresh sensor record."""
+    global _last_sensor_record
+    if not isinstance(record, dict):
+        return False
+    kind = record.get('type')
+    timestamp = record.get('ts')
+    fresh = (kind in ('piezo-dual', 'capSense', 'capSense2', 'frzTemp', 'frzHealth', 'bedTemp', 'bedTemp2')
+             and _is_number(timestamp) and math.isfinite(timestamp)
+             and abs(time.time() - timestamp) <= RECENT_RECORD_WINDOW.total_seconds())
+    if fresh:
+        _last_sensor_record = time.monotonic()
+    if kind == 'frzTemp':
+        update_sensor_temps(record)
+    elif kind == 'frzHealth':
+        _note_pump_speed(record)
+        update_pump_health(record)
+    elif not _store_decoded_cap_record(record):
+        _queue_decoded_piezo_record(record)
+    return fresh
+
+
 def _report_stream_health(processing_thread) -> bool:
-    """Post the stream's health; False once the processing thread has stopped."""
-    if processing_thread.is_alive():
-        update_health('stream', 'healthy', '')
-        return True
-    update_health('stream', 'failed', 'processing thread stopped')
-    return False
+    if not processing_thread.is_alive():
+        update_health('stream', 'failed', 'processing thread stopped')
+        return False
+    last_record = _last_sensor_record if _last_sensor_record is not None else _stream_started_at
+    if time.monotonic() - last_record >= SOURCE_IDLE_SECONDS:
+        update_health('stream', 'failed', 'No sensor data from the Pod for 30 minutes')
+    else:
+        update_health('stream', 'healthy' if _last_sensor_record is not None else 'started', '')
+    return True
 
 
 class LatestRawFileHandler(FileSystemEventHandler):
@@ -350,26 +401,7 @@ class LatestRawFileHandler(FileSystemEventHandler):
 
                 decoded_data = cbor2.loads(data_bytes)
 
-                # Handle frzTemp records for sensor temperatures
-                if isinstance(decoded_data, dict) and decoded_data.get('type') == 'frzTemp':
-                    update_sensor_temps(decoded_data)
-                    self.last_pos = self.latest_file_obj.tell()
-                    continue
-
-                # Handle frzHealth records for pump-stall detection
-                if isinstance(decoded_data, dict) and decoded_data.get('type') == 'frzHealth':
-                    _note_pump_speed(decoded_data)
-                    update_pump_health(decoded_data)
-                    self.last_pos = self.latest_file_obj.tell()
-                    continue
-
-                if _store_decoded_cap_record(decoded_data):
-                    self.last_pos = self.latest_file_obj.tell()
-                    continue
-
-                # Shared filter/queue path with the NATS consumer, so the
-                # sequence dedup also covers a NATS -> fallback transition.
-                _queue_decoded_piezo_record(decoded_data)
+                _ingest_live_record(decoded_data)
 
                 # Update last read position
                 self.last_pos = self.latest_file_obj.tell()
@@ -387,16 +419,26 @@ class LatestRawFileHandler(FileSystemEventHandler):
                 break
 
 
-def process_biometrics():
-    piezo_record = piezo_record_queue.get()
+def process_biometrics(stop_event=None):
+    stop_event = stop_event or threading.Event()
+    while not stop_event.is_set():
+        try:
+            piezo_record = piezo_record_queue.get(timeout=5)
+            break
+        except queue.Empty:
+            continue
+    else:
+        return
+    if piezo_record is None:
+        piezo_record_queue.task_done()
+        return
     stream_processor = StreamProcessor(piezo_record, debug=False, cap_source=latest_cap, pump=pump_speed)
     _refresh_presence_mode(stream_processor)
     _refresh_vitals_mode(stream_processor)
     ix = 0
-    while True:
+    while not stop_event.is_set():
         ix += 1
         if ix == 60:
-            update_health('stream', 'healthy')
             _refresh_presence_mode(stream_processor)
             _refresh_vitals_mode(stream_processor)
             ix = 0
@@ -428,107 +470,233 @@ def watch_directory(directory="/persistent"):
     observer.start()
 
     # Start biometric processing in a separate thread
-    processing_thread = threading.Thread(target=process_biometrics, daemon=True)
+    stop_event = threading.Event()
+    processing_thread = threading.Thread(target=process_biometrics, args=(stop_event,), daemon=True)
     processing_thread.start()
 
     logger.debug('Stream processor set up successfully, running...')
+    last_health_update = time.monotonic()
     try:
         while True:
             time.sleep(1)
             handler.track_latest_file()  # Check if a newer file exists
             handler.follow_latest_file()  # Read new CBOR entries line-by-line
+            if time.monotonic() - last_health_update >= STREAM_HEALTH_INTERVAL_SECONDS:
+                if not _report_stream_health(processing_thread):
+                    raise RuntimeError('processing thread stopped')
+                last_health_update = time.monotonic()
     except KeyboardInterrupt:
-        observer.stop()
-        piezo_record_queue.put(None)  # Send stop signal to processing thread
-        processing_thread.join()
+        pass
     except Exception as error:
         logger.error(error)
         update_health('stream', 'failed', repr(error))
-        raise error
+        raise
+    finally:
+        observer.stop()
+        observer.join()
+        if handler.latest_file_obj is not None:
+            handler.latest_file_obj.close()
+        stop_event.set()
+        _put_latest(None)
+        processing_thread.join(timeout=5)
+        _drain_queue(piezo_record_queue)
 
-    observer.join()
+
+class _RawFiles:
+    """The newest RAW file in a directory, opened on first use."""
+
+    def __init__(self, directory):
+        self.directory = directory
+        self.handler = None
+
+    def poll(self):
+        try:
+            if self.handler is None:
+                self.handler = LatestRawFileHandler(self.directory)
+            self.handler.track_latest_file()
+            self.handler.follow_latest_file()
+        except OSError as error:
+            logger.debug(f'RAW files unavailable: {error}')
+
+    def close(self):
+        if self.handler is not None and self.handler.latest_file_obj is not None:
+            self.handler.latest_file_obj.close()
 
 
-async def _ack_message(message):
-    ack_result = message.ack()
-    if inspect.isawaitable(ack_result):
-        await ack_result
+def _stream_sequence(message):
+    try:
+        sequence = message.metadata.sequence.stream
+    except Exception:
+        return None
+    return sequence if isinstance(sequence, int) and not isinstance(sequence, bool) else None
+
+
+def _resume_sequence(state):
+    """The next stream sequence to read when the last one is recent and still in the stream, else None."""
+    global _last_stream_sequence
+    if _last_stream_sequence is not None:
+        resume = _last_stream_sequence + 1
+        try:
+            if (time.monotonic() - _last_stream_message_at <= RECENT_RECORD_WINDOW.total_seconds()
+                    and state.first_seq <= resume <= state.last_seq + 1):
+                return resume
+        except (AttributeError, TypeError):
+            pass
+    _last_stream_sequence = None
+    return None
+
+
+async def _remove_legacy_consumer(jetstream, not_found):
+    global _legacy_consumer_checked
+    if _legacy_consumer_checked:
+        return
+    _legacy_consumer_checked = True
+    try:
+        await jetstream.delete_consumer(NATS_STREAM, LEGACY_CONSUMER)
+        logger.info('Removed the NATS consumer an earlier version left behind')
+    except not_found:
+        pass
+    except Exception as error:
+        logger.debug(f'Could not remove the earlier NATS consumer: {error}')
+
+
+async def _nats_session(processing_thread, raw_files=None):
+    """Read all subjects with an independently owned consumer and no acknowledgments."""
+    global _last_stream_sequence, _last_stream_message_at
+    import nats
+    from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy, RetentionPolicy
+    from nats.js.errors import NotFoundError
+
+    connection = jetstream = consumer_name = None
+
+    async def note_error(error):
+        logger.debug(f'NATS client: {error}')
+
+    try:
+        # Retry outside the client so RAW fallback and health keep running during an outage.
+        connection = await nats.connect(NATS_URL, connect_timeout=2, allow_reconnect=False,
+                                        max_reconnect_attempts=1, reconnect_time_wait=0,
+                                        error_cb=note_error)
+        jetstream = connection.jetstream(timeout=NATS_REQUEST_SECONDS)
+        info = await jetstream.stream_info(NATS_STREAM)
+        if info.config.retention != RetentionPolicy.LIMITS:
+            raise RuntimeError('NATS raw stream retention must be limits for a read-only consumer')
+        await _remove_legacy_consumer(jetstream, NotFoundError)
+        resume = _resume_sequence(getattr(info, 'state', None))
+        if resume is None:
+            start = {'deliver_policy': DeliverPolicy.BY_START_TIME,
+                     'opt_start_time': datetime.now(timezone.utc) - RECENT_RECORD_WINDOW}
+        else:
+            start = {'deliver_policy': DeliverPolicy.BY_START_SEQUENCE, 'opt_start_seq': resume}
+        consumer_name = 'nightstand_live_' + uuid4().hex
+        created = await jetstream.add_consumer(NATS_STREAM, config=ConsumerConfig(
+            name=consumer_name,
+            ack_policy=AckPolicy.NONE,
+            inactive_threshold=60.0,
+            mem_storage=True,
+            **start,
+        ))
+        consumer_name = created.name
+        subscription = await jetstream.pull_subscribe_bind(
+            stream=NATS_STREAM, consumer=consumer_name,
+            pending_msgs_limit=50, pending_bytes_limit=4 * 1024 * 1024)
+        logger.info(f'Consuming NATS JetStream stream={NATS_STREAM}')
+        last_health_update = time.monotonic()
+        last_nats_record = time.monotonic()
+        reading_raw = False
+        while True:
+            if time.monotonic() - last_health_update >= STREAM_HEALTH_INTERVAL_SECONDS:
+                if not _report_stream_health(processing_thread):
+                    raise RuntimeError('processing thread stopped')
+                last_health_update = time.monotonic()
+            silent = raw_files is not None and time.monotonic() - last_nats_record >= NATS_SILENT_SECONDS
+            if silent != reading_raw:
+                reading_raw = silent
+                logger.info('No sensor records from NATS for 2 minutes, reading RAW files as well' if silent
+                            else 'Sensor records are arriving from NATS again')
+            if silent:
+                raw_files.poll()
+            try:
+                messages = await subscription.fetch(25, timeout=RAW_POLL_SECONDS if silent else NATS_REQUEST_SECONDS)
+            except asyncio.TimeoutError:
+                # An inactive consumer may have expired while no sensors were publishing.
+                await jetstream.consumer_info(NATS_STREAM, consumer_name)
+                continue
+            for message in messages:
+                sequence = _stream_sequence(message)
+                if sequence is not None:
+                    if _last_stream_sequence is not None and sequence <= _last_stream_sequence:
+                        continue
+                    _last_stream_sequence = sequence
+                    _last_stream_message_at = time.monotonic()
+                try:
+                    row = cbor2.loads(message.data)
+                    record = _decode_raw_row(row)
+                    if (isinstance(record, dict) and record.get('type') == 'piezo-dual'
+                            and isinstance(row, dict) and 'seq' in row):
+                        record.setdefault('seq', row['seq'])
+                    if _ingest_live_record(record):
+                        last_nats_record = time.monotonic()
+                except Exception as error:
+                    logger.warning(f'Error decoding NATS raw message, skipping: {error}')
+    finally:
+        try:
+            if jetstream is not None and consumer_name is not None:
+                await asyncio.wait_for(jetstream.delete_consumer(NATS_STREAM, consumer_name), NATS_REQUEST_SECONDS)
+        except Exception as error:
+            logger.warning(f'Could not remove live NATS consumer: {error}')
+        finally:
+            if connection is not None:
+                await asyncio.wait_for(connection.close(), NATS_REQUEST_SECONDS)
 
 
 async def watch_nats_stream():
     try:
-        import nats
-        from nats.errors import TimeoutError as NatsTimeoutError
-        from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy
+        import nats  # noqa: F401
     except ImportError as error:
         raise RuntimeError('nats-py is not installed') from error
 
-    logger.info('NATS stream processor starting...')
     update_health('stream', 'started', '')
-
-    processing_thread = threading.Thread(target=process_biometrics, daemon=True)
+    stop_event = threading.Event()
+    processing_thread = threading.Thread(target=process_biometrics, args=(stop_event,), daemon=True)
     processing_thread.start()
-
-    nc = None
+    raw_files = _RawFiles('/persistent')
+    backoff = 1
+    last_error = None
+    last_health_update = time.monotonic()
     try:
-        nc = await nats.connect(NATS_URL, connect_timeout=5)
-        js = nc.jetstream()
-        stream_info = await js.stream_info(NATS_STREAM)
-        subjects = getattr(stream_info.config, 'subjects', None) or [NATS_STREAM]
-        subject = subjects[0]
-        logger.info(f'Consuming NATS JetStream stream={NATS_STREAM} subject={subject}')
-
-        consumer_config = ConsumerConfig(
-            durable_name=NATS_DURABLE,
-            deliver_policy=DeliverPolicy.NEW,
-            ack_policy=AckPolicy.EXPLICIT,
-        )
-        subscription = await js.pull_subscribe(
-            subject,
-            durable=NATS_DURABLE,
-            stream=NATS_STREAM,
-            config=consumer_config,
-        )
-        last_health_update = time.monotonic()
-        queued_count = 0
-
         while True:
-            if time.monotonic() - last_health_update >= STREAM_HEALTH_INTERVAL_SECONDS:
-                if not _report_stream_health(processing_thread):
-                    # Nothing drains the queue now; leave so the file watcher or a service restart recovers.
-                    raise RuntimeError('processing thread stopped')
-                last_health_update = time.monotonic()
-                logger.debug(f'NATS stream heartbeat; queued piezo records={queued_count}')
-
+            connected_at = time.monotonic()
             try:
-                messages = await subscription.fetch(25, timeout=5)
-            except NatsTimeoutError:
-                continue
-
-            for message in messages:
-                try:
-                    row = cbor2.loads(message.data)
-                    decoded_data = _decode_raw_row(row)
-                    if isinstance(decoded_data, dict) and decoded_data.get('type') == 'frzTemp':
-                        update_sensor_temps(decoded_data)
-                    elif isinstance(decoded_data, dict) and decoded_data.get('type') == 'frzHealth':
-                        _note_pump_speed(decoded_data)
-                        update_pump_health(decoded_data)
-                    elif not _store_decoded_cap_record(decoded_data) and _queue_decoded_piezo_record(decoded_data):
-                        queued_count += 1
-                    await _ack_message(message)
-                except Exception as error:
-                    logger.warning(f'Error decoding NATS raw message, acknowledging and skipping: {error}')
-                    await _ack_message(message)
+                await _nats_session(processing_thread, raw_files)
+            except Exception as error:
+                if not processing_thread.is_alive():
+                    _report_stream_health(processing_thread)
+                    raise RuntimeError('processing thread stopped') from error
+                # A Pod without NATS fails the same way every retry; only a change is worth a warning.
+                message = f'NATS stream unavailable, watching RAW files before retry: {error}'
+                if repr(error) != last_error:
+                    logger.warning(message)
+                else:
+                    logger.debug(message)
+                last_error = repr(error)
+            if time.monotonic() - connected_at >= NATS_RETRY_MAX_SECONDS:
+                backoff = 1
+                last_error = None
+            for _ in range(backoff):
+                raw_files.poll()
+                if time.monotonic() - last_health_update >= STREAM_HEALTH_INTERVAL_SECONDS:
+                    if not _report_stream_health(processing_thread):
+                        raise RuntimeError('processing thread stopped')
+                    last_health_update = time.monotonic()
+                await asyncio.sleep(1)
+            backoff = min(backoff * 2, NATS_RETRY_MAX_SECONDS)
     finally:
-        if nc is not None:
-            await nc.close()
-        if processing_thread.is_alive():
-            piezo_record_queue.put(None)
-            processing_thread.join(timeout=5)
-        else:
-            # A stop signal left here would end the next thread once it reached it.
-            _drain_queue(piezo_record_queue)
+        raw_files.close()
+        stop_event.set()
+        _put_latest(None)
+        processing_thread.join(timeout=5)
+        _drain_queue(piezo_record_queue)
 
 
 def _drain_queue(records) -> None:
@@ -540,6 +708,9 @@ def _drain_queue(records) -> None:
 
 
 def watch_stream():
+    global _stream_started_at, _last_sensor_record
+    _stream_started_at = time.monotonic()
+    _last_sensor_record = None
     try:
         asyncio.run(watch_nats_stream())
     except Exception as error:

@@ -104,9 +104,11 @@ nothing while it is off.
 
 - `stream.py`: Reads sensor records from the firmware's local NATS JetStream
   stream. If NATS isn't available (older firmware, `nats-py` not installed, or
-  no stream), it falls back to watching `/persistent` and reading the newest
-  `.RAW` file. The NATS reader is adapted from
-  [SFenton/free-sleep](https://github.com/SFenton/free-sleep/commit/86aba76).
+  no stream), or carries no sensor records for two minutes, it reads the
+  newest `.RAW` file in `/persistent`. The NATS reader began as an adaptation
+  of [SFenton/free-sleep](https://github.com/SFenton/free-sleep/commit/86aba76)
+  and has since been rewritten; the record decoding and deduplication helpers
+  it uses came with that port.
 - `stream_processor.py`: Buffers piezo data and hands each side's signal to
   presence detection and the vitals calculations.
 - `buffer.py`: The rolling sample buffers for the heart rate, breathing, and
