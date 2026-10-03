@@ -17,6 +17,7 @@
 # service, that file requests a specific version (and whether a downgrade is
 # allowed) instead of the newest release. See the "consume the target-version
 # request file" block below.
+[ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 set -uo pipefail
 
 NIGHTSTAND_REPO="${NIGHTSTAND_REPO:-LTimothy/nightstand}"
@@ -536,6 +537,12 @@ if [ "$HANDOFF" != 1 ]; then
     say "Fetching Node $(node_pin "$STAGE") for the new version"
     run_limited 600 sudo -u dac bash -c "cd '$STAGE/server' && '$NPM' --version" >/dev/null \
       || fail "could not fetch Node $(node_pin "$STAGE"); live install untouched"
+  fi
+  # Inside the window; optional Python packages never gate the swap.
+  if [ -x /home/dac/venv/bin/python ] && [ -f "$STAGE/scripts/python/install-missing-requirements.py" ]; then
+    /home/dac/venv/bin/python "$STAGE/scripts/python/install-missing-requirements.py" \
+      "$STAGE/scripts/python/requirements.txt" \
+      || say "WARNING: optional biometrics package installation failed; continuing"
   fi
   close_wan
 
