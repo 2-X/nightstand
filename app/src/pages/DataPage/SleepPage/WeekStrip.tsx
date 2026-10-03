@@ -39,7 +39,7 @@ function NightButton({ day, selected, record, disabled, onSelect, missingState }
       variant="text"
       sx={ {
         flex: 1, minWidth: 0, minHeight: 84, px: 0, py: 0, flexDirection: 'column',
-        border: '1px solid', borderColor: selected ? palette.lamp : 'transparent',
+        border: '1px solid', borderColor: selected ? palette.accent : 'transparent',
         color: selected ? palette.text.primary : palette.text.secondary, fontWeight: 400,
       } }>
       <Typography component="span" variant="caption" sx={ { lineHeight: 1.2 } }>{ day.format('ddd') }</Typography>

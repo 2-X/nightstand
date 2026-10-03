@@ -29,7 +29,7 @@ export default function RhythmList({ sideData, today, disabled, onOpen, onNew, o
           disabled={ disabled }
           onClick={ () => onOpen(rhythm.id) }
           sx={ { ...tokens.glassCard, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, textAlign: 'left',
-            '&.Mui-focusVisible': { outline: `2px solid ${palette.lamp}`, outlineOffset: 2 } } }>
+            '&.Mui-focusVisible': { outline: `2px solid ${palette.accent}`, outlineOffset: 2 } } }>
           <Box sx={ { minWidth: 0 } }>
             <Typography sx={ { fontSize: 16, fontWeight: 600, overflowWrap: 'anywhere' } }><bdi>{ rhythm.name }</bdi></Typography>
             { detail !== rhythm.name && <Typography variant="body2" color="text.secondary">{ detail }</Typography> }

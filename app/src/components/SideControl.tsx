@@ -19,7 +19,7 @@ function presenceLabel(observation: PresenceSide | undefined): string | undefine
   return minutes < 1 ? 'In bed less than a minute' : `In bed ${minutes} min`;
 }
 
-const focusRing = { '&:has(input:focus-visible)': { outline: `2px solid ${palette.lamp}`, outlineOffset: 3 } } as const;
+const focusRing = { '&:has(input:focus-visible)': { outline: `2px solid ${palette.accent}`, outlineOffset: 3 } } as const;
 // Bed's tiles: warm when selected, content from the top, and room for the presence line so the pair never grows.
 // The shorter heights keep the power row above the bottom bar on short screens.
 const bedTileSx = (selected: boolean) => ({
@@ -37,7 +37,7 @@ const compactTileSx = (selected: boolean) => ({
   position: 'relative', display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, minHeight: 48, py: 0.5, px: 1,
   cursor: 'pointer', borderRadius: '24px',
   bgcolor: selected ? palette.bg.selected : palette.bg.elevated,
-  border: `2px solid ${selected ? palette.lamp : palette.border.subtle}`,
+  border: `2px solid ${selected ? palette.accent : palette.border.subtle}`,
   ...focusRing,
 }) as const;
 
@@ -99,8 +99,8 @@ export default function SideControl({ compact = true, mergeAwaySides = true, bef
         const check = selected && <CheckCircleOutline
           aria-hidden
           sx={ compact
-            ? { position: 'absolute', top: 10, right: 10, fontSize: 18, color: palette.lamp, pointerEvents: 'none' }
-            : { fontSize: 17, color: palette.lamp, flex: 'none' } }/>;
+            ? { position: 'absolute', top: 10, right: 10, fontSize: 18, color: palette.accent, pointerEvents: 'none' }
+            : { fontSize: 17, color: palette.accent, flex: 'none' } }/>;
         // The Bed tiles cut long lines short; a hover shows them in full.
         const full = compact ? undefined : [title, shown, occupancy].filter(Boolean).join('\n');
         return <Box component="label" key={ key } title={ full } sx={ compact ? compactTileSx(selected) : bedTileSx(selected) }>

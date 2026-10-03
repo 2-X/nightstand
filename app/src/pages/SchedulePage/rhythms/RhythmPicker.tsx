@@ -48,7 +48,7 @@ export default function RhythmPicker({ title, subtitle, options, selected, dayCh
           sx={ { px: 2, mb: 1.5, flexWrap: 'wrap', gap: 0.5,
             '& .MuiToggleButtonGroup-grouped': { border: 1, borderColor: 'divider', borderRadius: '12px !important', m: 0 },
             '& .MuiToggleButtonGroup-grouped.Mui-selected, & .MuiToggleButtonGroup-grouped.Mui-selected:hover': {
-              bgcolor: palette.lamp, borderColor: palette.lamp, color: palette.bg.base } } }>
+              bgcolor: palette.accent, borderColor: palette.accent, color: palette.bg.base } } }>
           { dayChoice.days.map(day => <ToggleButton
             key={ day }
             value={ day }
@@ -76,7 +76,7 @@ export default function RhythmPicker({ title, subtitle, options, selected, dayCh
             onClick={ () => onPick(option.choice) }
             sx={ { borderRadius: '12px', gap: 1, minHeight: 44 } }>
             <ListItemText primary={ option.label } secondary={ option.detail }/>
-            { active && <Check aria-hidden sx={ { color: palette.lamp } }/> }
+            { active && <Check aria-hidden sx={ { color: palette.accent } }/> }
           </ListItemButton>;
         }) }
       </List>

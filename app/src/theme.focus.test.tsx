@@ -14,10 +14,10 @@ it.each([
   ['an icon button', <IconButton key="i" className={ focusVisible } aria-label="Increase"/>, 'button', 'Increase'],
   ['a tab', <Tabs key="t" value={ 0 }><Tab className={ focusVisible } label="Monday"/></Tabs>, 'tab', 'Monday'],
   ['an accordion summary', <AccordionSummary key="a" className={ focusVisible }>Recovery</AccordionSummary>, 'button', 'Recovery'],
-])('outlines %s on keyboard focus with the lamp outline other controls use', (_label, element, role, name) => {
+])('outlines %s on keyboard focus with the accent outline other controls use', (_label, element, role, name) => {
   render(<ThemeProvider theme={ theme }>{ element }</ThemeProvider>);
   const style = getComputedStyle(screen.getByRole(role, { name }));
-  expect(style.outline).toBe(`2px solid ${palette.lamp.toLowerCase()}`);
+  expect(style.outline).toBe(`2px solid ${palette.accent.toLowerCase()}`);
 });
 
 it('does not outline a control that is not keyboard focused', () => {

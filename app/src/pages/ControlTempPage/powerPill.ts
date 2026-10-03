@@ -4,8 +4,8 @@ export type PillKind = 'off' | 'on';
 
 // Two matched dark pills: no light block on the screen at any hour.
 const looks = {
-  off: { bgcolor: palette.ember, color: palette.text.primary, boxShadow: `inset 0 0 0 1px ${palette.power.offBorder}` },
-  on: { bgcolor: palette.power.nightBg, color: palette.lamp, boxShadow: `inset 0 0 0 1.5px ${palette.tile.selectedBorder}` },
+  off: { bgcolor: palette.power.offBg, color: palette.power.offText, boxShadow: `inset 0 0 0 1px ${palette.power.offBorder}` },
+  on: { bgcolor: palette.power.nightBg, color: palette.accent, boxShadow: `inset 0 0 0 1.5px ${palette.tile.selectedBorder}` },
 } as const;
 
 export function powerPillSx(kind: PillKind) {

@@ -34,7 +34,7 @@ export default function WeeklyScheduleBars({ records, weekStart, timeZone, onSel
             sx={ {
               width: '100%', display: 'grid', gridTemplateColumns: '64px minmax(0, 1fr)', gap: 1,
               textAlign: 'left', py: 1, minHeight: 44, borderTop: `1px solid ${palette.border.subtle}`,
-              '&.Mui-focusVisible': { outline: `2px solid ${palette.lamp}` },
+              '&.Mui-focusVisible': { outline: `2px solid ${palette.accent}` },
             } }>
             <Typography variant="body2" sx={ { whiteSpace: 'nowrap' } }>{ day.format('ddd D') }</Typography>
             <Box sx={ { width: '100%', minWidth: 0 } }>

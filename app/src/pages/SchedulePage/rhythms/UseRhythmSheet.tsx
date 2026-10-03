@@ -29,7 +29,7 @@ export default function UseRhythmSheet({ name, onUse, onClose }: Props) {
         sx={ { flexWrap: 'wrap', gap: 0.5,
           '& .MuiToggleButtonGroup-grouped': { border: 1, borderColor: 'divider', borderRadius: '12px !important', m: 0 },
           '& .MuiToggleButtonGroup-grouped.Mui-selected, & .MuiToggleButtonGroup-grouped.Mui-selected:hover': {
-            bgcolor: palette.lamp, borderColor: palette.lamp, color: palette.bg.base } } }>
+            bgcolor: palette.accent, borderColor: palette.accent, color: palette.bg.base } } }>
         { WEEK_DAYS.map(day => <ToggleButton
           key={ day }
           value={ day }

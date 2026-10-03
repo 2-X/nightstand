@@ -30,7 +30,7 @@ export default function BedTabs() {
           // A short centred bar under the open tab, on the row's hairline.
           '&::after': selectedPath === to ? {
             content: '""', position: 'absolute', left: '50%', bottom: '-1px', width: 40, height: 2, ml: '-20px',
-            borderRadius: '2px', bgcolor: palette.lamp,
+            borderRadius: '2px', bgcolor: palette.accent,
           } : {},
         } }
       >{ label }</Button>) }

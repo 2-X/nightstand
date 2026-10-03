@@ -10,7 +10,7 @@ export default function UndoBar({ message, disabled, onUndo, onClose }: Props) {
     key={ message }
     onClose={ (_event, reason) => { if (reason !== 'clickaway') onClose(); } }
     message={ message }
-    action={ <Button onClick={ onUndo } disabled={ disabled } sx={ { color: palette.lamp, minHeight: 44 } }>Undo</Button> }
+    action={ <Button onClick={ onUndo } disabled={ disabled } sx={ { color: palette.accent, minHeight: 44 } }>Undo</Button> }
     anchorOrigin={ { vertical: 'bottom', horizontal: 'center' } }
     sx={ {
       bottom: { xs: 'calc(76px + env(safe-area-inset-bottom, 0px))', md: 24 },

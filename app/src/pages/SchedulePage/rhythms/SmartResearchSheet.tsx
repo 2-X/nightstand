@@ -101,7 +101,7 @@ function PhaseSection({ phase }: { phase: Phase }) {
         component="li"
         key={ source.href }
         sx={ { pl: 1.5, borderLeft: `2px solid ${palette.border.medium}`, overflowWrap: 'anywhere' } }>
-        <Link href={ source.href } target="_blank" rel="noopener noreferrer" variant="body2" sx={ { color: palette.lamp } }>
+        <Link href={ source.href } target="_blank" rel="noopener noreferrer" variant="body2" sx={ { color: palette.accent } }>
           { source.title }
         </Link>
         <Typography variant="body2" color="text.secondary">{ source.cite }</Typography>

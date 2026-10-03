@@ -110,9 +110,9 @@ export default function MultiDateSheet({ sideData, today, onNext, onClose }: Pro
             sx={ {
               minHeight: 44, minWidth: 44, borderRadius: '12px', fontSize: 15, position: 'relative',
               color: !usable ? 'text.disabled' : on ? palette.bg.base : 'text.primary',
-              bgcolor: on ? palette.lamp : 'transparent',
+              bgcolor: on ? palette.accent : 'transparent',
               border: date === today ? `1px solid ${palette.border.control}` : '1px solid transparent',
-              '&.Mui-focusVisible': { outline: `2px solid ${palette.lamp}`, outlineOffset: 1 },
+              '&.Mui-focusVisible': { outline: `2px solid ${palette.accent}`, outlineOffset: 1 },
             } }>
             { moment(date, DATE).date() }
             { changed && <Box
