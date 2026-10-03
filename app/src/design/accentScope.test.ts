@@ -16,6 +16,7 @@ const VALUE_PARTS = [
   'components/SleepFitnessCard.tsx',
   'components/SleepStagesCard.tsx',
   'lib/temperatureColor.ts',
+  'components/MovementChart.tsx',
 ];
 const ACCENT = /palette\.accent|primary\.main|palette\.primary|color="primary"/;
 

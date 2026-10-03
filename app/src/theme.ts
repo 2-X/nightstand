@@ -97,6 +97,11 @@ const buildComponents = ({ palette: p, radius, type }: ThemeTokens) => {
       '&.Mui-expanded': { minHeight: 44 },
       '&.Mui-focusVisible': { outlineOffset: '-2px' } }, content: { margin: '8px 0', '&.Mui-expanded': { margin: '8px 0' } } } },
     MuiDialogTitle: { styleOverrides: { root: { fontSize: 16, fontWeight: type.headingWeight } } },
+    // Loading is grey in every look, like the dial's stale state.
+    MuiCircularProgress: { styleOverrides: { colorPrimary: { color: p.text.tertiary } } },
+    MuiLinearProgress: { styleOverrides: {
+      colorPrimary: { backgroundColor: p.border.subtle }, barColorPrimary: { backgroundColor: p.text.tertiary },
+    } },
     MuiListItemText: { styleOverrides: { root: { marginBlock: 2 } } },
     MuiListItemButton: { styleOverrides: { root: { minHeight: 44, '&.Mui-focusVisible': { outlineOffset: '-2px' },
       '&.Mui-selected': { backgroundColor: p.bg.selected } } } },
