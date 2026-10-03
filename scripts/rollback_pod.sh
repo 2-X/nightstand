@@ -198,9 +198,10 @@ rm -f "$HBODY"
 
 if [ "$HEALTHY" = yes ]; then
   if [ "$TARGET_IS_NIGHTSTAND" != yes ]; then
-    systemctl disable --now free-sleep-archive-raw.timer free-sleep-health.timer >/dev/null 2>&1 || true
+    systemctl disable --now free-sleep-archive-raw.timer free-sleep-health.timer free-sleep-network-watchdog.timer >/dev/null 2>&1 || true
     rm -f /etc/systemd/system/free-sleep-archive-raw.service /etc/systemd/system/free-sleep-archive-raw.timer \
       /etc/systemd/system/free-sleep-health.service /etc/systemd/system/free-sleep-health.timer \
+      /etc/systemd/system/free-sleep-network-watchdog.service /etc/systemd/system/free-sleep-network-watchdog.timer \
       /etc/systemd/system/free-sleep.service.d/10-nightstand-limits.conf \
       /etc/systemd/system/free-sleep-stream.service.d/10-nightstand-limits.conf
     systemctl daemon-reload

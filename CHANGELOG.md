@@ -60,6 +60,12 @@ is a hard fork; for the history of the projects it descends from, see
   and switching to upstream turns it off again (on some Pods, at the next
   restart). Checked by hand on one Pod 5; the automatic setup is checked on
   hardware before release.
+- On a Pod whose hardware watchdog is on, Nightstand now tries restarting
+  the Pod when the stock Wi-Fi driver has crashed and Wi-Fi stays down for 5
+  minutes, or when Wi-Fi scans keep failing for 20 minutes. Until now only
+  unplugging the Pod brought Wi-Fi back, and whether a restart does is not
+  yet confirmed. It waits during updates and restarts at most once every six
+  hours and three times a day.
 - Updates no longer turn the firewall off while downloading. They allow only
   HTTPS and name lookups out for the download and keep blocking the
   firmware's upload port, and a stalled dependency install now gives up after

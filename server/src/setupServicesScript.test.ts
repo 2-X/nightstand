@@ -14,7 +14,9 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const SCRIPT = path.join(repoRoot, 'scripts/setup_services.sh');
 
-function sandbox(opts: { existingSudoers?: string; visudoFails?: boolean; withoutHealthCheck?: boolean; watchdog?: 'ok' } = {}) {
+function sandbox(opts: {
+  existingSudoers?: string; visudoFails?: boolean; withoutHealthCheck?: boolean; withoutNetworkWatchdog?: boolean; watchdog?: 'ok';
+} = {}) {
   const root = mkdtempSync(path.join(tmpdir(), 'nightstand-services-'));
   const bin = path.join(root, 'bin');
   const systemd = path.join(root, 'systemd');
@@ -26,6 +28,10 @@ function sandbox(opts: { existingSudoers?: string; visudoFails?: boolean; withou
   if (!opts.withoutHealthCheck) {
     units.push('free-sleep-health.service', 'free-sleep-health.timer');
     copyFileSync(path.join(repoRoot, 'scripts/health_check.sh'), path.join(repo, 'scripts/health_check.sh'));
+  }
+  if (!opts.withoutNetworkWatchdog) {
+    units.push('free-sleep-network-watchdog.service', 'free-sleep-network-watchdog.timer');
+    copyFileSync(path.join(repoRoot, 'scripts/network_watchdog.sh'), path.join(repo, 'scripts/network_watchdog.sh'));
   }
   for (const unit of units) {
     copyFileSync(path.join(repoRoot, 'scripts/systemd', unit), path.join(repo, 'scripts/systemd', unit));
@@ -86,7 +92,7 @@ describe('setup_services.sh', () => {
       assert.ok(box.read(path.join(box.systemd, unit)).length > 0, `${unit} was not installed`);
     }
     const calls = box.read(box.calls).trim().split('\n');
-    assert.deepEqual(calls, ['daemon-reload', 'enable --now free-sleep-health.timer']);
+    assert.deepEqual(calls, ['daemon-reload', 'enable --now free-sleep-health.timer', 'enable --now free-sleep-network-watchdog.timer']);
   });
 
   it('installs and starts the health check timer after the reload', () => {
@@ -104,15 +110,36 @@ describe('setup_services.sh', () => {
     assert.equal(second.status, 0, second.stdout + second.stderr);
     const calls = box.read(box.calls).trim().split('\n');
     assert.deepEqual(calls, [
-      'daemon-reload', 'enable --now free-sleep-health.timer',
-      'daemon-reload', 'enable --now free-sleep-health.timer',
+      'daemon-reload', 'enable --now free-sleep-health.timer', 'enable --now free-sleep-network-watchdog.timer',
+      'daemon-reload', 'enable --now free-sleep-health.timer', 'enable --now free-sleep-network-watchdog.timer',
     ]);
+  });
+
+  it('installs and starts the network watchdog timer after the reload', () => {
+    const box = sandbox();
+    const result = box.run();
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    for (const unit of ['free-sleep-network-watchdog.service', 'free-sleep-network-watchdog.timer']) {
+      assert.equal(
+        box.read(path.join(box.systemd, unit)),
+        readFileSync(path.join(repoRoot, 'scripts/systemd', unit), 'utf8'),
+        `${unit} was not installed`,
+      );
+    }
+  });
+
+  it('skips the network watchdog on a tree that does not carry it', () => {
+    const box = sandbox({ withoutNetworkWatchdog: true });
+    const result = box.run();
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.deepEqual(box.read(box.calls).trim().split('\n'), ['daemon-reload', 'enable --now free-sleep-health.timer']);
+    assert.equal(existsSync(path.join(box.systemd, 'free-sleep-network-watchdog.timer')), false);
   });
 
   it('skips the health check on a tree that does not carry it', () => {
     // The agent overlay installs this script onto upstream free-sleep without
     // the health check, and must not fail for it.
-    const box = sandbox({ withoutHealthCheck: true });
+    const box = sandbox({ withoutHealthCheck: true, withoutNetworkWatchdog: true });
     const result = box.run();
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.equal(box.read(box.calls).trim(), 'daemon-reload');
@@ -123,7 +150,7 @@ describe('setup_services.sh', () => {
     const box = sandbox({ watchdog: 'ok' });
     const result = box.run();
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.doesNotMatch(box.read(box.calls), /watchdog/);
+    assert.doesNotMatch(box.read(box.calls), /^watchdog /m);
   });
 
   it('grants a sudoers rule for every command the server runs through sudo', () => {

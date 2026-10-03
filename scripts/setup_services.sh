@@ -9,8 +9,8 @@
 # warning, since a pod without these still controls the bed.
 #
 # The rollback and revert units are on-demand oneshots. This only installs
-# them; starting either one runs the action. The health timer is the one
-# unit this starts.
+# them; starting either one runs the action. The health and network watchdog
+# timers are the units this starts.
 set -u
 
 REPO_DIR="${1:-/home/dac/free-sleep}"
@@ -62,9 +62,21 @@ if [ -f "$REPO_DIR/scripts/health_check.sh" ]; then
   done
 fi
 
+# The network watchdog restarts the Pod when its Wi-Fi driver has died.
+NETWATCH=no
+if [ -f "$REPO_DIR/scripts/network_watchdog.sh" ]; then
+  NETWATCH=yes
+  for unit in free-sleep-network-watchdog.service free-sleep-network-watchdog.timer; do
+    cp "$REPO_DIR/scripts/systemd/$unit" "$SYSTEMD_DIR/" || { warn "could not install $unit"; NETWATCH=no; }
+  done
+fi
+
 systemctl daemon-reload || warn "systemctl daemon-reload failed"
 if [ "$HEALTH" = yes ]; then
   systemctl enable --now free-sleep-health.timer >/dev/null 2>&1 || warn "could not start free-sleep-health.timer"
+fi
+if [ "$NETWATCH" = yes ]; then
+  systemctl enable --now free-sleep-network-watchdog.timer >/dev/null 2>&1 || warn "could not start free-sleep-network-watchdog.timer"
 fi
 
 RULES=(

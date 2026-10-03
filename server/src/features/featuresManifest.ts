@@ -458,6 +458,36 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     rationale: 'Safety: a frozen system otherwise leaves the Pod with no server and no cooling until it is unplugged. '
       + 'Switching to upstream free-sleep removes the drop-in; it never overrides a watchdog set up some other way.',
   },
+  {
+    id: 'network-watchdog',
+    title: 'Restart the Pod when its Wi-Fi driver has died',
+    description: 'Where the stock Wi-Fi driver is loaded and the hardware watchdog is on, a one-minute timer restarts '
+      + 'the Pod when the gateway has not answered for 5 minutes after a crash of that driver, or for 20 minutes '
+      + 'while its scans fail with the error the crashed driver gives. A router that is away while scans work never '
+      + 'counts. Not in the first 10 minutes after boot or while an update, rollback, switch, install, reset or '
+      + 'biometrics install runs; at most once in 6 hours and 3 times in 24.',
+    category: 'safety',
+    version: 'n/a',
+    flag: null,
+    default: true,
+    touchpoints: [
+      'scripts/network_watchdog.sh', 'scripts/systemd/free-sleep-network-watchdog.service',
+      'scripts/systemd/free-sleep-network-watchdog.timer', 'scripts/setup_services.sh', 'scripts/rollback_pod.sh',
+      'scripts/revert-to-stock.sh', 'scripts/migrate/restore-original-fork.sh',
+    ],
+    depends_on: ['agent'],
+    reversible: true,
+    tests: [
+      'server/src/networkWatchdogScript.test.ts', 'server/src/setupServicesScript.test.ts',
+      'server/src/rollbackScript.test.ts', 'server/src/revertToStockScript.test.ts',
+    ],
+    upstream_offer: false,
+    rationale: 'Safety: when the driver dies the Pod keeps running but cannot be reached, and unplugging it has '
+      + 'been the only known fix; whether a restart brings Wi-Fi back is not yet confirmed. A restart after this '
+      + 'crash can hang, so it waits unless the hardware watchdog can reset a hung shutdown. Always on, '
+      + 'since the evidence rules and rate limits keep it from restarting for an ordinary outage. Switching to '
+      + 'upstream free-sleep removes the timer; an older release leaves it installed as a no-op.',
+  },
 
   {
     id: 'primary-navigation',

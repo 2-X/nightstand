@@ -92,6 +92,9 @@ describe('revert-to-stock.sh', () => {
     assert.match(rest, /systemctl disable --now free-sleep-health\.timer/);
     assert.match(rest, /\/etc\/systemd\/system\/free-sleep-health\.service/);
     assert.match(rest, /\/etc\/systemd\/system\/free-sleep-health\.timer/);
+    assert.match(rest, /systemctl disable --now [^\n]*free-sleep-network-watchdog\.timer/);
+    assert.match(rest, /\/etc\/systemd\/system\/free-sleep-network-watchdog\.service/);
+    assert.match(rest, /\/etc\/systemd\/system\/free-sleep-network-watchdog\.timer/);
     // The fork's tree is at $PREV by then; $LIVE is upstream's.
     // --switching records no owner choice, so a later install turns it on.
     assert.match(rest, /bash "\$PREV\/scripts\/setup_watchdog\.sh" --remove --switching /);

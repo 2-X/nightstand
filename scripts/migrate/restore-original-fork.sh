@@ -67,10 +67,11 @@ restore_iptables() {
 
 cleanup_nightstand_services() {
   # Remove only files owned by Nightstand. Preserve other drop-ins.
-  systemctl disable --now free-sleep-archive-raw.timer free-sleep-health.timer >/dev/null 2>&1 || true
+  systemctl disable --now free-sleep-archive-raw.timer free-sleep-health.timer free-sleep-network-watchdog.timer >/dev/null 2>&1 || true
   systemctl stop free-sleep-archive-raw.service >/dev/null 2>&1 || true
   rm -f "$SYSTEMD_DIR/free-sleep-archive-raw.timer" "$SYSTEMD_DIR/free-sleep-archive-raw.service" \
     "$SYSTEMD_DIR/free-sleep-health.timer" "$SYSTEMD_DIR/free-sleep-health.service" \
+    "$SYSTEMD_DIR/free-sleep-network-watchdog.timer" "$SYSTEMD_DIR/free-sleep-network-watchdog.service" \
     "$SYSTEMD_DIR/free-sleep.service.d/10-nightstand-limits.conf" \
     "$SYSTEMD_DIR/free-sleep-stream.service.d/10-nightstand-limits.conf"
   systemctl daemon-reload >/dev/null 2>&1 || true

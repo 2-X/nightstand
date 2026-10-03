@@ -54,13 +54,16 @@ describe('rollback_pod.sh', () => {
     assert.match(src, /cmp -s "\$LIVE\/server\/package-lock\.json" "\$source\/server\/package-lock\.json"/);
   });
 
-  it('removes the health check and the watchdog setting only when rolling back to another fork', () => {
+  it('removes the health check, network watchdog and watchdog setting only when rolling back to another fork', () => {
     const src = readFileSync(path.join(repoRoot, SCRIPT), 'utf8');
     const success = src.slice(src.indexOf('if [ "$HEALTHY" = yes ]; then'), src.indexOf('# --- swap back on failure'));
     const otherFork = success.slice(success.indexOf('if [ "$TARGET_IS_NIGHTSTAND" != yes ]; then'), success.indexOf('\n  fi\n'));
     assert.match(otherFork, /disable --now [^\n]*free-sleep-health\.timer/);
     assert.match(otherFork, /\/etc\/systemd\/system\/free-sleep-health\.service/);
     assert.match(otherFork, /\/etc\/systemd\/system\/free-sleep-health\.timer/);
+    assert.match(otherFork, /disable --now [^\n]*free-sleep-network-watchdog\.timer/);
+    assert.match(otherFork, /\/etc\/systemd\/system\/free-sleep-network-watchdog\.service/);
+    assert.match(otherFork, /\/etc\/systemd\/system\/free-sleep-network-watchdog\.timer/);
     // After the swap, $PREV holds the Nightstand tree that was running.
     // --switching records no owner choice, so a later install turns it on.
     assert.match(otherFork, /bash "\$PREV\/scripts\/setup_watchdog\.sh" --remove --switching /);
