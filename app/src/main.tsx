@@ -6,6 +6,8 @@ import { StrictMode } from 'react';
 import { ThemeProvider } from '@mui/material/styles';
 import { theme } from './theme';
 import { createQueryClient } from '@lib/queryClient';
+import { loadThemeFonts } from '@design/fonts';
+import { themeTokens } from '@design/tokens';
 
 import AppRoutes from './AppRoutes';
 import { AppStoreProvider } from '@state/appStore.tsx';
@@ -69,7 +71,10 @@ async function enableMocking() {
   });
 }
 
-enableMocking().then(() => {
+// A failed boot step still renders the app, in the fallback font if need be.
+Promise.all([enableMocking(), loadThemeFonts(themeTokens.type.font)]).catch((error: unknown) => {
+  console.error('Rendering after a failed boot step', error);
+}).then(() => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <ErrorBoundary componentName='App'>

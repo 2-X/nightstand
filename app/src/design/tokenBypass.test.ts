@@ -32,9 +32,14 @@ it('reads every colour from the look', () => {
   expect(hits(/['"`](#[0-9a-f]{3,8})['"`]|(rgba?\()/gi)).toEqual([]);
 });
 
+// A template literal only passes when the sizes in it come from interpolated tokens.
+const literalTemplateSize = (hit: string) => / `/.test(hit) && /[1-9]\d*(px|rem|em|%)/.test(hit.replace(/\$\{[^}]*\}/g, ''));
+
 it('reads every corner from the look', () => {
-  const corners = hits(/borderRadius: *('[^']*'|\d+)/g)
-    .filter(hit => !/ ('0( !important)?'|0|1|2|'50%')$/.test(hit) && !PILL_BY_HEIGHT.has(hit));
+  const corners = hits(/borderRadius: *('[^']*'|`[^`]*`|\d+)/g)
+    .filter(hit => / `/.test(hit)
+      ? literalTemplateSize(hit)
+      : !/ ('0( !important)?'|0|1|2|'50%')$/.test(hit) && !PILL_BY_HEIGHT.has(hit));
   expect(corners).toEqual([]);
 });
 
