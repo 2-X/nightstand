@@ -27,11 +27,12 @@ elif [ $result -eq 1 ]; then
   ensure_nats_python_package
   systemctl enable free-sleep-stream.service
   systemctl restart free-sleep-stream.service
+  # The installation status goes first, on its own, so it is kept even if the
+  # server cannot turn the switch on.
   curl -s -X POST http://127.0.0.1:3000/api/services \
     -H "Content-Type: application/json" \
     -d '{
       "biometrics": {
-        "enabled": true,
         "jobs": {
           "installation": {
             "status": "healthy",
@@ -40,6 +41,10 @@ elif [ $result -eq 1 ]; then
         }
       }
     }'
+  curl -sf -X POST http://127.0.0.1:3000/api/services \
+    -H "Content-Type: application/json" \
+    -d '{"biometrics": {"enabled": true}}' >/dev/null \
+    || echo "Biometrics is installed. Turn it on in Settings > Features."
   exit 0
 else
   echo "Unable to check if biometrics installed, exiting..."
@@ -100,3 +105,10 @@ curl -X POST http://127.0.0.1:3000/api/services \
 sh /home/dac/free-sleep/scripts/block_internet_access.sh
 cd /home/dac/free-sleep/biometrics/sleep_detection && /home/dac/venv/bin/python calibrate_sensor_thresholds.py
 
+
+# Installed: turn Biometrics on in the app too. The server enables and starts
+# the stream, which is already running, and only then saves the switch.
+curl -sf -X POST http://127.0.0.1:3000/api/services \
+  -H "Content-Type: application/json" \
+  -d '{"biometrics": {"enabled": true}}' >/dev/null \
+  || echo "Biometrics is installed. Turn it on in Settings > Features."
