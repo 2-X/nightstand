@@ -8,6 +8,9 @@ is a hard fork; for the history of the projects it descends from, see
 
 ## [Unreleased]
 
+- Settings > Features says that biometrics are estimates checked only on a
+  Pod 5, and marks other models, or a Pod whose model has not loaded yet, as
+  not checked.
 - Smart Schedule now says it cools once you have settled in bed (it does not
   detect sleep), that a shared bed can fool its presence sensing, and that
   its research list is background, not a test of this curve.

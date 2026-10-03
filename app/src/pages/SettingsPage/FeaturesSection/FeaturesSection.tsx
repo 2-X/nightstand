@@ -16,6 +16,13 @@ import { useAppStore } from '@state/appStore.tsx';
 import { DeepPartial } from 'ts-essentials';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
+const BIOMETRICS_ESTIMATES = 'Estimates heart rate and sleep from the bed\'s sensors. '
+  + 'These are estimates, not medical measurements, and have only been checked on a Pod 5.';
+const BIOMETRICS_UNCHECKED_MODEL = 'Not checked on this Pod model. Numbers may be further off than on a Pod 5.';
+const NEW_SLEEP_TRACKING_CHECKED = 'Tells the two sides apart with the bed\'s capacitance sensors, for bed times, '
+  + 'the in-bed indicator, auto-off and Smart Schedule. Checked on one Pod 5 so far. '
+  + 'Heart rate and breathing are estimated with newer methods.';
+
 export default function FeaturesSection() {
   const [error, setError] = useState<string | null>(null);
   const { data: services, refetch: refetchServices, isLoading: servicesLoading, isError: servicesError } = useServices();
@@ -68,10 +75,15 @@ export default function FeaturesSection() {
   const features = settings.features;
   const biometricsEnabled = services.biometrics?.enabled ?? false;
   const biometricsInstalled = services.biometrics?.jobs?.installation?.status === 'healthy';
-  const experimental = deviceStatus !== undefined && sleepTrackingExperimental(
+  // Unknown counts as unchecked: the labels show until the Pod proves it is a
+  // validated Pod 5.
+  const experimental = deviceStatus === undefined || sleepTrackingExperimental(
     deviceStatus.coverVersion, deviceStatus.hubVersion,
     [calibrationState?.left?.capFormat, calibrationState?.right?.capFormat],
   );
+  // Biometrics only needs the model: the capacitance format is a New sleep tracking matter.
+  const modelUnchecked = deviceStatus === undefined
+    || sleepTrackingExperimental(deviceStatus.coverVersion, deviceStatus.hubVersion, []);
 
   return (
     <Section>
@@ -87,7 +99,10 @@ export default function FeaturesSection() {
         checked={ biometricsEnabled }
         onChange={ (next) => updateServices({ biometrics: { enabled: next } }) }
         description={
-          biometricsInstalled ? 'Estimates sleep stages and heart rate on the Pod.'
+          biometricsInstalled ? <>
+            { BIOMETRICS_ESTIMATES }
+            { modelUnchecked && <Box component="span" sx={ { display: 'block', mt: 0.5 } }>{ BIOMETRICS_UNCHECKED_MODEL }</Box> }
+          </>
             : 'Not installed. Optional sleep and vital estimates.'
         }
       />
@@ -151,10 +166,7 @@ export default function FeaturesSection() {
           description={
             !biometricsEnabled
               ? <Link href="#biometrics" sx={ { display: 'inline-flex', minHeight: 44, alignItems: 'center' } }>Needs Biometrics</Link>
-              : <>
-                Tells the two sides apart with the bed's capacitance sensors. Still being tested.
-                { experimental && <Box component="span" sx={ { display: 'block', mt: 0.5 } }>{ EXPERIMENTAL_ON_THIS_POD }</Box> }
-              </>
+              : experimental ? EXPERIMENTAL_ON_THIS_POD : NEW_SLEEP_TRACKING_CHECKED
           }
         />
       </Box>
