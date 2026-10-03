@@ -7,6 +7,11 @@ import { server } from '@test/setup';
 import type { SleepRecord } from '@api/sleepSchema';
 import SleepSideControl from './SleepSideControl';
 
+vi.mock('@api/sleepScore', async importOriginal => ({
+  ...await importOriginal<typeof import('@api/sleepScore')>(),
+  useSleepScoreEnabled: () => true,
+}));
+
 const record = (side: string, hours: number): SleepRecord => ({
   id: hours, side, entered_bed_at: '2026-09-23T06:00:00-07:00',
   left_bed_at: `2026-09-23T${String(6 + hours).padStart(2, '0')}:00:00-07:00`,
@@ -22,6 +27,20 @@ describe('Sleep side captions', () => {
     renderWithProviders(<SleepSideControl selectedDate="2026-09-23" timeZone="America/Los_Angeles"/>);
     expect(await screen.findByText('No recording')).toBeInTheDocument();
     expect(screen.getAllByText(/1h/)).toHaveLength(1);
+  });
+
+  it('shows the length of the night without a bare score number', async () => {
+    let scored = false;
+    server.use(
+      http.get('*/metrics/sleep', ({ request }) => HttpResponse.json(
+        new URL(request.url).searchParams.get('side') === 'left' ? [record('left', 7)] : [])),
+      http.get('*/metrics/sleep-score', () => { scored = true; return HttpResponse.json({ active: true, score: 86, components: {} }); }),
+    );
+    renderWithProviders(<SleepSideControl selectedDate="2026-09-23" timeZone="America/Los_Angeles"/>);
+    expect(await screen.findByText(/7h/)).toBeInTheDocument();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(screen.queryByText(/86/)).not.toBeInTheDocument();
+    expect(scored).toBe(false);
   });
 
   it('leaves out a record dated in the future', async () => {
