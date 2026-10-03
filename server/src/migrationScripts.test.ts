@@ -362,6 +362,24 @@ echo "$STREAM_WAS_ACTIVE"`], { encoding: 'utf8' });
   describe('restore-original-fork.sh idempotency', () => {
     const src = readScript('scripts/migrate/restore-original-fork.sh');
 
+    // Their stream comes back only if their Pod had it enabled. The restore
+    // can run after a reboot, so it reads systemd's saved state, which the
+    // migration never changes, rather than whether it was running.
+    it('starts their stream again only if it is enabled', () => {
+      const fn = src.slice(src.indexOf('start_stream_if_enabled() {'), src.indexOf('\n}\n', src.indexOf('start_stream_if_enabled() {')) + 3);
+      for (const [state, started] of [['enabled', true], ['disabled', false], ['masked', false], ['', false]] as const) {
+        const out = execFileSync('bash', ['-c', `LOG=$(mktemp)
+systemctl() { echo "systemctl $*" >> "$LOG"; [ "$1" = is-enabled ] && echo "${state}"; return 0; }
+${fn}
+start_stream_if_enabled
+cat "$LOG"; rm -f "$LOG"`], { encoding: 'utf8' });
+        assert.equal(out.includes('systemctl start free-sleep-stream'), started, `${state}: ${out}`);
+      }
+      assert.equal(src.split('systemctl start free-sleep-stream').length - 1, 1, 'only the gated start');
+      assert.equal(src.split('\nstart_stream_if_enabled\n').length - 1 + src.split('  start_stream_if_enabled\n').length - 1, 2,
+        'both the no-op and the revert path use it');
+    });
+
     it('documents the swap-never/half/already-happened decision table', () => {
       assert.match(src, /never happened, half\s*\n?#?\s*happened, or already happened/);
     });

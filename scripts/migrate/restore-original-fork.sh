@@ -76,6 +76,15 @@ cleanup_nightstand_services() {
   systemctl daemon-reload >/dev/null 2>&1 || true
 }
 
+# Their stream comes back only if their Pod had it enabled. The migration
+# stops it but never enables or disables it, and this can run after a reboot,
+# so systemd's saved state is the record of their choice.
+start_stream_if_enabled() {
+  if [ "$(systemctl is-enabled free-sleep-stream 2>/dev/null)" = enabled ]; then
+    systemctl start free-sleep-stream >/dev/null 2>&1 || true
+  fi
+}
+
 cleanup_temporary_files() {
   rm -rf "$ABORTED_QUARANTINE" "$STAGE" "$STAGE.unzip"
   rm -f "$ZIP" "$PID_FILE" "$IPTABLES_SNAPSHOT" /home/dac/free-sleep-migrate.lock \
@@ -126,7 +135,7 @@ if [ ! -f "$SWAP_MARKER" ]; then
   # failure that lands here (e.g. it failed to even move $LIVE aside);
   # restarting is a safe no-op if it's already running.
   systemctl start free-sleep >/dev/null 2>&1 || true
-  systemctl start free-sleep-stream >/dev/null 2>&1 || true
+  start_stream_if_enabled
   cleanup_temporary_files
   write_status "no_op" "no swap in progress"
   say "Nothing to move, their service has been (re)started just in case. Done."
@@ -175,7 +184,7 @@ restore_iptables
 say "Starting their original service"
 systemctl start free-sleep >/dev/null 2>&1 \
   || say "WARNING: 'systemctl start free-sleep' failed, their fork may use a different service name; the tree is restored regardless"
-systemctl start free-sleep-stream >/dev/null 2>&1 || true
+start_stream_if_enabled
 
 sleep 8
 if curl -sf --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" >/dev/null 2>&1 \
