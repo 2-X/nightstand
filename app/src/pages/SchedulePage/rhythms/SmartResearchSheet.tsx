@@ -34,10 +34,11 @@ const PHASES: Phase[] = [
     ],
   },
   {
-    heading: 'Once you are asleep',
+    heading: 'Once you have settled in',
     does: 'The bed cools one step at a time to one or two steps below your base, then holds there through the night. With sleep '
       + 'tracking on, the cool-down waits until you have settled in bed; otherwise it follows the clock from bedtime.',
-    why: 'Gentle cooling during sleep has been linked with a little more deep sleep and a slightly lower heart rate.',
+    why: 'In one lab study, a mattress that drew heat away during sleep was linked with a little more deep sleep and a slightly lower '
+      + 'heart rate. The Pod\'s curve has not been tested for this.',
     sources: [
       {
         cite: 'Herberger and others, 2024',
@@ -121,10 +122,10 @@ export default function SmartResearchSheet({ onClose }: { onClose: () => void })
     scroll="paper"
     sx={ { '& .MuiDialog-container': { alignItems: 'flex-end' },
       '& .MuiDialog-paper': { m: 0, width: '100%', maxHeight: '90%', borderRadius: '20px 20px 0 0' } } }>
-    <DialogTitle id={ titleId }>Based on sleep research</DialogTitle>
+    <DialogTitle id={ titleId }>The research behind it</DialogTitle>
     <DialogContent dividers>
       <Typography variant="body2" color="text.secondary">
-        Comfortable when you lie down, a little cooler once you are asleep, and warming gently before your wake time. Changes
+        Comfortable when you lie down, a little cooler once you have settled in bed, and warming gently before your wake time. Changes
         are small and gradual. The step sizes and timings are our estimates: these studies used other beds and small groups of
         people, and none of them tested this curve.
       </Typography>

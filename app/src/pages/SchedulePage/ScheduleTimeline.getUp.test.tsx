@@ -5,6 +5,9 @@ import { useScheduleStore } from './scheduleStore';
 import { useAppStore } from '@state/appStore';
 import { getSchedules } from '../../mocks/mockData';
 
+const NOTE = "Uses the bed's presence sensing. In a shared bed it can mistake the other sleeper for you; "
+  + 'if it stops reporting, the bed follows the clock.';
+
 const HELPER = "After your wake time, it turns off once you've been out of bed for 10 minutes and your alarms are done."
   + ' Still in bed at 8:30 AM? It stays on at your wake temperature until you get up, for up to 3 more hours.';
 
@@ -47,6 +50,7 @@ it('keeps the set off as the usual one and explains the choice', () => {
   expect(screen.queryByLabelText('Turn off at')).not.toBeInTheDocument();
   expect(screen.queryByText(/^Turns off at/)).not.toBeInTheDocument();
   expect(screen.getByText(HELPER)).toBeInTheDocument();
+  expect(screen.getAllByText(NOTE)).toHaveLength(1);
 });
 
 it('needs Biometrics: the choice is disabled, and a saved one says the set time applies', () => {
@@ -65,7 +69,7 @@ it('links the note to the Turn off control and announces it', () => {
   timeline({ on: true, tracking: true, onChange: vi.fn() });
   const note = screen.getByRole('status');
   expect(note).toHaveTextContent(HELPER);
-  expect(screen.getByLabelText('Turn off')).toHaveAccessibleDescription(HELPER);
+  expect(screen.getByLabelText('Turn off')).toHaveAccessibleDescription(expect.stringContaining(HELPER));
 });
 
 it('gives the Biometrics note the same link and role', () => {
@@ -73,6 +77,7 @@ it('gives the Biometrics note the same link and role', () => {
   const text = 'Needs Biometrics. Until it is on, the bed turns off at 8:30 AM.';
   expect(screen.getByRole('status')).toHaveTextContent(text);
   expect(screen.getByLabelText('Turn off')).toHaveAccessibleDescription(text);
+  expect(screen.queryByText(/presence sensing/)).not.toBeInTheDocument();
 });
 
 it('has no note, and no description, until the choice is made', () => {

@@ -15,6 +15,7 @@ import {
 import { palette } from '@design/tokens';
 import { CHART_END_PADDING_MS, HorizontalTempGradient, type Point } from '../ScheduleChart';
 import { curveSummary, previewCurves } from './smartPreview';
+import { PRESENCE_NOTE } from './presenceNote';
 
 function CoolDownBand({ from, to }: { from: Date; to: Date }) {
   const { top, height } = useDrawingArea();
@@ -104,5 +105,8 @@ export default function SmartCurveChart({ night, wake, smart, date, timeZone, fo
       { trackingOn ? 'Shaded: the cool-down can start up to 2 hours later, once you\'ve settled in bed.'
         : 'Follows the clock from bedtime to wake-up.' }
     </Typography>
+    { trackingOn && <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mt: 0.5 } }>
+      { PRESENCE_NOTE }
+    </Typography> }
   </Paper>;
 }

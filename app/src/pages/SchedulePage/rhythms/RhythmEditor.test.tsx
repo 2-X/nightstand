@@ -87,6 +87,14 @@ it('switches to Smart Schedule, hides temperature rows and keeps them for later'
   expect(saved.night.temperatures).toEqual({ '02:00': 77, '08:00': 85 });
 });
 
+it('links the research sheet as the research behind Smart Schedule', async () => {
+  const { user } = renderEditor('weekend');
+  await user.click(await screen.findByRole('button', { name: 'Smart Schedule' }));
+  expect(screen.queryByRole('button', { name: 'Based on sleep research' })).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'The research behind it' }));
+  expect(screen.getByRole('dialog', { name: 'The research behind it' })).toBeInTheDocument();
+});
+
 it('asks where the days go before deleting a rhythm that is in use', async () => {
   const { user, onDelete, onClose } = renderEditor('workday');
   await user.click(await screen.findByRole('button', { name: 'Delete rhythm' }));

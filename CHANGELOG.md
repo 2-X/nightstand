@@ -8,6 +8,9 @@ is a hard fork; for the history of the projects it descends from, see
 
 ## [Unreleased]
 
+- Smart Schedule now says it cools once you have settled in bed (it does not
+  detect sleep), that a shared bed can fool its presence sensing, and that
+  its research list is background, not a test of this curve.
 - The sleep score no longer calls a night good, fair or rough. The Sleep
   page leads with time asleep and shows the score as a small estimate,
   because it is mostly a measure of how long you slept and has not been

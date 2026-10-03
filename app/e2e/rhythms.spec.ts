@@ -162,12 +162,14 @@ test('a Smart Schedule rhythm shows its controls and a preview', async ({ page }
   for (let step = 0; step < 6; step++) await page.getByRole('button', { name: 'Decrease base temperature' }).click();
   await expect(page.getByRole('spinbutton', { name: 'Base temperature' })).toHaveAttribute('aria-valuenow', '-7');
   await expect(page.getByText('The bed turns on at 10:00 PM.')).toBeVisible();
-  await page.getByRole('button', { name: 'Based on sleep research' }).click();
-  const sources = page.getByRole('dialog', { name: 'Based on sleep research' });
+  await page.getByRole('button', { name: 'The research behind it' }).click();
+  const sources = page.getByRole('dialog', { name: 'The research behind it' });
   for (const studies of await sources.getByRole('button', { name: /^Studies/ }).all()) await studies.click();
   await expect(sources.getByRole('link').first()).toBeVisible();
   for (const link of await sources.getByRole('link').all()) await expect(link).toHaveAttribute('href', /^https:\/\/doi\.org\/10\./);
   await expect(sources).toContainText('not a medical recommendation');
+  await expect(sources.getByRole('heading', { name: 'Once you have settled in' })).toBeVisible();
+  await expect(sources).not.toContainText('Once you are asleep');
   await expect(sources).not.toContainText(/minutes a night|beats a minute|about \d/);
   await sources.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Set by hand' }).click();

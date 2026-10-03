@@ -63,7 +63,7 @@ const SWEEP: Screen[] = [
       },
       async page => {
         await editRhythm(page);
-        await clickThenDialog('Based on sleep research')(page);
+        await clickThenDialog('The research behind it')(page);
       },
     ],
   },

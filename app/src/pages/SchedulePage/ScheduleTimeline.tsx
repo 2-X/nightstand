@@ -13,6 +13,7 @@ import { useScheduleStore } from './scheduleStore';
 import { minutesSincePowerOn, temperatureInPowerWindow, timeInPowerWindow } from './scheduleValidation';
 import { addMinutes, canFollowWake, nextTemperatureChange, relativeOffDelay, wakeTemperatureTimes } from './scheduleRoutine';
 import TemperatureStepper from './TemperatureStepper';
+import { PRESENCE_NOTE } from './rhythms/presenceNote';
 import WakeVibrationSheet from './AlarmSection/WakeVibrationSheet';
 
 // A rhythm passes `wake`: its own wake time, kept whether or not an alarm rings, which anchors the warm-up and the turn-off.
@@ -461,6 +462,7 @@ export default function ScheduleTimeline({ format, risePattern = false, hideTemp
         </Typography> }
         { upMode && <Typography id={ upNoteId } role="status" variant="caption" color="text.secondary" sx={ { display: 'block', mt: 1 } }>
           { upNote }
+          { getUp?.tracking && <Box component="span" sx={ { display: 'block', mt: 0.5 } }>{ PRESENCE_NOTE }</Box> }
         </Typography> }
         { customOff && delay !== undefined && <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mt: 1 } }>
           Matches { delay === 0 ? 'wake time' : `${delay} min after wake` }, so it will move with your wake time.

@@ -236,7 +236,7 @@ export default function RhythmEditor({
         aria-haspopup="dialog"
         endIcon={ <ChevronRight/> }
         sx={ { alignSelf: 'flex-start', px: 0, mt: -1, minHeight: 44 } }>
-        Based on sleep research
+        The research behind it
       </Button> }
       { researchOpen && <SmartResearchSheet onClose={ () => setResearchOpen(false) }/> }
       { mode === 'smart' && <SmartScheduleControls
