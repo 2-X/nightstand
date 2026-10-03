@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import SectionHeading from '@components/SectionHeading';
 import moment from 'moment-timezone';
 import { Alert, AlertTitle, Button, CircularProgress, Stack, Typography } from '@mui/material';
@@ -19,7 +20,14 @@ export default function StatusPage() {
   const impacts = [...new Set(attention.filter(key => !overdue.includes(key)).map(statusImpact))];
   const stale = dataUpdatedAt > 0 && now - dataUpdatedAt > 60_000;
   const activity = keys.filter(key => ['started', 'waiting_for_data'].includes((data![key] as StatusInfo).status));
-
+  const ranked = () => [...GROUPS].sort((left, right) => {
+    const rank = (group: StatusGroup) => attention.some(key => STATUS_META[key].group === group) ? 0
+      : activity.some(key => STATUS_META[key].group === group) ? 1 : 2;
+    return rank(left) - rank(right);
+  });
+  // The first answer of the visit sets the order; later changes show inside the groups and in the summary.
+  const [order, setOrder] = useState<StatusGroup[]>();
+  if (!order && keys.length > 0) setOrder(ranked());
 
   return (
     <SubpageShell title="System status" backTo="/settings/device" backLabel="Back to Pod and diagnostics">
@@ -51,11 +59,7 @@ export default function StatusPage() {
             <Button onClick={ () => void refetch() }>Check again</Button>
           </Stack>
           { attention.length > 0 && <SectionHeading>Needs attention ({ attention.length })</SectionHeading> }
-          { [...GROUPS].sort((left, right) => {
-            const rank = (group: StatusGroup) => attention.some(key => STATUS_META[key].group === group) ? 0
-              : activity.some(key => STATUS_META[key].group === group) ? 1 : 2;
-            return rank(left) - rank(right);
-          }).map(group => (
+          { (order ?? ranked()).map(group => (
             <GroupCard
               key={ group }
               label={ GROUP_LABELS[group] }

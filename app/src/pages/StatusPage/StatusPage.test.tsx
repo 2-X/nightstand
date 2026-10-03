@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { renderApp, renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import { getServerStatus } from '../../mocks/mockData';
@@ -109,7 +109,7 @@ it('does not report an empty status response as healthy', async () => {
   expect(screen.queryByText('Everything is running')).not.toBeInTheDocument();
 });
 
-it('opens a group when a new failure arrives after it was collapsed', async () => {
+it('leaves a collapsed group closed when a new failure arrives, counting it in the summary', async () => {
   const { user, queryClient } = renderWithProviders(<StatusPage/>);
   const group = await screen.findByRole('button', { name: /Schedules.*healthy/ });
   await user.click(group);
@@ -119,7 +119,27 @@ it('opens a group when a new failure arrives after it was collapsed', async () =
   act(() => queryClient.setQueryData(['useServerStatus'], {
     status: { ...data, alarmSchedule: { ...data.alarmSchedule, status: 'failed' } },
   }));
-  await waitFor(() => expect(group).toHaveAttribute('aria-expanded', 'true'));
+  await waitFor(() => expect(group).toHaveAccessibleName(/Schedules.*1 failed/));
+  expect(screen.getByText(/needs attention$/)).toBeVisible();
+  expect(group).toHaveAttribute('aria-expanded', 'false');
+});
+
+it('keeps the order of the groups from the first answer as their states change', async () => {
+  const data = getServerStatus();
+  server.use(http.get('/api/serverStatus', () => HttpResponse.json({ ...data,
+    analyzeSleepLeft: { ...data.analyzeSleepLeft, status: 'started' },
+  })));
+  const { queryClient } = renderWithProviders(<StatusPage/>);
+  await screen.findByRole('button', { name: /Sleep tracking/ });
+  const order = () => screen.getAllByRole('heading', { level: 2 }).filter(heading => within(heading).queryByRole('button'))
+    .map(heading => heading.textContent?.split(' ·')[0]);
+  const first = order();
+  expect(first[0]).toBe('Sleep tracking');
+  act(() => queryClient.setQueryData(['useServerStatus'], {
+    status: { ...data, alarmSchedule: { ...data.alarmSchedule, status: 'failed' } },
+  }));
+  await waitFor(() => expect(screen.getByRole('button', { name: /Schedules.*1 failed/ })).toBeVisible());
+  expect(order()).toEqual(first);
 });
 
 it.each(['franken', 'jobs', 'systemDate'] as const)('does not claim readiness before %s starts', async (key) => {
