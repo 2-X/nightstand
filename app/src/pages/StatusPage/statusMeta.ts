@@ -58,7 +58,7 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
   analyzeSleepLeft: {
     runLabel: 'Analyze left-side sleep',
     group: 'biometrics',
-    blurb: "Turns last night's raw sensor data into sleep stages and a sleep score, left side.",
+    blurb: "Finds last night's bed times and movement from the sensor data, left side.",
     meaning: {
       healthy: 'Finished analyzing the most recent sleep session.',
       waiting_for_data: 'No full night to analyze yet. Runs automatically after your first night.',
@@ -68,7 +68,7 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
   analyzeSleepRight: {
     runLabel: 'Analyze right-side sleep',
     group: 'biometrics',
-    blurb: "Turns last night's raw sensor data into sleep stages and a sleep score, right side.",
+    blurb: "Finds last night's bed times and movement from the sensor data, right side.",
     meaning: {
       healthy: 'Finished analyzing the most recent sleep session.',
       waiting_for_data: 'No full night to analyze yet. Runs automatically after your first night.',
@@ -78,7 +78,7 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
   biometricsCalibrationLeft: {
     runLabel: 'Calibrate left presence',
     group: 'biometrics',
-    blurb: 'Learns what an empty bed looks like to the sensors, so presence detection stays accurate, left side.',
+    blurb: 'Learns what an empty bed looks like to the sensors, so presence detection fits this bed, left side.',
     meaning: {
       healthy: 'Calibration finished successfully.',
       waiting_for_data: 'Collecting data. Calibration runs automatically once the sensors record a stretch of empty bed.',
@@ -88,7 +88,7 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
   biometricsCalibrationRight: {
     runLabel: 'Calibrate right presence',
     group: 'biometrics',
-    blurb: 'Learns what an empty bed looks like to the sensors, so presence detection stays accurate, right side.',
+    blurb: 'Learns what an empty bed looks like to the sensors, so presence detection fits this bed, right side.',
     meaning: {
       healthy: 'Calibration finished successfully.',
       waiting_for_data: 'Collecting data. Calibration runs automatically once the sensors record a stretch of empty bed.',

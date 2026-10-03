@@ -107,7 +107,7 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
   {
     id: 'biometrics',
     title: 'Biometrics',
-    description: 'Heart rate, HRV, breathing rate, and presence detection from the piezo stream, plus every accuracy fix within that subsystem.',
+    description: 'Heart rate, HRV, breathing rate, and presence detection from the piezo stream, plus fixes within that subsystem.',
     category: 'biometrics',
     version: '3.0.0',
     flag: 'services.biometrics.enabled',
