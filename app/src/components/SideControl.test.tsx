@@ -133,7 +133,7 @@ it('names the level of a paused side that is on, on the Bed tiles and the compac
   expect(screen.getByText('Paused · 84°F')).toBeInTheDocument();
 });
 
-it('draws the selected Bed tile warm, from the top, with room for three lines', () => {
+it('draws the selected Bed tile filled, from the top, with room for three lines', () => {
   render(<SideControl compact={ false }/>);
   const selected = screen.getByRole('radio', { name: /^Alex/ }).closest('label')!;
   expect(selected).toHaveStyle({ backgroundColor: '#172028', minHeight: '84px', borderRadius: '7px', justifyContent: 'flex-start' });

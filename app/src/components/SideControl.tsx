@@ -20,7 +20,7 @@ function presenceLabel(observation: PresenceSide | undefined): string | undefine
 }
 
 const focusRing = { '&:has(input:focus-visible)': { outline: `2px solid ${palette.accent}`, outlineOffset: 3 } } as const;
-// Bed's tiles: warm when selected, content from the top, and room for the presence line so the pair never grows.
+// Bed's tiles: filled when selected, content from the top, and room for the presence line so the pair never grows.
 // The shorter heights keep the power row above the bottom bar on short screens.
 const bedTileSx = (selected: boolean) => ({
   position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', minWidth: 0, minHeight: 84,
