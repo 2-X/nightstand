@@ -18,7 +18,7 @@ export function downgradeWarnings(release: Release, runningVersion: string | und
   }
   if (release.kind === 'bundle') {
     const features = [
-      ['sleep-stages-score', 'Sleep stages and score'],
+      ['sleep-stages-score', 'Sleep score'],
       ['level-temperature-display', 'Level temperature display'],
       ['one-off-alarms', 'One-time alarms'],
       ['base-control', 'Adjustable base control'],

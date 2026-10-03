@@ -6,7 +6,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import express from 'express';
-import { NIGHT_END, NIGHT_START, flappingNight } from './sleepNightFixture.js';
 
 const folder = mkdtempSync(path.join(tmpdir(), 'nightstand-score-'));
 mkdirSync(path.join(folder, 'lowdb'));
@@ -18,7 +17,6 @@ execFileSync(process.execPath, [
   path.join(serverRoot, 'node_modules/prisma/build/index.js'),
   'migrate', 'deploy', '--schema', path.join(serverRoot, 'prisma/schema.prisma'),
 ], { env: process.env, stdio: 'pipe', timeout: 60_000 });
-const { summarizeStages } = await import('./sleepStages.js');
 const { durationComponent, default: router } = await import('./sleepScore.js');
 const { prisma } = await import('../../db/prisma.js');
 const { default: settingsDB } = await import('../../db/settings.js');
@@ -37,32 +35,14 @@ after(async () => {
 
 const IN_BED_SECONDS = 5 * 3600 + 46 * 60;
 
-// Same arithmetic and format as the app's night headline.
-function headline(seconds: number) {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor(seconds % 3600 / 60);
-  return `${hours}h${minutes ? ` ${minutes}m` : ''}`;
-}
-
-test('duration scores the same asleep time the stages headline shows', () => {
-  const { vitals, movements } = flappingNight();
-  const stages = summarizeStages(vitals, movements, NIGHT_START, NIGHT_END);
-  const asleep = stages.totals.light + stages.totals.rem + stages.totals.deep;
-  const component = durationComponent(IN_BED_SECONDS, stages);
-  assert.equal(component.value, `${headline(asleep)} asleep`);
-  assert.equal(component.score, Math.round(100 - Math.abs(asleep / 3600 - 8) * 10));
-});
-
-test('duration falls back to time in bed when vitals coverage is low', () => {
-  const stages = summarizeStages([], [], NIGHT_START, NIGHT_END);
-  assert.equal(stages.lowCoverage, true);
-  const component = durationComponent(IN_BED_SECONDS, stages);
+test('duration is scored on time in bed', () => {
+  const component = durationComponent(IN_BED_SECONDS);
   assert.equal(component.value, '5h 46m in bed');
   assert.equal(component.score, 78);
 });
 
 test('whole hours drop the minutes like the app does', () => {
-  const component = durationComponent(8 * 3600, summarizeStages([], [], NIGHT_START, NIGHT_END));
+  const component = durationComponent(8 * 3600);
   assert.equal(component.value, '8h in bed');
   assert.equal(component.score, 100);
 });
@@ -140,4 +120,11 @@ test('skips failed-estimate minutes when finding the lowest heart rate', async (
   const night = 1791000000;
   await seedNight('left', night, 0, [0, 55, 61]);
   assert.equal((await scoreFor('left', night)).components.restingHr.value, '55 bpm');
+});
+
+test('the score route reports time in bed for a night with plenty of heart readings', async () => {
+  const night = 1791100000;
+  await seedNight('left', night, 0, Array.from({ length: 60 }, (_, index) => 55 + index % 7));
+  const response = await scoreFor('left', night);
+  assert.equal(response.components.duration.value, '1h 2m in bed');
 });

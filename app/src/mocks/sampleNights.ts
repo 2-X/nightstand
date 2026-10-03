@@ -104,18 +104,17 @@ export const createVitalsSamples = (startTime: string, endTime: string): VitalsS
 };
 
 
-// The same scorers as the server (routes/metrics/sleepScore.ts): 8h asleep is 100, each bed exit costs 15,
+// The same scorers as the server (routes/metrics/sleepScore.ts): 8h in bed is 100, each bed exit costs 15,
 // and the lowest heart rate is reported but not scored.
 export const nightScore = (start: Date | string, end: Date | string, exits: number) => {
   const startTime = new Date(start).toISOString();
   const endTime = new Date(end).toISOString();
-  const { totals } = createSleepStages(startTime, endTime);
-  const asleepSeconds = totals.light + totals.rem + totals.deep;
+  const inBedSeconds = (new Date(endTime).getTime() - new Date(startTime).getTime()) / 1000;
   const minHeartRate = Math.min(...createVitalsSamples(startTime, endTime).map(sample => sample.heartRate));
-  const duration = Math.max(0, Math.round(100 - Math.abs(asleepSeconds / 3600 - 8) * 10));
+  const duration = Math.max(0, Math.round(100 - Math.abs(inBedSeconds / 3600 - 8) * 10));
   const continuity = Math.max(0, 100 - exits * 15);
   const score = Math.round((duration * 0.4 + continuity * 0.3) / 0.7);
-  return { score, duration, continuity, asleepSeconds, minHeartRate };
+  return { score, duration, continuity, inBedSeconds, minHeartRate };
 };
 
 // Starts around 10:45 PM local and ends in the morning, within 6h 40m to 8h 20m.

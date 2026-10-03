@@ -132,15 +132,15 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
   },
   {
     id: 'sleep-stages-score',
-    title: 'Sleep score and stages',
-    description: 'The estimated sleep score and sleep-stages chart on the Sleep page.',
+    title: 'Sleep score',
+    description: 'The estimated sleep score on the Sleep page.',
     category: 'biometrics',
     version: '3.0.1',
     flag: 'sleepScore',
     default: true,
     touchpoints: [
       'server/src/routes/metrics/sleepScore.ts', 'server/src/routes/metrics/sleepStages.ts',
-      'app/src/components/SleepFitnessCard.tsx', 'app/src/components/SleepStagesCard.tsx',
+      'app/src/components/SleepFitnessCard.tsx',
     ],
     depends_on: ['biometrics'],
     reversible: true,

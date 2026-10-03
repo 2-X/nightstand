@@ -36,7 +36,7 @@ it('keeps software actions on Software without repeating its link on Device', as
 
 it('keeps optional toggles together and bed maintenance with the sides', async () => {
   const { unmount } = renderWithProviders(<SettingsPage/>, { initialRoute: '/settings/features' });
-  for (const label of ['Biometrics', 'Sleep score and stages', 'Presence auto-off', 'New sleep tracking (beta)',
+  for (const label of ['Biometrics', 'Sleep score', 'Presence auto-off', 'New sleep tracking (beta)',
     'Level temperature display', 'One-time alarm', 'Rhythms']) {
     expect(await screen.findByRole('switch', { name: label })).toBeInTheDocument();
   }

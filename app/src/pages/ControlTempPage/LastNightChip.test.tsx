@@ -16,7 +16,7 @@ const record = (id: number, enteredBedAt: string, leftBedAt: string, seconds: nu
   times_exited_bed: 0, present_intervals: [], not_present_intervals: [],
 });
 
-const duration = { duration: { score: 80, weight: 0.4, value: '7h 12m asleep', available: true } };
+const duration = { duration: { score: 80, weight: 0.4, value: '7h 12m in bed', available: true } };
 
 it('scores the longest record of the newest wake date, as the Sleep page does', async () => {
   const requests: Array<{ startTime: string | null; endTime: string | null }> = [];
@@ -34,7 +34,7 @@ it('scores the longest record of the newest wake date, as the Sleep page does', 
 
   renderWithProviders(<Chip />);
 
-  expect(await screen.findByText('Last night: about 7h 12m asleep')).toBeInTheDocument();
+  expect(await screen.findByText('Last night: 7h 12m in bed')).toBeInTheDocument();
   expect(requests).toEqual([{
     startTime: '2026-09-22T22:00:00-07:00',
     endTime: '2026-09-23T06:30:00-07:00',
@@ -56,7 +56,7 @@ it('ignores a stale row appended after the newest night', async () => {
 
   renderWithProviders(<Chip />);
 
-  expect(await screen.findByText('Last night: about 7h 12m asleep')).toBeInTheDocument();
+  expect(await screen.findByText('Last night: 7h 12m in bed')).toBeInTheDocument();
   expect(requests).toEqual(['2026-09-23T22:00:00-07:00']);
 });
 
@@ -80,7 +80,7 @@ it('waits for the Pod time zone instead of guessing UTC, so only the right night
 
   renderWithProviders(<Chip />);
 
-  expect(await screen.findByText('Last night: about 7h 12m asleep')).toBeInTheDocument();
+  expect(await screen.findByText('Last night: 7h 12m in bed')).toBeInTheDocument();
   expect(requests).toEqual(['2026-09-22T22:00:00-07:00']);
 });
 
@@ -101,6 +101,6 @@ it('groups nights in UTC, as the Sleep page does, when the Pod time zone is unse
 
   renderWithProviders(<Chip />);
 
-  expect(await screen.findByText('Last night: about 7h 12m asleep')).toBeInTheDocument();
+  expect(await screen.findByText('Last night: 7h 12m in bed')).toBeInTheDocument();
   expect(requests).toEqual(['2026-09-23T17:00:00-07:00']);
 });

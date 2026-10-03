@@ -32,7 +32,7 @@ describe('FeaturesSection partial payload handling', () => {
     expect(await screen.findByRole('switch', { name: 'Biometrics' })).toBeEnabled();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-    for (const name of ['Sleep score and stages', 'Presence auto-off', 'New sleep tracking (beta)',
+    for (const name of ['Sleep score', 'Presence auto-off', 'New sleep tracking (beta)',
       'Level temperature display', 'One-time alarm']) {
       expect(screen.getByRole('switch', { name })).toBeDisabled();
     }
@@ -66,7 +66,7 @@ describe('FeaturesSection partial payload handling', () => {
 });
 
 it.each([
-  ['sleepScore', 'Sleep score and stages'], ['presenceAutoOff', 'Presence auto-off'],
+  ['sleepScore', 'Sleep score'], ['presenceAutoOff', 'Presence auto-off'],
   ['biometricsV2', 'New sleep tracking (beta)'],
   ['levelTemps', 'Level temperature display'], ['oneOffAlarms', 'One-time alarm'],
 ])('disables only the missing feature %s', async (key, name) => {

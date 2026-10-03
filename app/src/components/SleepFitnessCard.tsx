@@ -6,11 +6,10 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import type { SleepRecord } from '@api/sleepSchema';
 import { useSettings } from '@api/settings';
 import { useSleepScore, useSleepScoreEnabled } from '@api/sleepScore';
-import { useSleepStages } from '@api/sleepStages';
 import GlassCard from '@design/GlassCard';
 import { palette, typography } from '@design/tokens';
 import {
-  formatSleepDuration, nightDuration, SLEEP_GOAL_MIN_SECONDS, SLEEP_GOAL_MAX_SECONDS, SLEEP_RANGE_SOURCE, SLEEP_RANGE_TEXT,
+  formatSleepDuration, SLEEP_GOAL_MIN_SECONDS, SLEEP_GOAL_MAX_SECONDS, SLEEP_RANGE_SOURCE, SLEEP_RANGE_TEXT,
 } from '../pages/DataPage/SleepPage/sleepContext';
 
 type Props = { sleepRecord: SleepRecord; timeZone?: string; title?: string; timeZoneLabel?: string };
@@ -27,10 +26,8 @@ export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZon
   const enabled = useSleepScoreEnabled();
   const query = { side: sleepRecord.side as 'left' | 'right', startTime: sleepRecord.entered_bed_at, endTime: sleepRecord.left_bed_at };
   const { data: score, isPending, isError } = useSleepScore(query, enabled);
-  const { data: stages } = useSleepStages(query, enabled);
   const [infoOpen, setInfoOpen] = useState(false);
-  const duration = nightDuration(sleepRecord.sleep_period_seconds, enabled ? stages : undefined);
-  const asleep = duration.kind === 'asleep' ? duration.seconds : undefined;
+  const inBed = sleepRecord.sleep_period_seconds;
   const hasScore = enabled && score?.active && score.score !== null && Number.isFinite(score?.score);
   const shownScore = hasScore ? Math.round(score.score!) : undefined;
 
@@ -39,10 +36,9 @@ export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZon
       { title && <SectionHeading sx={ { color: 'text.secondary', mb: 1.5 } }>{ title }</SectionHeading> }
       { timeZoneLabel && <Typography variant="body2" color="text.secondary" sx={ { mb: 1 } }>{ timeZoneLabel }</Typography> }
       <Typography sx={ typography.metricValue }>
-        { asleep !== undefined ? `${formatSleepDuration(asleep)} asleep` : formatSleepDuration(sleepRecord.sleep_period_seconds) }
+        { formatSleepDuration(inBed) }
       </Typography>
-      { asleep === undefined && <Typography variant="body2" color="text.secondary">Detected time in bed</Typography> }
-      { asleep === 0 && <Typography>No sleep detected</Typography> }
+      <Typography variant="body2" color="text.secondary">Detected time in bed</Typography>
       { enabled && (
         <Box sx={ { display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 1 } }>
           { hasScore
@@ -60,12 +56,10 @@ export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZon
         <Box component="span">{ moment.tz(sleepRecord.entered_bed_at, zone).format('h:mm A') }</Box>
         { ' to ' }
         <Box component="span">{ moment.tz(sleepRecord.left_bed_at, zone).format('h:mm A') }</Box>
-        { asleep !== undefined && `, ${formatSleepDuration(sleepRecord.sleep_period_seconds)} in bed` }
       </Typography>
-      { (duration.seconds < SLEEP_GOAL_MIN_SECONDS || duration.seconds > SLEEP_GOAL_MAX_SECONDS) && (
+      { (inBed < SLEEP_GOAL_MIN_SECONDS || inBed > SLEEP_GOAL_MAX_SECONDS) && (
         <Typography variant="body2" color="text.secondary" sx={ { mt: 1 } }>
-          { duration.seconds < SLEEP_GOAL_MIN_SECONDS ? 'Under' : 'Over' } the { SLEEP_RANGE_TEXT } range
-          { duration.kind === 'in bed' ? ' for time in bed' : '' }
+          { inBed < SLEEP_GOAL_MIN_SECONDS ? 'Under' : 'Over' } the { SLEEP_RANGE_TEXT } range for time in bed
         </Typography>
       ) }
       { enabled && (
@@ -98,8 +92,8 @@ export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZon
         <DialogTitle id="sleep-estimate-title">About this estimate</DialogTitle>
         <DialogContent>
           <Typography>
-            A rough summary of time asleep and trips out of bed from the bed's sensors. It has not been validated and
-            is mostly driven by how long you slept.
+            A rough summary of time in bed and trips out of bed from the bed's sensors. It has not been validated and
+            is mostly driven by how long you were in bed.
           </Typography>
           { CONTRIBUTORS.map(({ key, label }) => {
             const component = score?.components?.[key];
@@ -115,7 +109,7 @@ export default function SleepFitnessCard({ sleepRecord, timeZone, title, timeZon
             </Typography>
           ) }
           <Typography variant="body2" color="text.secondary" sx={ { mt: 2 } }>
-            The duration contribution uses time asleep, or time in bed when there are too few heart readings.
+            The duration contribution uses time in bed.
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={ { mt: 2 } }>{ SLEEP_RANGE_SOURCE }</Typography>
         </DialogContent>

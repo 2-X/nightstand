@@ -1,14 +1,14 @@
 import { expect, it } from 'vitest';
-import { getSleepScore, getSleepStages } from './mockData';
+import { getSleepScore } from './mockData';
 
-it('describes the demo duration contribution by time asleep, like the server', () => {
-  const startTime = '2026-09-28T06:00:00Z';
-  const endTime = '2026-09-28T13:12:00Z';
-  const { totals } = getSleepStages(startTime, endTime);
-  const asleepMinutes = Math.round((totals.light + totals.rem + totals.deep) / 60);
-  const value = getSleepScore(startTime, endTime).components.duration?.value;
-  expect(value).toBe(`${Math.floor(asleepMinutes / 60)}h ${asleepMinutes % 60}m asleep`);
-  expect(asleepMinutes).toBeLessThan(7 * 60 + 12);
+it('describes the demo duration contribution by time in bed, like the server', () => {
+  const duration = getSleepScore('2026-09-28T06:00:00Z', '2026-09-28T13:12:00Z').components.duration;
+  expect(duration?.value).toBe('7h 12m in bed');
+  expect(duration?.score).toBe(92);
+});
+
+it('drops the minutes from a whole number of hours, like the server', () => {
+  expect(getSleepScore('2026-09-28T06:00:00Z', '2026-09-28T14:00:00Z').components.duration?.value).toBe('8h in bed');
 });
 
 it('gives the demo score no HRV contribution, like the server', () => {

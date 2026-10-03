@@ -2,8 +2,6 @@
 import { Box, Button, Typography } from '@mui/material';
 import moment from 'moment-timezone';
 import type { SleepRecord } from '@api/sleepSchema';
-import { useSleepStages } from '@api/sleepStages';
-import { useSleepScoreEnabled } from '@api/sleepScore';
 import { palette, radius, weight } from '@design/tokens';
 import { formatSleepDuration, nightDuration, nightMarkHeight, recordForNight } from './sleepContext';
 import type { MissingNightState } from './MissingNightCard';
@@ -21,11 +19,7 @@ function NightButton({ day, selected, record, disabled, onSelect, missingState }
   day: moment.Moment; selected: boolean; record?: SleepRecord; disabled: boolean; onSelect: () => void;
   missingState?: MissingNightState;
 }) {
-  const enabled = useSleepScoreEnabled();
-  const { data: stages } = useSleepStages({
-    side: record?.side === 'right' ? 'right' : 'left', startTime: record?.entered_bed_at, endTime: record?.left_bed_at,
-  }, enabled && !!record);
-  const result = record ? nightDuration(record.sleep_period_seconds, enabled ? stages : undefined) : undefined;
+  const result = record ? nightDuration(record.sleep_period_seconds) : undefined;
   const duration = result?.seconds;
   const description = disabled ? 'upcoming' : result ? `recorded, ${formatSleepDuration(result.seconds)} ${result.kind}` : 'no recording';
   const pending = missingState === 'pending' || missingState === 'analyzing';

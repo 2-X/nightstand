@@ -14,7 +14,6 @@ const VALUE_PARTS = [
   'components/VitalsLineChart.tsx',
   'design/TimeSeriesChart.tsx',
   'components/SleepFitnessCard.tsx',
-  'components/SleepStagesCard.tsx',
   'lib/temperatureColor.ts',
   'components/MovementChart.tsx',
 ];

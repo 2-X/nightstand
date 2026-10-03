@@ -5,7 +5,6 @@ import settingsDB from '../../db/settings.js';
 import servicesDB from '../../db/services.js';
 import { isSleepScoreActive } from './sleepScoreGuard.js';
 import { parseNightQuery } from './metricsQuery.js';
-import { loadStageSummary, StageSummary } from './sleepStages.js';
 
 const router = express.Router();
 
@@ -36,14 +35,12 @@ function formatHours(seconds: number): string {
   return `${h}h${m ? ` ${m}m` : ''}`;
 }
 
-// Scores the same asleep time the stages headline shows, or time in bed when
-// vitals coverage is too sparse for the stages to say when sleep began.
-export function durationComponent(inBedSeconds: number, stages: StageSummary): Component {
-  const [seconds, label] = stages.lowCoverage ? [inBedSeconds, 'in bed'] : [stages.asleepSeconds, 'asleep'];
+// Scores time in bed: the stages classifier cannot yet place sleep onset reliably.
+export function durationComponent(inBedSeconds: number): Component {
   return {
-    score: scoreDuration(seconds),
+    score: scoreDuration(inBedSeconds),
     weight: 0.4,
-    value: `${formatHours(seconds)} ${label}`,
+    value: `${formatHours(inBedSeconds)} in bed`,
     available: true,
   };
 }
@@ -85,12 +82,11 @@ router.get(
     });
 
     const inBedSec = sleepRecord?.sleep_period_seconds ?? endUnix - startUnix;
-    const stages = await loadStageSummary(side, startUnix, endUnix);
     const exits = sleepRecord?.times_exited_bed ?? 0;
     const minHr = hrAgg._min.heart_rate ?? 0;
 
     const components: Record<string, Component> = {
-      duration: durationComponent(inBedSec, stages),
+      duration: durationComponent(inBedSec),
       continuity: {
         score: scoreContinuity(exits),
         weight: 0.3,

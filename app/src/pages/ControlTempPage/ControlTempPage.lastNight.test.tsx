@@ -14,7 +14,7 @@ const night = {
 };
 const score = {
   active: true, score: 86,
-  components: { duration: { score: 80, weight: 0.4, value: '7h 12m asleep', available: true } },
+  components: { duration: { score: 80, weight: 0.4, value: '7h 12m in bed', available: true } },
 };
 
 function leftSide(isOn: boolean) {
@@ -32,7 +32,7 @@ describe('last night on the Bed page', () => {
     );
   });
 
-  it('moves under the dial, as time asleep with a link to Sleep, while the side is off', async () => {
+  it('moves under the dial, as time in bed with a link to Sleep, while the side is off', async () => {
     leftSide(false);
     renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
 
@@ -40,7 +40,7 @@ describe('last night on the Bed page', () => {
     expect(link).toHaveAttribute('href', '/sleep');
     expect(link).toHaveTextContent('View sleep');
     expect(link.closest('[data-controls-row]')).not.toBeNull();
-    expect(screen.getByText('Last night: about 7h 12m asleep')).toBeInTheDocument();
+    expect(screen.getByText('Last night: 7h 12m in bed')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Turn on' })).toBeInTheDocument();
     // The chip is not shown as well, and the score is never shown.
     expect(screen.getAllByText(/^Last night:/)).toHaveLength(1);
@@ -51,7 +51,7 @@ describe('last night on the Bed page', () => {
     leftSide(true);
     const { container } = renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
 
-    expect(await screen.findByText('Last night: about 7h 12m asleep')).toBeInTheDocument();
+    expect(await screen.findByText('Last night: 7h 12m in bed')).toBeInTheDocument();
     const chip = container.querySelector('[data-last-night-chip]')!;
     expect(chip).toContainElement(screen.getByRole('link', { name: 'View last night\'s sleep' }));
     expect(screen.getByRole('button', { name: 'Warmer' })).toBeInTheDocument();

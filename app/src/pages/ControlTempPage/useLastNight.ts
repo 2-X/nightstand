@@ -9,7 +9,7 @@ import { recordForNight } from '../DataPage/SleepPage/sleepContext.ts';
 
 export type LastNight = {
   score: number;
-  // The score's own duration line, such as "7h 12m asleep" or "8h in bed".
+  // The score's own duration line, such as "7h 12m in bed".
   duration?: string;
 };
 

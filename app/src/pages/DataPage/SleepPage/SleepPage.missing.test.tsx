@@ -249,21 +249,6 @@ it('uses the same longest session for the fallback summary and side tile', async
   expect(screen.getAllByRole('radio', { name: /8h in bed/ })[0]).toBeChecked();
 });
 
-it('shows failed stage data as an error while preserving the summary and vitals caveat', async () => {
-  settings.features.sleepScore = true;
-  services.biometrics.enabled = true;
-  server.use(
-    http.get('*/metrics/sleep', () => HttpResponse.json([older])),
-    http.get('*/metrics/sleep-stages', () => HttpResponse.json({}, { status: 500 })),
-  );
-  renderWithProviders(<SleepPage/>);
-  expect(await screen.findByText('Sleep stages could not be loaded.', {}, { timeout: 3000 })).toBeInTheDocument();
-  expect(screen.getByLabelText('Night summary')).toBeInTheDocument();
-  expect(screen.getByText(
-    'Estimates from bed sensors, not a medical measurement. In a shared bed, some readings can come from the other sleeper.',
-  )).toBeInTheDocument();
-  expect(screen.queryByText('No sleep stages data available for this period')).not.toBeInTheDocument();
-});
 it('describes the Rhythms analysis timing only while Rhythms is active', async () => {
   settings.features.rhythms = true;
   resetMockRhythms(createDemoRhythms(), true);

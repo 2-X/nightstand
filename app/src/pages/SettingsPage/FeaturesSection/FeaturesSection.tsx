@@ -134,14 +134,14 @@ export default function FeaturesSection() {
       </Accordion> }
       <Box sx={ { pl: 2, borderLeft: 1, borderColor: 'divider' } }>
         <FeatureToggleRow
-          label="Sleep score and stages"
+          label="Sleep score"
           disabled={ isUpdating || features?.sleepScore === undefined || !biometricsEnabled }
           checked={ features?.sleepScore ?? false }
           onChange={ (next) => updateFeature({ sleepScore: next }) }
           description={
             !biometricsEnabled
               ? <Link href="#biometrics" sx={ { display: 'inline-flex', minHeight: 44, alignItems: 'center' } }>Needs Biometrics</Link>
-              : 'The estimated sleep score and sleep-stages chart on the Sleep page.'
+              : 'The estimated sleep score on the Sleep page.'
           }
         />
       </Box>

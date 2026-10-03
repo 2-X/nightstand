@@ -11,7 +11,6 @@ import {
   CircularProgress, IconButton, Tab, Tabs, Typography,
 } from '@mui/material';
 import VitalsLineChart from '@components/VitalsLineChart';
-import SleepStagesCard from '@components/SleepStagesCard';
 import SleepBalanceCard from '@components/SleepBalanceCard';
 import SleepFitnessCard from '@components/SleepFitnessCard';
 import PageHeader from '@components/PageHeader';
@@ -252,9 +251,6 @@ function SleepContext({ side, timeZone, biometricsV2 }: { side: Side; timeZone: 
                   </ErrorBoundary>
                 </Box>
                 <Box sx={ { display: 'grid', gap: 2, minWidth: 0 } }>
-                  <ErrorBoundary componentName="Sleep stages">
-                    <SleepStagesCard startTime={ displayed.entered_bed_at } endTime={ displayed.left_bed_at } timeZone={ timeZone }/>
-                  </ErrorBoundary>
                   <ErrorBoundary key={ `${side}-${displayed.id}` } componentName="Night measurements">
                     <NightVitals record={ displayed } side={ side } timeZone={ timeZone } biometricsV2={ biometricsV2 }/>
                   </ErrorBoundary>

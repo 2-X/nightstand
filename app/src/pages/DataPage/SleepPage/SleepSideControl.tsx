@@ -2,27 +2,21 @@ import moment from 'moment-timezone';
 import SideControl from '@components/SideControl';
 import { useSleepRecords } from '@api/sleep';
 import type { SleepRecord } from '@api/sleepSchema';
-import { useSleepStages } from '@api/sleepStages';
-import { useSleepScoreEnabled } from '@api/sleepScore';
 import { formatSleepDuration, nightDuration, recordForNight, withoutFutureRecords } from './sleepContext';
 
-function useNightCaption(record: SleepRecord | undefined, enabled: boolean) {
-  const query = { side: record?.side === 'right' ? 'right' as const : 'left' as const,
-    startTime: record?.entered_bed_at, endTime: record?.left_bed_at };
-  const { data: stages } = useSleepStages(query, enabled && !!record);
+function nightCaption(record: SleepRecord | undefined) {
   if (!record) return 'No recording';
-  const duration = nightDuration(record.sleep_period_seconds, enabled ? stages : undefined);
-  return `${formatSleepDuration(duration.seconds)}${duration.kind === 'in bed' ? ' in bed' : ''}`;
+  const duration = nightDuration(record.sleep_period_seconds);
+  return `${formatSleepDuration(duration.seconds)} ${duration.kind}`;
 }
 
 export default function SleepSideControl({ selectedDate, timeZone }: { selectedDate: string; timeZone: string }) {
   const left = useSleepRecords({ side: 'left' });
   const right = useSleepRecords({ side: 'right' });
-  const enabled = useSleepScoreEnabled();
   const nightFor = (side: 'left' | 'right', records: SleepRecord[] | undefined) =>
     recordForNight(withoutFutureRecords((records ?? []).filter(record => record.side === side), moment().valueOf()), selectedDate, timeZone);
-  const leftCaption = useNightCaption(nightFor('left', left.isError ? [] : left.data), enabled);
-  const rightCaption = useNightCaption(nightFor('right', right.isError ? [] : right.data), enabled);
+  const leftCaption = nightCaption(nightFor('left', left.isError ? [] : left.data));
+  const rightCaption = nightCaption(nightFor('right', right.isError ? [] : right.data));
   return <SideControl
     mergeAwaySides={ false }
     captions={ {

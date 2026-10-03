@@ -130,7 +130,7 @@ unless you set up [remote access with Tailscale](docs/REMOTE_ACCESS.md).
 In Settings:
 
 - **Biometrics** under Features: off by default, and needs a one-time install (see below).
-- **Sleep score and stages** under Features: needs biometrics.
+- **Sleep score** under Features: needs biometrics.
 - **Presence auto-off** under Features: on by default, and needs biometrics. Turns a side off
   after 45 minutes with no one on it, outside its scheduled on-window.
 - **New sleep tracking (beta)** under Features: off by default, needs biometrics. Uses

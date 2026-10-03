@@ -136,7 +136,7 @@ const createVitalsRecords = (nights: SampleNight[]): VitalsRecord[] => {
 const createSleepScore = (startTime: string, endTime: string): SleepScore => {
   const exits = sleepRecords.find(record => record.entered_bed_at === startTime)?.times_exited_bed ?? 0;
   const night = nightScore(startTime, endTime, exits);
-  const asleepMinutes = Math.round(night.asleepSeconds / 60);
+  const inBedMinutes = Math.floor(night.inBedSeconds / 60);
 
   return {
     active: true,
@@ -144,7 +144,7 @@ const createSleepScore = (startTime: string, endTime: string): SleepScore => {
     components: {
       duration: {
         score: night.duration, weight: 0.4, available: true,
-        value: `${Math.floor(asleepMinutes / 60)}h ${asleepMinutes % 60}m asleep`,
+        value: `${Math.floor(inBedMinutes / 60)}h${inBedMinutes % 60 ? ` ${inBedMinutes % 60}m` : ''} in bed`,
       },
       continuity: { score: night.continuity, weight: 0.3, value: `${exits} ${exits === 1 ? 'trip' : 'trips'} out of bed`, available: true },
       restingHr: { score: 0, weight: 0.15, value: `${night.minHeartRate} bpm`, available: false },

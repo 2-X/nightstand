@@ -1,12 +1,7 @@
 import { expect, it } from 'vitest';
 import { lastNightText } from './lastNightText';
 
-it('says time asleep with "about", since it is an estimate', () => {
-  expect(lastNightText({ score: 86, duration: '6h 30m asleep' })).toBe('Last night: about 6h 30m asleep');
-  expect(lastNightText({ score: 86, duration: '7h asleep' })).toBe('Last night: about 7h asleep');
-});
-
-it('says time in bed plainly, since it is measured', () => {
+it('says time in bed plainly', () => {
   expect(lastNightText({ score: 72, duration: '8h in bed' })).toBe('Last night: 8h in bed');
 });
 

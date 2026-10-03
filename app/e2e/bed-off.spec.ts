@@ -16,7 +16,7 @@ test('turning a side off keeps the power button in place and shows last night un
   await expect(turnOff).toBeVisible();
   // While on, last night stays in the chip below the controls.
   const chip = page.locator('[data-last-night-chip]');
-  await expect(chip).toContainText(/^Last night: about \d+h \d+m asleep/);
+  await expect(chip).toContainText(/^Last night: \d+h( \d+m)? in bed/);
   await expect(page.getByRole('button', { name: 'Warmer' })).toBeVisible();
   const onTop = (await turnOff.boundingBox())!.y;
 
@@ -26,7 +26,7 @@ test('turning a side off keeps the power button in place and shows last night un
   const row = page.locator('[data-controls-row]');
   const viewSleep = row.getByRole('link', { name: 'View last night\'s sleep' });
   await expect(viewSleep).toBeVisible();
-  await expect(row.getByText(/^Last night: about \d+h \d+m asleep$/)).toBeVisible();
+  await expect(row.getByText(/^Last night: \d+h( \d+m)? in bed$/)).toBeVisible();
   await expect(chip).toHaveCount(0);
 
   const offTop = (await turnOn.boundingBox())!.y;
@@ -47,7 +47,7 @@ for (const [width, height] of sizes) {
     await page.getByRole('button', { name: 'Turn off' }).click();
     await expect(page.getByRole('button', { name: 'Turn on' })).toBeVisible();
     const row = page.locator('[data-controls-row]');
-    const text = row.getByText(/^Last night: about \d+h \d+m asleep$/);
+    const text = row.getByText(/^Last night: \d+h( \d+m)? in bed$/);
     await expect(text).toBeVisible();
     const rowBox = (await row.boundingBox())!;
     const textBox = (await text.boundingBox())!;
