@@ -1134,6 +1134,10 @@ returns `400`. Presence has no WebSocket push; clients poll this endpoint.
 }
 ```
 
+### GET `/alive`
+
+- Answers `204` with no body while the server and its event loop are running. It reads and writes nothing, so the health check can ask every minute.
+
 ---
 
 ## `/api/storage`

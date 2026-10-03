@@ -52,10 +52,10 @@ if [ "$(systemctl is-active free-sleep 2>/dev/null)" != active ] || lock_held ||
 fi
 
 # Only curl's 000, no answer at all, counts. An error status is still an
-# answer: a full or read-only /persistent fails this route with 500, and a
-# server restarted then might not start again. No output means curl itself
-# did not run, which says nothing about the server.
-CODE=$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/serverStatus 2>/dev/null)
+# answer, and with a full or read-only /persistent a restarted server might
+# not start again. No output means curl itself did not run, which says
+# nothing about the server. The liveness route writes no files.
+CODE=$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/serverStatus/alive 2>/dev/null)
 if [ "$CODE" != 000 ]; then
   rm -f "$STATE"
   exit 0

@@ -103,6 +103,15 @@ describe('health_check.sh', () => {
     t.cleanup();
   });
 
+  it('asks the liveness route, which writes no files', () => {
+    // The full status rewrites the services file, which every minute is
+    // needless flash wear and races the server's own writes to it.
+    const t = setup({ answers: true });
+    t.run();
+    assert.match(t.log(), /^curl .* http:\/\/127\.0\.0\.1:3000\/api\/serverStatus\/alive$/m);
+    t.cleanup();
+  });
+
   it('asks systemd for the restart without waiting on it', () => {
     // A frozen server takes systemd's whole stop timeout to kill, and the
     // check has no reason to sit through it.
@@ -113,8 +122,8 @@ describe('health_check.sh', () => {
   });
 
   it('never restarts a server that answers, even with an error', () => {
-    // A full or read-only /persistent makes serverStatus fail with 500, and a
-    // restarted server could not start again at all. Only no answer counts.
+    // An error is still an answer, and with a full or read-only /persistent
+    // a restarted server could not start again at all. Only no answer counts.
     for (const status of [500, 503, 404]) {
       const t = setup({ status });
       writeFileSync(t.state, '2');
