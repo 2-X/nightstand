@@ -105,7 +105,7 @@ export default function DialRing({
         textAnchor="middle"
         fontSize="11.5"
         fontFamily="inherit"
-        fill={ live && !grey ? palette.text.tertiary : palette.text.disabled }>{ endLabel(level) }</text>) }
+        fill={ palette.text.tertiary }>{ endLabel(level) }</text>) }
     </svg>
   );
 }

@@ -51,3 +51,10 @@ it('keeps the not responding state readable', () => {
   // "Loading" in the dial, on the page. "Loading schedule" sits on the Tonight card, checked against bg.elevated above.
   expect(ratio(palette.text.tertiary, palette.bg.base)).toBeGreaterThanOrEqual(4.5);
 });
+
+it('keeps secondary and tertiary text at AA on the page and on cards', () => {
+  for (const text of [palette.text.secondary, palette.text.tertiary]) {
+    expect(ratio(text, palette.bg.base)).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(text, palette.bg.elevated)).toBeGreaterThanOrEqual(4.5);
+  }
+});

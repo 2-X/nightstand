@@ -10,7 +10,7 @@ const ring = (isOn: boolean, targetLevel: number, currentLevel = 0) =>
 const centre = (element: Element | null) => [Number(element?.getAttribute('cx')), Number(element?.getAttribute('cy'))];
 const attrs = (element: Element | null, ...names: string[]) => names.map(name => Number(element?.getAttribute(name)));
 
-it('draws a quiet track with dim ticks and dim end labels while off', () => {
+it('draws a quiet track with dim ticks and readable end labels while off', () => {
   const container = ring(false, 3);
   const svg = container.querySelector('svg')!;
   expect(svg).toHaveAttribute('aria-hidden', 'true');
@@ -22,7 +22,8 @@ it('draws a quiet track with dim ticks and dim end labels while off', () => {
   expect(container.querySelector('line[data-tick="major"]')).toHaveAttribute('stroke', palette.dial.tickMajorOff);
   const labels = container.querySelectorAll('text[data-end-label]');
   expect(Array.from(labels, label => label.textContent)).toEqual(['\u221210', '+10']);
-  expect(labels[0]).toHaveAttribute('fill', palette.text.disabled);
+  // Readable at AA on black even when the dial is grey.
+  expect(labels[0]).toHaveAttribute('fill', palette.text.tertiary);
   for (const selector of ['g[data-band="ghost"]', 'g[data-band="fill"]', 'line[data-notch]', 'circle[data-halo]', 'circle[data-target]'])
     expect(container.querySelector(selector)).toBeNull();
 });
@@ -110,7 +111,7 @@ it('draws a last known target as a grey dot on the off track, with no span, notc
   expect(dot).toHaveAttribute('data-stale');
   expect(dot).toHaveAttribute('fill', palette.text.tertiary);
   expect(container.querySelector('line[data-tick="major"]')).toHaveAttribute('stroke', palette.dial.tickMajorOff);
-  expect(container.querySelector('text[data-end-label]')).toHaveAttribute('fill', palette.text.disabled);
+  expect(container.querySelector('text[data-end-label]')).toHaveAttribute('fill', palette.text.tertiary);
 });
 
 it('draws an away side that is on grey, on the off track, as its tile is', () => {

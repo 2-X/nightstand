@@ -95,7 +95,7 @@ export default function ComingUp({
             <ListItemText
               primary={ label }
               secondary={ text }
-              slotProps={ { secondary: { sx: { overflowWrap: 'anywhere', ...(paused ? { color: 'text.disabled' } : {}) } } } }/>
+              slotProps={ { secondary: { sx: { overflowWrap: 'anywhere' } } } }/>
             <Box sx={ { display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 0.5, flexShrink: 0 } }>
               { running && <Chip label="Now" size="small" sx={ { bgcolor: palette.lamp, color: palette.bg.base } }/> }
               { paused && <Chip label="Paused" size="small" variant="outlined"/> }

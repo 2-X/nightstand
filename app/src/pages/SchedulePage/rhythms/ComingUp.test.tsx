@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
 import type { ResolvedSleepResponse } from '@api/rhythmsResponse';
 import { createDemoRhythms } from '../../../mocks/rhythmsMock';
+import { palette } from '@design/tokens';
 import ComingUp from './ComingUp';
 
 const left = createDemoRhythms(new Date('2026-09-28T19:00:00Z')).left;
@@ -60,6 +61,15 @@ it('marks every listed sleep paused until the pause is resumed', () => {
   const now = Date.now();
   renderComingUp(['2026-09-28'], [sleepAround(now + 3_600_000, now + 8 * 3_600_000)], null);
   expect(screen.getByText('Paused')).toBeInTheDocument();
+});
+
+it('keeps a paused sleep readable, leaving the chip to say it is paused', () => {
+  const now = Date.now();
+  renderComingUp(['2026-09-28'], [sleepAround(now + 3_600_000, now + 8 * 3_600_000)], null);
+  const row = screen.getByRole('button', { name: /, paused$/ });
+  const summary = within(row).getByText(/Workday/);
+  expect(summary).not.toHaveStyle({ color: palette.text.disabled });
+  expect(summary).toHaveStyle({ color: palette.text.secondary });
 });
 
 it('offers going back to the Week for a changed date', async () => {
