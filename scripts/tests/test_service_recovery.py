@@ -109,25 +109,49 @@ MISSING_UNITS=""" + ('0' if existing else '1'))
                 else:
                     self.assertEqual(log, '')
 
-    def test_reset_refusals_restart_stopped_services(self):
-        script = read('reset_db.sh').replace('/persistent/free-sleep-data', '$FIXTURE/data').replace('/persistent/free-sleep-database-backups', '$FIXTURE/backups')
-        script = script.replace('read -p "Are you sure you want to continue? (y/N): " confirm', 'confirm=y')
-        for failure in ('checkpoint', 'backup', 'sqlite_module', 'migration'):
-            for biometrics in ('on', 'off'):
-                with self.subTest(failure=failure, biometrics=biometrics):
-                    result, log = self.run_shell(script, '''
+    RESET_STUBS = '''
 mkdir -p "$FIXTURE/data"
-touch "$FIXTURE/data/free-sleep.db"
+echo damaged > "$FIXTURE/data/free-sleep.db"
 python3() {
   if [ "$1" = -c ]; then [ "$BIOMETRICS" = on ]; return; fi
   [ "$FAILURE" != sqlite_module ] && [ "$2" != "$FAILURE" ]
 }
-su() { [ "$FAILURE" != migration ]; }
-''' + '\nFAILURE=' + failure + '\nBIOMETRICS=' + biometrics)
+su() { echo su >> "$FIXTURE/services"; [ "$FAILURE" != migration ]; }
+cp() { [ "$FAILURE" != copy ] && command cp "$@"; }
+'''
+
+    def reset_script(self):
+        script = read('reset_db.sh').replace('/persistent/free-sleep-database-backups', '$FIXTURE/backups').replace('/persistent/free-sleep-data', '$FIXTURE/data')
+        return script.replace('read -p "Are you sure you want to continue? (y/N): " confirm', 'confirm=y')
+
+    def test_reset_refusals_restart_stopped_services(self):
+        # "copy": the checked copy failed and so did copying the file aside.
+        for failure in ('migration', 'copy'):
+            for biometrics in ('on', 'off'):
+                with self.subTest(failure=failure, biometrics=biometrics):
+                    setup = self.RESET_STUBS + '\nFAILURE=' + failure + '\nBIOMETRICS=' + biometrics
+                    if failure == 'copy':
+                        setup += '\npython3() { [ "$1" = -c ] && [ "$BIOMETRICS" = on ]; }'
+                    result, log = self.run_shell(self.reset_script(), setup)
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn('start free-sleep\n', log)
                     # The stream follows the app's Biometrics switch.
                     self.assertEqual('start free-sleep-stream\n' in log, biometrics == 'on')
+                    if failure == 'copy':
+                        self.assertIn('nothing was deleted', result.stdout)
+                        self.assertNotIn('su\n', log)
+
+    def test_reset_keeps_a_damaged_database_aside_and_continues(self):
+        for failure in ('checkpoint', 'backup', 'sqlite_module'):
+            with self.subTest(failure=failure):
+                result, log = self.run_shell(self.reset_script() + '''
+test ! -e "$FIXTURE/data/free-sleep.db"
+cat "$FIXTURE"/backups/*-reset-raw.db
+''', self.RESET_STUBS + '\nFAILURE=' + failure + '\nBIOMETRICS=off')
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('copying the file as it is instead', result.stdout)
+                self.assertTrue(result.stdout.endswith('damaged\n'), result.stdout)
+                self.assertIn('start free-sleep\n', log)
 
     def test_sentry_install_is_pinned_and_uses_writable_venv_owner(self):
         script = read('revert-to-stock.sh')

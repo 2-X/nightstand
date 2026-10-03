@@ -24,9 +24,24 @@ db.close()
 `, file]);
 }
 
-type Options = { database?: 'good' | 'none'; services?: string; migrateFails?: boolean };
+// Damages a table page but keeps the header, so SQLite opens the file and the
+// copy fails its integrity_check.
+function damage(file: string) {
+  const bytes = readFileSync(file);
+  bytes.fill(0xff, 4096 * 3, 4096 * 3 + 2048);
+  writeFileSync(file, bytes);
+}
 
-function run(answer: string, { database = 'good', services = '{"biometrics":{"enabled":false}}', migrateFails = false }: Options = {}) {
+type Options = {
+  database?: 'good' | 'damaged' | 'garbage' | 'none'; services?: string; migrateFails?: boolean; wal?: boolean; backupsBlocked?: boolean;
+  // sqlite-safety.py fails without touching the files.
+  safetyFails?: boolean;
+};
+
+function run(answer: string, {
+  database = 'good', services = '{"biometrics":{"enabled":false}}', migrateFails = false, wal = false, backupsBlocked = false,
+  safetyFails = false,
+}: Options = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-reset-db-'));
   const persistent = path.join(dir, 'persistent');
   const data = path.join(persistent, 'free-sleep-data');
@@ -38,7 +53,13 @@ function run(answer: string, { database = 'good', services = '{"biometrics":{"en
   mkdirSync(bin);
   writeFileSync(path.join(data, 'lowdb', 'servicesDB.json'), services);
   const db = path.join(data, 'free-sleep.db');
-  if (database !== 'none') makeDatabase(db);
+  if (database !== 'none') {
+    if (database === 'garbage') writeFileSync(db, 'this is not a database'.repeat(400));
+    else makeDatabase(db);
+    if (database === 'damaged') damage(db);
+  }
+  if (wal) writeFileSync(`${db}-wal`, 'wal bytes');
+  if (backupsBlocked) writeFileSync(backups, 'a file where the folder goes');
   const original = existsSync(db) ? readFileSync(db) : null;
   const calls = path.join(dir, 'calls');
   const stub = (name: string, body: string) => {
@@ -50,13 +71,14 @@ function run(answer: string, { database = 'good', services = '{"biometrics":{"en
   for (const helper of ['sqlite-safety.py', 'prune_db_snapshots.sh']) {
     copyFileSync(path.join(repoRoot, 'scripts', helper), path.join(scripts, helper));
   }
+  if (safetyFails) writeFileSync(path.join(scripts, 'sqlite-safety.py'), 'raise SystemExit(1)\n');
   const script = path.join(scripts, 'reset_db.sh');
   writeFileSync(script, readFileSync(path.join(repoRoot, 'scripts/reset_db.sh'), 'utf8').replaceAll('/persistent', persistent));
   const result = spawnSync('bash', [script], {
     env: { ...process.env, PATH: `${bin}:${process.env.PATH}` }, input: `${answer}\n`, encoding: 'utf8', timeout: 60_000,
   });
   const log = existsSync(calls) ? readFileSync(calls, 'utf8').trim().split('\n') : [];
-  const saved = existsSync(backups) ? readdirSync(backups) : [];
+  const saved = existsSync(backups) && !backupsBlocked ? readdirSync(backups) : [];
   const read = (name: string) => readFileSync(path.join(backups, name));
   const out = { ...result, log, saved, read, original, dbLeft: existsSync(db), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
   return out;
@@ -94,6 +116,42 @@ describe('reset_db.sh', () => {
     assert.match(result.stdout, /Database backup saved to/);
     assert.equal(result.dbLeft, false);
     assert.ok(result.log.some((line) => line.startsWith('su ') && line.includes('prisma migrate deploy')));
+    assert.ok(result.log.includes('systemctl start free-sleep'), result.log.join('\n'));
+    result.cleanup();
+  });
+
+  for (const database of ['damaged', 'garbage'] as const) {
+    it(`still resets a ${database} database, keeping the file as it was`, () => {
+      const result = run('y', { database });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const raw = result.saved.find((name) => /^\d{8}T\d{6}Z-\d+-reset-raw\.db$/.test(name));
+      assert.ok(raw, result.saved.join(', '));
+      assert.ok(result.original && result.read(raw).equals(result.original), 'the copy is the file byte for byte');
+      assert.ok(!result.saved.some((name) => /-reset\.db$/.test(name)), 'no checked copy is claimed');
+      assert.match(result.stdout, /could not be copied cleanly/);
+      assert.match(result.stdout, /copied as it was to \S+-reset-raw\.db/);
+      assert.equal(result.dbLeft, false);
+      assert.ok(result.log.some((line) => line.startsWith('su ') && line.includes('prisma migrate deploy')));
+      assert.ok(result.log.includes('systemctl start free-sleep'));
+      result.cleanup();
+    });
+  }
+
+  it('keeps the WAL with the copy, since committed rows can still be in it', () => {
+    const result = run('y', { wal: true, safetyFails: true });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const raw = result.saved.find((name) => name.endsWith('-reset-raw.db-wal'));
+    assert.ok(raw, result.saved.join(', '));
+    assert.equal(result.read(raw).toString(), 'wal bytes');
+    assert.ok(result.original && result.read(raw.replace(/-wal$/, '')).equals(result.original));
+    result.cleanup();
+  });
+
+  it('deletes nothing when the file cannot be copied aside', () => {
+    const result = run('y', { database: 'garbage', backupsBlocked: true });
+    assert.notEqual(result.status, 0);
+    assert.equal(result.dbLeft, true);
+    assert.ok(!result.log.some((line) => line.startsWith('su ')), 'no new database');
     assert.ok(result.log.includes('systemctl start free-sleep'), result.log.join('\n'));
     result.cleanup();
   });
