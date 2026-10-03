@@ -10,13 +10,19 @@ export type PhaseLineInput = {
   timeZone: string;
   format: TemperatureFormat;
   waiting: boolean;
+  // Unknown until the server has answered for tonight. Without that answer the line says only what happens at a later
+  // clock time, never what the bed is doing now.
+  runtime: 'live' | 'unknown';
   hold?: { level: number; until: Date };
   // Set once the curve went back to the base: up early, or out of bed after the wake time.
   base?: { level: number; since: Date };
 };
 
 export function smartPhaseLine(input: PhaseLineInput): string | undefined {
-  const { points, now, wake, timeZone, format, waiting, hold, base } = input;
+  const { points, now, wake, timeZone, format, waiting, runtime } = input;
+  const known = runtime === 'live';
+  const hold = known ? input.hold : undefined;
+  const base = known ? input.base : undefined;
   const time = (date: Date) => moment.tz(date, timeZone).format('h:mm A');
   const temperature = (level: number) => displayTemperature(levelToFahrenheit(level), format);
   const warmUp = points.find(point => point.phase === 'warmup');
@@ -41,10 +47,11 @@ export function smartPhaseLine(input: PhaseLineInput): string | undefined {
   const bedtime = points.find(point => point.phase === 'bedtime');
   switch (current.phase) {
   case 'prewarm':
+    if (!known) return undefined;
     return bedtime ? `Warming to ${temperature(bedtime.level)} for bedtime at ${time(bedtime.at)}` : `Warming to ${temperature(current.level)}`;
   case 'bedtime':
   case 'cooldown':
-    if (!holdPoint) return undefined;
+    if (!holdPoint || !known) return undefined;
     if (waiting) return 'Starts cooling once you\'ve settled in bed';
     // A trend, not a target: the dial shows the current step.
     return `Cooling step by step to ${temperature(holdPoint.level)} by ${time(holdPoint.at)}`;
@@ -52,8 +59,10 @@ export function smartPhaseLine(input: PhaseLineInput): string | undefined {
     if (warmUp && warmUp.at.getTime() > now.getTime()) {
       return `Warm-up starts at ${time(warmUp.at)} for your ${time(wake)} wake-up`;
     }
+    if (!known) return undefined;
     return `Holding ${temperature(current.level)} until ${time(wake)}`;
   case 'warmup':
+    if (!known) return undefined;
     return `Warming step by step for your ${time(wake)} wake-up`;
   case 'wake':
     return nextPoint ? `Back to ${temperature(nextPoint.level)} at ${time(nextPoint.at)}` : undefined;

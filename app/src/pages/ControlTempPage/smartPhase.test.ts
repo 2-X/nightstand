@@ -20,7 +20,7 @@ const points: CurvePoint[] = [
   { at: at('2026-09-29', '06:30'), level: 2, phase: 'wake' },
   { at: at('2026-09-29', '07:00'), level: 0, phase: 'after' },
 ];
-const base = { points, wake: at('2026-09-29', '06:30'), timeZone: TZ, format: 'level' as const, waiting: false };
+const base = { points, wake: at('2026-09-29', '06:30'), timeZone: TZ, format: 'level' as const, waiting: false, runtime: 'live' as const };
 const line = (date: string, time: string, extra: Partial<Parameters<typeof smartPhaseLine>[0]> = {}) =>
   smartPhaseLine({ ...base, now: at(date, time), ...extra });
 
@@ -78,11 +78,26 @@ it('builds the line for a resolved Smart Schedule sleep from the shared curve', 
     smart: { baseLevel: 0, intensity: 'standard', warmStart: true, warmUp: true, upEarly: false },
     events: [{ kind: 'alarm', at: at('2026-09-29', '06:30').toISOString(), alarm, index: 0 }],
   };
-  const options = { timeZone: TZ, format: 'level' as const, waiting: false };
+  const options = { timeZone: TZ, format: 'level' as const, waiting: false, runtime: 'live' as const };
   expect(smartLineForSleep(sleep, { ...options, now: at('2026-09-29', '03:00') })).toMatch(/^Warm-up starts at .* for your 6:30 AM wake-up$/);
   expect(smartLineForSleep({ ...sleep, mode: 'manual' }, { ...options, now: at('2026-09-29', '03:00') })).toBeUndefined();
   // A cool-down the server delayed from 22:30 to 23:00 reaches the hold 30 minutes later than the clock curve.
   expect(smartLineForSleep(sleep, { ...options, now: at('2026-09-28', '23:05') })).toBe('Cooling step by step to \u22122 by 11:40 PM');
   expect(smartLineForSleep(sleep, { ...options, now: at('2026-09-28', '23:05'), coolStart: at('2026-09-28', '23:00') }))
     .toBe('Cooling step by step to \u22122 by 12:10 AM');
+});
+
+it('keeps only lines about later clock times while the server has not said what tonight is doing', () => {
+  const unknown = { runtime: 'unknown' as const };
+  expect(line('2026-09-28', '22:20', unknown)).toBeUndefined();
+  expect(line('2026-09-28', '22:50', unknown)).toBeUndefined();
+  expect(line('2026-09-28', '23:30', unknown)).toBeUndefined();
+  expect(line('2026-09-29', '03:00', unknown)).toBe('Warm-up starts at 5:45 AM for your 6:30 AM wake-up');
+  expect(line('2026-09-29', '06:00', unknown)).toBeUndefined();
+  expect(line('2026-09-29', '06:40', unknown)).toBe('Back to 0 at 7:00 AM');
+  // Whether the night already reached its hold depends on when the cool-down started.
+  expect(smartPhaseLine({ ...base, ...unknown, points: points.filter(point => point.phase !== 'warmup'), now: at('2026-09-29', '03:00') }))
+    .toBeUndefined();
+  expect(line('2026-09-28', '23:30', { ...unknown, hold: { level: 1, until: at('2026-09-29', '00:10') } })).toBeUndefined();
+  expect(line('2026-09-29', '06:00', { ...unknown, base: { level: 0, since: at('2026-09-29', '05:50') } })).toBeUndefined();
 });

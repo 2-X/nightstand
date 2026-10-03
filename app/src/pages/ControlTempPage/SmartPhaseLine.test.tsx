@@ -3,11 +3,15 @@ import { render, screen } from '@testing-library/react';
 import type { ResolvedSleepResponse, RhythmsLive } from '@api/rhythmsResponse';
 import SmartPhaseLine from './SmartPhaseLine';
 
-const fixture = vi.hoisted(() => ({ live: null as RhythmsLive | null }));
-vi.mock('@api/rhythms', () => ({ useRhythmsLive: () => ({ data: fixture.live }) }));
+const fixture = vi.hoisted(() => ({ live: null as RhythmsLive | null, liveError: false, statusAge: 0 }));
+vi.mock('@api/rhythms', () => ({ useRhythmsLive: () => ({ data: fixture.live, isError: fixture.liveError }) }));
 vi.mock('@api/settings', () => ({ useSettings: () => ({ data: { timeZone: 'America/Los_Angeles', temperatureFormat: 'level' } }) }));
+vi.mock('@state/appStore', () => ({ useAppStore: () => ({ side: 'left' }) }));
 // -1 in levels: the level the manual change set.
-vi.mock('@api/deviceStatus', () => ({ useDeviceStatus: () => ({ data: { left: { targetTemperatureF: 80 } } }) }));
+vi.mock('@api/deviceStatus', () => ({ useDeviceStatus: () => ({
+  data: { left: { isOn: true, targetTemperatureF: 80, currentTemperatureF: 80 } },
+  dataUpdatedAt: Date.now() - fixture.statusAge, isError: false, isFetching: false, failureCount: 0, errorUpdateCount: 0, errorUpdatedAt: 0,
+}) }));
 
 const alarm = { time: '06:30', enabled: true, vibrationIntensity: 30, vibrationPattern: 'rise' as const, duration: 30, alarmTemperature: 83 };
 const sleep: ResolvedSleepResponse = {
@@ -26,6 +30,8 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-09-29T09:00:00Z'));
   fixture.live = null;
+  fixture.liveError = false;
+  fixture.statusAge = 0;
 });
 afterEach(() => vi.useRealTimers());
 
@@ -61,4 +67,26 @@ it('says when the server went back to the base', () => {
   fixture.live = live({ phase: 'after', baseSince: '2026-09-29T12:50:00.000Z' });
   render(<SmartPhaseLine sleep={ sleep } side="left"/>);
   expect(screen.getByText('Back at your base, 0, since 5:50 AM')).toBeInTheDocument();
+});
+
+it('drops the presence-driven cool-down when the live answer could not be read', () => {
+  vi.setSystemTime(new Date('2026-09-29T05:45:00Z'));
+  fixture.live = live({ phase: 'bedtime', waiting: true });
+  fixture.liveError = true;
+  const { container } = render(<SmartPhaseLine sleep={ sleep } side="left"/>);
+  expect(container).toBeEmptyDOMElement();
+});
+
+it('drops the cool-down while there is no live answer for tonight', () => {
+  vi.setSystemTime(new Date('2026-09-29T05:45:00Z'));
+  const { container } = render(<SmartPhaseLine sleep={ sleep } side="left"/>);
+  expect(container).not.toHaveTextContent('Cooling step by step');
+  expect(container).toBeEmptyDOMElement();
+});
+
+it('shows no line while the bed has not reported for two minutes', () => {
+  fixture.statusAge = 3 * 60_000;
+  fixture.live = live({ hold: { until: '2026-09-29T12:00:00.000Z' } });
+  const { container } = render(<SmartPhaseLine sleep={ sleep } side="left"/>);
+  expect(container).toBeEmptyDOMElement();
 });
