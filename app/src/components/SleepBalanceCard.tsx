@@ -32,7 +32,7 @@ export default function SleepBalanceCard({ records, weekStart, timeZone, onSelec
           { summaries.length > 1 && (
             <Typography variant="body2" color="text.secondary">
               { summary.nights } { summary.nights === 1 ? 'night' : 'nights' }{ ' ' }
-              { summary.kind === 'asleep' ? 'with sleep stages' : 'without sleep stages' }
+              { summary.kind === 'asleep' ? 'with an estimate of time asleep' : 'with time in bed only' }
             </Typography>
           ) }
           <Typography variant="body2" color="text.secondary">

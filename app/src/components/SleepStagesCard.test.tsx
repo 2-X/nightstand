@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { renderWithProviders } from '@test/renderWithProviders';
@@ -31,17 +31,35 @@ describe('Sleep stages card', () => {
     expect(screen.getByText('5:00 AM')).toHaveStyle({ transform: 'translateX(-100%)' });
   });
 
-  it('marks the totals as unreliable when stage coverage is low', async () => {
-    server.use(http.get('*/metrics/sleep-stages', () => HttpResponse.json(stages({ lowCoverage: true }))));
-    renderWithProviders(<SleepStagesCard startTime={ START } endTime={ END } timeZone="America/Los_Angeles"/>);
-    expect(await screen.findByText(/Too few heart readings/i)).toBeInTheDocument();
-    expect(screen.queryByText('Deep sleep')).not.toBeInTheDocument();
-  });
-
-  it('shows deep and REM totals when coverage is fine', async () => {
+  it('shows estimated sleep and wake, without deep sleep or REM', async () => {
     server.use(http.get('*/metrics/sleep-stages', () => HttpResponse.json(stages())));
     renderWithProviders(<SleepStagesCard startTime={ START } endTime={ END } timeZone="America/Los_Angeles"/>);
-    expect(await screen.findByText('Deep sleep')).toBeInTheDocument();
-    expect(screen.queryByText(/Too few heart readings/i)).not.toBeInTheDocument();
+    expect(await screen.findByText('Estimated sleep and wake')).toBeInTheDocument();
+    expect(await screen.findAllByText('Asleep')).not.toHaveLength(0);
+    expect(screen.getByText('From heart rate and movement. Not compared with a sleep study.')).toBeInTheDocument();
+    for (const gone of ['Deep sleep', 'REM', 'Light', 'Too few heart readings']) {
+      expect(screen.queryByText(new RegExp(gone))).toBeNull();
+    }
+    expect(screen.getAllByText('Asleep').length).toBeGreaterThan(0);
+  });
+
+  it('shows no stage totals even when coverage is low', async () => {
+    server.use(http.get('*/metrics/sleep-stages', () => HttpResponse.json(stages({ lowCoverage: true }))));
+    renderWithProviders(<SleepStagesCard startTime={ START } endTime={ END } timeZone="America/Los_Angeles"/>);
+    expect(await screen.findByText('Asleep')).toBeInTheDocument();
+    expect(screen.queryByText(/Too few heart readings/)).toBeNull();
+  });
+
+  it('draws deep, light and REM epochs as one asleep segment', async () => {
+    const t0 = Date.parse(START) / 1000;
+    const epochs = ['light', 'deep', 'rem', 'awake', 'deep'].map((stage, i) => (
+      { startUnix: t0 + i * 1800, endUnix: t0 + (i + 1) * 1800, stage }
+    ));
+    server.use(http.get('*/metrics/sleep-stages', () => HttpResponse.json(stages({ epochs }))));
+    const { container } = renderWithProviders(
+      <SleepStagesCard startTime={ START } endTime={ END } timeZone="America/Los_Angeles"/>,
+    );
+    // asleep, awake, asleep
+    await waitFor(() => expect(container.querySelectorAll('svg rect')).toHaveLength(3));
   });
 });

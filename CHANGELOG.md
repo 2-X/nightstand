@@ -23,6 +23,9 @@ is a hard fork; for the history of the projects it descends from, see
 - HRV is no longer shown in the app, and the sleep score no longer uses it.
   Checked against chest-strap recordings, the stored estimate was no more
   accurate than a fixed guess. It is still stored and returned by the API.
+- The Sleep page no longer shows deep sleep and REM. They came from fixed
+  rules over heart rate and movement and looked about the same every night,
+  so it shows time awake and asleep instead.
 - Settings > Software now says when you are running a beta while your update
   channel is Stable, and offers to switch. Releases are marked Stable or Beta
   in the version list and the release notes, and installing a beta says so.

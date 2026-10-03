@@ -11,7 +11,6 @@ import { useSleepStages, SleepStage, StageEpoch } from '@api/sleepStages.ts';
 import { useSleepScoreEnabled } from '@api/sleepScore.ts';
 import GlassCard from '@design/GlassCard';
 import { palette, typography } from '@design/tokens';
-import { formatSleepDuration } from '../pages/DataPage/SleepPage/sleepContext';
 
 type Props = {
   startTime: string;
@@ -19,30 +18,25 @@ type Props = {
   timeZone?: string;
 };
 
-const STAGE_COLOR: Record<SleepStage, string> = palette.stage;
-// Y-axis position for each stage (0 = top, 1 = bottom)
-const STAGE_Y: Record<SleepStage, number> = {
-  awake: 0.10,
-  rem:   0.34,
-  light: 0.58,
-  deep:  0.82,
-};
-const STAGE_LABEL: Record<SleepStage, string> = {
-  awake: 'Awake',
-  rem:   'REM',
-  light: 'Light',
-  deep:  'Deep',
-};
+type ShownStage = 'awake' | 'asleep';
+// Deep, light and REM come from fixed rules and are not shown apart.
+const shown = (stage: SleepStage): ShownStage => (stage === 'awake' ? 'awake' : 'asleep');
+// Y-axis position for each row (0 = top, 1 = bottom)
+const SHOWN_Y: Record<ShownStage, number> = { awake: 0.25, asleep: 0.7 };
+const SHOWN_LABEL: Record<ShownStage, string> = { awake: 'Awake', asleep: 'Asleep' };
+const SHOWN_COLOR: Record<ShownStage, string> = { awake: palette.stage.awake, asleep: palette.stage.light };
 
-// Merge consecutive epochs of the same stage into a single segment so we
-// don't render hundreds of overlapping blocks. e.g. ten 5-min Light epochs
-// in a row → one 50-min Light segment.
-function mergeAdjacent(epochs: StageEpoch[]): StageEpoch[] {
+type ShownEpoch = { startUnix: number; endUnix: number; stage: ShownStage };
+
+// Merge consecutive epochs of the same row into a single segment so we
+// don't render hundreds of overlapping blocks.
+function mergeAdjacent(epochs: StageEpoch[]): ShownEpoch[] {
   if (epochs.length === 0) return [];
-  const out: StageEpoch[] = [{ ...epochs[0] }];
-  for (let i = 1; i < epochs.length; i++) {
+  const mapped: ShownEpoch[] = epochs.map(epoch => ({ ...epoch, stage: shown(epoch.stage) }));
+  const out: ShownEpoch[] = [{ ...mapped[0] }];
+  for (let i = 1; i < mapped.length; i++) {
     const prev = out[out.length - 1];
-    const cur = epochs[i];
+    const cur = mapped[i];
     // Treat a tiny gap (≤ 60s) as continuous - sometimes vitals records
     // arrive at slightly off-boundary timestamps.
     if (cur.stage === prev.stage && cur.startUnix - prev.endUnix <= 60) {
@@ -52,63 +46,6 @@ function mergeAdjacent(epochs: StageEpoch[]): StageEpoch[] {
     }
   }
   return out;
-}
-
-function StatBlock({
-  label,
-  duration,
-  pct,
-}: {
-  label: string;
-  duration: string;
-  pct: string;
-}) {
-  return (
-    <Box sx={ { minWidth: 0 } }>
-      <Typography
-        sx={ {
-          fontSize: '0.875rem',
-          color: palette.text.secondary,
-          fontWeight: 400,
-          mb: 0.5,
-        } }
-      >
-        { label }
-      </Typography>
-      <Box sx={ { display: 'flex', alignItems: 'baseline', gap: 1 } }>
-        <Typography
-          sx={ {
-            fontSize: '1.5rem',
-            fontWeight: 500,
-            letterSpacing: '-0.01em',
-            color: palette.text.primary,
-            fontVariantNumeric: 'tabular-nums',
-            lineHeight: 1.05,
-            whiteSpace: 'nowrap',
-          } }
-        >
-          { duration }
-        </Typography>
-        <Typography
-          component="span"
-          sx={ {
-            fontSize: '0.875rem',
-            color: palette.text.primary,
-            opacity: 0.85,
-            fontWeight: 400,
-            borderLeft: `1px solid ${palette.border.subtle}`,
-            pl: 1,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 0.5,
-            whiteSpace: 'nowrap',
-          } }
-        >
-          { pct }
-        </Typography>
-      </Box>
-    </Box>
-  );
 }
 
 // SVG-based step chart. Each segment is a thick rounded horizontal line at
@@ -126,20 +63,20 @@ function StagesChart({ epochs, periodStart, periodEnd }: {
   const span = Math.max(1, periodEnd - periodStart);
 
   const xOf = (t: number) => ((t - periodStart) / span) * VB_W;
-  const yOf = (stage: SleepStage) => STAGE_Y[stage] * VB_H;
+  const yOf = (stage: ShownStage) => SHOWN_Y[stage] * VB_H;
 
   const merged = mergeAdjacent(epochs);
 
   return (
     <Box sx={ { width: '100%', mb: 1, touchAction: 'pan-y', display: 'grid', gridTemplateColumns: '44px minmax(0, 1fr)' } }>
       <Box sx={ { position: 'relative', height: 140 } }>
-        { (Object.keys(STAGE_Y) as SleepStage[]).map(stage => (
+        { (Object.keys(SHOWN_Y) as ShownStage[]).map(stage => (
           <Typography
             key={ stage }
             sx={ {
-              position: 'absolute', top: `${STAGE_Y[stage] * 100}%`, transform: 'translateY(-50%)',
+              position: 'absolute', top: `${SHOWN_Y[stage] * 100}%`, transform: 'translateY(-50%)',
               fontSize: 12, color: palette.text.secondary,
-            } }>{ STAGE_LABEL[stage] }</Typography>
+            } }>{ SHOWN_LABEL[stage] }</Typography>
         )) }
       </Box>
       <svg
@@ -164,7 +101,7 @@ function StagesChart({ epochs, periodStart, periodEnd }: {
               y1={ y1 }
               x2={ x }
               y2={ y2 }
-              stroke={ STAGE_COLOR[seg.stage] }
+              stroke={ SHOWN_COLOR[seg.stage] }
               strokeWidth={ 1.5 }
               strokeOpacity={ 0.55 }
             />
@@ -175,7 +112,7 @@ function StagesChart({ epochs, periodStart, periodEnd }: {
         { merged.map((seg, i) => {
           const x = xOf(seg.startUnix);
           const w = Math.max(2, xOf(seg.endUnix) - xOf(seg.startUnix));
-          const color = STAGE_COLOR[seg.stage];
+          const color = SHOWN_COLOR[seg.stage];
           if (seg.stage === 'awake') {
             // From the top of the chart down to the awake row.
             const top = 0;
@@ -230,7 +167,10 @@ export default function SleepStagesCard({ startTime, endTime, timeZone }: Props)
 
   return (
     <GlassCard>
-      <SectionHeading sx={ { mb: 1.5 } }>Sleep stages</SectionHeading>
+      <SectionHeading sx={ { mb: 0.5 } }>Estimated sleep and wake</SectionHeading>
+      <Typography variant="body2" color="text.secondary" sx={ { mb: 1.5 } }>
+        From heart rate and movement. Not compared with a sleep study.
+      </Typography>
       { isError && (
         <Alert severity="error" action={ <Button onClick={ () => refetch() }>Retry</Button> }>Sleep stages could not be loaded.</Alert>
       ) }
@@ -238,25 +178,6 @@ export default function SleepStagesCard({ startTime, endTime, timeZone }: Props)
 
       { !isError && data && data.epochs.length > 0 && (
         <>
-          { data.lowCoverage ? (
-            <Typography variant="body2" color="text.secondary" sx={ { mb: 2 } }>
-              Too few heart readings to total deep sleep and REM for this night.
-            </Typography>
-          ) : (
-            <Box sx={ { display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' } }>
-              <StatBlock
-                label="Deep sleep"
-                duration={ formatSleepDuration(data.totals.deep) }
-                pct={ `${data.percentages.deep}%` }
-              />
-              <StatBlock
-                label="REM"
-                duration={ formatSleepDuration(data.totals.rem) }
-                pct={ `${data.percentages.rem}%` }
-              />
-            </Box>
-          ) }
-
           <StagesChart
             epochs={ data.epochs }
             periodStart={ periodStart }

@@ -61,8 +61,8 @@ describe('Sleep balance coverage', () => {
       timeZone={ timeZone }/>);
     expect(await screen.findByText('6h 30m asleep on average')).toBeInTheDocument();
     expect(await screen.findByText('8h in bed on average')).toBeInTheDocument();
-    expect(screen.getByText('1 night with sleep stages')).toBeInTheDocument();
-    expect(screen.getByText('1 night without sleep stages')).toBeInTheDocument();
+    expect(screen.getByText('1 night with an estimate of time asleep')).toBeInTheDocument();
+    expect(screen.getByText('1 night with time in bed only')).toBeInTheDocument();
   });
 });
 
