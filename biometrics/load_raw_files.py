@@ -8,6 +8,7 @@ from typing import Optional
 import gc
 import sys
 import os
+from collections import Counter
 
 # Add the current directory to sys.path
 sys.path.append(os.getcwd())
@@ -274,10 +275,136 @@ def _feed_presence(collector, capture, ts: int):
         collector.note_piezo_layout(layout)
 
 
+def _ingest_record(decoded_data: dict, data: dict, start_time, end_time, side: Side, sensor_count: int,
+                   presence_collector=None, cap_formats=None, check_file_span=False, unknown_caps=None):
+    """Shared normalization and collection; False skips a RAW file outside the window."""
+    load_raw_types = data.keys()
+    format_name = _cap_format_name(decoded_data) if cap_formats is not None else None
+    presence_capture = _capture_presence(decoded_data) if presence_collector is not None else None
+    unknown_kind = None
+    if presence_capture is not None and presence_capture[0] == 'unknown':
+        # An unknown type never passes the type filter below.
+        unknown_kind = presence_capture[1]
+        presence_capture = None
+    # Pod 5 writes 'capSense2' records; normalize them to the
+    # legacy 'capSense' shape before the type filter so Pod 5
+    # capacitance data isn't silently dropped.
+    if decoded_data.get('type') == 'capSense2':
+        missing = _cap_values_missing(decoded_data)
+        decoded_data = _normalize_cap_sense2(decoded_data)
+        if decoded_data['type'] == 'capSense':
+            # Movement skips these rows; presence and calibration
+            # read only out, cen and in.
+            for cap_side, value in missing.items():
+                decoded_data[cap_side]['no_reading'] = value
+    if not decoded_data['type'] in load_raw_types:
+        # Never loaded, but still what the Pod writes in this window.
+        if (format_name == 'unknown' or unknown_kind is not None) and \
+                _in_window(decoded_data, start_time, end_time):
+            if format_name == 'unknown':
+                cap_formats[format_name] += 1
+            if unknown_kind is not None:
+                if unknown_caps is not None:
+                    unknown_caps[unknown_kind] += 1
+                else:
+                    try:
+                        presence_collector.note_unknown_cap(unknown_kind)
+                    except Exception as error:
+                        logger.error(error)
+        return None
+    _delete_other_side(decoded_data, side, sensor_count)
+    record_time = datetime.fromtimestamp(decoded_data['ts'], timezone.utc)
+    if check_file_span:
+        timestamp_end = record_time + timedelta(minutes=15)
+        if not (start_time <= record_time <= end_time or start_time <= timestamp_end <= end_time):
+            return False
+
+    # A file spans ~15 minutes and can straddle either window edge.
+    if not start_time <= record_time <= end_time:
+        return True
+    if format_name is not None:
+        cap_formats[format_name] += 1
+
+    if decoded_data['type'] == 'piezo-dual':
+        load_piezo_row(decoded_data, side)
+
+    decoded_data['ts'] = record_time.strftime("%Y-%m-%d %H:%M:%S")
+    data[decoded_data['type']].append(decoded_data)
+
+    if presence_capture is not None:
+        try:
+            _feed_presence(presence_collector, presence_capture, int(record_time.timestamp()))
+        except Exception as error:
+            logger.error(error)
+    return True
+
+
+class _Diagnostics:
+    """Per-source capacitance diagnostics, applied only for the source whose result is used."""
+
+    def __init__(self, cap_formats, presence_collector):
+        self.cap_formats = cap_formats
+        self.presence_collector = presence_collector
+        self.formats = Counter() if cap_formats is not None else None
+        self.unknown_caps = Counter() if presence_collector is not None else None
+
+    def __bool__(self):
+        return bool(self.formats) or bool(self.unknown_caps)
+
+    def apply(self):
+        if self.formats is not None:
+            self.cap_formats.update(self.formats)
+        for kind, count in (self.unknown_caps or {}).items():
+            for _ in range(count):
+                try:
+                    self.presence_collector.note_unknown_cap(kind)
+                except Exception as error:
+                    logger.error(error)
+
+
+# Per kept record beyond its piezo arrays: the dict, nested capacitance dict and time string.
+KEPT_RECORD_OVERHEAD = 1024
+
+
+def _kept_size(record: dict) -> int:
+    return KEPT_RECORD_OVERHEAD + sum(value.nbytes for value in record.values() if isinstance(value, np.ndarray))
+
+
+def _load_nats_window(data: dict, start_time, end_time, side: Side, sensor_count: int, presence_collector,
+                      diagnostics: _Diagnostics):
+    """Fill data from the local JetStream history, keeping only what the RAW path keeps."""
+    import nats_source
+    logger.info('No RAW records in the window; trying local NATS JetStream stream raw')
+    limits = nats_source.window_limits(start_time, end_time)
+    rows = list(data.values())
+    kept = kept_bytes = 0
+    records = nats_source.iter_window_records(start_time, end_time, limits)
+    try:
+        for decoded_data in records:
+            try:
+                _ingest_record(decoded_data, data, start_time, end_time, side, sensor_count,
+                               presence_collector, diagnostics.formats, unknown_caps=diagnostics.unknown_caps)
+            except Exception as error:
+                logger.error(error)
+                continue
+            total = sum(map(len, rows))
+            if total == kept:
+                continue
+            kept = total
+            # Normalization works in place, so the kept row is decoded_data itself.
+            kept_bytes += _kept_size(decoded_data)
+            if kept > limits.kept_records or kept_bytes > limits.kept_bytes:
+                raise RuntimeError(f'NATS history kept more than {limits.kept_records} records or '
+                                   f'{limits.kept_bytes} bytes; window is incomplete')
+    except nats_source.NatsUnavailableError as error:
+        logger.warning(str(error))
+    finally:
+        records.close()
+
+
 def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Side, sensor_count: int, presence_collector=None,
-                      cap_formats=None):
+                      cap_formats=None, unknown_caps=None):
     # logger.debug(f'Loading cbor data from: {file_path}')
-    load_raw_types = list(data.keys())
     checked_timespan = False
     with open(file_path, 'rb') as raw_data:
         while True:
@@ -290,67 +417,13 @@ def _decode_cbor_file(file_path: str, data: dict, start_time, end_time, side: Si
                 if data_bytes is None:
                     continue  # empty placeholder record
                 decoded_data = cbor2.loads(data_bytes)
-                format_name = _cap_format_name(decoded_data) if cap_formats is not None else None
-                presence_capture = _capture_presence(decoded_data) if presence_collector is not None else None
-                unknown_kind = None
-                if presence_capture is not None and presence_capture[0] == 'unknown':
-                    # An unknown type never passes the type filter below.
-                    unknown_kind = presence_capture[1]
-                    presence_capture = None
-                # Pod 5 writes 'capSense2' records; normalize them to the
-                # legacy 'capSense' shape before the type filter so Pod 5
-                # capacitance data isn't silently dropped.
-                if decoded_data.get('type') == 'capSense2':
-                    missing = _cap_values_missing(decoded_data)
-                    decoded_data = _normalize_cap_sense2(decoded_data)
-                    if decoded_data['type'] == 'capSense':
-                        # Movement skips these rows; presence and calibration
-                        # read only out, cen and in.
-                        for cap_side, value in missing.items():
-                            decoded_data[cap_side]['no_reading'] = value
-                if not decoded_data['type'] in load_raw_types:
-                    # Never loaded, but still what the Pod writes in this window.
-                    if (format_name == 'unknown' or unknown_kind is not None) and \
-                            _in_window(decoded_data, start_time, end_time):
-                        if format_name == 'unknown':
-                            cap_formats[format_name] += 1
-                        if unknown_kind is not None:
-                            try:
-                                presence_collector.note_unknown_cap(unknown_kind)
-                            except Exception as error:
-                                logger.error(error)
-                    continue
-                _delete_other_side(decoded_data, side, sensor_count)
-                record_time = datetime.fromtimestamp(decoded_data['ts'], timezone.utc)
-                if not checked_timespan:
-                    timestamp_start = record_time
-                    timestamp_end = timestamp_start + timedelta(minutes=15)
-                    if start_time <= timestamp_start <= end_time:
-                        checked_timespan = True
-                    else:
-                        if start_time <= timestamp_end <= end_time:
-                            checked_timespan = True
-                        else:
-                            raw_data.close()
-                            return
-
-                # A file spans ~15 minutes and can straddle either window edge.
-                if not start_time <= record_time <= end_time:
-                    continue
-                if format_name is not None:
-                    cap_formats[format_name] += 1
-
-                if decoded_data['type'] == 'piezo-dual':
-                    load_piezo_row(decoded_data, side)
-
-                decoded_data['ts'] = record_time.strftime("%Y-%m-%d %H:%M:%S")
-                data[decoded_data['type']].append(decoded_data)
-
-                if presence_capture is not None:
-                    try:
-                        _feed_presence(presence_collector, presence_capture, int(record_time.timestamp()))
-                    except Exception as error:
-                        logger.error(error)
+                accepted = _ingest_record(decoded_data, data, start_time, end_time, side, sensor_count,
+                                          presence_collector, cap_formats, check_file_span=not checked_timespan,
+                                          unknown_caps=unknown_caps)
+                if accepted is False:
+                    return
+                if accepted is True:
+                    checked_timespan = True
 
             except EOFError:
                 break
@@ -384,7 +457,7 @@ def _debug_data(data: dict):
 
 def load_raw_files(folder_path: str, start_time: datetime, end_time: datetime, side: Side, sensor_count=2, raw_data_types: List[RawDataTypes] = None,
                    presence_collector=None, cap_formats=None):
-    """Decode the RAW records in [start_time, end_time] for one side.
+    """Decode RAW records, or local NATS history, in [start_time, end_time] for one side.
 
     presence_collector, when given, also receives both sides' capacitance
     channels (any format presence.sensors reads) and per-record piezo ranges
@@ -406,16 +479,31 @@ def load_raw_files(folder_path: str, start_time: datetime, end_time: datetime, s
         logger.info(f'Loading RAW files from {folder_path} | {start_time.isoformat()} -> {end_time.isoformat()}')
 
         file_paths = get_current_files(folder_path)
-
-        if len(file_paths) == 0:
-            logger.error('No file paths detected!')
-            raise FileNotFoundError(f'No files found for: {folder_path}! Is internet blocked?')
+        raw_diagnostics = _Diagnostics(cap_formats, presence_collector)
 
         for file_path in file_paths:
             if os.path.isfile(file_path):
-                _decode_cbor_file(file_path, data, start_time, end_time, side, sensor_count, presence_collector, cap_formats)
+                _decode_cbor_file(file_path, data, start_time, end_time, side, sensor_count, presence_collector,
+                                  raw_diagnostics.formats, raw_diagnostics.unknown_caps)
             else:
                 logger.warning(f'File path deleted before parsed! {file_path}')
+
+        if any(data.values()):
+            raw_diagnostics.apply()
+        else:
+            nats_diagnostics = _Diagnostics(cap_formats, presence_collector)
+            _load_nats_window(data, start_time, end_time, side, sensor_count, presence_collector, nats_diagnostics)
+            if any(data.values()):
+                nats_diagnostics.apply()
+                logger.info('Loaded sensor records from local NATS JetStream stream raw')
+            else:
+                # Diagnostics from whichever source saw the window.
+                (raw_diagnostics if raw_diagnostics or not nats_diagnostics else nats_diagnostics).apply()
+                if len(file_paths) == 0:
+                    logger.error('No file paths detected!')
+                    raise FileNotFoundError(
+                        f'No RAW files found in {folder_path} and no sensor records in local NATS JetStream '
+                        f'stream raw for {start_time.isoformat()} to {end_time.isoformat()}')
 
         _rename_keys(data)
         data_found = False
