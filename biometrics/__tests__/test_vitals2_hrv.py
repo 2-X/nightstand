@@ -8,8 +8,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, os.path.dirname(__file__))
 
 from vitals2.artifacts import mask_artifacts
-from vitals2.hr import estimate_hr
-from vitals2.hrv import LEARN_SECONDS, WINDOW_SECONDS, BeatTemplate, jj_intervals, rmssd_sdnn
+from vitals2.hr import estimate_hr, resample
+from vitals2.hrv import HRV_FS, _bad_at_hrv_rate, LEARN_SECONDS, WINDOW_SECONDS, BeatTemplate, jj_intervals, rmssd_sdnn
 from vitals2_synth import FS, bcg, beat_times, breathing, noise
 
 BPM = 62.0
@@ -26,6 +26,36 @@ def learned(signal):
     template = BeatTemplate.learn(signal[-int(LEARN_SECONDS * FS):], FS, 60.0 / BPM, learned_at=0)
     assert template is not None
     return template
+
+
+class ArtifactMaskTest(unittest.TestCase):
+    def test_bad_span_stays_at_its_acquisition_time(self):
+        for sample_rate in (125, 140, 250, 400, 500, 1000):
+            with self.subTest(sample_rate=sample_rate):
+                bad = np.zeros(300 * sample_rate, dtype=bool)
+                bad[270 * sample_rate:280 * sample_rate] = True
+                mapped = _bad_at_hrv_rate(bad, sample_rate, int(300 * HRV_FS))
+                times = np.flatnonzero(mapped) / HRV_FS
+                self.assertGreaterEqual(times[0], 269.9)
+                self.assertLessEqual(times[0], 270.0)
+                self.assertGreaterEqual(times[-1], 279.99)
+                self.assertLessEqual(times[-1], 280.1)
+                self.assertTrue(mapped[int(271 * HRV_FS):int(279 * HRV_FS)].all())
+
+    def test_mask_includes_the_polyphase_filter_support(self):
+        for sample_rate in (125, 140, 250, 400, 500, 1000):
+            with self.subTest(sample_rate=sample_rate):
+                bad = np.zeros(3 * sample_rate, dtype=bool)
+                bad[sample_rate] = True
+                impulse = resample(bad.astype(float), sample_rate, HRV_FS)
+                mapped = _bad_at_hrv_rate(bad, sample_rate, impulse.size)
+                self.assertTrue(mapped[np.abs(impulse) > 1e-8].all())
+                self.assertFalse(mapped[:int(0.8 * HRV_FS)].any())
+                self.assertFalse(mapped[int(1.2 * HRV_FS):].any())
+
+    def test_output_without_input_samples_is_not_clean(self):
+        mapped = _bad_at_hrv_rate(np.zeros(125, dtype=bool), 125, 300)
+        self.assertTrue(mapped[250:].all())
 
 
 class BeatTemplateTest(unittest.TestCase):

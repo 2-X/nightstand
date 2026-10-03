@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from fractions import Fraction
 
 import numpy as np
 import scipy.signal as sps
@@ -33,12 +34,18 @@ def beat_band(values: np.ndarray, fs: float) -> np.ndarray:
 
 
 def _bad_at_hrv_rate(bad: np.ndarray, fs: float, size: int) -> np.ndarray:
-    """A bad-sample mask at HRV_FS: a sample is bad when any sample it replaces was."""
-    step = max(1, int(round(fs / HRV_FS)))
-    usable = min(bad.size // step, size)
-    out = np.zeros(size, dtype=bool)
-    out[:usable] = bad[:usable * step].reshape(usable, step).any(axis=1)
-    return out
+    """Mark output samples whose polyphase filter support touches bad input."""
+    ratio = Fraction(int(round(HRV_FS)), int(round(fs))).limit_denominator(1000)
+    up, down = ratio.numerator, ratio.denominator
+    # Match resample_poly's default FIR half-length, in upsampled samples.
+    radius = 0 if up == down else 10 * max(up, down)
+    centres = np.arange(size, dtype=np.int64) * down
+    starts = np.maximum(0, (centres - radius + up - 1) // up)
+    stops = np.minimum(bad.size, (centres + radius) // up + 1)
+    prefix = np.concatenate(([0], np.cumsum(bad, dtype=np.int64)))
+    unavailable = centres >= bad.size * up
+    starts = np.minimum(starts, bad.size)
+    return unavailable | (prefix[stops] > prefix[starts])
 
 
 @dataclass(frozen=True)
