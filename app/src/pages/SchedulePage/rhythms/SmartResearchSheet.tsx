@@ -81,6 +81,9 @@ const PHASES: Phase[] = [
   },
 ];
 
+// A study title is a link on its own line, so it gets a whole 44 px row to tap.
+const studyLinkSx = { color: palette.accent, display: 'flex', alignItems: 'center', minHeight: 44 } as const;
+
 function PhaseSection({ phase }: { phase: Phase }) {
   const [open, setOpen] = useState(false);
   const listId = useId();
@@ -101,7 +104,7 @@ function PhaseSection({ phase }: { phase: Phase }) {
         component="li"
         key={ source.href }
         sx={ { pl: 1.5, borderLeft: `2px solid ${palette.border.medium}`, overflowWrap: 'anywhere' } }>
-        <Link href={ source.href } target="_blank" rel="noopener noreferrer" variant="body2" sx={ { color: palette.accent } }>
+        <Link href={ source.href } target="_blank" rel="noopener noreferrer" variant="body2" sx={ studyLinkSx }>
           { source.title }
         </Link>
         <Typography variant="body2" color="text.secondary">{ source.cite }</Typography>

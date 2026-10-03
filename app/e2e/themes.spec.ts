@@ -24,6 +24,17 @@ for (const id of THEME_IDS) {
     expect(await smallTargets(page)).toEqual([]);
   });
 
+  test(`the research sheet in ${id} fits the width and keeps 44 px targets`, async ({ page }) => {
+    await openThemed(page, id, '/schedules', PHONE);
+    await page.getByRole('button', { name: 'Edit Workday' }).click();
+    await page.getByRole('button', { name: 'The research behind it' }).click();
+    const sheet = page.getByRole('dialog', { name: 'The research behind it' });
+    for (const studies of await sheet.getByRole('button', { name: /^Studies/ }).all()) await studies.click();
+    await expect(sheet.getByRole('link').first()).toBeVisible();
+    expect(await overflows(page)).toBe(false);
+    expect(await smallTargets(page)).toEqual([]);
+  });
+
   test(`${id} loads its fonts from the app's own origin`, async ({ page, baseURL }) => {
     const fonts: string[] = [];
     page.on('request', request => {
