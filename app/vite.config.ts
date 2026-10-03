@@ -1,12 +1,30 @@
-import { defineConfig, searchForWorkspaceRoot } from 'vite';
+import { defineConfig, searchForWorkspaceRoot, type Plugin } from 'vite';
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
 const isDemoMode = process.env.VITE_ENV === 'demo';
 
+const DEMO_DESCRIPTION = 'Try Nightstand, local control for Eight Sleep Pods, with sample data in your browser. '
+  + 'Nothing here connects to a real Pod.';
+
+// Link previews and search results describe the hosted demo as one, not as a Pod's own app.
+const demoMeta = (): Plugin => ({
+  name: 'demo-meta',
+  transformIndexHtml: () => (isDemoMode ? [
+    { tag: 'meta', attrs: { name: 'description', content: DEMO_DESCRIPTION }, injectTo: 'head' as const },
+    { tag: 'meta', attrs: { property: 'og:title', content: 'Nightstand demo' }, injectTo: 'head' as const },
+    { tag: 'meta', attrs: { property: 'og:description', content: DEMO_DESCRIPTION }, injectTo: 'head' as const },
+    {
+      tag: 'meta',
+      attrs: { property: 'og:image', content: 'https://raw.githubusercontent.com/LTimothy/nightstand/main/docs/social-preview.png' },
+      injectTo: 'head' as const,
+    },
+  ] : []),
+});
+
 export default defineConfig({
-  plugins: [react(), tsconfigPaths()],
+  plugins: [react(), tsconfigPaths(), demoMeta()],
   server: {
     fs: { allow: [
       searchForWorkspaceRoot(process.cwd()),

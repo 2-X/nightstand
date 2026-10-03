@@ -3,6 +3,11 @@ import { test, expect } from '@playwright/test';
 
 test.use({ viewport: { width: 390, height: 844 } });
 
+// These specs measure where the controls sit, so they start with the demo bar dismissed.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => sessionStorage.setItem('nightstand-demo-banner-dismissed', 'true'));
+});
+
 const sizes = [[320, 740], [360, 640], [375, 560], [375, 667], [390, 844], [768, 1024], [1280, 800]] as const;
 
 test('turning a side off keeps the power button in place and shows last night under the dial', async ({ page }) => {

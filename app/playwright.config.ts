@@ -18,6 +18,8 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   use: {
     baseURL,
+    // Not Pacific, the demo's own zone, so a spec that only passes on a Pacific-time machine fails here.
+    timezoneId: 'Asia/Tokyo',
     trace: 'on-first-retry',
   },
   projects: [

@@ -13,6 +13,7 @@ import {
   getSettings,
   updateSettings,
   getDeviceStatus,
+  isPrimingAt,
   updateDeviceStatus,
   getServerStatus,
   getStorageInfo,
@@ -171,6 +172,7 @@ export const handlers = [
       const seconds = status[side].isOn ? scheduledSecondsRemaining(side) : undefined;
       if (seconds !== undefined) status[side].secondsRemaining = seconds;
     }
+    if (import.meta.env.MODE !== 'test' && !status.isPriming) status.isPriming = isPrimingAt(new Date(), status);
     return HttpResponse.json(status);
   }),
   http.post('/api/deviceStatus', async ({ request }) => {
@@ -319,14 +321,21 @@ export const handlers = [
     });
   }),
   http.get('/api/calibration', () => HttpResponse.json(mockCalibration)),
-  http.get('/api/metrics/vitals/summary', async () => {
+  http.get('/api/metrics/vitals/summary', async ({ request }) => {
+    const filters = toFilters(request);
+    const records = filterByQuery(listVitalsRecords(), filters, record => record.timestamp * 1000);
     await delay(120);
+    if (records.length === 0) {
+      return HttpResponse.json({ avgHeartRate: 0, minHeartRate: 0, maxHeartRate: 0, avgHRV: 0, avgBreathingRate: 0 });
+    }
+    const heartRates = records.map(record => record.heart_rate);
+    const mean = (values: number[]) => Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
     return HttpResponse.json({
-      avgHeartRate: 55,
-      minHeartRate: 45,
-      maxHeartRate: 68,
-      avgHRV: 63,
-      avgBreathingRate: 12,
+      avgHeartRate: mean(heartRates),
+      minHeartRate: Math.min(...heartRates),
+      maxHeartRate: Math.max(...heartRates),
+      avgHRV: mean(records.map(record => record.hrv)),
+      avgBreathingRate: mean(records.map(record => record.breathing_rate)),
     });
   }),
   // The real route fires the alarm and returns the schedules; the demo has no

@@ -11,10 +11,10 @@ import type { StorageInfo } from '@api/storageSchema.ts';
 import type { MemoryInfo } from '@api/memorySchema.ts';
 import type { BaseStatus, BasePosition } from '@api/baseControl.ts';
 import type { Jobs } from '@api/jobs.ts';
-import type { SleepStage, StageEpoch, SleepStagesResponse } from '@api/sleepStages.ts';
 import type { SleepScore } from '@api/sleepScore.ts';
 import type { ChangelogEntry } from '@api/changelogSchema.ts';
 import { demoOffersUpdate, demoRhythmsDefault } from './demoPreferences';
+import { DEMO_TIME_ZONE, createSampleNights, createSleepStages, createVitalsSamples, nightScore, type SampleNight } from './sampleNights';
 import serverInfo from '../../../server/src/serverInfo.json';
 import semver from 'semver';
 
@@ -44,25 +44,31 @@ const clone = <T>(value: T): T => {
 
 const toIso = (date: Date) => date.toISOString();
 
-const createSleepRecord = (id: number, side: Side, nightsAgo: number, durationHours: number, exits: number): SleepRecord => {
-  const start = new Date(now.getTime() - nightsAgo * 24 * HOURS_TO_MS + (side === 'left' ? -30 * MINUTES_TO_MS : 0));
-  const end = new Date(start.getTime() + durationHours * HOURS_TO_MS);
-  const presentInterval: [string, string] = [toIso(start), toIso(end)];
-  const absenceStart = new Date(start.getTime() + (durationHours / 2) * HOURS_TO_MS);
-  const absenceEnd = new Date(absenceStart.getTime() + 10 * MINUTES_TO_MS);
-  const notPresentInterval: [string, string] = [toIso(absenceStart), toIso(absenceEnd)];
+const toSleepRecord = (night: SampleNight): SleepRecord => {
+  const start = night.start.getTime();
+  const end = night.end.getTime();
+  const presentIntervals: [string, string][] = [];
+  let cursor = start;
+  night.exits.forEach(([exitStart, exitEnd]) => {
+    presentIntervals.push([toIso(new Date(cursor)), toIso(exitStart)]);
+    cursor = exitEnd.getTime();
+  });
+  presentIntervals.push([toIso(new Date(cursor)), toIso(night.end)]);
 
   return {
-    id,
-    side,
-    entered_bed_at: presentInterval[0],
-    left_bed_at: presentInterval[1],
-    sleep_period_seconds: Math.round(durationHours * 60 * 60),
-    times_exited_bed: exits,
-    present_intervals: [presentInterval],
-    not_present_intervals: exits > 0 ? [notPresentInterval] : [],
+    id: night.id,
+    side: night.side,
+    entered_bed_at: toIso(night.start),
+    left_bed_at: toIso(night.end),
+    sleep_period_seconds: Math.round((end - start) / 1000),
+    times_exited_bed: night.exits.length,
+    present_intervals: presentIntervals,
+    not_present_intervals: night.exits.map(([exitStart, exitEnd]): [string, string] => [toIso(exitStart), toIso(exitEnd)]),
   };
 };
+
+const sampleNights = createSampleNights(now);
+let sleepRecords = sampleNights.map(toSleepRecord);
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -110,77 +116,30 @@ const createMovementRecords = (): MovementRecord[] => {
   return records;
 };
 
-const createVitalsRecords = (): VitalsRecord[] => {
-  const records: VitalsRecord[] = [];
-  // Include all three recorded nights, not only the hours after the last one.
-  const sampleHours = 4 * 24;
-  const intervalMinutes = 15;
-  for (let index = 0; index <= (sampleHours * 60) / intervalMinutes; index += 1) {
-    const timestamp = Math.floor((now.getTime() - index * intervalMinutes * MINUTES_TO_MS) / 1000);
-    const side: Side = index % 2 === 0 ? 'left' : 'right';
-    const heartRate = 55 + ((index * 7) % 10);
-    const hrv = 80 + ((index * 5) % 20);
-    const breathingRate = 10 + ((index * 3) % 5);
-    records.push({ side, timestamp, heart_rate: heartRate, hrv, breathing_rate: breathingRate });
-  }
-  return records;
-};
-
-// Repeating hypnogram pattern (roughly a 90-minute sleep cycle split into
-// 15-minute epochs): brief awake at sleep onset, then light, deep, light,
-// REM, cycling through the night.
-const STAGE_CYCLE: SleepStage[] = ['awake', 'light', 'deep', 'light', 'rem', 'light', 'deep', 'rem', 'light'];
-const STAGE_EPOCH_SECONDS = 15 * 60;
-
-const createSleepStages = (startTime: string, endTime: string): SleepStagesResponse => {
-  const startUnix = Math.floor(new Date(startTime).getTime() / 1000);
-  const endUnix = Math.floor(new Date(endTime).getTime() / 1000);
-  const epochs: StageEpoch[] = [];
-
-  let cursor = startUnix;
-  let i = 0;
-  while (cursor < endUnix) {
-    const stage = STAGE_CYCLE[i % STAGE_CYCLE.length];
-    const segEnd = Math.min(endUnix, cursor + STAGE_EPOCH_SECONDS);
-    epochs.push({ startUnix: cursor, endUnix: segEnd, stage });
-    cursor = segEnd;
-    i += 1;
-  }
-
-  const totals: Record<SleepStage, number> = { awake: 0, rem: 0, light: 0, deep: 0 };
-  epochs.forEach((epoch) => {
-    totals[epoch.stage] += epoch.endUnix - epoch.startUnix;
-  });
-  const totalSeconds = Math.max(0, endUnix - startUnix);
-  const percentages: Record<SleepStage, number> = { awake: 0, rem: 0, light: 0, deep: 0 };
-  (Object.keys(totals) as SleepStage[]).forEach((stage) => {
-    percentages[stage] = totalSeconds > 0 ? Math.round((totals[stage] / totalSeconds) * 100) : 0;
-  });
-
-  return { active: true, epochs, totals, percentages, totalSeconds };
+const createVitalsRecords = (nights: SampleNight[]): VitalsRecord[] => {
+  const records = nights.flatMap(night => createVitalsSamples(toIso(night.start), toIso(night.end))
+    .filter(({ timestamp }) => !night.exits.some(([from, to]) => timestamp * 1000 >= from.getTime() && timestamp * 1000 < to.getTime()))
+    .map(({ timestamp, heartRate, hrv, breathingRate }): VitalsRecord => ({
+      side: night.side, timestamp, heart_rate: heartRate, hrv, breathing_rate: breathingRate,
+    })));
+  return records.sort((a, b) => b.timestamp - a.timestamp);
 };
 
 const createSleepScore = (startTime: string, endTime: string): SleepScore => {
-  const durationHours = Math.max(0, (new Date(endTime).getTime() - new Date(startTime).getTime()) / HOURS_TO_MS);
-  const durationScore = clamp(Math.round(55 + durationHours * 5), 40, 100);
-  const continuityScore = 84;
-  const restingHrScore = 88;
-  const { totals } = createSleepStages(startTime, endTime);
-  const asleepMinutes = Math.round((totals.light + totals.rem + totals.deep) / 60);
-  const score = Math.round(
-    (durationScore * 0.4 + continuityScore * 0.3 + restingHrScore * 0.15) / 0.85
-  );
+  const exits = sleepRecords.find(record => record.entered_bed_at === startTime)?.times_exited_bed ?? 0;
+  const night = nightScore(startTime, endTime, exits);
+  const asleepMinutes = Math.round(night.asleepSeconds / 60);
 
   return {
     active: true,
-    score,
+    score: night.score,
     components: {
       duration: {
-        score: durationScore, weight: 0.4, available: true,
+        score: night.duration, weight: 0.4, available: true,
         value: `${Math.floor(asleepMinutes / 60)}h ${asleepMinutes % 60}m asleep`,
       },
-      continuity: { score: continuityScore, weight: 0.3, value: '1 awakening', available: true },
-      restingHr: { score: restingHrScore, weight: 0.15, value: '52bpm', available: true },
+      continuity: { score: night.continuity, weight: 0.3, value: `${exits} ${exits === 1 ? 'exit' : 'exits'}`, available: true },
+      restingHr: { score: night.restingHr, weight: 0.15, value: `${night.minHeartRate} bpm`, available: true },
     },
   };
 };
@@ -278,7 +237,7 @@ const createSchedules = (): Schedules => ({
 
 const createSettings = (): Settings => ({
   id: 'demo-user',
-  timeZone: 'America/Los_Angeles',
+  timeZone: DEMO_TIME_ZONE,
   temperatureFormat: 'level',
   rebootDaily: true,
   rawArchiveRetentionDays: 14,
@@ -674,20 +633,8 @@ const createLogs = (): LogStore => ({
   ],
 });
 
-let sleepRecords = [
-  createSleepRecord(5, 'left', 3, 7.1, 0),
-  createSleepRecord(6, 'right', 3, 7.0, 0),
-
-
-  createSleepRecord(3, 'left', 2, 7.8, 1),
-  createSleepRecord(4, 'right', 2, 7.4, 2),
-
-  createSleepRecord(1, 'left', 1, 7.5, 1),
-  createSleepRecord(2, 'right', 1, 7.2, 0),
-];
-
 const movementRecords = createMovementRecords();
-const vitalsRecords = createVitalsRecords();
+const vitalsRecords = createVitalsRecords(sampleNights);
 let schedules = createSchedules();
 let settings = createSettings();
 let services = createServices();
@@ -743,6 +690,17 @@ export const updateSettings = (partial: Partial<Settings>) => {
 };
 
 export const getDeviceStatus = () => deviceStatus;
+
+// The Pod only primes when nothing is running, in the ten minutes after the daily prime time.
+export const isPrimingAt = (at: Date, status: DeviceStatus = deviceStatus): boolean => {
+  const { enabled, time } = settings.primePodDaily;
+  if (!enabled || status.left.isOn || status.right.isOn) return false;
+  const local = moment.tz(at, settings.timeZone);
+  const [hour, minute] = time.split(':').map(Number);
+  const sinceMinutes = local.diff(local.clone().set({ hour, minute, second: 0, millisecond: 0 }), 'minutes');
+  return sinceMinutes >= 0 && sinceMinutes < 10;
+};
+
 export const updateDeviceStatus = (partial: Partial<DeviceStatus>) => {
   deviceStatus = mergeDeep(clone(deviceStatus), partial) as DeviceStatus;
   return deviceStatus;
