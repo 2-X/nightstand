@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useMediaQuery } from '@mui/material';
 
 function easeOutCubic(t: number): number {
   return 1 - (1 - t) ** 3;
@@ -7,7 +8,9 @@ function easeOutCubic(t: number): number {
 // Animates toward `target` instead of snapping, so the bed illustration
 // glides as the head/feet angle changes (matches the "Base is moving..."
 // status) rather than jumping a frame at a time like the old PNG sequence.
+// With reduced motion requested, or a value that is not a number, it snaps.
 export function useTweenedNumber(target: number, durationMs = 450): number {
+  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)', { noSsr: true });
   const [value, setValue] = useState(target);
   const fromRef = useRef(target);
   const startRef = useRef<number | null>(null);
@@ -21,6 +24,10 @@ export function useTweenedNumber(target: number, durationMs = 450): number {
     const from = fromRef.current;
     const delta = target - from;
     if (delta === 0) return;
+    if (reduceMotion || !Number.isFinite(delta)) {
+      setValue(target);
+      return;
+    }
 
     const step = (timestamp: number) => {
       if (startRef.current === null) startRef.current = timestamp;
@@ -39,7 +46,7 @@ export function useTweenedNumber(target: number, durationMs = 450): number {
     // Deliberately excludes `value` - re-running on every tween tick would
     // restart the animation from wherever it currently sits, never reaching
     // `target`. Each run captures the in-flight value via fromRef instead.
-  }, [target, durationMs]);
+  }, [target, durationMs, reduceMotion]);
 
-  return value;
+  return reduceMotion ? target : value;
 }

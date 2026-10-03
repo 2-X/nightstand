@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeBedSpine, quiltMarks, scaleVisualDeg } from './bedGeometry.ts';
+import { computeBedSpine, scaleVisualDeg } from './bedGeometry.ts';
 
 const CFG = { headPivotX: 180, feetPivotX: 220, baselineY: 90, segmentLen: 150 };
 
@@ -48,25 +48,5 @@ describe('computeBedSpine', () => {
       + `L ${spine.feetPivot.x} ${spine.feetPivot.y} `
       + `L ${spine.feetTip.x} ${spine.feetTip.y}`,
     );
-  });
-});
-
-describe('quiltMarks', () => {
-  it('returns `count` marks, evenly spaced and perpendicular to the segment', () => {
-    const marks = quiltMarks({ x: 0, y: 0 }, { x: 100, y: 0 }, 3, 10);
-    expect(marks).toHaveLength(3);
-    // Segment is horizontal, so each mark should be a vertical tick centred
-    // on the segment (perpendicular to a horizontal line is vertical).
-    marks.forEach((m) => {
-      expect(m.x1).toBeCloseTo(m.x2, 5);
-      expect(Math.abs(m.y1 - m.y2)).toBeCloseTo(20, 5);
-    });
-    expect(marks[0].x1).toBeCloseTo(25, 5);
-    expect(marks[1].x1).toBeCloseTo(50, 5);
-    expect(marks[2].x1).toBeCloseTo(75, 5);
-  });
-
-  it('returns no marks for a zero-length segment', () => {
-    expect(quiltMarks({ x: 5, y: 5 }, { x: 5, y: 5 }, 3, 10)).toEqual([]);
   });
 });

@@ -56,32 +56,3 @@ export function scaleVisualDeg(rawDeg: number, rawMax: number, maxVisualDeg: num
   const clamped = Math.max(0, Math.min(rawMax, rawDeg));
   return (clamped / rawMax) * maxVisualDeg;
 }
-
-// A handful of perpendicular tick marks along a panel, evenly spaced between
-// its pivot and tip, suggesting mattress channel-quilting. Deliberately a
-// generic, evenly-spaced motif - not the clustered diagonal stripe used as
-// Eight Sleep's vent-logo mark.
-export function quiltMarks(pivot: Point, tip: Point, count: number, halfLen: number) {
-  const dx = tip.x - pivot.x;
-  const dy = tip.y - pivot.y;
-  const len = Math.hypot(dx, dy);
-  if (len === 0) return [];
-  const ux = dx / len;
-  const uy = dy / len;
-  const px = -uy;
-  const py = ux;
-
-  const marks = [];
-  for (let i = 1; i <= count; i++) {
-    const f = i / (count + 1);
-    const cx = pivot.x + dx * f;
-    const cy = pivot.y + dy * f;
-    marks.push({
-      x1: cx - px * halfLen,
-      y1: cy - py * halfLen,
-      x2: cx + px * halfLen,
-      y2: cy + py * halfLen,
-    });
-  }
-  return marks;
-}
