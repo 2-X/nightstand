@@ -7,7 +7,7 @@ export const glass: ThemeTokens = {
   radius: 16,
   palette: {
     bg: { base: '#000000', elevated: '#080808', raised: '#141416', selected: '#021529', hover: 'rgba(255,255,255,0.08)' },
-    border: { subtle: 'rgba(255,255,255,0.06)', control: 'rgba(255,255,255,0.4)', medium: 'rgba(255,255,255,0.12)' },
+    border: { subtle: 'rgba(255,255,255,0.06)', control: 'rgba(255,255,255,0.4)', medium: 'rgba(255,255,255,0.12)', accent: '#0A84FF' },
     text: {
       primary: 'rgba(255,255,255,0.95)', secondary: 'rgba(255,255,255,0.65)', tertiary: 'rgba(255,255,255,0.48)',
       disabled: 'rgba(255,255,255,0.25)', onAccent: 'rgba(0,0,0,0.87)', onError: 'rgba(0,0,0,0.87)',

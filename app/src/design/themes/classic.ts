@@ -7,7 +7,9 @@ export const classic: ThemeTokens = {
   radius: 4,
   palette: {
     bg: { base: '#010101', elevated: '#1E1E1E', raised: '#232323', selected: '#182129', hover: 'rgba(255,255,255,0.08)' },
-    border: { subtle: 'rgba(255,255,255,0.12)', control: 'rgba(255,255,255,0.4)', medium: 'rgba(255,255,255,0.12)' },
+    border: {
+      subtle: 'rgba(255,255,255,0.12)', control: 'rgba(255,255,255,0.4)', medium: 'rgba(255,255,255,0.12)', accent: 'rgba(144,202,249,0.5)',
+    },
     text: {
       primary: '#FFFFFF', secondary: 'rgba(255,255,255,0.7)', tertiary: '#88878C', disabled: 'rgba(255,255,255,0.5)',
       onAccent: 'rgba(0,0,0,0.87)', onError: 'rgba(0,0,0,0.87)',

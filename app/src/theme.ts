@@ -68,7 +68,11 @@ const buildComponents = ({ palette: p, radius, type }: ThemeTokens) => {
         },
       },
     },
-    MuiButton: { styleOverrides: { root: { ...controlCase, minHeight: 44 } } },
+    // MUI draws an outlined border at half the label's colour, under 3:1 in some looks; hover keeps the full colour.
+    MuiButton: { styleOverrides: { root: { ...controlCase, minHeight: 44, variants: [
+      { props: { variant: 'outlined', color: 'primary' }, style: { '--variant-outlinedBorder': p.border.accent } },
+      { props: { variant: 'outlined', color: 'secondary' }, style: { '--variant-outlinedBorder': p.border.accent } },
+    ] } } },
     MuiSlider: { styleOverrides: { root: { padding: '20px 0' }, thumb: { '&::after': { width: 44, height: 44 } } } },
     MuiSwitch: {
       styleOverrides: { root: { width: 64, height: 44, padding: 15 }, switchBase: { padding: 12, color: p.text.secondary } },

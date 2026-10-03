@@ -7,7 +7,7 @@ export const nightstand: ThemeTokens = {
   radius: 7,
   palette: {
     bg: { base: '#000000', elevated: '#0A0A0A', raised: '#141414', selected: '#172028', hover: 'rgba(255,255,255,0.08)' },
-    border: { subtle: '#1E1E1E', control: '#616161', medium: 'rgba(255,255,255,0.12)' },
+    border: { subtle: '#1E1E1E', control: '#616161', medium: 'rgba(255,255,255,0.12)', accent: 'rgba(144,202,249,0.5)' },
     text: {
       primary: '#FFFFFF', secondary: 'rgba(255,255,255,0.7)', tertiary: '#9E9E9E', disabled: 'rgba(255,255,255,0.5)',
       onAccent: 'rgba(0,0,0,0.87)', onError: 'rgba(0,0,0,0.87)',

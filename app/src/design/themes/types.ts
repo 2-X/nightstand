@@ -10,7 +10,8 @@ export type TextCase = 'none' | 'uppercase';
 
 export interface ThemePalette {
   bg: { base: string; elevated: string; raised: string; selected: string; hover: string };
-  border: { subtle: string; control: string; medium: string };
+  /** accent: an outlined accent button's border, 3:1 on the page, cards and the undo bar. */
+  border: { subtle: string; control: string; medium: string; accent: string };
   text: { primary: string; secondary: string; tertiary: string; disabled: string; onAccent: string; onError: string };
   /** Controls only: buttons, switches, tabs, focus, selection. Never a value. */
   accent: string;

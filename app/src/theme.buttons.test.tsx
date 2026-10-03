@@ -8,6 +8,7 @@ import { THEME_IDS } from '@design/themes/ids';
 import { buildMuiTheme } from './theme';
 
 const TEXT = 4.5;
+const MARK = 3;
 const COLOURS = ['primary', 'secondary', 'error'] as const;
 
 describe.each(THEME_IDS)('buttons in the %s look', id => {
@@ -37,5 +38,11 @@ describe.each(THEME_IDS)('buttons in the %s look', id => {
       expect(ratio(label, below), `on ${surface}`).toBeGreaterThanOrEqual(TEXT);
       expect(ratio(label, flatten(hover, below)), `on ${surface}, hovered`).toBeGreaterThanOrEqual(TEXT);
     }
+  });
+
+  it.each(['primary', 'secondary'] as const)('draws an outlined %s button\'s border at 3:1 where it sits', color => {
+    const border = drawn('outlined', color)('Border');
+    expect(border).toBe(p.border.accent);
+    for (const [surface, below] of Object.entries(accentSurfaces)) expect(ratio(border, below), surface).toBeGreaterThanOrEqual(MARK);
   });
 });
