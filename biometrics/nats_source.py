@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import cbor2
 from get_logger import get_logger
+import vendored  # noqa: F401
 
 logger = get_logger()
 

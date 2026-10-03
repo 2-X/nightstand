@@ -129,13 +129,9 @@ is a hard fork; for the history of the projects it descends from, see
   the stream carries no sensor records for two minutes, the RAW files are
   read as well. The Status page now shows sleep tracking as stopped after 30
   minutes without new sensor data, and as running again once data returns.
-- Updates and the switch from another fork now add nats-py, the Python
-  package the live stream reader needs, when a biometrics install is
-  otherwise complete but lacks it. It is downloaded from PyPI (pypi.org and
-  files.pythonhosted.org) while the update has internet access open, and is
-  skipped with less than 100 MB free. The update into this version is run by
-  the previous version's updater, which does not do this, so nats-py arrives
-  with the next update after this one.
+- Nightstand now includes nats-py, which the newer Eight Sleep firmware's
+  local sensor stream needs, so updated Pods can read it without downloading
+  anything.
 
 ## [3.5.1] - 2026-10-01
 

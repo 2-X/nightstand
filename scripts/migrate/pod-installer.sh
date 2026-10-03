@@ -218,13 +218,6 @@ ROOT_FREE=$(free_mb /)
 [ "${ROOT_FREE:-0}" -ge "$DEPS_NEED" ] \
   || fail "low disk on / (${ROOT_FREE:-unknown}M free, ${DEPS_NEED}M needed for the new dependencies); their server was never touched"
 
-# Use the current network policy; optional Python packages never gate the swap.
-if [ -x /home/dac/venv/bin/python ] && [ -f "$STAGE/scripts/python/install-missing-requirements.py" ]; then
-  /home/dac/venv/bin/python "$STAGE/scripts/python/install-missing-requirements.py" \
-    "$STAGE/scripts/python/requirements.txt" \
-    || say "WARNING: optional biometrics package installation failed; continuing"
-fi
-
 say "Ensuring Node/Volta toolchain (shared with install.sh)..."
 bash "$STAGE/scripts/ensure-node.sh" dac || fail "node/volta bootstrap failed; their server was never touched"
 

@@ -48,6 +48,12 @@ describe('fork-switch tool scripts', () => {
     });
   }
 
+  it('pod-installer.sh re-runs itself under bash and installs no Python packages', () => {
+    const src = readScript('scripts/migrate/pod-installer.sh');
+    assert.match(src, /^\[ -n "\$\{BASH_VERSION:-\}" \] \|\| exec bash "\$0" "\$@"$/m);
+    assert.doesNotMatch(src, /\bpip3?\b|requirements/);
+  });
+
   it('data-compat-check.mjs exists and parses', () => {
     const full = path.join(repoRoot, 'scripts/migrate/data-compat-check.mjs');
     assert.equal(existsSync(full), true);

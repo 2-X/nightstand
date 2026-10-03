@@ -47,6 +47,8 @@ import threading
 from get_logger import get_logger
 logger = get_logger('free-sleep-stream')
 
+import vendored  # noqa: F401
+
 import calibration
 from features import biometrics_v2_enabled
 from presence.model import on_this_pod

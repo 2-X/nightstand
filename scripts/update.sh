@@ -548,12 +548,6 @@ if [ "$HANDOFF" != 1 ]; then
     run_limited 600 sudo -u dac bash -c "cd '$STAGE/server' && '$NPM' --version" >/dev/null \
       || fail "could not fetch Node $(node_pin "$STAGE"); live install untouched"
   fi
-  # Inside the window; optional Python packages never gate the swap.
-  if [ -x /home/dac/venv/bin/python ] && [ -f "$STAGE/scripts/python/install-missing-requirements.py" ]; then
-    /home/dac/venv/bin/python "$STAGE/scripts/python/install-missing-requirements.py" \
-      "$STAGE/scripts/python/requirements.txt" \
-      || say "WARNING: optional biometrics package installation failed; continuing"
-  fi
   close_wan
 
   # Only to a copy that carries the marker. An older updater would find the

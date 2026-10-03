@@ -46,6 +46,13 @@ describe('updater shell scripts', () => {
     assert.match(src, /find "\$STAGE\.unzip".*-type d/, 'must resolve the staged archive dir dynamically');
   });
 
+  // nats-py ships in the release tree, so an update downloads only the release.
+  it('update.sh re-runs itself under bash and installs no Python packages', () => {
+    const src = readFileSync(path.join(repoRoot, 'scripts/update.sh'), 'utf8');
+    assert.match(src, /^\[ -n "\$\{BASH_VERSION:-\}" \] \|\| exec bash "\$0" "\$@"$/m);
+    assert.doesNotMatch(src, /\bpip3?\b|requirements/);
+  });
+
   // free-sleep-update.service ExecStarts update_service.sh, which runs
   // update.sh. If either loses its exec bit the unit dies with 203/EXEC
   // before writing a single log line.
