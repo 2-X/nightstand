@@ -38,4 +38,7 @@ export const smallTargets = (page: Page) => page.evaluate(() => Array.from(docum
     return `${name} ${Math.round(rect.width)}x${Math.round(rect.height)}`;
   }));
 
-export const overflows = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+// Against the set width: a phone widens its layout viewport to fit overflowing content.
+export const overflows = (page: Page) => page.evaluate(
+  width => document.documentElement.scrollWidth > (width ?? window.innerWidth), page.viewportSize()?.width,
+);

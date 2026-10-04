@@ -33,7 +33,19 @@ export default defineConfig({
     // only renders below the MUI 'md' breakpoint (900px); the AppBar variant
     // takes over above it. Narrow the viewport so the app's real mobile
     // layout is what gets exercised.
-    { name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 480, height: 854 } } },
+    { name: 'chromium', testIgnore: /layout-sweep/, use: { ...devices['Desktop Chrome'], viewport: { width: 480, height: 854 } } },
+    ...[320, 360, 390, 430, 768, 1280].map(width => ({
+      name: `sweep-${width}`,
+      testMatch: /layout-sweep\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width, height: width < 768 ? 800 : 900 },
+        deviceScaleFactor: 2,
+        isMobile: width < 768,
+        hasTouch: width < 768,
+        timezoneId: 'America/Los_Angeles',
+      },
+    })),
   ],
   webServer: {
     command: `VITE_ENV=demo npx vite preview --port ${PORT} --strictPort`,
