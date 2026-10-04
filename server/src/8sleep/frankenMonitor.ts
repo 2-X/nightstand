@@ -15,6 +15,7 @@ import { trimixBase } from './trimixBaseControl.js';
 import { BASE_PRESETS } from './basePresets.js';
 import eventBus from '../events/eventBus.js';
 import { waterLevelTracker } from './waterLevel.js';
+import { handleAlarmTap } from './tapAlarm.js';
 
 // Pod 4+ only: gestures and the 2s cadence are the only path. The Pod 3
 // 60s slow-poll branch was removed alongside the WebSocket initiative.
@@ -33,6 +34,9 @@ export class FrankenMonitor {
   private isRunning: boolean;
   private deviceStatus?: DeviceStatus;
   private currentBasePreset: keyof typeof BASE_PRESETS = 'flat';
+  // The last tap counters read as numbers. A read missing a counter keeps the
+  // one before it, so a tap made across that read is still seen.
+  private lastTaps: Record<Side, Partial<Record<Gesture, number>>> = { left: {}, right: {} };
 
   constructor() {
     this.isRunning = false;
@@ -68,7 +72,11 @@ export class FrankenMonitor {
   }
 
   private async processGesture(side: Side, gesture: Gesture) {
-    const behavior = settingsDB.data[side].taps[gesture];
+    const behavior = settingsDB.data[side]?.taps?.[gesture];
+    if (!behavior) {
+      logger.info(`[processGesture] No ${gesture} action set for the ${side} side`);
+      return;
+    }
     logger.debug(`[processGesture] side: ${side}, gesture: ${gesture}, type: ${behavior.type}`);
 
     if (behavior.type === 'temperature') {
@@ -140,16 +148,25 @@ export class FrankenMonitor {
         this.currentBasePreset === 'relax' ? 'flat' : 'relax';
       }
 
-    } else if (behavior.type) {
-      // TODO: Add alarm handling
-      logger.warn('Skipping gesture...');
+    } else if (behavior.type === 'alarm') {
+      await handleAlarmTap(side, behavior);
     }
   }
 
   private processGesturesForSide(nextDeviceStatus: DeviceStatus, side: Side) {
     try {
       for (const gesture of GestureSchema.options) {
-        if (nextDeviceStatus[side].taps?.[gesture] !== this?.deviceStatus?.[side].taps?.[gesture]) {
+        const prior = this.deviceStatus?.[side].taps?.[gesture];
+        if (this.lastTaps[side][gesture] === undefined && typeof prior === 'number') {
+          this.lastTaps[side][gesture] = prior;
+        }
+        const previous = this.lastTaps[side][gesture];
+        const current = nextDeviceStatus[side].taps?.[gesture];
+        // A missing counter says nothing about a tap, and treating it as one
+        // would act on the bed with nobody touching it.
+        if (typeof current !== 'number') continue;
+        this.lastTaps[side][gesture] = current;
+        if (previous !== undefined && previous !== current) {
           // Deliberately detached: a base move takes seconds over BLE and this
           // loop doubles as the tap-detection cadence, so awaiting here would
           // delay the next gesture. Detached means the surrounding try cannot

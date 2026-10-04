@@ -730,4 +730,26 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
       + 'off, rolling back or switching to upstream leaves the weekly schedule exactly as it was.'
       + ' A rhythm set to turn off when the person gets up carries one optional key, which 3.5.0 drops on read.',
   },
+  {
+    id: 'tap-alarm',
+    title: 'Alarm taps',
+    description: 'A tap set to the alarm action dismisses or snoozes a ringing alarm on that side. '
+      + 'If no alarm is ringing or snoozed it does nothing; its power option is not used yet.',
+    category: 'platform',
+    version: 'n/a',
+    flag: null,
+    default: true,
+    touchpoints: [
+      'server/src/8sleep/tapAlarm.ts', 'server/src/8sleep/frankenMonitor.ts', 'server/src/jobs/activeAlarms.ts',
+      'server/src/jobs/alarmScheduler.ts',
+    ],
+    depends_on: ['agent'],
+    reversible: true,
+    tests: [
+      'server/src/8sleep/tapAlarm.test.ts', 'server/src/8sleep/alarmDismiss.test.ts', 'server/src/8sleep/frankenMonitor.test.ts',
+    ],
+    upstream_offer: false,
+    rationale: 'Always on: it carries out a tap setting that was already accepted and only logged. '
+      + 'A tap set to anything else behaves as before, and older versions keep the setting.',
+  },
 ];

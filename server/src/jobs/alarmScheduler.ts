@@ -21,7 +21,7 @@ import { describePause, isAlarmPaused } from './schedulePause.js';
 import { ALARM_LATE_LIMIT_MS, trackAlarm } from './alarmActivity.js';
 import { alarmPatternFor } from './alarmPattern.js';
 import { missedReasonForError, noteMissedAlarm, setAlarmSuppression } from './alarmLedger.js';
-import { activeAlarms } from './activeAlarms.js';
+import { activeAlarms, cancelSnooze } from './activeAlarms.js';
 import { alarmOverrideSilences } from './alarmOverrideGate.js';
 
 
@@ -96,8 +96,10 @@ export const executeAlarm = async (
     sending = true;
     await executeFunction(command, hexPayload, { ...options, notAfter });
     fired = true;
-    const activeAlarm = Symbol(side);
+    const activeAlarm = { vibrationIntensity, duration, vibrationPattern };
     activeAlarms.set(side, activeAlarm);
+    // This alarm replaces any snooze waiting on the side; it can be snoozed in turn.
+    cancelSnooze(side);
     await memoryDB.read();
     memoryDB.data[side].isAlarmVibrating = true;
     await memoryDB.write();

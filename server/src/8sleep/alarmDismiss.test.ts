@@ -92,3 +92,31 @@ test('dismissing one side leaves the other ringing side to its own timer', async
   await timers[1]();
   assert.equal(memoryDB.data.right.isAlarmVibrating, false);
 });
+
+test('a ringing alarm keeps the settings it started with', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { activeAlarms } = await import('../jobs/activeAlarms.js');
+  await executeAlarm({ ...alarm, vibrationIntensity: 30, vibrationPattern: 'rise', duration: 45 });
+  assert.deepEqual(activeAlarms.get('left'), { vibrationIntensity: 30, vibrationPattern: 'rise', duration: 45 });
+});
+
+test('an alarm that starts replaces a snooze waiting on its side only', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { cancelSnooze, hasSnooze, setSnooze } = await import('../jobs/activeAlarms.js');
+  t.after(() => { cancelSnooze('left'); cancelSnooze('right'); });
+  setSnooze('left', 300_000, () => {});
+  setSnooze('right', 300_000, () => {});
+  await executeAlarm(alarm);
+  assert.equal(hasSnooze('left'), false);
+  assert.equal(hasSnooze('right'), true);
+});
+
+test('an alarm that does not start leaves the snooze in place', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { cancelSnooze, hasSnooze, setSnooze } = await import('../jobs/activeAlarms.js');
+  t.after(() => cancelSnooze('left'));
+  t.mock.method(franken, 'getDeviceStatus', async () => ({ left: { isOn: false }, right: { isOn: false }, hubVersion: 'Pod 5' }));
+  setSnooze('left', 300_000, () => {});
+  assert.equal(await executeAlarm({ ...alarm, force: false }), 0);
+  assert.equal(hasSnooze('left'), true);
+});
