@@ -15,13 +15,19 @@ to [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep)
 - Open pull requests against `dev`. Work lands there, and `main` moves only
   at a release (see
   [Release cadence and promotion](#release-cadence-and-promotion)).
-- [AGENTS.md](AGENTS.md) is written for coding agents, and it is also the
-  shortest orientation for people: repository layout, commands, where the
-  scheduling and hardware code lives, and the hardware cautions.
+- [AGENTS.md](AGENTS.md) is a map of the code for people and coding agents:
+  repository layout, commands, where the scheduling and hardware code lives,
+  and the hardware cautions.
 - [server/README_SERVER.md](server/README_SERVER.md) covers running the
-  server on your computer or on a Pod, and lists the API routes.
+  server on your computer or on a Pod and how the server is organized.
+  [server/API.md](server/API.md) documents every route.
   [app/README_APP.md](app/README_APP.md) covers the app's dev server,
   including a demo mode that needs no Pod.
+- [biometrics/DEVELOPER.md](biometrics/DEVELOPER.md) covers the Python
+  code, and [docs/CALIBRATION.md](docs/CALIBRATION.md) lists its numeric
+  constants and why each has its value.
+- [docs/TESTING.md](docs/TESTING.md) lists the tests, what CI runs, what has
+  been tried on a real Pod and what is not tested.
 - Read [docs/EIGHT_SLEEP_PROTOCOL.md](docs/EIGHT_SLEEP_PROTOCOL.md) before
   changing anything that talks to the hardware.
 
@@ -31,7 +37,8 @@ Contributions written with AI tools are welcome and are reviewed like any
 other. Point your tool at [AGENTS.md](AGENTS.md) first. However the code was
 written, the person who opens the pull request is its author: you have read
 and tested it, and you respond to review feedback and to any problems it
-causes. No disclosure is needed either way.
+causes. Mentioning it in the pull request helps me review hardware-facing
+changes, but it does not change whether a change is accepted.
 
 ## Setup
 
@@ -46,7 +53,8 @@ as well:
 ```
 
 `npm run generate` builds the Prisma client, which the server's build and
-tests need.
+tests need. The server tests also run the Python tests in `scripts/tests/`,
+so `python3` must be on your path.
 
 ## Before a pull request
 
@@ -57,13 +65,15 @@ Typecheck, lint, and test both packages. From the repository root:
 (cd app && npx tsc -b && npm run lint && npm test)
 ```
 
-CI runs the same checks, plus two more that are worth running locally when
-your change touches that area:
+CI runs the same tests and lint, plus these, which are worth running locally
+when your change touches that area:
 
-- Biometrics (Python 3.9, with `cbor2 numpy scipy pandas watchdog pytest`
-  installed): `python -m pytest biometrics/__tests__/`
+- Biometrics (CI runs Python 3.9 and 3.10):
+  `pip install -r scripts/python/requirements.txt pytest`, then
+  `python -m pytest biometrics/__tests__/`
 - End-to-end tests against the demo build:
-  `cd app && npx playwright install chromium && npm run build:demo && npx playwright test`
+  `cd app && npx playwright install chromium webkit && npm run build:demo && npx playwright test`
+- `shellcheck -S error scripts/*.sh scripts/migrate/*.sh ops/*.sh`
 
 The Pod runs prebuilt code, so `server/dist/` and `server/public/` (the app's
 build output) are committed. They must match the source on `main`, so a
@@ -73,13 +83,13 @@ Rebuild from a clean `npm ci` with `npm run build:pr` in both `server/` and
 `app/`, then run `scripts/check-bundles.sh`: the builds do not delete old
 output, and it lists files nothing uses anymore so you can remove them.
 `ops/deploy.sh` refuses to ship bundles older than the source. CI rebuilds
-from a clean `npm ci` and fails on `main` if the result differs from what is
-committed; on `dev` it only notes it.
+from a clean `npm ci` and fails on `main`, and on pull requests into `main`,
+if the result differs from what is committed; on `dev` it only notes it.
 
 ## Tests
 
 New code comes with tests. Some older code has little coverage; it gains
-tests as it is changed, and anything added now should land with tests for its
+tests as it is changed, and anything added now lands with tests for its
 logic.
 
 - Server: `node:test`, with test files next to the code they cover
@@ -92,15 +102,21 @@ logic.
   component or page comes with a colocated `*.test.tsx` that renders it
   against the mock data using `renderWithProviders` or `renderApp`.
   [app/src/test/README.md](app/src/test/README.md) explains the harness.
+- Biometrics: pytest, in `biometrics/__tests__/`.
+- Scripts: shell scripts are tested from `server/src` against throwaway
+  copies with the Pod's commands replaced, and the Python helpers in
+  `scripts/` by `scripts/tests/`.
 
 ## Optional features
 
-Anything a user might reasonably want off ships behind a toggle in the
-Features group in Settings:
+Anything a user might reasonably want off ships behind a feature flag:
 
 - A key in `defaultFeatures` in `server/src/db/settingsSchema.ts`, with a
   default that keeps existing Pods behaving as they did.
-- A row in `app/src/pages/SettingsPage/FeaturesSection/FeaturesSection.tsx`.
+- A row in the Features group of Settings
+  (`app/src/pages/SettingsPage/FeaturesSection/FeaturesSection.tsx`), or no
+  row for a flag that only API clients use. `sleepScore` is one: the app no
+  longer shows the score, and the flag still turns its routes on and off.
 - An entry in `server/src/features/featuresManifest.ts`, whose tests fail if a
   settings feature key has no entry.
 
@@ -123,11 +139,11 @@ on a Pod:
   has no backup or rollback step. Set `POD_HOST` to your Pod's address; the
   script header lists the other options.
 
-Both scripts push code rather than running a full install, so a new systemd
-unit can need a one-time manual step. The RAW-file archive section of
-[server/README_SERVER.md](server/README_SERVER.md) describes the one case
-today. For hot reload of server code, run the server directly on the Pod, as
-described in the same file.
+Both scripts push code rather than running a full install, so they do not
+install systemd units, sudoers rules or the hardware watchdog.
+[server/README_SERVER.md](server/README_SERVER.md#units-a-deploy-does-not-install)
+lists the one-time steps. For hot reload of server code, run the server
+directly on the Pod, as described in the same file.
 
 ## Commit style
 
@@ -148,6 +164,25 @@ type(scope): subject
   commit they belong to with `git commit --fixup <commit>` and
   `git rebase -i --autosquash`. Pushed commits are not rewritten.
 
+## Credit for ported work
+
+Much of this code comes from other forks of free-sleep, and changes are
+still ported from them. Credit goes where the work came from:
+
+- A commit taken whole from another fork is applied with
+  `git cherry-pick -x <commit>`, so its author stays the git author and the
+  commit records where it came from. Cite the commit in the fork where it
+  was first made, not a copy of it. Keep its message as it is, and make any
+  changes, such as wording or formatting, in a separate commit of your own.
+- Never write a `(cherry picked from commit ...)` line by hand.
+- Work adapted from another fork, or only part of a commit, goes in your own
+  commit, whose body names the source: the fork and commit, or the pull
+  request, and its author's GitHub handle.
+- The changelog entry for ported work says where it came from, for example
+  "Adapted from [EpicPi's pull request 51 to
+  throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep/pull/51)."
+  Reports and ideas are credited by handle the same way.
+
 ## Versioning
 
 Semver, `MAJOR.MINOR.PATCH`, always with all three parts. The version is set
@@ -165,8 +200,8 @@ build is based on. Change it only when a build moves to a newer base.
 
 Every release is also recorded in `releases.json` at the repository root,
 with a `channel` of `stable` or `beta` and a `kind` of `bundle` (`agent` is
-an older value the app still accepts; no release uses it),
-and tagged in git as `v<version>` (for example `v3.2.0`).
+an older value the app still accepts; no release uses it), and tagged in git
+as `v<version>` (for example `v3.2.0`).
 
 ## Release cadence and promotion
 
@@ -177,19 +212,22 @@ becomes the release, `main` is fast-forwarded to `dev`, and the release
 commit is tagged.
 
 `main` moves only at a release, so it always matches the newest release.
-This matters because installed Pods read `releases.json` from `main`, and
-fresh installs and older updaters download `main` itself. Beta and stable are
-not branches: each release's channel is a field in `releases.json`.
+This matters because installed Pods, the app and the installer read
+`releases.json` from `main`, and the fork switch tool and updaters from
+3.3.0 and earlier download `main` itself. The installer and current
+updaters download the chosen release's tag. Beta and stable are not
+branches: each release's channel is a field in `releases.json`.
 
 Avoid a series of one-commit releases. They make the changelog noisy and the
 version number less meaningful.
 
 Every release starts on `beta`, which gets new work first and has had less
-testing. A release moves to `stable` at the maintainer's discretion, usually
-after it has been in everyday use for a while without problems; there is no
-fixed waiting period, so `stable` changes less often.
-`scripts/promote_release.sh <version>` changes a single entry's channel in
-`releases.json` and prints the matching `gh release edit` command to run.
+testing. It runs on my own Pod 5 before I move it to `stable`; there is no
+fixed waiting period, so `stable` changes less often. A change aimed at a
+model I do not own is confirmed by an owner of that model, or its changelog
+entry says it is not confirmed. `scripts/promote_release.sh <version>`
+changes a single entry's channel in `releases.json` and prints the matching
+`gh release edit` command to run.
 
 - Trivial or documentation-only releases can start on `stable` directly.
 
@@ -210,30 +248,56 @@ older reader against a copy of the resulting database before release.
 1. Bump the version in `server/src/serverInfo.json`.
 2. Pin the SHA-256 checksum of each new migration in
    `server/prisma/shipped-migrations.json`.
-3. Add the new release to the top of `releases.json`, following the shape of
+3. If `scripts/install.sh` now needs something only this release ships,
+   raise its `MIN_INSTALL_VERSION` to this version.
+4. Add the new release to the top of `releases.json`, following the shape of
    the entry below it: `kind` (always `bundle`), `version`, `date`, and
    `channel` (`beta` unless there is a reason to ship straight to `stable`).
    A bundle also carries its own `upstreamBase`, the release it was built
-   from, and its `features` list. Its `treeSha256` is added in step 7.
-4. Add a matching entry at the top of `CHANGELOG.md` (the `## [Unreleased]`
+   from, and its `features` list. Its `treeSha256` is added in step 8.
+5. Add a matching entry at the top of `CHANGELOG.md` (the `## [Unreleased]`
    notes become `## [<version>] - <date>`), starting with a one-sentence
    summary on its own line before the notes. The app shows it as the
-   release's preview.
-5. Rebuild both packages from a clean `npm ci` (`npm run build:pr` in
+   release's preview. End the entry with one line,
+   `Checked on: <model>, <what was exercised>, <nights>.` If the test
+   counts in `docs/TESTING.md` have moved by more than about a hundred,
+   update them from the last CI run on `dev`.
+6. Rebuild both packages from a clean `npm ci` (`npm run build:pr` in
    `server/` and `app/`), remove any files `scripts/check-bundles.sh` lists,
-   and commit the output. The release commit is the last commit before the
-   tag.
-6. Commit everything together on `dev`.
-7. Run `scripts/release_digest.sh`, which writes the release's checksum into
-   `releases.json` and amends the release commit. Then tag. To tag,
+   run it again until it lists nothing, and commit the output.
+7. Commit everything together on `dev`. The release commit is the last
+   commit before the tag.
+8. Run `scripts/release_digest.sh`, which writes the release's checksum
+   (`treeSha256`) into `releases.json` and amends the release commit. Then
    fast-forward `main` to `dev` (`git switch main && git merge --ff-only
-   dev`) and run `git tag -a v<version> -m "..."`.
-8. Push both branches and the tag: `git push origin main dev v<version>`.
-9. Create the GitHub Release: `gh release create v<version> --title
-   "v<version>" --notes-file <path>`, with that version's `CHANGELOG.md`
-   section as the notes. Add `-R LTimothy/nightstand` if `gh` picks the
-   wrong default repository (this clone has several other forks configured
-   as remotes for cherry-picking). Pass `--prerelease` for a `beta` release.
-   When a release is later promoted to `stable` in `releases.json`, also run
-   `gh release edit v<version> --prerelease=false` (and `--latest` if it is
-   the newest stable release) to match.
+   dev`) and tag: `git tag -a v<version> -m "..."`.
+9. Push both branches and the tag: `git push origin main dev v<version>`.
+10. Create the GitHub Release: `gh release create v<version> --title
+    "v<version>" --notes-file <(python3 scripts/release_notes.py <version>
+    checked.md)`, where `checked.md` contains only the bullets below, filled
+    in and kept out of the repository. From the repository root, preview with
+    `python3 scripts/release_notes.py <version> checked.md`. Both arguments
+    are required. The script prints that version's `CHANGELOG.md` section,
+    adds the `### Checked before release` heading, then prints the bullets.
+    When an entry is later corrected, run
+    `gh release edit v<version> --notes-file <(...)` with the same script. Add
+    `-R LTimothy/nightstand` if `gh` picks the wrong default repository
+    (this clone has several other forks configured as remotes for
+    cherry-picking). Pass `--prerelease` for a `beta` release. When a
+    release is later promoted to `stable` in `releases.json`, also run
+    `gh release edit v<version> --prerelease=false` (and `--latest` if it is
+    the newest stable release) to match.
+
+```markdown
+- CI: {link to the run on the tag}, all checks passed.
+- Hardware: {model}, firmware {version}, {what was exercised}, {dates}.
+- Nights on the maintainer's Pod before stable: {n} (beta releases: not yet).
+- Not checked: {models not tested, features not exercised, browsers not run}.
+```
+
+Settings > Software can switch a Pod to upstream free-sleep. Once that
+switch has been checked against a particular upstream commit, record it at
+the top level of `releases.json` as `upstreamSwitch`, with `commit`, `date`
+and `treeSha256` (the header of `scripts/release_digest.sh` shows how to
+compute it for another repository's commit). Without it the switch installs
+upstream's `main`.

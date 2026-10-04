@@ -1,79 +1,122 @@
 # Calibration and fixed constants
 
-This codebase leans on numeric constants in several places. They are not all
-the same kind of thing, and treating them the same is how a value tuned
-against one bed ends up shipped as if it were a law of physics.
+This page is for people changing the biometrics or presence code. It says
+what calibration stores and lists the numeric constants the code relies on,
+with the reason each has its value. Every constant is a fixed literal, even
+where it shapes a value that is learned, and I tuned most of them on my own
+Pod 5. Unless its meaning says otherwise, a constant is a timing margin, a
+tuning choice tied to one bed, or a chosen acceptance range (not a
+physiological limit). A value here says what the code does, not that the
+mechanism behind it has passed a test on a real Pod. For what the sleep data
+can tell you, see [biometrics/BIOMETRICS.md](../biometrics/BIOMETRICS.md);
+for the code, see [biometrics/DEVELOPER.md](../biometrics/DEVELOPER.md).
 
-The class describes why a value exists, not whether it is learned today:
+## What calibration does
 
-- **Hardware fact.** Follows from the silicon or the physics. Never learned.
-  Must carry a comment explaining why it cannot vary.
-- **Timing margin.** A debounce or confirmation window. Fixed, but must state
-  the reasoning behind the number.
-- **Estimator acceptance range.** A filter chosen by the algorithm. Estimates
-  outside it are discarded, which can leave missing data. It is not a
-  universal physiological limit.
-- **Bed-dependent tuning.** Depends on the bed, topper or sensor. Most of these
-  values are fixed literals today; learning them is a possible future change.
+Calibration measures an empty-bed baseline for each side's sensors. It
+doesn't validate heart rate, breathing rate, HRV, sleep stages or the sleep
+score.
 
-## Catalog
+With Biometrics on and a time zone set, it runs at 18:30 for the left side
+and 19:00 for the right (`server/src/jobs/primeScheduler.ts`), whether or not
+daily priming is on. Each run looks back six hours for a stretch when the bed
+was empty. It asks the live presence detector first and skips the run if
+someone is on the bed; if it can't ask, it logs that and goes ahead. A side
+that is usually occupied at that time is rarely calibrated.
 
-| File | Constant | Value | Class | Current implementation | Rationale |
-|---|---|---|---|---|---|
-| `biometrics/stream/biometric_processor.py` | `NOISE_THRESHOLD` | 150,000 | Bed-dependent tuning | Fixed literal | An empty side idles 40k to 110k on this pod; occupied jumps to 200k and above, even on the off side via mattress transmission. 150k keeps a 25% margin below the weakest occupied signal |
-| `biometrics/stream/biometric_processor.py` | `DOMINANCE_RATIO` | 1.3 | Bed-dependent tuning | Fixed literal | Cross-side ratio depends on mattress coupling |
-| `biometrics/stream/biometric_processor.py` | `_SANE_MAX_SIGNAL` | 25,000,000 | Hardware fact | Fixed literal | Anchored to the 24-bit ADC ceiling of 16,777,215; rejects int32 overflow sentinels |
-| `biometrics/stream/biometric_processor.py` | `no_presence_tolerance` | 180s | Timing margin | Fixed literal | Slow-exit debounce |
-| `biometrics/stream/biometric_processor.py` | `_fast_exit_grace` | 30s | Timing margin | Fixed literal | Fast-exit debounce |
-| `biometrics/stream/biometric_processor.py` | `_established_threshold` | 60s | Timing margin | Fixed literal | How long presence must hold before it counts as established |
-| `biometrics/stream/biometric_processor.py` | `_REENTRY_CONFIRM_FRAMES` | 3 | Timing margin | Fixed literal | Frames of dominance before a mid-exit clock resets |
-| `biometrics/stream/biometric_processor.py` | `_presence_heartbeat_interval` | 60s | Timing margin | Fixed literal | Contract with the server's `PRESENCE_STALE_MS`; changing one requires changing the other |
-| `biometrics/service_health.py` | `_PUMP_RPM_STALL_THRESHOLD` | 200 | Bed-dependent tuning | Fixed literal | Derived from this pod's 1900 to 2000 rpm running speed. Reclassify to hardware fact if the figure proves to be pump-revision independent |
-| `biometrics/service_health.py` | `_PUMP_TEC_ACTIVE_AMPS` | 1.0 | Bed-dependent tuning | Fixed literal | Same provenance as above |
-| `biometrics/sleep_detection/cap_data.py` | `min_std` | 1 | Bed-dependent tuning | Fixed literal | Measured empty-bed std on Pod 5 is 0.03 to 0.85; the floor sits above it with margin |
-| `biometrics/sleep_detection/calibrate_sensor_thresholds.py` | `range_threshold` | 80,000 | Bed-dependent tuning | Fixed literal | Piezo range gate related to `NOISE_THRESHOLD` |
-| `biometrics/sleep_detection/calibrate_sensor_thresholds.py` | `threshold_range` | 10,000 | Bed-dependent tuning | Fixed literal | Stillness gate used to find an empty window |
-| `biometrics/sleep_detection/calibrate_sensor_thresholds.py` | `threshold_percent` | 0.70 | Timing margin | Fixed literal | Fraction of a rolling window that must agree |
-| `biometrics/sleep_detection/calibrate_sensor_thresholds.py` | `empty_minutes` | 5 | Timing margin | Fixed literal | Shortest window worth calibrating from |
-| `biometrics/sleep_detection/sleep_detector.py` | `detect_presence_cap` call's `occupancy_threshold` | 5 | Bed-dependent tuning | Fixed literal | Gate on the z-score sum computed against the per-bed cap baseline this work stores. Overrides `detect_presence_cap`'s own default of 50 with no rationale given at the call site; likely tuned to this pod's much smaller capSense2 z-score denominators (see the `min_std` note above), but that is not stated in code. Revisit to confirm and document, or restore the shared default |
-| `biometrics/sleep_detection/sleep_detector.py` | `detect_presence_cap` call's `threshold_percent` | 0.90 | Timing margin | Fixed literal | Fraction of a 10s rolling window that must read occupied before live cap presence latches; tighter than the calibrator's own 0.70 for the same rolling-window mechanism, since a false cap positive here directly compounds with piezo in `build_sleep_records`'s OR |
-| `biometrics/sleep_detection/sleep_detector.py` | `detect_presence_piezo_p2p` call's `threshold_percent` | 0.70 | Timing margin | Fixed literal | Same value and purpose as `calibrate_sensor_thresholds.py`'s `threshold_percent`, applied here to the p2p piezo detector used for sleep-record building instead of calibration |
-| `biometrics/sleep_detection/sleep_detector.py` | `detect_presence_piezo_p2p` call's `noise_threshold` | 150,000 | Bed-dependent tuning | Fixed literal | A second copy of `biometric_processor.py`'s `NOISE_THRESHOLD`, passed explicitly here even though it matches that function's own default. The two literals should be reconciled to one source of truth rather than read as independently derived |
-| `server/src/8sleep/presenceAutoOffMonitor.ts` | `PRESENCE_AUTO_OFF_MS` | 45 min | Timing margin | Fixed literal | Safety net for a side left on |
-| `server/src/8sleep/presenceAutoOffMonitor.ts` | `PRESENCE_STALE_MS` | 5 min | Timing margin | Fixed literal | Tolerates five missed 60s heartbeats |
-| `server/src/jobs/primeScheduler.ts` | `CALIBRATE_LEFT_HOUR` / `CALIBRATE_RIGHT_HOUR` | 18:30 / 19:00 | Timing margin | Fixed literal | A household schedule choice, not sensor physics: chosen because it is reliably empty for one user at that hour. Owned per household, not per bed; revisit once run history shows whether skips cluster |
-| `server/src/8sleep/loadDeviceStatus.ts`, `server/src/routes/deviceStatus/updateDeviceStatus.ts` | Level-to-Fahrenheit conversion | 82.5 and 27.5 | Hardware fact | Fixed literal | Maps temperature levels to Fahrenheit; inlined in both files |
-| `biometrics/stream/presence_floor.py` | `FLOOR_PERCENTILE` | 20 | Bed-dependent tuning | Fixed literal | Low end of the recent-range distribution used as the between-burst floor; helps distinguish crosstalk alongside `NOISE_THRESHOLD` and `DOMINANCE_RATIO` |
-| `biometrics/stream/presence_floor.py` | `FLOOR_MIN_WINDOW` | 300 samples (~5 min at 1 Hz) | Bed-dependent tuning | Fixed literal | How long a rolling floor must accumulate before it is trusted |
-| `biometrics/stream/presence_floor.py` | `FLOOR_EMPTY_FRACTION` | 0.30 | Bed-dependent tuning | Fixed literal | On a real recording the occupied rolling p20 sat ~2.5M against a ~0.7M crosstalk floor; 0.30 was chosen to catch that gap with margin |
-| `biometrics/stream/presence_floor.py` | `FLOOR_EMA_ALPHA` | 0.02 | Bed-dependent tuning | Fixed literal | Smoothing rate for the learned per-side occupied-floor reference; slow enough that a momentary still stretch cannot drag it down |
-| `biometrics/stream/presence_floor.py` | `AMBIGUOUS_FREEZE_CAP` | 600 frames | Timing margin | Fixed literal | Backstop so an inconclusive floor cannot freeze the exit clock forever; set long and slow so a genuinely present sleeper never reaches it |
-| `biometrics/stream/presence_floor.py` | `AMBIGUOUS_LEAK_DIVISOR` | 4 | Timing margin | Fixed literal | Rate at which the backstop above advances the exit clock once the freeze cap is hit |
-| `biometrics/service_health.py` | `SENSOR_TEMPS_UPDATE_INTERVAL` | 30s | Timing margin | Fixed literal | Throttles sensor-temperature reporting; frequent enough for health monitoring, infrequent enough to avoid flooding the server |
-| `biometrics/service_health.py` | `_PUMP_STALL_DWELL_FRAMES` | 6 frames (~1 min) | Timing margin | Fixed literal | frzHealth frames arrive roughly every 10s; 6 consecutive avoids alerting on a single noisy frame |
-| `biometrics/service_health.py` | `_PUMP_RECOVERY_DWELL_FRAMES` | 3 frames (~30s) | Timing margin | Fixed literal | Consecutive frames required to clear a stall alert |
-| `biometrics/stream/stream.py` | `STREAM_HEALTH_INTERVAL_SECONDS` | 60s | Timing margin | Fixed literal | Heartbeat cadence for the NATS consumer loop, matching the ~60s cadence used elsewhere for biometrics health reporting |
-| `server/src/8sleep/presenceAutoOffMonitor.ts` | `CHECK_INTERVAL_MS` | 60s | Timing margin | Fixed literal | Matches the presence stream's own ~once-a-minute heartbeat; a tighter poll would not see new information between checks |
-| `biometrics/vitals/calculations.py`, `biometrics/stream/biometric_processor.py` | `bpmmin` / `bpmmax` | 40 / 90 bpm | Estimator acceptance range | Fixed literal | Plausible resting-to-sleeping heart rate range passed to the heartpy processor; duplicated in both files |
-| `biometrics/vitals/calculations.py` | `breathing_lower_threshold` / `breathing_upper_threshold` | 10 / 23 breaths/min | Estimator acceptance range | Fixed literal | Plausible adult breathing-rate range used to discard bad estimates |
-| `biometrics/vitals/calculations.py` | `hrv_lower_threshold` / `hrv_upper_threshold` | 10 / 100 ms | Estimator acceptance range | Fixed literal | Plausible SDNN range used to discard bad estimates |
-| `biometrics/stream/biometric_processor.py` | live breathing-rate gate | 8 / 20 breaths/min | Estimator acceptance range | Fixed literal | Same purpose as `breathing_lower_threshold`/`breathing_upper_threshold` above but a separate, narrower literal in the live path; the two should probably be reconciled to one source of truth |
-| `biometrics/stream/biometric_processor.py` | live HRV gate | 8 / 200 ms | Estimator acceptance range | Fixed literal | Same purpose as `hrv_lower_threshold`/`hrv_upper_threshold` above but a separate, wider literal in the live path; the two should probably be reconciled to one source of truth |
-| `biometrics/presence/sensors.py` | `CAPSENSE.unit` | 75 | Bed-dependent tuning | Fixed literal | Converts the new detector's fixed capacitance levels from `capSense2` units to `capSense` counts, giving a starting entry level of 300 counts, which matches sleepypod's published `capSense` entry threshold. Not checked on a Pod that writes `capSense`; each side's learned level takes over after its first good night |
-| `biometrics/presence/guard.py` | `UNEXPLAINED_SECONDS` of `UNEXPLAINED_WINDOW_SECONDS` | 600 of 900 | Timing margin | Fixed literal | On a Pod or capacitance format not yet checked, the vibration sensor takes back deciding when vitals are recorded after the bed reads in use for 10 of 15 minutes with nobody placed in it by capacitance. Live presence (the in-bed indicator and presence auto-off) stays on the vibration sensor there either way. Longer than any entry, much shorter than the 45 minute auto-off |
-| `biometrics/presence/piezo.py` | `ONE_PER_SECOND_SHARE` | 0.9 | Timing margin | Fixed literal | The presence detector counts piezo records as seconds; on a Pod or format not yet checked, the new tracking runs only when at least 90% of record steps are one second |
+A run started by hand (Settings > Pod and diagnostics > System status) looks
+from two hours ago to one hour ahead and skips the occupancy check, so only
+start one when the bed is empty. It still needs an empty stretch in the
+recorded data; without one it reports insufficient data rather than saving an
+occupied baseline.
 
-## Estimates and calibration stored today
-
-Pump health appears under Settings > Pod and diagnostics > System status.
-
-| Value | Current implementation | Persistence |
+| Value | Where it is kept | How it is used |
 | --- | --- | --- |
-| Per-sensor capacitance mean and standard deviation | Persisted calibration from an empty-bed window | SQLite calibration profile; legacy baseline JSON also written for rollback compatibility |
-| Empty-bed piezo floor | Persisted calibration from an empty-bed window | Recorded by the calibration job; not a replacement for the live fixed noise threshold |
-| Recent piezo floor and occupied-floor reference | Rolling estimate using the fixed parameters above | In-memory stream state |
+| Empty-bed capacitance means and standard deviations | SQLite calibration profiles, plus a legacy baseline JSON file for older readers | The default nightly detector compares readings with this baseline. New sleep tracking reads the same means and noise. |
+| Empty-bed piezo floor | SQLite calibration profiles and run history | New sleep tracking uses recent floors for its whole-bed activity check. The default live detector keeps its fixed noise threshold. |
+| Occupied capacitance rise | SQLite calibration profiles, learned by the nightly analysis when New sleep tracking finds a usable night | Sets each side's entry level for that path; one night moves it only so far. |
+| Recent and occupied piezo floors in the default live detector | Stream memory | Decide when an ambiguous two-side signal counts toward leaving the bed. A restart loses them. |
 
-`min_std` is a fixed literal that floors the measured capacitance standard
-deviation; the floor itself is not learned. The `FLOOR_*` constants are also
-fixed even though they parameterize a rolling estimate. The class column
-records provenance and tuning needs, not an implemented calibration roadmap.
+## Default live presence
+
+In `biometrics/stream/biometric_processor.py`:
+
+| Constant | Value | Meaning |
+| --- | --- | --- |
+| `NOISE_THRESHOLD` | 150,000 | Piezo range below which a side reads empty. Bed tuning: an empty side idled at 40k to 110k on my Pod 5 and an occupied one at 200k and up, even on the other side through the mattress; 150k keeps a margin below the weakest occupied signal. |
+| `DOMINANCE_RATIO` | 1.3 | One side must read at least 1.3 times the other to count as the only occupied side. Bed tuning: depends on mattress coupling. |
+| `_SANE_MAX_SIGNAL` | 25,000,000 | Largest sample magnitude accepted: above the 16,777,215 clipping ceiling seen on the Pod, far below the int32 overflow values near 2.1 billion that it rejects. |
+| `no_presence_tolerance` | 180 s | Exit delay once presence is established. A still sleeper's signal can sit below the threshold for a minute or more. |
+| `_fast_exit_grace` / `_established_threshold` | 30 s / 60 s | Sessions shorter than 60 s can end after 30 s without signal. |
+| `_REENTRY_CONFIRM_FRAMES` | 3 | Clear frames needed to cancel an exit that has started. |
+| `_presence_heartbeat_interval` | 60 frames | About one report a minute to the server; a contract with `PRESENCE_STALE_MS` below. |
+| `VITALS_RESET_ABSENCE_SECONDS` | 600 s | With New sleep tracking deciding presence, a side keeps its heart-rate bounds and last HRV and breathing values through an absence shorter than this; each estimate still waits for a full window after the return. After it, the next occupant starts clean. |
+
+In `biometrics/stream/presence_floor.py`:
+
+| Constant | Value | Meaning |
+| --- | --- | --- |
+| `FLOOR_PERCENTILE` / `FLOOR_MIN_WINDOW` | 20 / 300 samples | Low end of the recent range distribution, trusted after about 5 minutes at 1 Hz. |
+| `FLOOR_EMPTY_FRACTION` | 0.30 | A rolling floor below 30% of the learned occupied floor looks empty. Bed tuning: on one recording the occupied floor sat near 2.5M against a 0.7M crosstalk floor. |
+| `FLOOR_EMA_ALPHA` | 0.02 | Smoothing of the occupied-floor reference, slow enough that a still stretch can't drag it down. |
+| `AMBIGUOUS_FREEZE_CAP` / `AMBIGUOUS_LEAK_DIVISOR` | 600 frames / 4 | After 600 consecutive ambiguous frames the exit clock advances one tick in four, so ambiguity can't hold presence indefinitely. A still sleeper can also produce an ambiguous signal. |
+
+## Calibration and default nightly analysis
+
+| File | Constant | Value | Meaning |
+| --- | --- | --- | --- |
+| `biometrics/sleep_detection/cap_data.py` | `min_std` | 1 | Floor for a saved capacitance standard deviation, used as a z-score denominator. Measured empty-bed values on my Pod 5 were 0.03 to 0.85. |
+| `biometrics/sleep_detection/calibrate_sensor_thresholds.py` | `range_threshold` / `threshold_percent` | 80,000 / 0.70 | Piezo range gate for finding an empty window, and the share of a rolling window that must agree. |
+| Same file | `threshold_range` / `empty_minutes` | 10,000 / 5 | Stillness gate and the shortest window worth calibrating from. |
+| `biometrics/sleep_detection/sleep_detector.py` | `occupancy_threshold` / `threshold_percent` | 5 / 0.90 | Gate on the capacitance z-score sum and the share of a 10 s window that must read occupied. The helper's own default gate is 50. The call's 5 comes unchanged from upstream free-sleep's first sleep detection code, which was tested on a Pod 3, and no reason for it is recorded. |
+| Same file | `noise_threshold` / piezo `threshold_percent` | 150,000 / 0.70 | Nightly piezo range gate (a duplicate of `NOISE_THRESHOLD`) and window share. |
+
+## New sleep tracking
+
+Off by default, and tested only on my Pod 5 with `capSense2` records. Reading
+another format in code doesn't mean it works on another Pod.
+
+| File | Constant | Value | Meaning |
+| --- | --- | --- | --- |
+| `biometrics/presence/params.py` | `DEFAULT_ENTER_DELTA` | 4 | Starting entry rise in `capSense2` units, before a side has a learned rise. |
+| Same file | `ENTER_FRACTION` / `EXIT_RATIO` | 0.4 / 0.5 | Entry at this share of the learned occupied rise; exit at half of entry. |
+| Same file | `ENTER_MIN` / `NOISE_MULTIPLE` / `ENTER_MAX` | 3 / 6 / 10 | Entry never drops below partner-only spikes (about 3 on real nights) or six times the calibrated noise, and never rises past where a light sleeper would be missed. |
+| Same file | `DEFAULT_PIEZO_FLOOR`, min, max | 75,000 / 30,000 / 150,000 | Default and bounds for the median of recent empty floors. |
+| `biometrics/presence/detector.py` | `enter_seconds` / `exit_seconds` | 20 s / 60 s | Confirmation before a side reads occupied or empty. |
+| Same file | `BED_QUIET_SECONDS` / `PIEZO_ALIVE_MARGIN` / `ENTER_ALIVE_SECONDS` | 90 s / 2 / 5 s | Whole-bed quiet period, activity multiplier over the floor, and active seconds needed within entry confirmation. |
+| `biometrics/presence/sensors.py` | `CAPSENSE.unit` | 75 | Converts the fixed levels from `capSense2` units to `capSense` counts, giving a starting entry level of 300 counts. That level is an assumption, not a measurement: it has not been tested on a Pod that writes `capSense`, and each side's learned level takes over after its first good night. |
+| `biometrics/presence/guard.py` | `UNEXPLAINED_SECONDS` of `UNEXPLAINED_WINDOW_SECONDS` | 600 of 900 | On a Pod or format not yet tested, the vibration sensor takes back vitals recording when the bed reads in use for 10 of 15 minutes but capacitance places nobody in it. Longer than any entry, much shorter than the 45 minute auto-off. |
+| `biometrics/presence/piezo.py` | `ONE_PER_SECOND_SHARE` | 0.9 | On a Pod or format not yet tested, the new tracking runs only when at least 90% of record steps are one second, since it counts piezo records as seconds. |
+
+## Vitals filters
+
+| Path | Heart rate | Breathing rate | HRV |
+| --- | --- | --- | --- |
+| Default live, `biometrics/stream/biometric_processor.py` | HeartPy bounds 40 to 90 bpm; a rate over 90 is dropped, which leaves a gap | Updates accepted at 8 to 20 breaths/min | SDNN updates accepted at 8 to 200 ms |
+| Standalone recomputation, `biometrics/vitals/calculations.py` (does not run as supplied) | HeartPy bounds 40 to 90 bpm | 10 to 23 breaths/min | 10 to 100 ms |
+| New estimators, `biometrics/vitals2/gates.py` | `HR_RANGE` 35 to 140 bpm, plus quality, motion and signal gates | `RESP_RANGE` 6 to 30 breaths/min, plus a quality gate | Needs interval coverage; see [DEVELOPER.md](../biometrics/DEVELOPER.md) |
+
+How rejected and missing values are stored is in
+[DEVELOPER.md](../biometrics/DEVELOPER.md#vitals-and-missing-values).
+
+`HR_RANGE` and `RESP_RANGE` are plausibility bounds: an estimate outside them
+is dropped. I set them wider than the older paths' limits so the limits stop
+shaping the result (the old 90 bpm ceiling drops every faster reading). The
+exact edges are round numbers, not tuned values. The estimators search a
+little past them (heart rate up to 150 bpm, breathing 5 to 36 a minute), so a
+rate near an edge can still be found.
+
+## Server and sensor-health settings
+
+| File | Constant | Value | Meaning |
+| --- | --- | --- | --- |
+| `server/src/8sleep/presenceAutoOffMonitor.ts` | `PRESENCE_AUTO_OFF_MS` / `CHECK_INTERVAL_MS` | 45 min / 60 s | A side on with nobody reported for 45 minutes is turned off, checked once a minute to match the presence heartbeat. Skipped inside a scheduled sleep, while paused or away, and when presence is unknown. |
+| `server/src/8sleep/presenceStale.ts` | `PRESENCE_STALE_MS` | 5 min | Presence older than this is unknown to auto-off: five missed heartbeats. |
+| `server/src/jobs/primeScheduler.ts` | calibration times | 18:30 left / 19:00 right | Evening times when the bed is usually empty. |
+| `biometrics/stream/stream.py` | `STREAM_HEALTH_INTERVAL_SECONDS` / `SOURCE_IDLE_SECONDS` | 60 s / 30 min | Stream health heartbeat, and how long without a sensor record before System status reports sleep tracking stopped. |
+| Same file | `NATS_SILENT_SECONDS` | 2 min | A connected stream with no sensor records for this long gets the RAW files read alongside it. |
+| `biometrics/stream/pump_speed.py` | `PUMP_HIGH_RPM` / `PUMP_STALE_SECONDS` | 2,500 rpm / 30 s | A `frzHealth` frame at or above this speed marks the pump fast; a frame older than 30 s, or none yet, leaves it unknown. The newer vitals keep a window only when frames show the pump slow throughout. |
+| `biometrics/service_health.py` | `SENSOR_TEMPS_UPDATE_INTERVAL` | 30 s | Throttle on sensor-temperature reports. |
+| Same file | `_PUMP_RPM_STALL_THRESHOLD` / `_PUMP_TEC_ACTIVE_AMPS` | 200 rpm / 1.0 A | Pump stall alert. Bed tuning from the 1900 to 2000 rpm running speed of my Pod 5; not known to hold for other pump revisions. |
+| Same file | `_PUMP_STALL_DWELL_FRAMES` / `_PUMP_RECOVERY_DWELL_FRAMES` | 6 / 3 frames | `frzHealth` frames arrive about every 10 s; six in a row raise the alert, three clear it. |
+| `server/src/8sleep/loadDeviceStatus.ts`, `server/src/routes/deviceStatus/updateDeviceStatus.ts` | level to Fahrenheit | 82.5 and 27.5 | Converts the level scale to Fahrenheit, inlined in both files. A calculation, not a measured cover temperature. |

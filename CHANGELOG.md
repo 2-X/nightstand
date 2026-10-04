@@ -542,7 +542,7 @@ Biometrics setup on Pod 3 units installed from an SD card, safer installs, and u
 
 - Opening internet access for an update now also clears the IPv6 rules that
   blocking it adds, not only the IPv4 ones. Taken from
-  [Piyush's commit](https://github.com/EpicPi/free-sleep/commit/0642856a37e6828eb78f9d87b8024c8e72be2a6b)
+  [EpicPi's commit](https://github.com/EpicPi/free-sleep/commit/0642856a37e6828eb78f9d87b8024c8e72be2a6b)
   to the EpicPi/free-sleep fork of free-sleep.
 
 ## [3.3.0] - 2026-09-26

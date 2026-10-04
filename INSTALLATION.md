@@ -1,222 +1,191 @@
-# Requirements
+# Installing Nightstand
 
-## Which path is yours?
+This guide installs Nightstand from scratch: you open the Pod, connect a
+serial cable to its board, get a root shell and run the installer (a Pod 3
+with an SD card skips the cable). If your Pod already runs a free-sleep fork,
+use [Coming from free-sleep](docs/COMING_FROM_FREE_SLEEP.md#switching)
+instead; you only need [step 20](#20-remote-access-with-tailscale-optional)
+here, for remote access.
 
-How you install depends on your Pod and on what it runs today.
+> Steps 1 to 12 come from upstream free-sleep's install guide. I have only a
+> Pod 5, so I haven't tried the Pod 3 and Pod 4 parts (the SD card method,
+> the teardown and the firmware reset), and they may be out of date. Ask
+> [upstream free-sleep](https://github.com/throwaway31265/free-sleep) about
+> those. For Pod 5 questions, or anything from step 13 on,
+> [open an issue here](https://github.com/LTimothy/nightstand/issues).
+> I followed upstream's version of steps 1 to 12 on my Pod 5 for my own first
+> install.
 
-- **Pod 3 with an SD card:** you get a root shell with a community SD card method (see [Compatibility](#compatibility)), then join this guide at [step 11](#11-disable-software-updates). You don't need the cable or the tools below.
-- **Pod 3 without an SD card, Pod 4, or Pod 5:** you open the Pod and connect a cable to its circuit board. Get the tools below, then start at [step 1](#1-access-the-circuit-board).
-- **Already running another free-sleep fork:** you don't need to reinstall by hand. See [Switching from another free-sleep fork](#switching-from-another-free-sleep-fork).
+## Before you start
 
-I only have a Pod 5, so it's the only Pod I've tested this guide on. The Pod 3 and Pod 4 steps come from the guide in the original project, throwaway31265/free-sleep.
+Nightstand is unofficial, so read
+[Before you install](README.md#before-you-install) in the README first. A
+first install has no earlier Nightstand to fall back to: if it fails,
+recovery needs the serial cable or SSH.
+
+- Pod 3 with an SD card: get a root shell with the SD card method in
+  [Compatibility](#compatibility), then join at
+  [step 11](#11-disable-software-updates). No cable or tools needed.
+- Pod 3 without an SD card, Pod 4 or Pod 5: you open the Pod and connect a
+  cable to its circuit board. Get the tools below, then start at
+  [step 1](#1-access-the-circuit-board). On a Pod 5 there are no teardown or
+  board photos here yet, so read step 1 before you open it.
+
+Also read [Going back to the Eight Sleep app](#going-back-to-the-eight-sleep-app)
+for your model. On a Pod 5 there is no tested way back.
 
 ## Compatibility
 
-- Pod 1: not compatible.
-- Pod 2: not compatible.
-- Pod 3 (with SD card): supported by upstream free-sleep. The SD card method needs a Linux computer.
-  - Option 1: follow blopker's [ZeroSleep guide](https://blopker.com/writing/04-zerosleep-1/) to get root.
-  - Option 2: use Pixel-Meister's [SD card script](https://github.com/Pixel-Meister/freesleep_script/blob/main/modify_eight_sleep.sh), which modifies the Eight Sleep SD card.
-  - Once you can SSH in as root, do [step 11](#11-disable-software-updates) right away. Until you do, the Pod can update its firmware on its own and disconnect you. Then skip step 12 (if SSH works, the Pod is already on your network) and continue from step 13.
-- Pod 3 (no SD card): supported by upstream free-sleep. This version has FCC ID 2AYXT61100001, printed on the back of the Pod where the water tubes plug in.
-- Pod 4: supported by upstream free-sleep.
-- Pod 5: tested by the maintainer. The missing teardown photos and reset procedure are noted below.
-- Pod 6: unknown; no Nightstand compatibility report is documented here.
+- Pod 1 and Pod 2: not compatible.
+- Pod 3 with an SD card: supported by upstream free-sleep. The SD card method
+  needs a Linux computer. Get root with blopker's
+  [ZeroSleep guide](https://blopker.com/writing/04-zerosleep-1/) or
+  Pixel-Meister's [SD card script](https://github.com/Pixel-Meister/freesleep_script/blob/main/modify_eight_sleep.sh).
+  Once you can SSH in as root, do [step 11](#11-disable-software-updates)
+  right away. Then skip step 12 (the Pod is already on your network) and
+  continue from step 13.
+- Pod 3 without an SD card (FCC ID 2AYXT61100001, printed on the back of the
+  Pod where the water tubes plug in) and Pod 4: supported by upstream
+  free-sleep.
+- Pod 5: the model I use and test on.
+- Pod 6: unknown.
 
 ## Tools required
 
-These are for the cable method only (Pod 3 without an SD card, Pod 4, Pod 5). The cable connects your computer to the board's serial console (UART), a text terminal the board exposes for debugging. That's how you interrupt the boot and get a root shell.
+These are for the cable method only. The cable connects your computer to the
+board's serial console (UART), which lets you stop the boot and get a root
+shell.
 
-- [TC2070-IDC ($50)](https://www.tag-connect.com/product/tc2070-idc): a Tag-Connect cable. Its spring pins press onto pads on the board, so there's nothing to solder. If you'd rather solder, you can attach the three required wires to the JTAG header instead.
-- [FTDI FT232RL ($13)](https://www.amazon.com/gp/product/B07TXVRQ7V/): a USB-to-serial adapter. It makes the board's serial pins show up as a USB device on your computer.
-- [Dupont wires ($7)](https://www.amazon.com/Elegoo-EL-CP-004-Multicolored-Breadboard-arduino/dp/B01EV70C78): jumper wires to connect the cable to the adapter.
+- [TC2070-IDC ($50)](https://www.tag-connect.com/product/tc2070-idc): a
+  Tag-Connect cable whose spring pins press onto pads on the board, so there's
+  nothing to solder. If you'd rather solder, attach the three required wires
+  to the JTAG header instead.
+- [FTDI FT232RL ($13)](https://www.amazon.com/gp/product/B07TXVRQ7V/): a
+  USB-to-serial adapter.
+- [Dupont wires ($7)](https://www.amazon.com/Elegoo-EL-CP-004-Multicolored-Breadboard-arduino/dp/B01EV70C78):
+  jumper wires to connect the cable to the adapter.
 
-You'll also need an SSH key pair on your computer for [step 18](#18-add-an-ssh-config). If you don't have one, `ssh-keygen` creates it.
+You'll also need an SSH key pair on your computer for
+[step 18](#18-add-an-ssh-config). If you don't have one, `ssh-keygen` creates
+it. These steps are written for Mac and Linux; on Windows you'll need to adapt
+them yourself.
 
-These steps are written for Mac and Linux. On Windows you'll need to adapt them yourself.
-
----
-
-## How to revert changes and go back to using your Eight Sleep through their app
-
-This restores Eight Sleep software, not a previous Nightstand release or
-upstream free-sleep. Check the model-specific procedure before installing.
-Back up any data you want to keep before resetting. See the
-[recovery notes](README.md#what-happens-if-an-install-fails) before starting.
-
-1. If your Pod is still on your Eight Sleep account, open the app, manage the Pod, and remove it from your account.
-2. Reset the firmware:
-   - [Pod 3](docs/pod_3_teardown/6_firmware_reset.jpeg)
-   - [Pod 4](docs/pod_4_teardown/3_reset_firmware.png)
-   - Pod 5: not written up here yet.
-3. Set up the Pod as a new Pod in the app. Once it's back online it may start a firmware update on its own. That is expected.
-
----
-
-## Switching from another free-sleep fork
-
-If your Pod already runs a free-sleep fork (the original project, jmew's, or
-another), use the migration script instead of reinstalling by hand. It runs on
-your computer and connects to the Pod over SSH. Before replacing the app, it
-backs up application code and installed dependencies, the SQLite database
-and LowDB settings/schedules. It keeps one copy on the Pod and one on your
-computer, and checks both archives.
-Logs and RAW sensor archives are not included. It then installs Nightstand and
-keeps your old application tree for rollback from the app afterward. This
-application rollback does not restore the database to its earlier state.
-
-Before you start, check that:
-
-- Your current install's web app is running and reachable from your computer.
-  The script looks for the Pod at `eight-pod.local`, offers to scan your local
-  network, or takes the address directly with `--ip <address>`.
-- You can SSH in as root on port 8822 or 22. The script asks for the root
-  password; if you log in with a key instead, leave the prompt blank.
-- Your computer (macOS or Linux) has `curl`, `ssh`, `scp`, `tar`, and `python3`.
-
-On your computer:
-
-1. Download the script and the two helper files it copies to the Pod into one
-   folder. Saving them rather than piping into `bash` lets you read them first:
-   ```bash
-   for f in switch-to-this-fork.sh pod-installer.sh restore-original-fork.sh; do
-     curl -fO "https://raw.githubusercontent.com/LTimothy/nightstand/main/scripts/migrate/$f"
-   done
-   chmod +x switch-to-this-fork.sh
-   ```
-2. Run it once with `--dry-run`. It reports what it found and what it would
-   do, without changing anything:
-   ```bash
-   ./switch-to-this-fork.sh --dry-run
-   ```
-3. If the report looks right, run it for real:
-   ```bash
-   ./switch-to-this-fork.sh
-   ```
-   It asks you to type `switch` before it changes anything. The laptop copy of
-   the backup is saved in the folder you run it from; keep it for a few nights.
-
-Pod 5 is the tested case. On a Pod 3 or Pod 4 the script asks for a separate
-typed acknowledgment, because sleep tracking there may not work on this fork
-(temperature control and scheduling are expected to). If the install fails,
-the script attempts to restore your original application automatically.
-See the [recovery notes](README.md#what-happens-if-an-install-fails). For
-options such as `--restore <backup-tarball>`, run it with `--help`.
-
-When it finishes, the Pod's internet access is blocked with the same rules as
-[step 19](#19-add-firewall-rules-to-block-internet-access-optional-but-recommended).
-You don't need the numbered steps below, except step 20 if you want remote
-access.
-
----
-# Installation steps
+## Installation steps
 
 Steps 1 to 4 are physical setup or commands on your computer. From step 5,
-commands run **on the Pod**, first through the serial console and later over
-SSH. Browser and computer steps are labeled separately.
+commands run on the Pod, first through the serial console and later over SSH.
 
-## 1. Access the circuit board
+### 1. Access the circuit board
 
 1. Pod 5 only: set up your Pod with the Eight Sleep app first, then continue.
-2. Follow the teardown steps for your Pod to reach the circuit board:
+2. Unplug the Pod, then follow the teardown steps for your model:
    - [Pod 3](docs/pod_3_teardown)
    - [Pod 4](docs/pod_4_teardown) ([written instructions](docs/pod_4_teardown/instructions.md))
-   - Pod 5: no teardown photos here yet. If you take some while doing yours, a pull request would be welcome.
+   - Pod 5: no teardown or board photos here yet. If you're unsure how to
+     open it or where the cable goes,
+     [open an issue](https://github.com/LTimothy/nightstand/issues) before you
+     start. Photos from yours would be welcome in a pull request.
 
----
+### 2. Connect to the device
 
-## 2. Connect to the device
-
-1. Keep the Pod unplugged. It doesn't need to be connected to the mattress cover or to power yet.
-2. **Set the FTDI adapter's voltage jumper to 3.3V** before connecting anything ([photo](docs/jtag/4_module_connection.png)). The board's serial pins run at 3.3V, and the 5V setting can damage them. Then connect the Tag-Connect cable to the adapter with Dupont wires, following the images in [docs/jtag/](docs/jtag/).
+1. Keep the Pod unplugged from power and from the mattress cover.
+2. Set the FTDI adapter's voltage jumper to 3.3V before connecting anything
+   ([photo](docs/jtag/4_module_connection.png)). The board's serial pins run
+   at 3.3V, and the 5V setting can damage them. Then connect the Tag-Connect
+   cable to the adapter with Dupont wires, following the images in
+   [docs/jtag/](docs/jtag/).
 3. Connect the Tag-Connect cable to the circuit board:
    - [Pod 3](docs/pod_3_teardown/7_pod_3_board_connection.jpeg)
    - [Pod 4](docs/pod_4_teardown/2_circuit_board.png)
+   - Pod 5: no photo yet. Don't guess at the pads (see step 1).
 4. Plug the FTDI adapter into your computer.
 
----
+### 3. Get minicom ready on your computer
 
-## 3. Get minicom ready on your computer
+minicom is a terminal program for serial devices. Install it with
+`brew install minicom` (Mac) or `sudo apt install minicom` (Debian/Ubuntu).
 
-minicom is a terminal program for serial devices. If you don't have it, install it with `brew install minicom` (Mac) or `sudo apt install minicom` (Debian/Ubuntu).
+Find the adapter's device name: run `ls /dev/tty*`, unplug the adapter, run
+it again, then plug it back in. The entry that disappeared is the adapter. On
+a Mac it looks like `/dev/tty.usbserial-B0010NHK`; on Linux it's usually
+`/dev/ttyUSB0`. Put your device's name in this command (the baud rate is
+921600):
 
-- The baud rate is 921600.
-- Find the adapter's device name. Run `ls /dev/tty*` with the adapter unplugged and again with it plugged in; the new entry is the adapter. On a Mac it looks like `tty.usbserial-B0010NHK`. On Linux it's usually `/dev/ttyUSB0`. Put your device's name in place of the one in this command:
-  ```bash
-  minicom -b 921600 -o -D /dev/tty.usbserial-B0010NHK
-  ```
-- minicom should open to a screen like this one (taken on a Mac). If it can't open the device, check the name again.
+```bash
+minicom -b 921600 -o -D /dev/tty.usbserial-B0010NHK
+```
 
-![docs/installation/0_minicom.png](docs/installation/0_minicom.png)
+minicom should open to a screen like this one, taken on a Mac. If it can't
+open the device, check the name again.
 
----
+![minicom](docs/installation/0_minicom.png)
 
-## 4. Plug the power into the pod
+### 4. Plug the power into the Pod
 
-Plug in the Pod's power and watch minicom. When `Hit any key to stop autoboot` appears, press a key (Ctrl+C works) to interrupt the boot. If you miss it and the Pod keeps booting, unplug the power and try again.
-
-If the Pod's output appears but your key presses do nothing, a common cause is minicom's hardware flow control. Press Ctrl+A, then O, open "Serial port setup", and set Hardware Flow Control to No.
+Plug in the Pod's power and watch minicom. When `Hit any key to stop autoboot`
+appears, press a key (Ctrl+C works). If you miss it and the Pod keeps booting,
+unplug the power and try again.
 
 ![Interrupt](docs/installation/1_interrupt.png)
+
+If the Pod's output appears but your key presses do nothing, a common cause is
+minicom's hardware flow control. Press Ctrl+A, then O, open "Serial port
+setup", and set Hardware Flow Control to No.
 
 If it worked, you'll see this prompt:
 
 ![Interrupt success](docs/installation/2_shell.png)
 
----
+### 5. Modify the boot environment
 
-## 5. Modify the boot environment
+These commands tell the Pod to boot once into a root shell. The change isn't
+saved, so the reboot in step 9 goes back to a normal boot.
 
-Type these at the bootloader prompt from step 4. They tell the Pod to boot once into a root shell. The change isn't saved, so the reboot in step 9 goes back to a normal boot.
+First check which slot the Pod boots from. Type this at the bootloader prompt:
 
 ```text
-# Verify that current_slot = a. If it isn't, go back and reset your pod's firmware.
-# If it's still not a, open an issue on this repository.
 printenv current_slot
+```
 
-# If current_slot=a:
+If it prints `current_slot=a`, type these two lines:
+
+```text
 setenv bootargs "root=PARTLABEL=rootfs_a rootwait init=/bin/bash"
-
 run bootcmd
 ```
 
----
+If it prints anything else, stop, and don't substitute another partition
+name. On a Pod 3 or Pod 4, reset the firmware (see
+[Going back to the Eight Sleep app](#going-back-to-the-eight-sleep-app)) and
+start again. If it still isn't `a`, open an issue. On a Pod 5, which has no
+tested firmware reset yet, open an issue without going further.
 
-## 6. Mount the file system
+### 6. Mount the file system
 
-You're now in a minimal root shell with nothing mounted. Mount the file systems so you can make changes. The last command makes the root file system writable, so type carefully from here on.
+You're now in a minimal root shell with nothing mounted. These commands mount
+the system folders and make the root file system writable, so type carefully
+from here on.
 
 ```bash
-# Mount /proc for process and system information
 mount -t proc proc /proc
-
-# Mount /sys for hardware and system-level information
 mount -t sysfs sysfs /sys
-
-# Mount /dev for device files (e.g. /dev/mmcblk0)
 mount -t devtmpfs devtmpfs /dev
-
-# Mount /run (optional, but useful for some runtime scripts)
 mount -t tmpfs tmpfs /run
-
-# Remount the file system read-write (be careful editing files from here)
 mount -o remount,rw /
 ```
 
----
+### 7. Set the root and rewt passwords
 
-## 7. Set the root and rewt passwords
-
-The Pod has two accounts that can log in with full access, root and rewt. Set a password on each. You'll log in as root in step 10. Keep a record of the password: without it or an SSH key, the only way back in is the cable.
+The Pod has two accounts with full access, root and rewt. Set a password on
+each; you'll log in as root in step 10. Keep a record of the password: without
+it or an SSH key, the only way back in is the cable.
 
 ```bash
 passwd root
 passwd rewt
 ```
 
----
-
-## 8. Sync the file changes
+### 8. Sync the file changes
 
 This writes your changes to disk before the reboot.
 
@@ -224,158 +193,200 @@ This writes your changes to disk before the reboot.
 sync
 ```
 
----
+### 9. Reboot
 
-## 9. Reboot
-
-**Do not interrupt this boot.** Let it start normally.
+Do not interrupt this boot or press any keys in minicom until the login
+prompt appears.
 
 ```bash
 reboot -f
 ```
 
----
+### 10. Log in as root with the password you set
 
-## 10. Log in as root with the password you set
-
-The login prompt appears in minicom once the Pod finishes booting. On Pod 4 and Pod 5 it looks slightly different from this screenshot.
+On Pod 4 and Pod 5 the prompt looks slightly different from this screenshot.
 
 ![Login](docs/installation/3_login.png)
 
----
+### 11. Disable software updates
 
-## 11. Disable software updates
+Do this as soon as you're logged in, whichever way you got in. Until you do,
+the Pod can update its firmware on its own and lock you out.
 
-**Do this as soon as you're logged in, on every path.** Until you do, the Pod can update its firmware on its own and disconnect you.
-
-The first command stops the update and telemetry services and keeps them from starting at boot. The second masks them so nothing else can start them. Not every Pod has all of these services, so errors saying a unit isn't loaded or doesn't exist are expected.
+These commands stop Eight Sleep's update and telemetry services, keep them
+from starting at boot, and mask them so nothing else can start them. Not
+every Pod has all of these services, so errors saying a unit isn't loaded or
+doesn't exist are expected.
 
 ```bash
-# Disable the software updates
+# First save which of these are enabled, so they can be restored later
+[ -e /persistent/nightstand-stock/unit-states.txt ] || { mkdir -p /persistent/nightstand-stock && for unit in swupdate-progress swupdate defibrillator eight-kernel telegraf vector frankenfirmware dac swupdate.socket; do echo "$unit $(systemctl is-enabled $unit 2>/dev/null || echo unknown)"; done > /persistent/nightstand-stock/unit-states.txt; }
 systemctl disable --now swupdate-progress swupdate defibrillator eight-kernel telegraf vector frankenfirmware dac swupdate.socket
-
-# Block the software updates from starting again on restart or power-on
 systemctl mask swupdate-progress swupdate defibrillator eight-kernel telegraf vector frankenfirmware dac swupdate.socket
 ```
 
----
-
-## 12. Set up internet access
+### 12. Set up internet access
 
 This connects the Pod to your Wi-Fi. Pod 3 with an SD card: skip this step.
 
-Replace `WIFI_NAME` (it appears twice) and `PASSWORD` with your network's name and password. Use your regular network rather than a guest network. The Pod needs internet access for the next step; if you want to block it afterward, step 19 does that.
+Replace `WIFI_NAME` (it appears twice) and `PASSWORD` with your network's name
+and password. Use your regular network rather than a guest network. Upstream's
+guide says not to use one, alongside other ways of keeping the Pod off the
+internet, without giving a further reason. The Pod needs internet access for
+the next step; step 19 limits it afterward. The later steps also assume the
+Pod, your computer and your phone share a normal home network.
 
 ```bash
-# Replace WIFI_NAME and PASSWORD with your actual Wi-Fi credentials
-# (WIFI_NAME appears twice)
-#
-# Do not use a guest network or try anything fancy to keep the pod off the internet here.
-# If you want to block internet access to the pod, we do that with firewall rules later (step 19).
-
 nmcli connection add type wifi con-name WIFI_NAME ifname wlan0 ssid WIFI_NAME wifi-sec.key-mgmt wpa-psk wifi-sec.psk "PASSWORD" ipv4.method auto ipv6.method auto
-
-# Optional: this takes your pod out of the "waiting to be set up" state and lets you turn off the blinking blue LED.
-sed -i 's/uuid=.*/uuid=700a7a76-2105-4f46-b1b4-c9f3c791c440/' /persistent/system-connections/*.nmconnection
-
-# Reload the network manager
 nmcli connection reload
 ```
 
----
-
-## 13. Install the Nightstand server
-
-This downloads `main` (the newest published release, which may be beta),
-installs it, and sets up a systemd service
-so Nightstand starts on boot. When it finishes you should see `Installation
-complete!`. Just before that it prints your dac.sock path. If that path doesn't
-end in `dac.sock`, open an issue before going further.
+Optional: to stop the blinking blue "waiting to be set up" light, copy the
+Wi-Fi profiles, then change their ID and reload:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/LTimothy/nightstand/main/scripts/install.sh)"
+cp -a /persistent/system-connections /persistent/system-connections.stock
+sed -i 's/uuid=.*/uuid=700a7a76-2105-4f46-b1b4-c9f3c791c440/' /persistent/system-connections/*.nmconnection
+nmcli connection reload
 ```
 
-If the download fails with a certificate error, check the Pod's clock with
-`date`. A clock that is far off breaks HTTPS.
+### 13. Install the Nightstand server
 
----
-
-## 14. Get your pod's IP address
-
-Run the first command. The line after it is example output, not something to type; yours will show a different address. The Pod's IP address is the part before `/24`.
+Download the installer so you can read it first, then run it:
 
 ```bash
-# Yours will be different, that's fine
+curl -fsSL https://raw.githubusercontent.com/LTimothy/nightstand/main/scripts/install.sh -o /tmp/nightstand-install.sh
+bash /tmp/nightstand-install.sh
+```
+
+It prints your dac.sock path, then `Installation complete!`. If that path
+doesn't end in `dac.sock`, open an issue before going further, and read any
+warnings above that line. On a Pod 5, wait about another minute for the
+prompt to come back while it tries the watchdog (below).
+
+The installer downloads the newest Nightstand release, which may be a beta,
+checks it against its published checksum when one exists, installs it, and
+sets Nightstand to start on boot. Nightstand is also restarted if it stops
+answering for 3 minutes, except during an update, rollback or fork switch.
+The checksum catches a corrupted download.
+On a first install the check comes from the same download, so it can't catch
+a swapped one; updates are checked by the Nightstand already on the Pod.
+Neither catches a compromised GitHub account. It saves the
+release's channel as the Pod's update channel, which later updates and
+reinstalls follow; to follow stable releases, choose Stable in Settings >
+Software. Run over an existing install, it keeps that install as the
+rollback copy and puts it back if a step fails, the new server doesn't
+answer within 90 seconds, or the install is interrupted.
+Nightstand keeps free-sleep's folder and service names, so you'll see
+`free-sleep` in paths and commands.
+
+If something goes wrong:
+
+- A certificate error: check the Pod's clock with `date`. A clock that is far
+  off breaks HTTPS.
+- "older than this installer supports": run the command again with
+  `NIGHTSTAND_CHANNEL=beta` in front of it. That also changes the saved
+  channel to beta.
+
+On a Pod 5 the installer then sets the hardware watchdog to restart the Pod
+after about 30 seconds if its system freezes. It tries the setting for about
+a minute first. If the trial fails, the watchdog stays off and later updates
+don't try again. A failure the script can't catch restarts the Pod once.
+Other models are left as they are for now. Recovery from a real freeze
+hasn't been tested on a Pod.
+
+With the watchdog on, and where the Pod uses the stock MT7663 Wi-Fi driver
+(my Pod 5 does), a timer also checks the network every minute. If that
+driver has crashed this boot and the network has been down for 5 minutes, or
+the network has been down for 20 minutes with Wi-Fi scans failing throughout,
+it restarts the Pod: at most once in 6 hours and three times a day, never in
+the first 10 minutes after boot or during an install, update, rollback, reset
+or fork switch. Whether a restart brings Wi-Fi back isn't confirmed yet.
+
+To turn the watchdog off, run
+`bash /home/dac/free-sleep/scripts/setup_watchdog.sh --remove`. It stays off
+through updates and reinstalls until you run the same command without
+`--remove`. On some Pods it turns off only at the next restart.
+
+### 14. Get your Pod's IP address
+
+```bash
 nmcli -g ip4.address device show wlan0
+```
+
+It prints something like this. The Pod's IP address is the part before `/24`.
+
+```text
 192.168.1.50/24
 ```
 
----
+### 15. Open the Nightstand web app
 
-## 15. Open the Nightstand web app
+From a phone or computer on the same Wi-Fi network as the Pod, open the Pod's
+IP address on port 3000. With the example address above, that's
+`http://192.168.1.50:3000/`.
 
-From a phone or computer on the same Wi-Fi network as the Pod, open the Pod's IP address on port 3000. With the example address above, that's:
+The web app has no login: any device that can reach the Pod can control it,
+read its sleep data and change its software
+([details](README.md#what-to-expect)). Use a trusted local network, do not
+port-forward it to the public internet, and restrict access if you set up
+Tailscale.
 
-`http://192.168.1.50:3000/`
-
-Nightstand's API has no login: a device that can reach it can control the Pod
-and access its data. Use a trusted local network, do not port-forward it to
-the public internet, and restrict access if you enable Tailscale.
-
-**Set your time zone under Settings > Bed preferences before using schedules.** The page looks dimmed until the Pod is connected to the mattress cover. That is expected.
+Set your time zone under Settings > Bed and sides before using schedules. The
+app looks dimmed until the Pod is connected to the mattress cover. That is
+expected.
 
 ![Web App](docs/installation/4_web_app.png)
 
----
+### 16. Save the web app to your home screen
 
-## 16. Save the Nightstand web app to your home screen
+- iPhone and iPad: open the app in Safari, tap the share icon, then "Add to
+  Home Screen".
+- Android: open the app in Chrome, tap the three-dot menu, then "Add to Home
+  screen" (sometimes shown as "Install app").
 
-- Apple devices: open the site in Safari, tap the share icon in the bottom toolbar, then "Add to Home Screen". Rename it if you like and tap Add.
-- Android devices: open the site in Chrome (or your default browser), tap the three-dot menu in the top-right corner, then "Add to Home screen" (sometimes shown as "Install app"). Rename it if you like and tap Add.
-
----
-
-## 17. Validation
-
-There are two checks. Do the first one now. The second needs steps 18 and 19, so come back to it after those.
-
-### Verify the site is still up
+### 17. Check that Nightstand starts on boot
 
 1. Unplug the Pod's power and plug it back in.
-2. Wait up to about four minutes, then open the site from another device.
-3. If it loads, Nightstand is starting on boot as it should. It won't fully load until the Pod is connected to the mattress cover.
+2. Wait up to about four minutes, then open the app from another device.
+3. If it loads (dimmed until the cover is connected, as in step 15),
+   Nightstand starts on boot as it should. That shows only that the server
+   answered; heating and cooling are checked in
+   [Before you close the Pod](#before-you-close-the-pod).
+4. Log in again in minicom as in step 10 (Pod 3 with an SD card: over SSH).
 
-### Verify the controls work
+### 18. Add an SSH config
 
-1. Finish steps 18 and 19 first (SSH access, and the firewall rules).
-2. Disconnect the Tag-Connect cable and power from your Pod.
-3. Connect your Pod to the cover as you normally would.
-4. In the web app, set one side to the highest temperature and the other side to the lowest.
-5. Check that the temperature actually changes, by hand or with a thermometer.
-6. If it does not, open an issue with your Pod model, Nightstand version and what you observed. `fs-debug`, run on the Pod over SSH, can help. Check it before posting and remove personal or network details you do not want to share.
+This lets you reach the Pod over the network instead of the cable. The script:
 
-## 18. Add an SSH config
-
-This sets up SSH so you can reach the Pod without the cable. The script:
-
-- replaces the Pod's SSH server configuration, with SSH on port 8822 and password login for root still allowed;
-- deletes the existing authorized keys in `/etc/ssh/authorized_keys`;
-- asks you to paste one public key, the contents of a file such as `~/.ssh/id_ed25519.pub` on your computer.
-
-Afterward, connect with `ssh root@<POD_IP> -p 8822`.
-
-If you're running this over SSH rather than the cable (Pod 3 with an SD card), the port or key you used to get in may stop working. Keep your current session open until a new connection on port 8822 succeeds.
+- replaces the Pod's SSH server and client configuration, with SSH on port
+  8822 and password login for root still allowed;
+- deletes the existing keys in `/etc/ssh/authorized_keys`;
+- asks you to paste one public key, which it saves in
+  `/home/root/ssh/authorized_keys`. Paste the contents of the file ending in
+  `.pub` (such as `~/.ssh/id_ed25519.pub`), never the one without it.
 
 ```bash
 sh /home/dac/free-sleep/scripts/setup_ssh.sh
 ```
 
-## 19. Add firewall rules to block internet access (optional, but recommended)
+Afterward, connect with `ssh root@<POD_IP> -p 8822`. If you're running this
+over SSH rather than the cable (Pod 3 with an SD card), the port or key you
+used to get in may stop working, so keep your current session open until a
+new connection on port 8822 works.
 
-The firewall blocks most new internet connections while allowing local access,
-established connections and time sync. If Tailscale is running when the
-script runs, it also allows outbound UDP, DNS and HTTPS to any host.
+### 19. Add firewall rules to limit internet access
+
+Without these rules, Eight Sleep's firmware can reach the internet and upload
+its raw sensor recordings. With them, most internet access is blocked. Time
+sync still works, and name lookups go only to the resolvers your network had
+set when the script ran (it prints them; rerun it after moving the Pod to
+another network). HTTPS and UDP to any server stay open while Tailscale runs.
+
+Local access keeps working on a private network, which most home networks
+are: the Pod's address from step 14 should start with `10.`, `192.168.`, or
+`172.16.` through `172.31.`. If it doesn't, these rules can cut off the app
+and SSH, leaving the cable as the only way back in.
 
 Run this on the Pod:
 
@@ -389,35 +400,121 @@ To undo the rules:
 sh /home/dac/free-sleep/scripts/unblock_internet_access.sh
 ```
 
-Updates open internet access for downloads and reapply the block afterward,
-even if you skipped this step. Rerun the block script after changing Tailscale
-setup: start Tailscale first to keep remote access, or stop it first to remove
-those broad exceptions. DNS is allowed only to the resolvers listed in
-`/etc/resolv.conf` (and in `/run/systemd/resolve/resolv.conf` when it exists)
-at the time the script runs, unless Tailscale allows it broadly. The script
-prints the resolvers it allowed. Rerun it after moving to a network with
-different resolvers so time sync can resolve its servers. The rules stay in
-place until reapplied or changed.
-Keep the firmware update services disabled as described in step 11.
+Undoing them lasts until the next reboot, when the saved rules load again, or
+until the next update, rollback, fork switch or Biometrics install, which
+apply the rules again. Nightstand has no setting to keep them off.
 
----
+Updates open only HTTPS and name lookups while they download, then apply
+these rules even if you skipped this step. The Biometrics install lifts the
+rules only while it downloads. If you start or stop Tailscale
+later, run the block script again
+([details](docs/REMOTE_ACCESS.md#5-turn-the-firewall-back-on)). Masking the
+update services in step 11 stops firmware updates; the firewall is a second
+layer.
 
-## 20. (Optional) Remote access from outside your home network with Tailscale
+### 20. Remote access with Tailscale (optional)
 
-Follow [Remote access with Tailscale](docs/REMOTE_ACCESS.md) to install the
-daemon, configure HTTPS and restrict access. Start Tailscale before reapplying
-the firewall in step 19. Its broad UDP, DNS and HTTPS exceptions are selected
-when the script runs and remain until the rules are reapplied or changed.
+[Remote access with Tailscale](docs/REMOTE_ACCESS.md) covers installing
+Tailscale on the Pod, HTTPS, and limiting who can reach it. Start Tailscale
+before you rerun the step 19 script.
 
----
+## Before you close the Pod
+
+Pod 3 with an SD card: skip steps 2 and 3.
+
+1. From your computer, check that `ssh root@<POD_IP> -p 8822` works and the
+   web app loads. If either fails, fix it while the cable is still connected.
+2. Unplug the power, then disconnect the Tag-Connect cable.
+3. Put the case back together (Pod 4:
+   [putting it back together](docs/pod_4_teardown/instructions.md#putting-it-back-together)).
+4. Connect the Pod to the cover as you normally would, with nobody on the bed.
+5. In the web app, set one side to the highest temperature and the other to
+   the lowest.
+6. Check that the temperature actually changes, by hand or with a thermometer,
+   then turn both sides off.
+7. If it doesn't, open an issue with your Pod model, Nightstand version and
+   what you saw. Output of [`fs-debug`](#nightstand-shortcuts) can help.
+
+That's the install. Biometrics (sleep tracking) is off by default; the
+[README](README.md#biometrics) covers turning it on.
+
+## Going back to the Eight Sleep app
+
+These are upstream's steps for returning to the Eight Sleep app. I haven't
+tried them after a Nightstand install on any model. Going back to an earlier
+Nightstand release or to upstream free-sleep is covered in
+[Coming from free-sleep](docs/COMING_FROM_FREE_SLEEP.md#going-back).
+
+First copy any data you want to keep to your computer, for example with
+`scp -r -P 8822 root@<POD_IP>:/persistent/free-sleep-data ./pod-data`.
+I haven't run this exact command against a Pod.
+
+1. If the Pod is still on your Eight Sleep account, open the app, manage the
+   Pod and remove it from your account.
+2. Reset the firmware:
+   - [Pod 3](docs/pod_3_teardown/6_firmware_reset.jpeg)
+   - [Pod 4](docs/pod_4_teardown/3_reset_firmware.png)
+   - Pod 5: Eight Sleep's support page gives the same reset for Pod 2 through
+     Pod 5: hold the small button on the back of the hub while you plug it in,
+     release when the light blinks green, and wait for blue. I expect it to
+     work, but I haven't tried it after an install and haven't found anyone
+     who has. If the Pod stops booting, the serial cable is the only known
+     way back in. Do not try to go back by re-enabling the services step 11
+     turned off: that lets the Pod update its firmware, which can remove the
+     root access you set up, and I haven't tried it.
+     [What installation changes on the Pod](#what-installation-changes-on-the-pod)
+     lists each change and how to undo it.
+3. Set up the Pod as a new Pod in the app. It may then update its firmware on
+   its own. That is expected.
+
+## What installation changes on the Pod
+
+Nightstand never replaces Eight Sleep's programs. It changes these system
+settings, and since 3.6.0 it saves the originals the first time it changes
+them, in /persistent/nightstand-stock/. recorded.txt says whether each copy
+is the original or was taken after Nightstand had already changed it.
+
+| Change | Made by | Original saved as | How to undo |
+| --- | --- | --- | --- |
+| Eight Sleep's update and cloud services disabled and masked | step 11 | `unit-states.txt` | `systemctl unmask` and `systemctl enable` each unit listed as enabled there. Doing this lets the Pod update its firmware, which can remove root access. |
+| SSH server config, client config, keys and service replaced | step 18 (`setup_ssh.sh`) | `sshd_config`, `ssh_config`, `authorized_keys`, `sshd.service` | Copy the first three back to /etc/ssh/, copy `sshd.service` back to /etc/systemd/system/, run `systemctl daemon-reload` and restart sshd. Step 18 removed /etc/ssh/authorized_keys and put your key in /home/root/ssh/authorized_keys. Keep a working SSH session open while you do. |
+| Firewall rules replaced | step 19 (`block_internet_access.sh`) | `iptables.rules`, `ip6tables.rules`, `iptables.rules.file`, `ip6tables.rules.file` | `iptables-restore` and `ip6tables-restore` from the saved files, then save them to /etc/iptables/. |
+| Time sync servers changed | step 19 | `timesyncd.conf` | Copy it back to /etc/systemd/ and restart systemd-timesyncd. |
+| Wi-Fi profile UUIDs rewritten | step 12 | `/persistent/system-connections.stock/` (only if you made the copy in step 12) | Copy the files back to /persistent/system-connections/ and restart NetworkManager. |
+| Nightstand's services, timers, sudoers rules and memory limits added | step 13 | not needed | Remove /home/dac/free-sleep and the free-sleep units under /etc/systemd/system/, and /etc/sudoers.d/dac. |
+
+On Pod 5, undoing all of this has not been tried, and there is no checked
+firmware reset, so treat these steps as information, not a tested way back.
 
 ## Nightstand shortcuts
 
-Step 13 installs these. Run them on the Pod as root, over SSH or at the serial console.
+Step 13 installs these. Run them on the Pod as root, over SSH or at the serial
+console.
 
-- `fs-debug`: prints device/server status, resolver configuration and service logs. Check it before sharing and remove personal or network details you do not want public.
-- `fs-restart`: restarts the free-sleep and free-sleep-stream services.
-- `fs-reset-db`: deletes the biometrics database and recreates it empty (useful if the database file is corrupted). Asks for confirmation first.
-- `fs-reset`: permanently deletes Nightstand's settings, schedules and sleep data in `/persistent/free-sleep-data/`, then starts Nightstand again with empty settings. Backups in `/persistent/free-sleep-backups` and `/persistent/free-sleep-database-backups` are kept; delete them too to remove all sleep data. Asks for confirmation first.
-- `fs-update`: selects the newest release allowed by your saved channel preference and uses the same backup and rollback workflow as the app. Stable selects stable releases; beta includes both channels. To choose a channel or specific version, use Settings > Software.
-- `fs-dev-server`: stops the Nightstand service and runs the Express server directly with nodemon (for development).
+- `fs-debug`: prints device and server status, resolver configuration and
+  service logs. Check it before sharing and remove personal or network
+  details you don't want public.
+- `fs-restart`: stops and starts the free-sleep service, and starts the
+  free-sleep-stream service only if Biometrics is on in the app; otherwise it
+  leaves the stream stopped and disabled.
+- `fs-reset-db`: saves a copy of the biometrics database in
+  `/persistent/free-sleep-database-backups`, then deletes the database and
+  creates it empty. A damaged database is copied as it is. Asks for
+  confirmation first.
+- `fs-reset`: permanently deletes Nightstand's settings, schedules and sleep
+  data in `/persistent/free-sleep-data/`, then restarts Nightstand with empty
+  settings and Biometrics off, so the stream stays stopped. If Nightstand or
+  the stream won't stop, it deletes nothing. It keeps the backups in
+  `/persistent/free-sleep-backups` and `/persistent/free-sleep-database-backups`
+  and the firmware's own raw recordings in `/persistent`, which the archive
+  can pick up again; delete the backups too to remove all sleep data. Asks
+  for confirmation first.
+- `fs-update`: selects the newest release allowed by your saved channel and
+  uses the same backup and rollback steps as the app. Stable selects stable
+  releases; beta includes both channels. To choose a channel or a specific
+  version, use Settings > Software. If a side is on, an alarm is due within
+  15 minutes, or the bed's state can't be read, the app asks before going
+  ahead. If the app didn't need to ask, it checks again just before
+  Nightstand stops, and the update ends with nothing changed if the bed has
+  come into use since. `fs-update` itself doesn't check, so run it with both
+  sides off and no alarm due.

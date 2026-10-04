@@ -1,27 +1,31 @@
-# Server documentation
+# Server notes
 
-## Overview
-Notes for working on the Express server that runs on the Eight Sleep Pod: how
-to run it during development, how the code is organized, and the manual
-changes made on the Pod itself. For the request and response formats of the
-device commands, see [API.md](./API.md).
+Notes for working on the Express server that runs on the Pod: how to run it
+during development, how the code is organized, and the changes that are made
+on the Pod by hand. [API.md](./API.md) documents every route and the
+WebSocket. [AGENTS.md](../AGENTS.md) maps the scheduling and hardware code,
+and [ops/ANTIBRICK.md](../ops/ANTIBRICK.md) covers deploying and recovery.
 
 The server listens on port 3000. It serves the REST API under `/api/`, a
-WebSocket stream at `/ws/events`, and the built React app from `public/`.
+WebSocket at `/ws/events`, and the built React app from `public/`.
 
 ## Running the server
 
 ### Prerequisites
+
 - [Volta](https://volta.sh/), which installs the Node version pinned in
-  `package.json` (currently 24.11.0).
+  `package.json` (currently 24.11.0), or the version in the repository's
+  `.nvmrc`.
 
 ### On the Pod
+
 `scripts/install.sh` installs dependencies, applies database migrations, and
 creates the `free-sleep` systemd service, which runs `npm start` (see
 [INSTALLATION.md](../INSTALLATION.md)). `npm start` loads `.env.pod`, which
 points at `/persistent/free-sleep-data/`, so it only works on a Pod.
 
 ### On your computer
+
 Running locally is useful for work on routes, the database, and the job
 scheduler. With `ENV="local"` the server does not connect to the Pod's
 Franken socket, so anything that talks to the hardware will not work. For
@@ -57,17 +61,19 @@ work on the UI alone, the app's demo mode needs no server at all (see
    ```
 
 After changing `prisma/schema.prisma`, create a migration with
-`npm run migrate:local <migration_name>`.
+`npm run migrate:local <migration_name>`, then read the migration rules in
+[CONTRIBUTING.md](../CONTRIBUTING.md#release-cadence-and-promotion).
 
 Typecheck, lint, and test commands are in
-[CONTRIBUTING.md](../CONTRIBUTING.md).
+[CONTRIBUTING.md](../CONTRIBUTING.md#before-a-pull-request).
 
 ### Hot reloading on the Pod
 
 This is a development workflow on an idle test Pod. It has no automatic
-backup or rollback step, and schedules and alarms pause while the server is
+backup or rollback step, and schedules and alarms stop while the service is
 stopped. For committed development deployments use
-[ops/deploy.sh](../ops/ANTIBRICK.md); for published releases use the app updater.
+[ops/deploy.sh](../ops/ANTIBRICK.md); for published releases use the in-app
+updater.
 
 `npm run dev` runs the TypeScript source with nodemon and restarts on changes
 to `src/`. It reads `.env.pod`, so it runs on the Pod.
@@ -83,8 +89,8 @@ to `src/`. It reads `.env.pod`, so it runs on the Pod.
    ```
    Running it as `dac` matches the service and keeps files it writes under
    `/persistent/free-sleep-data/` owned by that user. The `fs-dev-server`
-   alias from `scripts/add_shortcuts.sh` runs the first two commands (see
-   [INSTALLATION.md](../INSTALLATION.md)).
+   shortcut, which `scripts/add_shortcuts.sh` installs, runs the first two
+   commands.
 2. Because nodemon watches `src/` on the Pod, edits have to land there. An
    editor that uploads on save does this, for example VS Code's
    [Remote - SSH](https://code.visualstudio.com/docs/remote/ssh) or a JetBrains
@@ -94,149 +100,163 @@ to `src/`. It reads `.env.pod`, so it runs on the Pod.
 3. To run the app with hot reload against the same Pod, see
    [app/README_APP.md](../app/README_APP.md#developing).
 
+While the dev server runs, the health check sees the `free-sleep` service
+stopped and leaves it alone.
+
+### Units a deploy does not install
+
+`ops/deploy.sh` and `scripts/deploy-dev.sh` copy code, not systemd units or
+sudoers rules. Install and update set those up, so a Pod that was installed
+or updated to a recent release already has them. When a change adds or
+changes one, or on a Pod that only ever received deploys, install them by
+hand once.
+
+The update, rollback and switch services, their sudoers rules, the
+Biometrics switch rule, and the health check and network watchdog timers
+come from one script, which is safe to run again. As root on the Pod, after
+the deploy:
+
+```bash
+bash /home/dac/free-sleep/scripts/setup_services.sh /home/dac/free-sleep
+```
+
+The RAW archive timer is installed separately:
+
+```bash
+# From your computer, in the repo root:
+scp -P 8822 scripts/archive-raw.sh root@<POD_IP>:/home/dac/free-sleep/scripts/
+scp -P 8822 scripts/systemd/free-sleep-archive-raw.{service,timer} root@<POD_IP>:/etc/systemd/system/
+ssh -p 8822 root@<POD_IP> 'chmod +x /home/dac/free-sleep/scripts/archive-raw.sh \
+  && systemctl daemon-reload \
+  && systemctl enable --now free-sleep-archive-raw.timer'
+```
+
+Check it with `systemctl status free-sleep-archive-raw.timer`, which should
+show `active (waiting)` with the next run less than a minute away. Undo it
+with `systemctl disable --now free-sleep-archive-raw.timer`; the archive
+itself is in `/persistent/free-sleep-data/raw-archive/`.
+[biometrics/DEVELOPER.md](../biometrics/DEVELOPER.md#where-the-data-comes-from)
+explains what the archive is for.
+
+A deploy never turns on the hardware watchdog. Install, update and the fork
+switch do, or `scripts/setup_watchdog.sh` run by hand
+([ops/ANTIBRICK.md](../ops/ANTIBRICK.md#health-check-and-watchdogs)).
+
 ---
 
 ## Architecture
 
 ### Entry point (`src/server.ts`)
+
 Registers middleware and routes, starts listening, attaches the WebSocket
 server, and connects to Franken (skipped when `ENV="local"`). On `SIGTERM` or
-`SIGINT` it stops scheduled jobs, flushes SQLite, and closes connections
-before exiting.
+`SIGINT` it sends any power-off that was waiting for an alarm, stops
+scheduled jobs, disconnects the database, and closes the WebSocket, HTTP and
+Franken connections before exiting.
 
 ### Routes
+
 Each route group lives in its own folder under `src/routes/` and is
-registered in `src/setup/routes.ts`.
-
-Device control:
-- **`/api/deviceStatus`:** Read (GET) and change (POST) the device state.
-- **`/api/settings`:** Timezone, per-side settings (name, away mode, tap
-  gestures), daily priming, temperature format, daily reboot, RAW archive
-  retention, update channel, and feature flags.
-- **`/api/schedules`:** Daily power, temperature, and alarm schedules.
-- **`/api/execute`:** Sends a raw Franken command (`SET_TEMP`, `PRIME`, and
-  others). See [API.md](./API.md).
-- **`/api/alarm`:** Starts the vibration alarm immediately.
-- **`/api/base-control`:** Compatible adjustable-base hardware: read the state,
-  set head and foot positions, run a preset (`/preset`), or stop (`/stop`).
-- **`/api/jobs`:** Runs jobs on demand: sleep analysis and sensor calibration
-  per side, update, and reboot.
-- **`/api/update`:** POST starts `free-sleep-update.service` (which runs
-  `scripts/update.sh`), after writing the requested version to
-  `/persistent/free-sleep-data/update-target.json` when one is given. Also
-  `/api/update/rollback-info`, `/api/update/rollback`, and
-  `/api/update/revert-to-stock`, which switches to upstream free-sleep, not Eight Sleep firmware.
-- **`/api/calibration`:** Each side's capacitive-sensor calibration profile,
-  the run that produced it, and the most recent run.
-- **`/api/changelog`:** `CHANGELOG.md` parsed into entries for the in-app
-  changelog. Parsed once per process.
-
-Biometrics and sleep data (all under `/api/metrics/`):
-- **`vitals`** and **`vitals/summary`:** Heart rate, HRV, and breathing rate,
-  as rows and as summary statistics.
-- **`movement`:** Movement records derived from piezo data.
-- **`sleep`:** Sleep records (`entered_bed_at`, `left_bed_at`,
-  `present_intervals`). GET, PUT to edit, and DELETE `sleep/:id`.
-- **`sleep-stages`:** Sleep stage (awake, REM, light, deep) per interval.
-- **`sleep-score`:** Score for one sleep period.
-- **`presence`:** Current presence per side. The biometrics service POSTs it
-  and the server keeps it in memory.
-
-Operations:
-- **`/api/serverStatus`:** Health of each server component and service
-  (Express, jobs, Franken socket, biometrics, database, and others).
-- **`/api/services`:** Read and change service state. Currently this is
-  biometrics on or off and the status of its jobs.
-- **`/api/logs`** and **`/api/logs/:filename`:** List log files, and stream one
-  over server-sent events.
-- **`/api/metrics/server`:** In-process metrics as JSON: Franken command
-  latency (p50 and p95), timeout count, queue depth, WebSocket client count,
-  job run counts, memory, and uptime. From a Pod shell:
-  `curl localhost:3000/api/metrics/server`.
-- **`/api/storage`:** Disk usage on `/persistent` (logs, RAW archive, SQLite).
-- **`/api/memory`:** RAM usage, from `/proc/meminfo` on the Pod and Node's `os`
-  module elsewhere.
+registered in `src/setup/routes.ts`. `src/setup/middleware.ts` holds the
+Origin filter, the JSON body checks and request logging, and
+`src/setup/errorHandlers.ts` turns errors into responses. The groups are
+device control (`deviceStatus`, `settings`, `schedules`, `rhythms`,
+`execute`, `alarm`, `baseControl`, `jobs`), sleep data (`metrics`), and
+operations (`serverStatus`, `services`, `logs`, `metricsServer`, `storage`,
+`memory`, `calibration`, `changelog`, `update`). [API.md](./API.md) has the
+request and response formats.
 
 ### WebSocket (`src/ws/`, path `/ws/events`)
-Messages are JSON of the form `{ channel, payload, ts }`. A new client first
-receives a `hello` message. The other channels:
-- `device-status`: the full device status whenever it changes. The app writes
-  it into React Query's cache without an HTTP request.
-- `service-health`: a partial server-status update when a check becomes
-  healthy or fails. The app refetches server status.
-- `job-event`: a scheduled job (alarm, temperature change, prime, and others)
-  started, succeeded, or failed. The app refetches device and server status.
 
-The server pings each client every 15 seconds and closes any client that did
-not answer the previous ping. The app reconnects with exponential backoff
-capped at 30 seconds, and while it is disconnected each React Query hook
-falls back to its own polling interval.
+`src/events/eventBus.ts` carries three channels, `device-status`,
+`service-health` and `job-event`, and the WebSocket server sends each event
+to every client. A new client first receives a `hello` message. The server
+pings each client every 15 seconds and closes any client that did not answer
+the previous ping. See [API.md](./API.md#websocket-wsevents).
 
 ### Franken socket (`src/8sleep/`)
-The server talks to the Pod's "Franken" process over a Unix socket, following
-the approach of the original Pod code in `/home/dac/app/`. The socket path
-differs between Pod models and firmware versions. `install.sh` detects it and
-writes it to `/persistent/free-sleep-data/dac_sock_path.txt`; without that
-file the server uses `/deviceinfo/dac.sock`.
+
+The server talks to the Pod's "Franken" process over a Unix socket, the
+`dac.sock` the original Pod software in `/home/dac/app/` uses. The server
+listens on the socket and the firmware connects to it. Its path differs
+between Pod models and firmware versions. `install.sh` detects it and writes
+it to `/persistent/free-sleep-data/dac_sock_path.txt`; without that file the
+server reads it from the firmware's `/opt/eight/bin/frank.sh`, and failing
+that uses `/deviceinfo/dac.sock`.
 
 Commands run one at a time through a queue. Each is limited to
 `FRANKEN_COMMAND_TIMEOUT_MS` (default 5000). On a timeout the caller receives
 an error and the connection is closed, so the next command opens a new one.
+A request waits up to 10 seconds for a missing connection; scheduled power
+and temperature changes wait until it returns.
 
-`FrankenMonitor` polls the device every 2 seconds whether or not a client is
-connected, because the same loop detects tap gestures. Adjustable-base
-actions triggered by those gestures require compatible base hardware.
+`FrankenMonitor` reads the device every 2 seconds whether or not a client is
+connected, because the same loop detects tap gestures and watches the water
+tank. Adjustable-base actions triggered by those gestures need compatible
+base hardware.
 
 ### Job scheduler (`src/jobs/`)
-Uses `node-schedule` for power, temperature, alarm, priming, reboot, and the
-daily analysis jobs. It watches the LowDB folder and rebuilds the jobs when
-schedules or settings change. Changes to `servicesDB.json` (job status and
-sensor readings) are ignored, since they never affect the schedule.
+
+Uses `node-schedule` for power, temperature, alarm, priming, reboot and the
+daily analysis jobs, and for Rhythms when they are on. It watches the LowDB
+folder and rebuilds the jobs when settings, schedules or `rhythmsDB.json`
+change; other files there, such as `servicesDB.json`, never affect the
+schedule. [AGENTS.md](../AGENTS.md#scheduling-code) describes both schedule
+engines.
 
 ### Storage (`src/db/`)
+
 - **LowDB**, JSON files in `/persistent/free-sleep-data/lowdb/`, for
   configuration:
-  - `schedulesDB.json`: daily schedules
+  - `schedulesDB.json`: the weekly schedule
   - `settingsDB.json`: settings
-  - `servicesDB.json`: service state and job status
+  - `servicesDB.json`: the Biometrics switch and job status
+  - `rhythmsDB.json`: Rhythms, once they have been turned on
 
-  Each is validated with `zod` and written with defaults on startup if missing.
+  The first three are validated with `zod` and written with defaults on
+  startup if missing.
+- **Files in the data folder**: `alarm-ledger.json` (alarms that were due,
+  for missed-alarm reports) and `rhythms-history.jsonl` (one line per
+  finished Smart Schedule sleep, kept 90 days).
 - **SQLite through Prisma**, at `/persistent/free-sleep-data/free-sleep.db`,
-  for biometric data and calibration. Tables: `vitals`, `movement`,
-  `sleep_records`, `calibration_profiles`, `calibration_runs`, and
-  `water_level_events` (see `prisma/schema.prisma`).
-  - The server does not apply migrations. `scripts/install.sh` applies them on
-    install, and `scripts/update.sh` runs `prisma migrate deploy` during an
-    update when any are pending (with retries; skipped on a downgrade).
+  for sensor data and calibration. Tables: `vitals`, `movement`,
+  `sleep_records`, `calibration_profiles`, `calibration_runs`,
+  `analysis_runs` and `water_level_events` (see `prisma/schema.prisma`).
+  - The server does not apply migrations. `scripts/install.sh` applies them
+    on install, and `scripts/update.sh` runs `prisma migrate deploy` during
+    an update when any are pending (with retries; skipped on a downgrade).
     `/api/serverStatus` lists migrations that have not been applied.
-  - Read helpers: `loadMovementRecords.ts` and `loadSleepRecords.ts`. The vitals
-    route queries Prisma directly.
+  - Read helpers: `loadSleepRecords.ts` and `movement.ts`. The vitals route
+    queries Prisma directly.
 
 ---
 
 ## File structure
+
 ```text
 server/
-├── API.md                  # Franken command reference for /api/execute
+├── API.md                  # Route and WebSocket reference
 ├── free-sleep-data/        # Git-ignored local DATA_FOLDER (mirrors /persistent/free-sleep-data/)
 ├── prisma/
 │   ├── schema.prisma       # SQLite schema
+│   ├── shipped-migrations.json  # Checksums of released migrations
 │   └── migrations/         # Applied by scripts/install.sh and scripts/update.sh
 ├── public/                 # Built React app, served as static files (output of the app build)
 ├── dist/                   # Compiled server (tsc); committed, run by npm start
 ├── src/
-│   ├── 8sleep/             # Franken socket client, command queue, monitor, base control
-│   ├── agent/              # File list for the maintainer's stock-to-Nightstand tooling (not used at runtime)
+│   ├── 8sleep/             # Franken socket, command queue, monitor, base control, water tank
+│   ├── agent/              # File list for the updater overlay for stock installs (not used at runtime)
 │   ├── db/                 # LowDB stores, Prisma client, schemas, read helpers
 │   ├── events/             # In-process event bus
-│   ├── features/           # Feature manifest (tooling, not runtime)
-│   ├── jobs/               # Scheduled jobs and job events
+│   ├── features/           # Feature manifest, and the New sleep tracking switch
+│   ├── jobs/               # Scheduled jobs, Rhythms, alarm record, update and reboot starters
 │   ├── metrics/            # In-process metrics
 │   ├── routes/             # One folder per route group
-│   ├── setup/              # Middleware (CORS, request logging) and route registration
+│   ├── setup/              # Middleware, error handlers and route registration
 │   ├── ws/                 # WebSocket server
 │   ├── config.ts           # Reads DATA_FOLDER and ENV, finds dac.sock
 │   ├── logger.ts           # Winston logger
+│   ├── serverInfo.json     # Version, branch and upstream base
 │   ├── serverStatus.ts     # Health state reported by /api/serverStatus
 │   └── server.ts           # Entry point
 ├── .env.pod                # Pod environment (used by npm start and npm run dev)
@@ -245,22 +265,22 @@ server/
 └── tsconfig.json
 ```
 
+Tests sit next to the code they cover as `*.test.ts`. The tests for the shell
+scripts are at the top of `src/`.
+
 ---
 
-## Pod-side runtime configuration
+## Changes made on the Pod
 
-The resource figures and firmware behavior below were observed on the
-maintainer's Pod 5. They are not model-independent measurements.
+The first three changes concern the Pod's own system, outside this repo, and are done by
+hand to save memory, CPU and disk. The figures were measured on one Pod 5
+and are not the same on every model or firmware. Each can be undone. The last
+two are in the repo.
 
-Items 1 to 3 concern services on the Pod itself, outside this repo, and were
-done by hand to save RAM, CPU, and disk. Replay items 1 and 3 on a re-imaged
-or new Pod if you want them; each can be undone. Items 4 to 6 are in the
-repo; item 6 needs a manual step in one case, described there.
+### 1. Cap journald at 100 MB (frees about 700 MB on `/persistent`)
 
-### 1. Cap journald at 100 MB (recovers ~700 MB on `/persistent`)
-
-`/var/log/journal` is symlinked to `/persistent/journal`, so unbounded systemd
-logs use space on the persistent partition.
+`/var/log/journal` is a link to `/persistent/journal`, so systemd's logs use
+space on the persistent partition with no limit.
 
 ```bash
 # On the Pod (as root):
@@ -272,21 +292,19 @@ journalctl --vacuum-size=100M
 The `sed` command only changes an uncommented `SystemMaxUse=` line. Confirm
 the change with `grep '^SystemMaxUse' /etc/systemd/journald.conf`.
 
-Reverse: `cp /etc/systemd/journald.conf.bak /etc/systemd/journald.conf && systemctl restart systemd-journald`.
+Undo: `cp /etc/systemd/journald.conf.bak /etc/systemd/journald.conf && systemctl restart systemd-journald`.
 
 ### 2. Leave `Eight.Capybara` running (it makes the quad-tap buzz)
 
-Capybara is Eight Sleep's cloud-telemetry agent. It uses about 180 MB of RAM
-and 11% CPU, and this server does not use its `capybara-dac` socket, so it
-looks safe to disable. It is not: Capybara makes the confirmation buzz for
-the quad-tap gesture. The firmware buzzes on its own for double and triple
-taps, but disabling Capybara removes the quad-tap buzz without any error. If
-it has been disabled, turn it back on with `systemctl enable --now capybara`.
+Capybara is Eight Sleep's cloud-telemetry agent. It uses about 180 MB of
+memory and 11% CPU, and this server does not use its `capybara-dac` socket,
+so it looks safe to turn off. It is not: Capybara makes the confirmation buzz
+for the quad-tap gesture. The firmware buzzes on its own for double and
+triple taps, but with Capybara off the quad tap gives no buzz and no error.
+If it has been turned off, turn it back on with
+`systemctl enable --now capybara`.
 
-If this server makes the quad-tap buzz itself in the future, Capybara could
-then be disabled.
-
-### 3. Pin the resolved node binary in `free-sleep.service` (frees ~30 MB RAM)
+### 3. Run node directly in `free-sleep.service` (frees about 30 MB)
 
 The unit written by `install.sh` starts the server with `npm run start`,
 which leaves the npm and dotenv-cli wrapper processes running above the node
@@ -307,15 +325,15 @@ systemctl daemon-reload
 systemctl restart free-sleep
 ```
 
-Verify with `pstree -p $(systemctl show -p MainPID --value free-sleep)`. It
+Check with `pstree -p $(systemctl show -p MainPID --value free-sleep)`. It
 should show a single node process.
 
-Reverse: `cp ${SVC}.bak ${SVC} && systemctl daemon-reload && systemctl restart free-sleep`.
+Undo: `cp ${SVC}.bak ${SVC} && systemctl daemon-reload && systemctl restart free-sleep`.
 
 The pinned path includes the node version. If the version pinned in
 `package.json` changes, run the snippet again to pick up the new binary.
 Running `scripts/install.sh` again rewrites the unit with `npm run start`,
-which removes the pin.
+which removes the change.
 
 ### 4. Quieter access logging (in the repo)
 
@@ -333,61 +351,18 @@ restart the service. The next update replaces that file.
 `[presence-debug]` once a minute per side. `PRESENCE_DEBUG_LOG_INTERVAL_S`
 changes the interval.
 
-### 6. RAW file archive (keeps overnight piezo data for the daily analysis)
-
-The Pod firmware writes a RAW piezo file of about 6.7 MB roughly every 15
-minutes into `/persistent/` and keeps about 75 minutes of them. After trying
-to upload each file to `raw-api-upload.8slp.net:1337` (which times out,
-because `block_internet_access.sh` blocks outbound TCP/1337), it deletes
-anything older than that window. Without an archive, by midday the previous
-night's files are gone, and the daily `analyze_sleep` job finds nothing for
-anyone who got up more than about an hour before it ran.
-
-[`scripts/archive-raw.sh`](../scripts/archive-raw.sh) runs every minute from a
-systemd timer and hardlinks new RAW files into
-`/persistent/free-sleep-data/raw-archive/`. A hardlink shares the file's data,
-so the archive keeps the data after the firmware deletes its copy, and until
-then the file takes space only once. Files are kept for 14 days by default
-(about 5.5 GB). Settings offers 2 days to 2 months. If the data partition
-drops below 2 GB free, the oldest archived files are removed first. The
-biometrics loader [`load_raw_files.py`](../biometrics/load_raw_files.py) reads
-both `/persistent/` and the archive (deduplicated by filename), so the
-analysis sees the previous 12 hours whenever it runs.
-
-`scripts/install.sh` and `scripts/update.sh` install and enable the timer
-(safe to repeat), so a fresh install or an in-app or `fs-update` update needs
-no extra step. `ops/deploy.sh` and `scripts/deploy-dev.sh` copy code but not
-systemd units, so the first time you use either on a Pod, install the timer
-by hand:
-
-```bash
-# From your computer, in the repo root:
-scp -P 8822 scripts/archive-raw.sh root@<pod>:/home/dac/free-sleep/scripts/
-scp -P 8822 scripts/systemd/free-sleep-archive-raw.{service,timer} root@<pod>:/etc/systemd/system/
-ssh -p 8822 root@<pod> 'chmod +x /home/dac/free-sleep/scripts/archive-raw.sh \
-  && systemctl daemon-reload \
-  && systemctl enable --now free-sleep-archive-raw.timer'
-```
-
-Verify with `systemctl status free-sleep-archive-raw.timer` (it should show
-`active (waiting)` with the next trigger under 60 seconds away) and
-`ls /persistent/free-sleep-data/raw-archive/ | wc -l` (the count should grow by
-about 4 an hour).
-
-Reverse: `systemctl disable --now free-sleep-archive-raw.timer && rm -rf /persistent/free-sleep-data/raw-archive/`.
-
 ### Checking the results
 
 ```bash
-# Available RAM:
-ssh -p 8822 root@<pod> 'free -h | head -2'
+# Available memory:
+ssh -p 8822 root@<POD_IP> 'free -h | head -2'
 
 # /persistent usage (journald capped at 100 MB; the RAW archive also lives here):
-ssh -p 8822 root@<pod> 'df -h /persistent | tail -1'
+ssh -p 8822 root@<POD_IP> 'df -h /persistent | tail -1'
 
-# Capybara should still be active (see item 2):
-ssh -p 8822 root@<pod> 'systemctl status capybara || true'
+# Capybara should still be active (see change 2):
+ssh -p 8822 root@<POD_IP> 'systemctl status capybara || true'
 
 # Single-process node:
-ssh -p 8822 root@<pod> 'pstree -p $(systemctl show -p MainPID --value free-sleep)'
+ssh -p 8822 root@<POD_IP> 'pstree -p $(systemctl show -p MainPID --value free-sleep)'
 ```

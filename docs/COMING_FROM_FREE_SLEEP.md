@@ -1,213 +1,210 @@
 # Coming from free-sleep
 
-Nightstand is a fork of [jmew/free-sleep](https://github.com/jmew/free-sleep),
-which builds on the original
-[throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
-If your Pod already runs one of those, or another fork of free-sleep, a
-migration tool can switch it to Nightstand without reinstalling from scratch.
-This page covers what changes, what the tool does, and how to go back.
+If your Pod runs upstream [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep),
+[jmew/free-sleep](https://github.com/jmew/free-sleep) (which Nightstand is
+forked from) or another free-sleep fork, a migration tool can switch it to
+Nightstand without reinstalling from scratch, and keeps a copy of what it
+replaces.
+
+The switch replaces application files and changes services and firewall
+rules. Before swapping code it arms a timer that tries to restore your
+original application if the install hasn't finished within 12 minutes. If
+that fails too, recovery needs SSH. The migration tool doesn't check a
+release checksum. Its backup, automatic restore
+and failure checks have been tested against simulated failures, not on a
+real Pod, so read the
+[recovery notes](../README.md#what-happens-if-an-install-fails) first. I
+haven't run this version of the tool on a Pod yet; so far it has only been
+tested against simulated runs.
 
 ## What stays the same
 
-Nightstand keeps free-sleep's on-disk layout to ease migration:
+Nightstand keeps free-sleep's on-disk layout:
 
 - The install lives at `/home/dac/free-sleep`.
 - The services are `free-sleep.service` and `free-sleep-stream.service`.
 - Your data stays under `/persistent/free-sleep-data/`: the SQLite database,
   the lowdb JSON files that hold settings and schedules, and the logs.
 
-The migration checks settings and schedule formats and tries the target
-migrations against a database copy before installation. If that check finds
-incompatible migration histories, the tool stops before swapping application
-code. It keeps the existing data.
-Compare the two forks' migrations and resolve compatibility before retrying;
-do not reset the database.
-
 ## What changes
 
-- **Hardware.** I maintain Nightstand on my own Pod 5. On a Pod 3 or Pod 4,
-  temperature control and scheduling are expected to work, but those models
-  write sensor data in a different format and sleep tracking has not been
-  tested there. The tool asks you to acknowledge this before it continues.
-- **Internet access.** Nightstand sends no error reports or analytics. The app
-  checks for versions from your browser. Migration applies the
-  [firewall rules](../INSTALLATION.md#19-add-firewall-rules-to-block-internet-access-optional-but-recommended),
-  blocking most new internet connections while allowing local access,
-  established connections and time synchronization. If Tailscale is running
-  when the script applies them, outbound UDP, DNS and HTTPS to any host are
-  also allowed. These exceptions remain until the firewall is reapplied or
-  changed, even if Tailscale stops. Rerun the script after changing Tailscale
-  setup. The updater temporarily opens access for downloads.
-- **Updates.** Versions start at 3.0.0. Settings > Software offers beta and
-  stable channels, a version picker, and application rollback. Failed updates
-  attempt to restore the previous application tree. This does not restore
-  an earlier database or the Eight Sleep firmware.
-- **Known limits.** The numbers behind presence detection and the sleep
-  features are listed in [CALIBRATION.md](CALIBRATION.md), and the
-  [changelog](../CHANGELOG.md) notes what is still known to be imperfect.
+I test Nightstand on my own Pod 5. On a Pod 3 or Pod 4, temperature control
+and scheduling are expected to work, but those models write sensor data in a
+different format and sleep tracking hasn't been tested there. The tool asks
+you to acknowledge this, but it doesn't test compatibility.
+
+The switch applies the
+[firewall rules](../INSTALLATION.md#19-add-firewall-rules-to-limit-internet-access),
+which block most internet access (updates open what they need while they
+download). Nightstand sends no error reports or analytics.
+
+Settings > Software has Stable and Beta channels, a version picker and a way
+back to the previous install. If your settings have no update channel yet,
+the switch saves the installed release's channel. A failed update tries to
+restore the previous application, not an earlier database or Eight Sleep's
+firmware.
+
+On a Pod 5, the switch and later updates turn on the hardware watchdog and
+the network watchdog once they succeed, with the limits
+[installation step 13](../INSTALLATION.md#13-install-the-nightstand-server)
+describes. Other models are left as they are for now.
+
+The switch keeps your four-tap alarm action. The app has no tap editor; to
+change it, see `taps` under [`/api/settings`](../server/API.md#apisettings).
 
 ## Before you start
 
 You need:
 
-- A Mac or Linux computer with `curl`, `ssh`, `scp`, `tar`, and `python3`.
-- The Pod's root password and SSH access on port 8822 or 22 (every fork's
-  install sets this up).
-- A current install that is running normally. The tool stops if
-  `free-sleep.service` is not active.
-- More than 2 GB free on the Pod's `/` and `/persistent` partitions, and on
-  your computer for the backup copy.
-- Outbound HTTPS from the Pod for the release and its dependencies. SSH
-  access alone is not enough.
+- A Mac or Linux computer with `curl`, `ssh`, `scp`, `tar` and `python3`, and
+  more than 2 GB free on it for the backup copy.
+- The Pod's root password, or an SSH key, for SSH on port 8822 or 22.
+- A current install that is running normally, with its web app reachable from
+  your computer. The tool stops if `free-sleep.service` isn't active.
+- Enough free space on the Pod. The tool checks what it needs on `/` and
+  `/persistent` and stops before changing anything if there isn't enough.
+- Outbound HTTPS from the Pod, for the release and its dependencies. If you
+  blocked internet access on your current install, unblock it first (upstream,
+  jmew's fork and the other forks I know of all have
+  `sh /home/dac/free-sleep/scripts/unblock_internet_access.sh`). The switch
+  turns the block back on.
 
-## Running it
+Switch while the bed is empty and no alarm is due. The server stops during
+the swap, so schedules and alarms pause until it's back. If either side is
+on, the tool asks for a typed confirmation before going ahead.
 
-The full steps are in
-[Switching from another free-sleep fork](../INSTALLATION.md#switching-from-another-free-sleep-fork).
-On your computer, download all three scripts into the same folder. The main
-script copies the two helpers to the Pod:
+## Switching
 
-```bash
-for f in switch-to-this-fork.sh pod-installer.sh restore-original-fork.sh; do
-  curl -fO "https://raw.githubusercontent.com/LTimothy/nightstand/main/scripts/migrate/$f"
-done
-chmod +x switch-to-this-fork.sh
-./switch-to-this-fork.sh --dry-run
-```
+1. Download the tool and the two helper files it copies to the Pod into one
+   folder, so you can read them before running them:
+   ```bash
+   for f in switch-to-this-fork.sh pod-installer.sh restore-original-fork.sh; do
+     curl -fO "https://raw.githubusercontent.com/LTimothy/nightstand/main/scripts/migrate/$f"
+   done
+   chmod +x switch-to-this-fork.sh
+   ```
+2. Run it with `--dry-run`. It reports what it found and would do, without
+   changing anything:
+   ```bash
+   ./switch-to-this-fork.sh --dry-run
+   ```
+   It looks for the Pod at `eight-pod.local`, offers to scan your network, or
+   takes the address with `--ip <address>`. It asks for the root password;
+   leave it blank if you log in with a key. The dry run skips the download
+   and the database checks; the real run does them on the Pod before anything
+   is swapped.
+3. If the report looks right, run it again without `--dry-run`. It asks you
+   to type `switch` before it changes anything. Keep the backup it saves in the
+   folder you run it from for a few nights.
 
-If the report looks right, run `./switch-to-this-fork.sh` without
-`--dry-run`. It finds the Pod at `eight-pod.local` or offers to scan your
-network for it; pass `--ip <addr>` to skip that. `--help` lists the other
-options.
+Keep your computer awake and the terminal open until the tool prints its
+result. Once the backup is on your computer, the install carries on in the
+background on the Pod even if you disconnect.
+
+You don't need the numbered installation steps, except
+[step 20](../INSTALLATION.md#20-remote-access-with-tailscale-optional) if you
+want remote access.
 
 ## What the tool does
 
 `switch-to-this-fork.sh` runs on your computer and works over SSH. In order,
 it:
 
-1. Checks the Pod read-only and prints a report of what it found and what it
-   would do. With `--dry-run` it stops here.
-2. Waits for you to type `switch`. It then offers clock correction if needed;
-   dry-run mode skips both prompts.
-3. Backs up application code and installed server dependencies, the SQLite
-   database and LowDB settings/schedules to `/persistent/free-sleep-backups/`
-   on the Pod. It copies the archive to the folder you ran the tool from and
-   checks both archives. A separate SQLite snapshot is kept in
-   `/persistent/free-sleep-database-backups/`, outside code-backup rotation.
-   Logs and RAW sensor archives are not included.
-4. Downloads the newest Nightstand release on the Pod and checks your
-   current settings and schedules against Nightstand's formats. It stops if
-   anything can't carry over, before your install is touched.
-5. Swaps the new install in, keeps your old one at
-   `/home/dac/free-sleep-prev`, checks HTTP/device status and the expected
-   version, and applies the firewall rules described above. Check your usual
-   controls afterward.
-
-The work on the Pod runs in the background, so closing your computer partway
-through doesn't interrupt it.
-
-## What it risks
-
-Migration replaces application files and adjusts services and firewall rules.
-Before swapping code, the tool arms a timer that attempts to restore the
-original application if installation has not completed within 12 minutes.
-Read the [recovery notes](../README.md#what-happens-if-an-install-fails)
-before starting.
-
-If either side of the bed is on, the tool asks you to type a confirmation
-before going ahead.
-
-Switching in keeps upstream's four-tap alarm action (`quadTap: alarm`). To change
-it, send the desired per-side tap configuration to `POST /api/settings`
-(`left.taps.quadTap` or `right.taps.quadTap`); there is no tap editor in the app.
-Send the whole tap object, including its `type` and all fields for that action.
-For example, this makes four taps on the left dismiss an alarm and do nothing
-when no alarm is active:
-
-```json
-{
-  "left": {
-    "taps": {
-      "quadTap": {
-        "type": "alarm",
-        "behavior": "dismiss",
-        "snoozeDuration": 300,
-        "inactiveAlarmBehavior": "none"
-      }
-    }
-  }
-}
-```
+1. Checks the Pod and prints its report without changing anything. With
+   `--dry-run` it stops here.
+2. Asks you to type `switch`, then offers to set the Pod's clock if it's off.
+3. Backs up the application code and installed server dependencies, the
+   SQLite database and the lowdb settings and schedules to
+   `/persistent/free-sleep-backups/` on the Pod, copies the archive to the
+   folder you ran the tool from, and checks both (the database copy passes
+   SQLite's integrity check, both archives read back, their sizes match). A
+   separate SQLite snapshot goes in `/persistent/free-sleep-database-backups/`.
+   Logs and raw sensor archives aren't backed up.
+4. Downloads the newest Nightstand release on the Pod, which may be a beta,
+   checks your settings and schedules against Nightstand's formats, and tries
+   Nightstand's database migrations on a copy of your database. If anything
+   can't carry over, it stops with your install and data untouched. Don't
+   reset the database to get past this; open an issue with the tool's output
+   instead.
+5. Stops your old server and its stream (if either won't stop, it stops with
+   them untouched), swaps the new install in, keeps your old one at
+   `/home/dac/free-sleep-prev`, checks that the server answers with the
+   expected version, and applies the firewall rules. That check covers
+   startup, not heating or cooling, so try your usual controls afterward.
 
 ## Going back
 
-- **To your previous install:** Settings > Software has a Roll back
-  action. Right after migrating, it rolls back to your old install. Installing
-  any other Nightstand version replaces that slot, so use the laptop backup
-  after that. Pods migrated with the 3.3.1 tool need a successful Nightstand
-  update first to install missing permissions and service units.
-- **From the backup on your computer:** this works even if the web app is
-  down, as long as SSH works.
-  ```bash
-  ./switch-to-this-fork.sh --restore <backup-tarball> --ip <POD_IP>
-  ```
-  Restore checks the archive before stopping the app and keeps the replaced
-  tree at the path it prints. It restores code, not database rows or settings.
-  See [manual data recovery](../ops/ANTIBRICK.md#restore-a-database-snapshot).
-  Archives from older tools that omitted
-  `server/node_modules` are refused; use Roll back if the previous install
-  is still available.
-- **Switch to upstream free-sleep:** the action in Settings > Software
-  replaces the application with the current throwaway31265/free-sleep. It installs
-  the original project, not jmew's or another fork. There's no button to come
-  back afterward; run the migration tool again. Read the limits below first.
-- **Restore Eight Sleep software:** reset the firmware as described in
-  [INSTALLATION.md](../INSTALLATION.md#how-to-revert-changes-and-go-back-to-using-your-eight-sleep-through-their-app).
-  This is separate from application rollback.
+To your previous install: in Settings > Software > Recovery, use "Go back to
+v{version}" under Previous installation. Right after switching, that is your
+old install. Installing any other Nightstand version replaces it, and from
+then on you need the backup on your computer. Rolling back doesn't roll back
+the database. Pods switched with a tool older than 3.4.0 need one successful
+Nightstand update first, to add permissions and services that tool missed.
+
+From the backup on your computer, even with the web app down, as long as SSH
+works:
+
+```bash
+./switch-to-this-fork.sh --restore <backup-tarball> --ip <POD_IP>
+```
+
+It checks the archive before stopping the app and keeps the replaced install
+at the path it prints. Archives without `server/node_modules` are refused. It
+restores code, not database rows or settings; for those, see
+[manual data recovery](../ops/ANTIBRICK.md#restore-a-database-snapshot).
+
+To an older Nightstand version: this restores that version's firewall and
+features. Going from 3.3.x to 3.2.x can cut raw recording retention to 36
+hours.
+
+To upstream free-sleep: Settings > Software has "Switch to upstream
+free-sleep". It installs the original throwaway31265/free-sleep, not jmew's or
+another fork. Until a tested upstream version is recorded, it installs
+upstream free-sleep's newest code, which I haven't tested this switch with. To come back, run the migration tool again (there's no button). Read
+[Switching to upstream](#switching-to-upstream) first.
+
+To Eight Sleep's software: see
+[Going back to the Eight Sleep app](../INSTALLATION.md#going-back-to-the-eight-sleep-app).
+On a Pod 5 there is no tested way back.
 
 ### Switching to upstream
 
 Before the switch, code and JSON settings are backed up under
-`/persistent/free-sleep-backups/<timestamp>_v<version>_prerevert-to-stock/`.
-SQLite snapshots are kept separately under
-`/persistent/free-sleep-database-backups/`. The switch keeps the first enabled
-alarm per day, caps its duration at 180 seconds, changes level display to
-Fahrenheit, and maps base-control taps to alarm dismissal with no action when
-there is no alarm. Extra and one-time alarms do not run upstream; the backup
+`/persistent/free-sleep-backups/<timestamp>_v<version>_prerevert-to-stock/`,
+and SQLite snapshots under `/persistent/free-sleep-database-backups/`.
+Upstream runs one alarm per day, so the switch keeps the first enabled alarm
+per day, caps its duration at 180 seconds, shows level temperatures in
+Fahrenheit, and maps base-control taps to alarm dismissal (with no action when
+there is no alarm). Extra and one-time alarms don't run upstream; the backup
 keeps the original settings.
 
-The archive timer is disabled. `raw-archive/` stays in place, and the switch
-log prints its size; you can remove it if you no longer need those recordings.
-Switching does not uninstall every Nightstand change. Shared services,
-sudoers rules, firewall rules, Python and Node dependencies, backups, and
-archived data remain. Nightstand's archive, rollback, revert and health check
-units, its service memory-limit and restart drop-ins, and its hardware
-watchdog setting are removed.
+Nightstand's own services, including the network watchdog, and its hardware
+watchdog setting are removed (on some Pods the watchdog turns off at the next
+restart). Backups and `raw-archive/` stay; the switch log prints the
+archive's size so you can delete it if you no longer need it.
 
 Upstream's first update can print a "reset, all data will be lost" message
-because its migration history differs. Do not follow that reset prompt.
-The data can remain intact; inspect migration status and use the
+because its migration history differs. Do not follow that reset prompt. Your
+data can still be intact; check the migration status and use the
 [recovery steps](../ops/ANTIBRICK.md#failed-database-migrations) instead.
-Upstream and jmew installers also remove SQLite WAL files; keep a verified
-snapshot before using their reinstall or reset paths.
+jmew's installer removes SQLite WAL files (recent changes not yet written into
+the main database file), and both forks' database reset deletes them along
+with the database. Upstream's installer and updater now save a copy of the
+database and write those changes into it first, as of October 2026. Either
+way, copy the switch's snapshot from
+`/persistent/free-sleep-database-backups/` to your computer before using
+their reinstall or reset paths
+([restoring one](../ops/ANTIBRICK.md#restore-a-database-snapshot)).
 
-Remote app access through Tailscale ends at upstream's first update because
-its installer replaces the service configuration. Keep local access available.
-Downgrading within Nightstand restores the target's older firewall and feature
-behavior. In particular, 3.3.x to 3.2.x can reduce RAW retention to 36 hours;
-the current downgrade path protects retention, but those older updaters do not.
-
-On a Pod 5, installs and updates turn on the hardware watchdog once they
-have succeeded; other models keep it off for now. It was checked by hand on
-one Pod 5, and the automatic setup is checked on hardware before release.
-Switching to upstream removes that setting. A Pod 5 firmware reset still has
-no verified procedure here.
+Make sure you can still reach the Pod locally before switching. Upstream's
+installer, which its updater also runs, rewrites the server's service file,
+and that drops the Tailscale origin setting from
+[remote access](REMOTE_ACCESS.md#4-allow-the-tailscale-address-in-nightstand).
 
 ## Reporting problems
 
 [Open an issue](https://github.com/LTimothy/nightstand/issues) with your Pod
-model, Nightstand version, expected and actual behavior, and reproduction
-steps. For installation or service problems, include relevant `fs-debug`
-output. Check the report before posting it publicly and remove personal or
-network details you do not want to share. If the problem also exists in the
-original project, consider reporting it there too.
+model, Nightstand version, what you expected, what happened and how to
+reproduce it. For install or service problems, include the relevant `fs-debug`
+output after removing personal or network details you don't want public. If
+upstream free-sleep has the problem too, consider reporting it there as well.

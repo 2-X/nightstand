@@ -1,27 +1,44 @@
 # Pod 4 teardown
 
-For tearing pod 4 down: just remove the 4 screws under the rubber feet on the bottom.
+> These steps come from upstream free-sleep, written by @nota-nota-nota. I
+> don't have a Pod 4, so I haven't tried them with Nightstand. For help with
+> them, please ask in
+> [upstream free-sleep](https://github.com/throwaway31265/free-sleep).
 
-I believe they are T10 torx bits, but I don't recall for certain. If you have an assorted kit of torx bits you should be good.
+This covers the outer panels only; the serial wiring and firmware reset are
+in [INSTALLATION.md](../../INSTALLATION.md). You'll need a Torx bit and a
+towel or something soft to work on. The original author thought the bit was
+T10 but wasn't sure, so check the fit before turning a screw.
 
-Put your left and right hands on the left and right panels and lift upwards to lift the hub off the base panel (bottom panel). The left and right panels aren't connected, but they slide down to remove. Careful not to drop your hub while you are lifting, since the panels are not connected.
+## Taking it apart
 
-Put a towel down, or something soft, on the table or edge of counter.
+1. Unplug the power and disconnect the cover's water tubes from the hub (the
+   Pod's main unit). The original guide doesn't say whether to drain the water
+   first.
+2. Remove the 4 screws under the rubber feet on the bottom.
+3. Hold both side panels, one in each hand, and lift the hub off the base
+   panel. They aren't attached to each other, so don't drop the hub.
+4. Put the towel at the edge of a counter or table and set the hub on it, at
+   the edge. The original guide doesn't say why.
+5. Slide the left panel down about 1/2 inch, then pull it off. The original
+   guide doesn't say which side it calls left; you remove both.
+6. Turn the hub and do the same with the right panel.
+7. The front grille has tabs at the top and bottom that are awkward to line
+   up again. Note how they sit in the top and bottom panels before you go on.
+8. Slide the front mesh grille down about 1/2 inch, then pull it outwards.
+   Upstream's photos aren't tied to particular steps; these two show
+   [the inside of the removed grille](1_grille_cover.png) and
+   [the grille coming off the hub](2_grille_removal.png).
 
-Put the hub at the edge of the counter on the towel, then remove the left panel. It will slide downwards about 1/2 inch, then you can pull it off.
+The board is now visible; see [the board photo](2_circuit_board.png) for
+where the cable goes.
 
-Rotate.
+## Putting it back together
 
-Remove the right panel. Same thing: 1/2 inch down, then pull outwards.
-
-Now the front mesh grille / panel should slide off easily. It will also slide down about 1/2 inch, then pull outwards easily.
-
-Note: there are tabs at the top and bottom of the front panel. These are annoying to get back into the correct position when you're putting everything back together. Take note of how these tabs slide into the top panel and the bottom panel.
-
-You need to put the panel in place to line up the tabs, then slide it upwards. Then put the side panels back on. Lift the hub by keeping one hand on each side panel.
-
-Put the bottom panel at the edge of a counter or table. Put the hub/side panels back onto the base panel, carefully lining up the tabs on the front grille so they end up in the slots on the bottom panel.
-
-After all the panels are back in place, put the bolts back in and put the rubber feet back on.
-
-(Credit: @nota-nota-nota)
+1. Hold the front grille in place to line up its tabs, then slide it upwards.
+   Don't force a panel whose tabs aren't lined up.
+2. Put the side panels back on.
+3. Put the base panel at the edge of the counter. Holding one hand on each
+   side panel, lower the hub onto it, guiding the grille's bottom tabs into
+   their slots.
+4. Put the screws back in and the rubber feet back on.

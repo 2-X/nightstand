@@ -35,7 +35,7 @@ import RevertToStockRow from './RevertToStockRow';
 it('closes the confirm dialog on Cancel and fires no request', async () => {
   let reverted = false;
   server.use(
-    http.post('*/update/revert-to-stock', () => {
+    http.post('*/update/switch-to-upstream', () => {
       reverted = true;
       return HttpResponse.json({});
     }),

@@ -1,25 +1,27 @@
-# Nightstand agent notes
+# Notes for working in this repository
 
-These notes are for AI coding agents working in this repository. Read
-[CONTRIBUTING.md](CONTRIBUTING.md) as well, and read
+These notes are a map of the code for anyone changing it, whether a person
+or a coding agent. Read [CONTRIBUTING.md](CONTRIBUTING.md) as well, and read
 [docs/EIGHT_SLEEP_PROTOCOL.md](docs/EIGHT_SLEEP_PROTOCOL.md) before changing
 anything that talks to the hardware.
 
-## Contributions made with agents
+## Contributions written with coding tools
 
-Agent-written contributions are welcome and reviewed like any other. The
-person who opens the pull request is its author: they are expected to have
-read, tested, and understood it, and they answer for review feedback and for
-anything it breaks. No disclosure is needed either way.
+Contributions written with AI coding tools are welcome and reviewed like any
+other. The person who opens the pull request is its author: they have read,
+tested and understood it, and they answer for review feedback and for
+anything it breaks. Saying in the pull request that a tool wrote part of it
+helps the review of hardware-facing changes, but it does not change whether
+the change is accepted.
 
-The bar is the same for agent-written code. This software controls a bed that
-someone is sleeping on, so nothing should land that its author could not
-explain line by line.
+The bar is the same however the code was written. This software controls a
+bed that someone is sleeping on, so nothing should land that its author
+could not explain line by line.
 
 ## Rules for every change
 
 - Base work on `dev` and open pull requests against `dev`. Do not commit to
-  or push `main`; it moves only when the maintainer cuts a release.
+  or push `main`; it moves only when a release is cut.
 - Add or update tests for the logic you change (see "Tests" in
   CONTRIBUTING.md).
 - Before you report a change as done, run the checks in
@@ -30,19 +32,19 @@ explain line by line.
   last step of a release: `npm ci && npm run build:pr` in `server/` and `app/`,
   then remove the files `scripts/check-bundles.sh` lists, and commit.
 - Commit messages follow Conventional Commits as described in
-  CONTRIBUTING.md, with no trailers. Do not add `Co-Authored-By` or
-  "Generated with" lines.
+  CONTRIBUTING.md, with no trailers.
 - Prisma migrations must be additive. Never drop or rename a column or table
   that an older, still-installable release reads; rollbacks run the older
   server against the newer schema.
 - Do not run commands against a live Pod (SSH, deploy scripts, API calls that
-  change state) unless the user asks for that specific action.
+  change state) unless the person you are working for asks for that specific
+  action.
 
 ## What this repo is
 
 - Nightstand is a local controller for Eight Sleep Pods. The server runs on
-  the Pod's embedded Linux system and exposes a local REST API. The app is a
-  React/MUI web UI served by the server.
+  the Pod's embedded Linux system and serves a local REST API and WebSocket.
+  The app is a React and MUI web app served by the same server.
 - The Pod hardware is controlled through a Unix socket called `dac.sock`.
   This repo calls that integration "Franken" or "Franken sock".
 - Persistent user data lives under `/persistent/free-sleep-data/` on the
@@ -50,27 +52,32 @@ explain line by line.
 
 ## Layout
 
-- `app/`: Vite React frontend using MUI, Zustand, React Query, and Axios.
+- `app/`: Vite React frontend using MUI, Zustand, React Query and Axios.
   Unit tests sit next to components; Playwright tests are in `app/e2e/`.
+  Themes are in `app/src/design/themes/`.
 - `server/`: Express TypeScript backend with LowDB JSON settings and
-  schedules, Prisma SQLite metrics, node-schedule jobs, and Franken socket
-  control. `server/prisma/` holds the schema and migrations.
+  schedules, Prisma SQLite for sensor data, node-schedule jobs, and Franken
+  socket control. `server/prisma/` holds the schema and migrations.
+  [server/API.md](server/API.md) documents every route.
 - `biometrics/`: Python stream processing, sleep detection, vitals
-  calculation, and SQLite writes for biometrics. Tests are in
-  `biometrics/__tests__/`; see [biometrics/BIOMETRICS.md](biometrics/BIOMETRICS.md).
-- `scripts/`: Pod install, update, reset, and service helper scripts, plus
-  maintainer tools such as `promote_release.sh` and `deploy-dev.sh`.
-- `ops/`: LAN deployment (`deploy.sh`, `rollback.sh`) and the safety rules in
-  [ops/ANTIBRICK.md](ops/ANTIBRICK.md).
-- `docs/`: user-facing screenshots, hardware teardown and install docs,
+  estimation and SQLite writes. Tests are in `biometrics/__tests__/`; see
+  [biometrics/DEVELOPER.md](biometrics/DEVELOPER.md).
+- `scripts/`: Pod install, update, rollback, reset, firewall and service
+  scripts, the health check and watchdog scripts, and maintainer tools such
+  as `promote_release.sh`, `release_digest.sh`, `check-bundles.sh` and
+  `deploy-dev.sh`. `scripts/migrate/` holds the tool that switches a Pod from
+  another free-sleep fork.
+- `ops/`: LAN deployment (`deploy.sh`, `rollback.sh`) and the deployment and
+  recovery notes in [ops/ANTIBRICK.md](ops/ANTIBRICK.md).
+- `docs/`: screenshots, hardware teardown and install docs,
   [EIGHT_SLEEP_PROTOCOL.md](docs/EIGHT_SLEEP_PROTOCOL.md) (the
-  reverse-engineered hardware protocol reference, see below), and
-  [CALIBRATION.md](docs/CALIBRATION.md) (a catalog classifying the numeric
-  constants used for sleep detection as hardware fact, timing margin,
-  population bound, or per-bed learned value).
-- `releases.json` and `CHANGELOG.md`: the release manifest that installed
-  Pods read, and the user-facing changelog. Both change only as part of a
-  release, except for notes under `## [Unreleased]` in the changelog.
+  reverse-engineered hardware protocol reference, see below),
+  [CALIBRATION.md](docs/CALIBRATION.md) (the numeric constants behind
+  presence, sleep detection and vitals, and why each has its value) and
+  [TESTING.md](docs/TESTING.md) (what is tested and what is not).
+- `releases.json` and `CHANGELOG.md`: the release list that installed Pods
+  read, and the changelog. Both change only as part of a release, except for
+  notes under `## [Unreleased]` in the changelog.
 
 ## Commands
 
@@ -85,12 +92,14 @@ Server, from `server/`:
 
 - Typecheck without writing `dist`: `npx tsc --noEmit`
 - Lint: `npm run lint`
-- Test: `npm test` (`node:test`, files matching `src/**/*.test.ts`)
+- Test: `npm test` (`node:test`, files matching `src/**/*.test.ts`; one of
+  them also runs the Python tests in `scripts/tests/`, so `python3` must be
+  on the path)
 - Build into `server/dist/`: `npm run build:pr`
 - Local dev: `npm run dev:local`, after pointing `DATA_FOLDER` and
   `DATABASE_URL` in `server/.env.local` at your machine
 - Hot reload on a Pod: `fs-dev-server`, per
-  [server/README_SERVER.md](server/README_SERVER.md)
+  [server/README_SERVER.md](server/README_SERVER.md#hot-reloading-on-the-pod)
 
 App, from `app/`:
 
@@ -103,8 +112,9 @@ App, from `app/`:
 - End-to-end: `npx playwright install chromium`, then
   `npm run build:demo && npx playwright test`
 
-Biometrics, from the repository root (Python 3.9, as in CI):
+Biometrics, from the repository root (CI runs Python 3.9 and 3.10):
 
+- `pip install -r scripts/python/requirements.txt pytest`
 - `python -m pytest biometrics/__tests__/`
 
 ## Runtime notes
@@ -112,11 +122,13 @@ Biometrics, from the repository root (Python 3.9, as in CI):
 - `server/src/config.ts` requires `DATA_FOLDER` and `ENV`. On the Pod,
   `npm start` supplies them from `server/.env.pod`.
 - `server/src/jobs/jobScheduler.ts` schedules jobs at import time, once the
-  system clock is valid, and watches the LowDB folder. A write to settings or
-  schedules cancels and recreates every job; writes to `servicesDB.json` are
-  ignored.
+  system clock is valid, and watches the LowDB folder. A write to settings,
+  schedules or `rhythmsDB.json` cancels and recreates every job; writes to
+  other files there, such as `servicesDB.json`, are ignored.
 - Schedules are stored in `schedulesDB.json`, settings in `settingsDB.json`,
-  and service health in `servicesDB.json`.
+  and service health in `servicesDB.json`, all in the LowDB folder.
+  `alarm-ledger.json` in the data folder records which alarms were due, so
+  one that could not ring is reported as missed.
 - The app imports schemas directly from `server/src/db/*Schema.ts`, so schema
   changes must compile under both the app's and the server's TypeScript
   settings.
@@ -141,12 +153,16 @@ The weekly engine is the default:
   - `server/src/jobs/temperatureScheduler.ts`
   - `server/src/jobs/alarmScheduler.ts`
   - `server/src/jobs/primeScheduler.ts`
+- Each scheduled power-on also gives the firmware an off time
+  (`firmwareTimer.ts`): the scheduled off plus 5 minutes, or plus 8 minutes
+  when an alarm is due just before it. The firmware turns the side off at
+  that time even if the server is gone.
 - Sleep analysis runs once a day at noon for each side.
 
 The Rhythms engine runs named sleep plans (rhythms), a week that picks one
 for each day, and date changes:
 
-- Data: `rhythmsDB.json` in the lowdb folder, read and written through
+- Data: `rhythmsDB.json` in the LowDB folder, read and written through
   `server/src/db/rhythms.ts`, with its schema in
   `server/src/db/rhythmsSchema.ts`. The job watcher rebuilds on writes to it.
 - Routes: `server/src/routes/rhythms/rhythms.ts`. App:
@@ -179,7 +195,11 @@ for each day, and date changes:
   the app. `curveController.ts` and `curveRuntime.ts` follow it each minute
   and keep presence-confirmed cool-down starts and manual holds in memory
   only. Each finished Smart Schedule sleep adds a line to
-  `rhythms-history.jsonl` next to the lowdb folder, kept for 90 days.
+  `rhythms-history.jsonl` next to the LowDB folder, kept for 90 days.
+- "When I get up" (`smart.offWhenUp`): the rules are in `offWhenUp.ts` and
+  `server/src/db/smartOff.ts`, and `smartOffRuntime.ts` runs them. A side
+  turns off after 10 minutes out of bed, and no later than 3 hours past the
+  set off time.
 
 Turning Rhythms off and leaving this version both go through
 `server/src/jobs/rhythms/handoff.ts`:
@@ -194,17 +214,20 @@ Turning Rhythms off and leaving this version both go through
   night still has one ahead, that side's weekly alarms are switched off
   until the weekly night ends.
 - Pre-stop handoff: `scripts/update.sh` (downgrades only),
-  `scripts/rollback_pod.sh` and `scripts/revert-to-stock.sh` call
+  `scripts/rollback_pod.sh` and `scripts/switch-to-upstream.sh` call
   `POST /api/update/prepare-to-stop` just before they stop the server, after
   every check that could still abort them. The update and rollback scripts
-  skip it when the version they switch to has that route. It runs the same
-  plan without touching the flag. Older versions ignore a pause, so it also
-  switches off a paused side's alarms for its coming weekly night when the
-  last of them would still be paused. A failed call never stops the
-  script; the firmware off time set at power-on is the backstop.
+  skip the Rhythms part when the version they switch to has that route, and
+  skip the call entirely when that version also keeps the alarm record. The
+  call runs the same plan without touching the flag. Older versions ignore a
+  pause, so it also switches off a paused side's alarms for its coming
+  weekly night when the last of them would still be paused. A failed call
+  never stops the script; the firmware off time set at power-on is the
+  backstop.
 - `server/src/routes/update/update.ts` also ships in the updater overlay for
   stock installs, so it imports no Rhythms code. `server/src/setup/routes.ts`
-  registers the handoff with `setLeaveHook`.
+  registers the handoff with `setLeaveHook` and the bed-in-use check with
+  `setInUseCheck`.
 
 Revert rules, so that an older version or upstream free-sleep keeps working
 on data this version wrote:
@@ -238,17 +261,33 @@ on data this version wrote:
 - Live updates to the app: `server/src/ws/wsServer.ts` (WebSocket at
   `/ws/events`), fed by `server/src/events/eventBus.ts`.
 - Adjustable base control over Bluetooth:
-  `server/src/8sleep/trimixBaseControl.ts`.
+  `server/src/8sleep/trimixBaseControl.ts`. It has not been tested with a
+  base.
 - Presence-based auto-off: `server/src/8sleep/presenceAutoOffMonitor.ts`.
+- Missed alarms: `server/src/jobs/alarmLedger.ts`, read through
+  `/api/alarms/missed`.
 - Calibration status: `server/src/routes/calibration/`.
 - In-app updates: `server/src/routes/update/`, which starts `scripts/update.sh`
-  on the Pod through a systemd service.
-- The systemd units and sudoers rules behind Update, Roll back, Revert to
-  stock, Reboot, and the biometrics toggle all come from
-  `scripts/setup_services.sh`, which every install and update path runs. A new
-  control that needs sudo gets its rule there.
-  `server/src/setupServicesScript.test.ts` fails if a `sudo` call in
-  `server/src/jobs/` has no matching rule.
+  on the Pod through a systemd service. Update, rollback and the switch to
+  upstream are refused while a side is on, an alarm is due within 15
+  minutes, or the bed's state cannot be read, unless the request confirms
+  it (`server/src/jobs/bedInUse.ts`).
+- The systemd units and sudoers rules behind Update, Roll back, Switch to
+  upstream, Reboot and the Biometrics switch, plus the health check and
+  network watchdog timers, all come from `scripts/setup_services.sh`, which
+  install, update and the fork switch run. A new control that needs sudo
+  gets its rule there. `server/src/setupServicesScript.test.ts` fails if a
+  `sudo` call in `server/src/jobs/` has no matching rule.
+- Health check: `scripts/health_check.sh`, run every minute by
+  `free-sleep-health.timer`, restarts a server that is running but has not
+  answered three checks in a row.
+- Watchdogs: `scripts/setup_watchdog.sh` turns on the hardware watchdog,
+  only on a Pod 5 that matches the one it was checked on, and install,
+  update and the fork switch run it once they succeed.
+  `scripts/network_watchdog.sh`, run every minute by
+  `free-sleep-network-watchdog.timer`, restarts the Pod when the stock Wi-Fi
+  driver has died, and only while the hardware watchdog is on.
+  [ops/ANTIBRICK.md](ops/ANTIBRICK.md) describes both.
 
 ## Hardware protocol and safety
 
