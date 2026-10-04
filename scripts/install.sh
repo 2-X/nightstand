@@ -128,8 +128,11 @@ fi
 # normal on a first install; a failed stop for an existing unit is fatal.
 # Restart services on any refusal after stopping writers, including set -e exits.
 STOPPED_SERVICES=()
-# Set while the previous install waits at PREV_DIR, until the new server starts.
+# Set while the previous install waits at PREV_DIR, until the new server
+# passes its health check.
 RESTORE_PREVIOUS=no
+# The reinstall's health check keeps the server's answers here.
+HBODY=
 # Stops a service that writes the data and confirms it is not running. Kept
 # identical in the update, rollback, switch, reset and install scripts.
 # systemd refuses to stop a unit that is not installed or does not load, even
@@ -143,7 +146,12 @@ stop_writer() {
 }
 restart_on_failure() {
   result=$?
-  if [ "$result" -ne 0 ] && [ "$RESTORE_PREVIOUS" = yes ]; then
+  # Output can fail here, as when a dropped SSH session hung up the run, and
+  # must not stop the recovery.
+  set +e
+  trap '' HUP INT TERM PIPE
+  # Without PREV_DIR the previous install never left REPO_DIR.
+  if [ "$result" -ne 0 ] && [ "$RESTORE_PREVIOUS" = yes ] && [ -d "$PREV_DIR" ]; then
     # The new install may have started the stream already. Nothing moves
     # under a writer that will not stop.
     if ! stop_writer free-sleep || ! stop_writer free-sleep-stream; then
@@ -162,8 +170,13 @@ restart_on_failure() {
       systemctl start "$stopped_service" || true
     done
   fi
+  [ -z "$HBODY" ] || rm -f "$HBODY"
 }
 trap restart_on_failure EXIT
+# Without these, an interrupted run reaches the trap above with status 0.
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 biometrics_enabled="false"
 if systemctl is-active --quiet free-sleep-stream; then
   biometrics_enabled="true"
@@ -185,12 +198,12 @@ if [ -f "$SRC" ]; then
   echo "Database backup saved to $DEST"
   bash "$SRC_DIR/scripts/prune_db_snapshots.sh" /persistent/free-sleep-database-backups "$DEST" || true
 fi
-# The previous install is kept until the new server starts, and becomes the
-# rollback slot after that.
+# The previous install is kept until the new server passes its health check,
+# and becomes the rollback slot after that.
 rm -rf "$PREV_DIR"
 if [ -d "$REPO_DIR" ]; then
-  mv "$REPO_DIR" "$PREV_DIR"
   RESTORE_PREVIOUS=yes
+  mv "$REPO_DIR" "$PREV_DIR"
 fi
 mv "$SRC_DIR" "$REPO_DIR"
 rm -rf "$UNZIP_DIR"
@@ -329,17 +342,16 @@ echo ""
 
 # The database and its WAL were checkpointed and backed up before the swap.
 
-migration_failed="false"
-
 # migrate deploy only applies the migrations in this tree; generate refreshes
-# the client, since node_modules may have been carried over from before.
+# the client, since node_modules may have been carried over from before. A
+# failure stops the install, which puts the previous install back.
 echo "Running Prisma migrations..."
 NPX="/home/$USERNAME/.volta/bin/npx"
 if sudo -u "$USERNAME" bash -c "cd '$SERVER_DIR' && '$NPX' dotenv -e .env.pod -- npx prisma migrate deploy && '$NPX' dotenv -e .env.pod -- npx prisma generate"; then
   echo "Prisma migrations completed successfully."
 else
-  migration_failed="true"
-  echo -e "\033[33mWARNING: Prisma migrations failed! \033[0m"
+  echo -e "\033[33mERROR: Prisma migrations failed! A backup of your database prior to the migration was saved to ${DEST:-/persistent/free-sleep-database-backups} \033[0m"
+  exit 1
 fi
 
 
@@ -381,9 +393,53 @@ systemctl daemon-reload
 systemctl enable free-sleep.service
 bash "$REPO_DIR/scripts/setup_resource_limits.sh" || echo "WARNING: failed to install service memory limits"
 
+say() { echo "$*"; }
+# Waits up to 90 s for the server to answer as version $1, and with a sensor
+# reading when $2 is "temperature", keeping each answer in $HBODY. Any other
+# $2 returns 2. Kept identical in update.sh and install.sh.
+serves_version() {
+  local code body ok
+  case "${2:-}" in ""|temperature) ;; *) return 2 ;; esac
+  for _ in $(seq 1 30); do
+    sleep 3
+    # Log every attempt's HTTP status so a failed log shows the shape of the
+    # failure on its own (000 = no/aborted response, 503 = still starting).
+    code=$(curl -s -o "$HBODY" -w '%{http_code}' --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" 2>/dev/null || echo 000)
+    say "  health attempt: HTTP $code"
+    [ "$code" = 200 ] || continue
+    body=$(cat "$HBODY" 2>/dev/null) || continue
+    ok=$(printf '%s' "$body" | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    assert d['freeSleep']['version'] == '$1'
+    if '${2:-}' == 'temperature':
+        assert isinstance(d['left']['currentTemperatureF'], (int, float))
+    print('yes')
+except Exception:
+    print('no')" 2>/dev/null)
+    if [ "$ok" = yes ]; then
+      systemctl is-active free-sleep >/dev/null
+      return
+    fi
+  done
+  return 1
+}
+
 echo "Starting free-sleep.service..."
 systemctl start free-sleep.service
-RESTORE_PREVIOUS=no
+# A first install has nothing to go back to, so only a reinstall waits.
+if [ "$RESTORE_PREVIOUS" = yes ]; then
+  echo "Health check (up to 90s)"
+  HBODY=$(mktemp)
+  HEALTHY=no
+  # As in the fork switch: a reinstall is a cold connect, and a side's
+  # temperature can read null for its first cycles.
+  serves_version "$VERSION" && HEALTHY=yes
+  rm -f "$HBODY"
+  [ "$HEALTHY" = yes ] || { echo "The new version did not pass its health check."; exit 1; }
+  RESTORE_PREVIOUS=no
+fi
 
 echo "Checking free-sleep service status..."
 systemctl status free-sleep.service --no-pager || true
@@ -438,12 +494,7 @@ cat /persistent/free-sleep-data/dac_sock_path.txt 2>/dev/null || echo "No dac.so
 echo -e "\033[0;32mInstallation complete! The Nightstand server is running and will start automatically on boot.\033[0m"
 echo -e "\033[0;32mSee logs with: journalctl -u free-sleep --no-pager --output=cat\033[0m"
 
-if [ "$migration_failed" = "true" ]; then
-  echo -e "\033[33mWARNING: Prisma migrations failed! A backup of your database prior to the migration was saved to ${DEST:-/persistent/free-sleep-database-backups} \033[0m"
-fi
-
-# Last, since its first arming can reset the Pod; skipped when the database
-# did not migrate, so a broken install is not made worse.
-if [ "$migration_failed" != "true" ] && [ -f "$REPO_DIR/scripts/setup_watchdog.sh" ]; then
+# Last, since its first arming can reset the Pod.
+if [ -f "$REPO_DIR/scripts/setup_watchdog.sh" ]; then
   bash "$REPO_DIR/scripts/setup_watchdog.sh" --auto || echo "WARNING: the hardware watchdog could not be turned on; see above"
 fi

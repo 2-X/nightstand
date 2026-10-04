@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { spawnSync } from 'node:child_process';
 import {
-  chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync,
+  chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -466,5 +466,198 @@ describe('install.sh over an existing install', () => {
     assert.ok(started > 0);
     assert.ok(src.indexOf('RESTORE_PREVIOUS=no', started) > started);
     assert.equal(src.slice(src.indexOf('RESTORE_PREVIOUS=yes')).indexOf('RESTORE_PREVIOUS=no') > 0, true);
+  });
+});
+
+// A reinstall from stopping the services through the new server's health
+// check: the stretch where the previous install waits to be put back.
+// interrupt runs in the script's own shell at the health check's first wait;
+// setup runs before the install's sections.
+function reinstall({
+  live = true, migrates = true, answers = true, interrupt = '', setup = '', temperature = '80', version = NEXT,
+} = {}) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-reinstall-'));
+  const tree = (name: string, version: string) => {
+    mkdirSync(path.join(dir, name, 'scripts'), { recursive: true });
+    writeFileSync(path.join(dir, name, 'version'), version);
+  };
+  if (live) tree('free-sleep', 'old');
+  tree('unzip/nightstand', 'new');
+  mkdirSync(path.join(dir, 'etc'));
+  mkdirSync(path.join(dir, 'tmp'));
+  writeFileSync(path.join(dir, 'unzip/nightstand/scripts/ensure-node.sh'), 'exit 0\n');
+  const sections = [
+    between('# Stop both database writers', '# Setup /persistent/free-sleep-data'),
+    between('# Run Prisma migrations', '# Create systemd service'),
+    between('# Create systemd service', '# Install the RAW-archive retention timer'),
+  ].join('\n').replaceAll('/etc/systemd/system/', '$FIXTURE/etc/');
+  const answer = answers ? `{"freeSleep":{"version":"${version}"},"left":{"currentTemperatureF":${temperature}}}` : '';
+  const result = spawnSync('bash', ['-c', `set -euo pipefail
+REPO_DIR="$FIXTURE/free-sleep"; PREV_DIR="$FIXTURE/free-sleep-prev"; FAILED_DIR="$FIXTURE/free-sleep-failed"
+UNZIP_DIR="$FIXTURE/unzip"; SRC_DIR="$UNZIP_DIR/nightstand"; USERNAME=dac; SERVER_DIR="$REPO_DIR/server"
+VERSION=${NEXT}; STAGED_VERSION=${NEXT}; DEST="$FIXTURE/backup.db"
+systemctl() {
+  local unit state
+  case "$1" in
+    is-active)
+      unit=$2; [ "$unit" != --quiet ] || unit=$3
+      state=$(cat "$FIXTURE/state-\${unit%.service}" 2>/dev/null || echo inactive)
+      [ "$2" = --quiet ] || echo "$state"
+      [ "$state" = active ];;
+    cat) [ "$2" = free-sleep ] && ${live};;
+    *)
+      echo "$* $(cat "$REPO_DIR/version" 2>/dev/null)" >> "$FIXTURE/services"
+      case "$1" in
+        stop) echo inactive > "$FIXTURE/state-\${2%.service}";;
+        start|restart) echo active > "$FIXTURE/state-\${2%.service}";;
+      esac;;
+  esac
+}
+chown() { :; }
+sleep() { ${interrupt || ':'}; }
+sudo() { echo "sudo $*" >> "$FIXTURE/services"; ${migrates ? 'return 0' : 'return 1'}; }
+curl() {
+  local out=/dev/null
+  while [ $# -gt 0 ]; do [ "$1" != -o ] || out=$2; shift; done
+  printf '%s' '${answer}' > "$out"; [ -n '${answer}' ] && printf 200 || printf 000
+}
+${setup}
+${sections}
+echo continued`], { env: envWith({ FIXTURE: dir, TMPDIR: path.join(dir, 'tmp') }), encoding: 'utf8', timeout: 20000 });
+  const read = (name: string) => (existsSync(path.join(dir, name)) ? readFileSync(path.join(dir, name), 'utf8') : '');
+  const output = {
+    ...result, live: read('free-sleep/version'), previous: read('free-sleep-prev/version'),
+    failed: read('free-sleep-failed/version'), services: read('services'),
+    serverState: read('state-free-sleep').trim(), tmpLeft: readdirSync(path.join(dir, 'tmp')),
+  };
+  rmSync(dir, { recursive: true, force: true });
+  return output;
+}
+
+describe('install.sh keeps the previous install until the new one is healthy', () => {
+  it('a failed migration fails the reinstall and puts the previous install back', () => {
+    const result = reinstall({ migrates: false });
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.doesNotMatch(result.stdout, /continued/);
+    assert.match(result.stdout, /Prisma migrations failed!/);
+    assert.equal(result.live, 'old');
+    assert.equal(result.failed, 'new');
+    assert.doesNotMatch(result.services, /^start free-sleep\.service new$/m, 'the new server never starts');
+    assert.match(result.services, /^start free-sleep old$/m);
+    assert.match(result.stdout, /the previous install was put back/);
+  });
+
+  it('a failed migration fails a first install too, starting nothing', () => {
+    const result = reinstall({ live: false, migrates: false });
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.doesNotMatch(result.stdout, /continued/);
+    assert.equal(result.live, 'new');
+    assert.doesNotMatch(result.services, /^start /m);
+  });
+
+  it('a new server that never answers puts the previous install back', () => {
+    const result = reinstall({ answers: false });
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.doesNotMatch(result.stdout, /continued/);
+    assert.match(result.stdout, /did not pass its health check/);
+    assert.equal(result.live, 'old');
+    assert.equal(result.failed, 'new');
+    assert.match(result.services, /^stop free-sleep new$/m);
+    assert.match(result.services, /^start free-sleep old$/m);
+    assert.equal(result.serverState, 'active');
+    assert.deepEqual(result.tmpLeft, [], 'the health check leaves no file behind');
+  });
+
+  it('an interrupted health check puts the previous install back', () => {
+    const result = reinstall({ interrupt: 'kill -TERM $$' });
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.equal(result.live, 'old');
+    assert.equal(result.failed, 'new');
+    assert.match(result.services, /^start free-sleep old$/m);
+    assert.equal(result.serverState, 'active');
+    assert.deepEqual(result.tmpLeft, [], 'the health check leaves no file behind');
+  });
+
+  // A dropped SSH session hangs up the run and takes its output with it.
+  const lostOutput: [string, string][] = [['closed', 'exec >&- 2>&-']];
+  if (existsSync('/dev/full')) lostOutput.push(['full', 'exec >/dev/full 2>/dev/full']);
+  for (const [what, redirect] of lostOutput) {
+    it(`a hangup with its output ${what} still puts the previous install back and starts it`, () => {
+      const result = reinstall({ interrupt: `${redirect}; kill -HUP $$` });
+      assert.equal(result.status, 129, result.stderr);
+      assert.equal(result.live, 'old');
+      assert.equal(result.failed, 'new');
+      // With stdout closed, the script's own lines can land in the fake's log.
+      assert.match(result.services, /^start free-sleep old/m);
+      assert.equal(result.serverState, 'active');
+    });
+  }
+
+  const aroundMove = (when: 'before' | 'after') => `mv() {
+  local leaving=no
+  [ "$1 $2" != "$REPO_DIR $PREV_DIR" ] || leaving=yes
+  ${when === 'before' ? '[ "$leaving" = no ] || kill -TERM $$' : ':'}
+  command mv "$@" || return
+  ${when === 'after' ? '[ "$leaving" = no ] || kill -TERM $$' : ':'}
+}`;
+
+  it('an interruption just before the previous install moves aside leaves it in place and starts it', () => {
+    const result = reinstall({ setup: aroundMove('before') });
+    assert.equal(result.status, 143, result.stdout + result.stderr);
+    assert.equal(result.live, 'old');
+    assert.equal(result.failed, '');
+    assert.match(result.services, /^start free-sleep old$/m);
+    assert.equal(result.serverState, 'active');
+  });
+
+  it('an interruption just after the previous install moves aside puts it back and starts it', () => {
+    const result = reinstall({ setup: aroundMove('after') });
+    assert.equal(result.status, 143, result.stdout + result.stderr);
+    assert.equal(result.live, 'old');
+    assert.match(result.services, /^start free-sleep old$/m);
+    assert.equal(result.serverState, 'active');
+  });
+
+  it('keeps the new install once its server answers', () => {
+    const result = reinstall();
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /continued/);
+    assert.equal(result.live, 'new');
+    assert.equal(result.previous, 'old');
+    assert.equal(result.serverState, 'active');
+    assert.doesNotMatch(result.services, /^stop free-sleep new$/m);
+    assert.deepEqual(result.tmpLeft, [], 'the health check leaves no file behind');
+  });
+
+  it('keeps the new install when its server answers before a side reports a temperature', () => {
+    const result = reinstall({ temperature: 'null' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /continued/);
+    assert.equal(result.live, 'new');
+    assert.equal(result.previous, 'old');
+  });
+
+  it('a new server answering as another version puts the previous install back', () => {
+    const result = reinstall({ answers: true, temperature: '80', version: '0.0.1' });
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.equal(result.live, 'old');
+    assert.equal(result.failed, 'new');
+  });
+
+  it('the health check is the one the updater runs after its swap', () => {
+    const check = (text: string) => {
+      const start = text.indexOf('# Waits up to 90 s for the server to answer as version $1');
+      assert.ok(start >= 0);
+      return text.slice(start, text.indexOf('\n}\n', start) + 3);
+    };
+    assert.equal(check(src), check(readFileSync(path.join(repoRoot, 'scripts/update.sh'), 'utf8')));
+  });
+
+  it('a first install has nothing to put back, so it does not wait on the health check', () => {
+    const result = reinstall({ live: false, answers: false });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /continued/);
+    assert.equal(result.live, 'new');
+    assert.doesNotMatch(result.stdout, /health attempt/);
   });
 });

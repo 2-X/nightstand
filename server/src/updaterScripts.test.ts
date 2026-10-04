@@ -363,6 +363,7 @@ describe('the hardware watchdog is turned on only after a successful install or 
     const src = read('scripts/install.sh');
     const arm = src.indexOf('scripts/setup_watchdog.sh');
     assert.ok(arm > src.indexOf('Installation complete!'), 'install.sh must arm the watchdog last');
-    assert.match(src.slice(src.lastIndexOf('\nif ', arm), arm), /migration_failed/);
+    // A failed migration ends the install before it gets that far.
+    assert.match(src, /Prisma migrations failed![^\n]*\n\s*exit 1\n/);
   });
 });
