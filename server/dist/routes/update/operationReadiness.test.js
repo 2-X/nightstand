@@ -46,6 +46,9 @@ for (const [file, name] of [
 mock.module(new URL('../../jobs/biometrics.js', import.meta.url).href, { namedExports: {
         triggerBiometricsDisable: trigger,
         shouldDisableBiometrics: (body) => body.biometrics?.enabled === false,
+        triggerBiometricsEnable: trigger,
+        shouldEnableBiometrics: (body) => body.biometrics?.enabled === true,
+        reconcileBiometrics: async () => { },
     } });
 const handoffs = [];
 let handoffFails = false;
@@ -64,6 +67,7 @@ before(async () => {
     app.use(express.json());
     const update = await import('./update.js');
     update.setLeaveHook((await import('../../jobs/rhythms/handoff.js')).prepareToLeaveRhythms);
+    update.setInUseCheck(async () => []);
     app.use('/update', update.default);
     app.use((await import('../services/services.js')).default);
     server = app.listen(0);
@@ -71,7 +75,7 @@ before(async () => {
     url = `http://127.0.0.1:${server.address().port}`;
 });
 after(() => new Promise(resolve => { server.closeAllConnections(); server.close(() => resolve()); }));
-for (const endpoint of ['/update', '/update/rollback', '/update/revert-to-stock', '/services']) {
+for (const endpoint of ['/update', '/update/rollback', '/update/switch-to-upstream', '/update/revert-to-stock', '/services']) {
     it(`${endpoint} waits for permission failure and reports repair instructions`, async () => {
         fail = true;
         if (endpoint === '/services') {
@@ -131,6 +135,7 @@ it('starts an update, rollback or switch without handing Rhythms sleeps back', a
     assert.equal((await postJson('/update', {})).status, 204);
     assert.equal((await postJson('/update', { targetVersion: '3.4.0', allowDowngrade: true })).status, 204);
     assert.equal((await postJson('/update/rollback', {})).status, 204);
+    assert.equal((await postJson('/update/switch-to-upstream', {})).status, 204);
     assert.equal((await postJson('/update/revert-to-stock', {})).status, 204);
     assert.deepEqual(handoffs, []);
 });
@@ -152,9 +157,22 @@ it('answers 204 to prepare-to-stop when the handoff fails', async () => {
     }
     assert.deepEqual(handoffs, ['rollback']);
 });
+it('tells the hook whether to hand Rhythms sleeps back', async () => {
+    const update = await import('./update.js');
+    const seen = [];
+    update.setLeaveHook(async (reason, options) => { seen.push([reason, options]); });
+    try {
+        assert.equal((await postJson('/update/prepare-to-stop', { reason: 'rollback' })).status, 204);
+        assert.equal((await postJson('/update/prepare-to-stop', { reason: 'downgrade', handBack: false })).status, 204);
+    }
+    finally {
+        update.setLeaveHook((await import('../../jobs/rhythms/handoff.js')).prepareToLeaveRhythms);
+    }
+    assert.deepEqual(seen, [['rollback', { handBack: true }], ['downgrade', { handBack: false }]]);
+});
 it('refuses a prepare-to-stop body it does not know', async () => {
     handoffs.length = 0;
-    for (const body of [{}, { reason: 'update' }, { reason: 'rollback', extra: true }]) {
+    for (const body of [{}, { reason: 'update' }, { reason: 'rollback', extra: true }, { reason: 'rollback', handBack: 'no' }]) {
         assert.equal((await postJson('/update/prepare-to-stop', body)).status, 400);
     }
     assert.deepEqual(handoffs, []);
@@ -163,7 +181,7 @@ it('accepts prepare-to-stop only from the Pod itself', async () => {
     const { isLoopbackAddress } = await import('./update.js');
     for (const address of ['127.0.0.1', '::1', '::ffff:127.0.0.1'])
         assert.equal(isLoopbackAddress(address), true, address);
-    for (const address of [undefined, '192.168.5.20', '::ffff:192.168.5.20', 'fe80::1']) {
+    for (const address of [undefined, '192.168.1.20', '::ffff:192.168.1.20', 'fe80::1']) {
         assert.equal(isLoopbackAddress(address), false, String(address));
     }
 });

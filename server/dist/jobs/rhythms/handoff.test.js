@@ -40,9 +40,12 @@ const { SCHEDULE_DAYS } = await import('../../db/scheduleKeys.js');
 const { everyNight, testNight, testRhythmsDB } = await import('./testSupport.js');
 const { setEngineActivation } = await import('../scheduleQueries.js');
 const { disableRhythms, planHandoff, planPauseAlarmOverrides, prepareToLeaveRhythms, toReport } = await import('./handoff.js');
+const { DEFAULT_SMART } = await import('../../db/rhythmsSchema.js');
+const { startCurveController, stopCurveController } = await import('./curveController.js');
 const { armedEnd, rearmRhythmSleep, resetOffTimes, runRhythmEvent } = await import('./runEvent.js');
 const { scheduleRhythms } = await import('./scheduleRhythms.js');
 const { resolveSleeps } = await import('./resolve.js');
+const { nextReboot } = await import('../rebootTime.js');
 const NOW = new Date('2026-09-29T06:10:00Z');
 const RHYTHM = testNight('22:00', '06:30', { alarms: ['06:00'] });
 const LEGACY = testNight('23:00', '07:30', { alarms: ['07:15'] });
@@ -52,6 +55,10 @@ function rhythmsFor(schedules, options) {
     const left = everyNight(options.rhythm ?? RHYTHM);
     if (options.smart)
         left.rhythms['every-night'].temperatureMode = 'smart';
+    if (options.offWhenUp) {
+        left.rhythms['every-night'].temperatureMode = 'smart';
+        left.rhythms['every-night'].smart = { ...DEFAULT_SMART, offWhenUp: true };
+    }
     return testRhythmsDB(schedules, left);
 }
 function plan(options = {}) {
@@ -74,6 +81,7 @@ function plan(options = {}) {
         now: options.now ?? NOW,
         powerOffNow: options.powerOffNow ?? false,
         isOn: () => options.on ?? true,
+        powerOffFor: options.powerOffFor,
         alarmRang: (side, id) => (options.rang ?? false) && side === 'left' && id === 'rhythm:left:2026-09-28:06:00',
     });
 }
@@ -152,6 +160,19 @@ describe('planHandoff', () => {
                 { side: 'left', action: 'kept-on-until', until: '2026-09-29T06:30:00.000Z', alarmOverrideSet: false },
                 { side: 'right', action: 'powered-off', alarmOverrideSet: false },
             ] });
+    });
+    it('keeps a "When I get up" sleep on to its actual off and sets its timer there', () => {
+        const latest = new Date('2026-09-29T09:30:00Z');
+        const powerOffFor = (side, date) => (side === 'left' && date === '2026-09-28' ? latest : undefined);
+        const { keptSleep, ...rest } = plan({ offWhenUp: true, now: new Date('2026-09-29T06:40:00Z'), powerOffFor })[0];
+        assert.deepEqual(rest, { side: 'left', action: 'kept-on-until', until: latest, rearm: true });
+        assert.equal(keptSleep?.setOff?.toISOString(), '2026-09-29T06:30:00.000Z');
+    });
+    it('sets the timer of a "When I get up" sleep to its set off when handed over before it', () => {
+        const [left] = plan({ offWhenUp: true });
+        assert.equal(left.action, 'kept-on-until');
+        assert.equal(left.rearm, true);
+        assert.deepEqual(left.until, new Date('2026-09-29T06:30:00Z'));
     });
 });
 describe('planPauseAlarmOverrides', () => {
@@ -279,6 +300,66 @@ describe('prepareToLeaveRhythms', () => {
         settingsDB.data.left.scheduleOverrides.pause = { active: false, expiresAt: '' };
         settingsDB.data.left.scheduleOverrides.alarm = { disabled: false, timeOverride: '', expiresAt: '' };
         await settingsDB.write();
+    });
+    // Runs when Rhythms is turned off, or before leaving for a version without the prepare-to-stop route.
+    it('hands over a sleep kept on past its set off with its timer at the latest off', async () => {
+        settingsDB.data.timeZone = 'UTC';
+        settingsDB.data.features.rhythms = true;
+        // A 10:30 prime restarts at 09:30, so the latest off is 09:00.
+        const prime = settingsDB.data.primePodDaily;
+        settingsDB.data.primePodDaily = { enabled: true, time: '10:30' };
+        settingsDB.data.rebootDaily = true;
+        for (const side of ['left', 'right']) {
+            settingsDB.data[side].awayMode = false;
+            settingsDB.data[side].scheduleOverrides.alarm = { disabled: false, timeOverride: '', expiresAt: '' };
+            settingsDB.data[side].scheduleOverrides.pause = { active: false, expiresAt: '' };
+        }
+        await settingsDB.write();
+        for (const day of SCHEDULE_DAYS) {
+            schedulesDB.data.left[day] = OFF;
+            schedulesDB.data.right[day] = OFF;
+        }
+        await schedulesDB.write();
+        const left = everyNight(RHYTHM);
+        left.rhythms['every-night'].temperatureMode = 'smart';
+        left.rhythms['every-night'].smart = { ...DEFAULT_SMART, offWhenUp: true };
+        const db = testRhythmsDB(schedulesDB.data, left);
+        setEngineActivation({ active: true, db });
+        const setOff = new Date('2026-09-29T06:30:00Z');
+        const inBed = { present: true, lastUpdatedAt: setOff.toISOString(), stateChangedAt: setOff.toISOString() };
+        const controller = startCurveController({
+            now: () => setOff,
+            presence: () => ({ left: inBed, right: { present: false } }),
+            awayMode: () => ({ left: false, right: false }),
+            isPaused: () => false,
+            sleeps: () => [],
+            applyLevel: async () => { },
+            retime: () => { },
+            recordHistory: async () => { },
+            smartOff: {
+                sideIsOn: async () => true,
+                powerOff: async () => true,
+                armTimer: async () => true,
+                alarmPending: () => false,
+                nextRestart: after => nextReboot(settingsDB.data, after),
+            },
+        });
+        updates.length = 0;
+        mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-09-29T06:40:00Z') });
+        try {
+            const [sleep] = resolveSleeps({ db, side: 'left', timeZone: 'UTC', from: new Date('2026-09-29T06:00:00Z'), to: setOff });
+            assert.equal(controller.decideOff('left', sleep, setOff), 'keep');
+            assert.deepEqual((await prepareToLeaveRhythms('rollback')).sides[0], {
+                side: 'left', action: 'kept-on-until', until: '2026-09-29T09:00:00.000Z', alarmOverrideSet: false,
+            });
+        }
+        finally {
+            mock.timers.reset();
+            stopCurveController();
+            setEngineActivation({ active: false, reason: 'flag-off' });
+            settingsDB.data.primePodDaily = prime;
+        }
+        assert.deepEqual(updates, [{ left: { secondsRemaining: (2 * 3600 + 20 * 60) + 300 } }]);
     });
 });
 describe('after handing sleeps back', () => {

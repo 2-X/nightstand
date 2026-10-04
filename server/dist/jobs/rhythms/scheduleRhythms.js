@@ -6,8 +6,11 @@ import { getDeviceStatusCoalesced, isFrankenConnected } from '../../8sleep/frank
 import { effectiveSides } from '../scheduleQueries.js';
 import { resolveSleeps } from './resolve.js';
 import { ANALYSIS_DELAY_MS, ANALYSIS_MAX_WINDOW_MS, REANALYSIS_DELAY_MS, armedEnd, rearmRhythmSleep, runRhythmEvent, runSleepAnalysis, } from './runEvent.js';
-import { smartCoolStartFor } from './curveController.js';
+import { smartOffExtends, smartResolveHooks } from './curveController.js';
 import { trackAlarm } from '../alarmActivity.js';
+import { noteMissedAlarm, setAlarmSuppression } from '../alarmLedger.js';
+import { isAlarmOverridden, rhythmSkipReason } from './gates.js';
+import settingsDB from '../../db/settings.js';
 import { forgetKeptAlarms, keptSleeps, rememberKeptAlarms } from './keptAlarms.js';
 import { poweredOnSince, scheduleSleepAnalysis } from '../powerScheduler.js';
 import { SLEEP_ANALYSIS_HOUR, SLEEP_ANALYSIS_MINUTE } from '../../sleepAnalysisSchedule.js';
@@ -21,6 +24,10 @@ export const RHYTHMS_LOOKBACK_MS = 2 * 24 * 60 * 60 * 1000;
 export function rhythmJobName(side, date, kind, at, timeZone, n) {
     return `rhythm-${side}-${date}-${kind}-${moment.tz(at, timeZone).format('HHmm')}-${n}`;
 }
+const runningStarts = new Set();
+export function hasRunningRhythmStart(side, date) {
+    return [...runningStarts].some(job => job.name.startsWith(`rhythm-${side}-${date}-power-on-`));
+}
 // node-schedule keeps a dead entry for a date in the past, so past instants
 // and names already planned are skipped before asking it. A failed job is
 // logged: a rejected job becomes an unhandled rejection, which stops the server.
@@ -30,8 +37,16 @@ function scheduleOnce(name, at, now, run) {
     const job = () => run().catch((error) => {
         logger.error(`Rhythm job ${name} failed: ${error instanceof Error ? error.message : String(error)}`);
     });
-    if (schedule.scheduleJob(name, at, job))
+    const scheduled = schedule.scheduleJob(name, at, job);
+    if (scheduled) {
+        // One-time jobs leave scheduledJobs before their promises settle.
+        if (name.includes('-power-on-')) {
+            scheduled.on('run', () => runningStarts.add(scheduled));
+            scheduled.on('success', () => runningStarts.delete(scheduled));
+            scheduled.on('error', () => runningStarts.delete(scheduled));
+        }
         return true;
+    }
     schedule.cancelJob(name);
     return false;
 }
@@ -51,6 +66,8 @@ function scheduleSleep(settings, side, sleep, now, timeZone) {
             : () => runRhythmEvent(side, sleep, event);
         if (scheduleOnce(name, event.at, now, run))
             count += 1;
+        if (event.kind === 'alarm')
+            setAlarmSuppression(name, due => isAlarmOverridden(settingsDB.data, side, sleep, due));
     }
     const analysisAt = new Date(sleep.end.getTime() + ANALYSIS_DELAY_MS);
     const analysisName = rhythmJobName(side, sleep.date, 'analysis', analysisAt, timeZone, 0);
@@ -72,7 +89,8 @@ const REARM_DELAY_MS = 1000;
 function scheduleRearm(side, sleeps, now) {
     const t = now.getTime();
     const current = sleeps.filter(sleep => sleep.start.getTime() <= t && t < sleep.end.getTime()).pop();
-    if (!current || armedEnd(side) === current.end.getTime())
+    // A sleep kept on past its set off has its timer moved in steps by the controller.
+    if (!current || armedEnd(side) === current.end.getTime() || smartOffExtends(side, current.date))
         return 0;
     const name = `rhythm-${side}-${current.date}-rearm`;
     return scheduleOnce(name, new Date(t + REARM_DELAY_MS), now, () => rearmRhythmSleep(side, current)) ? 1 : 0;
@@ -109,6 +127,8 @@ async function ringKeptAlarm(side, sleep, event) {
         const status = await getDeviceStatusCoalesced();
         if (!status[side].isOn) {
             logger.info(`Skipping the kept alarm for ${side}: the side is off`);
+            if (!rhythmSkipReason(settingsDB.data, side, sleep, 'alarm', new Date(), event.at))
+                noteMissedAlarm(side, event.at, 'side-off');
             forgetKeptAlarms(side);
             return 0;
         }
@@ -144,15 +164,20 @@ export function scheduleKeptAlarms(now) {
         for (const { name, event } of ahead) {
             if (scheduleOnce(name, event.at, now, () => trackAlarm(side, name, () => ringKeptAlarm(side, sleep, event))))
                 count += 1;
+            setAlarmSuppression(name, due => isAlarmOverridden(settingsDB.data, side, sleep, due));
         }
     }
     return count;
 }
 const DAY_MS = 24 * 60 * 60 * 1000;
-// A sleep that ended in the day before `at` has its own analyses.
+// A sleep that ended in the day before `at` has its own analyses. One kept on
+// past its set off counts from the set off, since its analyses are still to come.
 function sleptWithin(db, side, timeZone, at) {
     const from = new Date(at.getTime() - DAY_MS);
-    return resolveSleeps({ db, side, timeZone, from, to: at }).some(sleep => sleep.end > from && sleep.end <= at);
+    return resolveSleeps({ db, side, timeZone, from, to: at, ...smartResolveHooks }).some(sleep => {
+        const ended = Math.min(sleep.end.getTime(), (sleep.setOff ?? sleep.end).getTime());
+        return ended > from.getTime() && ended <= at.getTime();
+    });
 }
 function nextNoon(now, timeZone) {
     const noon = moment.tz(now, timeZone).hour(SLEEP_ANALYSIS_HOUR).minute(SLEEP_ANALYSIS_MINUTE).startOf('minute');
@@ -207,7 +232,7 @@ export function scheduleRhythms(settings, db, now) {
         }
         let keepNoon = true;
         try {
-            const sleeps = resolveSleeps({ db, side, timeZone, from, to, coolStartFor: smartCoolStartFor });
+            const sleeps = resolveSleeps({ db, side, timeZone, from, to, ...smartResolveHooks });
             for (const sleep of sleeps) {
                 jobCount += scheduleSleep(settings, side, sleep, now, timeZone);
             }

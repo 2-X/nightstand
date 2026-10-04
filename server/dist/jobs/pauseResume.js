@@ -1,11 +1,12 @@
 import schedule from 'node-schedule';
+import { resumeSchedule } from './resumeSchedule.js';
 import logger from '../logger.js';
 import { updateSettings } from '../db/settings.js';
 // The clear runs after the end, not at it, so an alarm due exactly at the end
 // still reads the pause however node-schedule orders jobs due together.
 export const PAUSE_RESUME_DELAY_MS = 60 * 1000;
 // Clears only the pause that ended, so a newer pause saved meanwhile stays.
-// It never touches the bed: the next scheduled event applies as usual.
+// An off side resumes the current night after the pause is cleared.
 export async function clearEndedPause(side, expiresAt) {
     let cleared = false;
     try {
@@ -22,8 +23,11 @@ export async function clearEndedPause(side, expiresAt) {
         logger.error(`Failed to end the ${side} schedule pause: ${message}`);
         return false;
     }
-    if (cleared)
+    if (cleared) {
         logger.info(`Schedule pause for ${side} ended at ${expiresAt}`);
+        const endedAt = new Date(expiresAt);
+        await resumeSchedule(side, Number.isFinite(endedAt.getTime()) ? endedAt : new Date());
+    }
     return cleared;
 }
 // Resolves true when a pause that already ended was cleared now. The
@@ -34,7 +38,7 @@ export async function schedulePauseResume(settings, side, now = new Date()) {
         return false;
     const { expiresAt } = pause;
     const end = Date.parse(expiresAt);
-    if (!Number.isFinite(end) || end <= now.getTime())
+    if (!Number.isFinite(end) || end + PAUSE_RESUME_DELAY_MS <= now.getTime())
         return clearEndedPause(side, expiresAt);
     logger.debug(`Scheduling the ${side} schedule pause to end at ${expiresAt}`);
     schedule.scheduleJob(`${side}-pause-resume`, new Date(end + PAUSE_RESUME_DELAY_MS), () => clearEndedPause(side, expiresAt));

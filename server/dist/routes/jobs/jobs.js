@@ -8,6 +8,7 @@ import { JobKeyListSchema } from './jobsSchema.js';
 import update from '../../jobs/update.js';
 import { PrivilegedCommandError, privilegedErrorStatus } from '../../jobs/privilegedCommand.js';
 import reboot from '../../jobs/reboot.js';
+import { refusedWhileInUse } from '../update/update.js';
 const router = express.Router();
 const analyzeSleepLeft = () => executeAnalyzeSleep('left', moment().subtract(24, 'hours').toISOString(), moment().add(1, 'hours').toISOString());
 const analyzeSleepRight = () => executeAnalyzeSleep('right', moment().subtract(24, 'hours').toISOString(), moment().add(1, 'hours').toISOString());
@@ -48,6 +49,9 @@ router.post('/jobs', async (req, res) => {
         res.status(400).json({ message: 'Restart and update cannot be requested together' });
         return;
     }
+    // Older pages and upstream's page start updates here. They cannot confirm.
+    if (jobs.includes('update') && await refusedWhileInUse(res, undefined))
+        return;
     const busy = jobs.filter(job => {
         const key = QUEUED_JOB_KEYS[job];
         return key !== undefined && isPythonJobPending(key);

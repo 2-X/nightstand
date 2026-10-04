@@ -12,18 +12,22 @@ import { isSystemDateValid } from './isSystemDateValid.js';
 import { scheduleAlarm, scheduleAlarmOverride, scheduleOneOffAlarm } from './alarmScheduler.js';
 import { schedulePowerOff, schedulePowerOn, scheduleSleepAnalysis } from './powerScheduler.js';
 import { schedulePrimingRebootAndCalibration } from './primeScheduler.js';
+import { scheduleWeeklyRearm } from './weeklyRearm.js';
 import { scheduleTemperatures } from './temperatureScheduler.js';
 import { schedulePauseResume } from './pauseResume.js';
 import eventBus from '../events/eventBus.js';
 import { emitJobEvent } from './jobEvents.js';
 import { isScheduleDbChange } from './isScheduleDbChange.js';
+import { setRebuilding } from './rebuildState.js';
 import { loadRhythms } from '../db/rhythms.js';
 import { activation } from './rhythms/activation.js';
 import { dropKeptAlarms, keptAlarmsGeneration } from './rhythms/keptAlarms.js';
 import { scheduleKeptAlarms, scheduleRhythms } from './rhythms/scheduleRhythms.js';
 import { reportRhythmsStatus } from './rhythms/rhythmsStatus.js';
 import { setCurveRetime, startCurveRuntime, stopCurveRuntime, syncCurvePlan } from './rhythms/curveRuntime.js';
+import { smartOffRuntime } from './rhythms/smartOffRuntime.js';
 import { setEngineActivation, sleepAround } from './scheduleQueries.js';
+import { startAlarmLedger, alarmLedgerHeartbeat } from './alarmLedger.js';
 // Under Rhythms a replacement alarm belongs to the resolved sleep around it.
 const rhythmSleepAt = (side) => (at) => sleepAround(side, at);
 async function rebuildJobs() {
@@ -49,7 +53,7 @@ async function rebuildJobs() {
         setEngineActivation(engine);
         // Before anything below can throw, so Smart Schedule follows the engine.
         if (engine.active) {
-            startCurveRuntime();
+            startCurveRuntime(smartOffRuntime());
             syncCurvePlan(settingsData, engine.db);
         }
         else {
@@ -101,6 +105,13 @@ async function rebuildJobs() {
                         logger.error(`Failed to schedule ${side} ${day}, skipping it: ${message}`);
                     }
                 });
+                // The firmware end was set at power-on; an edit to tonight moves it.
+                try {
+                    scheduleWeeklyRearm(settingsData, schedulesData, side);
+                }
+                catch (error) {
+                    logger.error(`Failed to plan the ${side} off time: ${error instanceof Error ? error.message : String(error)}`);
+                }
             });
         }
         // A sleep left running when Rhythms was turned off keeps its alarms until
@@ -112,6 +123,7 @@ async function rebuildJobs() {
         schedulePrimingRebootAndCalibration(settingsData);
         reportRhythmsStatus(engine, plan, settingsData.timeZone);
         logger.info('Done scheduling jobs!');
+        alarmLedgerHeartbeat(new Date());
         const failedSides = plan.failedSides.length;
         serverStatus.status.jobs.status = failedDays + failedSides > 0 ? 'failed' : 'healthy';
         if (failedSides > 0) {
@@ -159,6 +171,7 @@ export function setupJobs() {
     if (setupRun)
         return setupRun;
     setupRun = (async () => {
+        setRebuilding(true);
         try {
             do {
                 setupRequested = false;
@@ -167,11 +180,13 @@ export function setupJobs() {
         }
         finally {
             setupRun = null;
+            setRebuilding(false);
         }
     })();
     return setupRun;
 }
 let RETRY_COUNT = 0;
+let alarmLedgerStarted = false;
 const FAST_RETRIES = 20;
 const FAST_RETRY_MS = 5_000;
 // The pod boots before NTP has corrected the clock, and a sync can take much
@@ -185,6 +200,10 @@ function waitForValidDateAndSetupJobs() {
         serverStatus.status.systemDate.message = '';
         RETRY_COUNT = 0;
         logger.info('System date is valid. Setting up jobs...');
+        if (!alarmLedgerStarted) {
+            alarmLedgerStarted = true;
+            startAlarmLedger(new Date());
+        }
         void setupJobs();
         return;
     }

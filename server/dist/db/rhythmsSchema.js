@@ -14,6 +14,9 @@ export const SmartScheduleSchema = z.object({
     warmStart: z.boolean(),
     warmUp: z.boolean(),
     upEarly: z.boolean(),
+    // Turn off when the person gets up. Stored only when on; 3.5.0 drops it on
+    // read and turns off at the set time.
+    offWhenUp: z.boolean().optional(),
 }).strict();
 export const RhythmSchema = z.object({
     id: RhythmIdSchema,
@@ -73,6 +76,8 @@ export const DEFAULT_SMART = { baseLevel: 0, intensity: 'standard', warmStart: t
 // GET /rhythms/live: the running Smart Schedule night, read from memory.
 export const CURVE_PHASES = ['prewarm', 'bedtime', 'cooldown', 'hold', 'warmup', 'wake', 'after'];
 const InstantSchema = z.string().datetime({ offset: true });
+// Set while a "When I get up" sleep runs and presence is fresh: the latest it turns off.
+export const OffWhenUpLiveSchema = z.object({ by: InstantSchema }).strict();
 export const RhythmsLiveSchema = z.object({
     side: SideSchema,
     date: IsoDateSchema,
@@ -82,6 +87,7 @@ export const RhythmsLiveSchema = z.object({
     hold: z.object({ until: InstantSchema }).strict().nullable(),
     baseSince: InstantSchema.nullable(),
     nextChange: z.object({ at: InstantSchema, level: z.number().int(), phase: z.enum(CURVE_PHASES) }).strict().nullable(),
+    offWhenUp: OffWhenUpLiveSchema.nullable().optional(),
 }).strict();
 export const RhythmsLiveResponseSchema = RhythmsLiveSchema.nullable();
 export const RhythmsLiveQuerySchema = z.object({ side: SideSchema }).strict();

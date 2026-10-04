@@ -1,0 +1,99 @@
+import assert from 'node:assert/strict';
+import { after, afterEach, beforeEach, describe, it, mock } from 'node:test';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import schedule from 'node-schedule';
+const folder = mkdtempSync(path.join(tmpdir(), 'nightstand-alarm-ledger-override-'));
+mkdirSync(path.join(folder, 'lowdb'));
+process.env.DATA_FOLDER = `${folder}/`;
+process.env.ENV = 'local';
+const LEDGER = path.join(folder, 'alarm-ledger.json');
+const { default: settingsDB } = await import('../db/settings.js');
+const { default: schedulesDB } = await import('../db/schedules.js');
+const ledger = await import('./alarmLedger.js');
+const { scheduleAlarm, scheduleAlarmOverride } = await import('./alarmScheduler.js');
+const { scheduleRhythms } = await import('./rhythms/scheduleRhythms.js');
+const { everyNight, testNight, testRhythmsDB } = await import('./rhythms/testSupport.js');
+const NOW = '2026-09-28T12:00:00Z';
+const alarm = {
+    time: '07:00', enabled: true, vibrationIntensity: 100, duration: 10, vibrationPattern: 'rise', alarmTemperature: 80,
+};
+const night = {
+    power: { on: '21:00', off: '09:00', enabled: true, onTemperature: 82 },
+    temperatures: {}, alarm, alarms: [alarm],
+};
+const planned = () => {
+    ledger.startAlarmLedger(new Date(NOW));
+    ledger.alarmLedgerHeartbeat(new Date(NOW));
+    return JSON.parse(readFileSync(LEDGER, 'utf8')).upcoming.map(item => item.jobName);
+};
+const override = (expiresAt) => {
+    settingsDB.data.left.scheduleOverrides.alarm = { disabled: false, timeOverride: '07:30', expiresAt };
+};
+beforeEach(() => {
+    mock.timers.enable({ apis: ['Date'], now: Date.parse(NOW) });
+    settingsDB.data.timeZone = 'UTC';
+    settingsDB.data.left.awayMode = false;
+    settingsDB.data.left.alarmsEnabled = true;
+    settingsDB.data.left.scheduleOverrides.alarm = { disabled: false, timeOverride: '', expiresAt: '' };
+});
+afterEach(() => {
+    Object.keys(schedule.scheduledJobs).forEach(name => schedule.cancelJob(name));
+    ledger.resetAlarmLedgerForTests();
+    rmSync(LEDGER, { force: true });
+    mock.timers.reset();
+});
+after(() => rmSync(folder, { recursive: true, force: true }));
+describe('the weekly alarm', () => {
+    it('is saved as upcoming', () => {
+        scheduleAlarm(settingsDB.data, 'left', 'monday', night);
+        assert.deepEqual(planned(), ['left-monday-07:00-0-alarm']);
+    });
+    it('is left out while an override replaces it', () => {
+        override('2026-09-29T07:30:00Z');
+        scheduleAlarm(settingsDB.data, 'left', 'monday', night);
+        assert.ok(schedule.scheduledJobs['left-monday-07:00-0-alarm']);
+        assert.deepEqual(planned(), []);
+    });
+});
+describe('a Rhythms alarm', () => {
+    const NIGHT = testNight('22:00', '06:00', { alarms: ['05:45'] });
+    const plan = () => scheduleRhythms(settingsDB.data, testRhythmsDB(schedulesDB.data, everyNight(NIGHT)), new Date(NOW));
+    it('is saved as upcoming', () => {
+        plan();
+        assert.ok(planned().includes('rhythm-left-2026-09-28-alarm-0545-0'));
+    });
+    it('is left out while an override replaces it', () => {
+        override('2026-09-29T07:30:00Z');
+        plan();
+        assert.ok(schedule.scheduledJobs['rhythm-left-2026-09-28-alarm-0545-0']);
+        assert.equal(planned().includes('rhythm-left-2026-09-28-alarm-0545-0'), false);
+    });
+});
+describe('an alarm job that fails before it reaches the Pod', () => {
+    const fire = async (name, at) => {
+        ledger.startAlarmLedger(new Date(NOW));
+        const job = schedule.scheduledJobs[name];
+        assert.ok(job, name);
+        const read = mock.method(settingsDB, 'read', async () => { throw new Error('settings unreadable'); });
+        try {
+            // node-schedule hands invoke's argument to the job as its fire date.
+            await job.invoke.bind(job)(new Date(at));
+        }
+        finally {
+            read.mock.restore();
+        }
+        return ledger.listMissedAlarms(new Date(NOW)).map(m => [m.reason, m.at]);
+    };
+    it('is reported for a weekly alarm', async () => {
+        scheduleAlarm(settingsDB.data, 'left', 'monday', night);
+        assert.deepEqual(await fire('left-monday-07:00-0-alarm', '2026-09-28T07:00:00Z'), [['error', '2026-09-28T07:00:00.000Z']]);
+    });
+    it('is reported for an override', async () => {
+        override('2026-09-29T07:30:00Z');
+        scheduleAlarmOverride(settingsDB.data, 'left');
+        assert.deepEqual(await fire('left-alarm-override-07:30', '2026-09-29T07:30:00Z'), [['error', '2026-09-29T07:30:00.000Z']]);
+    });
+});
+//# sourceMappingURL=alarmLedgerOverride.test.js.map

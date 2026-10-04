@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { enableRhythms } from '../../jobs/rhythms/enable.js';
 import { disableRhythms } from '../../jobs/rhythms/handoff.js';
 import { drivingSide } from '../../jobs/scheduleQueries.js';
-import { liveCurveState, smartCoolStartFor } from '../../jobs/rhythms/curveController.js';
+import { liveCurveState, smartResolveHooks } from '../../jobs/rhythms/curveController.js';
 const router = express.Router();
 export const MAX_SLEEPS_WINDOW_MS = 16 * 24 * 60 * 60 * 1000;
 // Changes reach 60 days ahead. Days 61 to 68 have none, so they hold every pair of consecutive weekdays.
@@ -109,7 +109,7 @@ router.get('/rhythms/sleeps', async (req, res) => {
     }
     const window = { side: driver, timeZone: settingsDB.data.timeZone, from, to };
     const sleeps = result.active
-        ? resolveSleeps({ db: result.db, ...window, coolStartFor: smartCoolStartFor })
+        ? resolveSleeps({ db: result.db, ...window, ...smartResolveHooks })
         : resolveLegacySleeps({ schedules: schedulesDB.data, ...window });
     res.json(applyAlarmsEnabled(sleeps, driver === side && settingsDB.data[side].alarmsEnabled));
 });

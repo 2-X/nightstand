@@ -42,6 +42,12 @@ describe('updater shell scripts', () => {
         assert.doesNotMatch(src, /free-sleep-main|nightstand-main/, 'must not hardcode the archive dir name');
         assert.match(src, /find "\$STAGE\.unzip".*-type d/, 'must resolve the staged archive dir dynamically');
     });
+    // nats-py ships in the release tree, so an update downloads only the release.
+    it('update.sh re-runs itself under bash and installs no Python packages', () => {
+        const src = readFileSync(path.join(repoRoot, 'scripts/update.sh'), 'utf8');
+        assert.match(src, /^\[ -n "\$\{BASH_VERSION:-\}" \] \|\| exec bash "\$0" "\$@"$/m);
+        assert.doesNotMatch(src, /\bpip3?\b|requirements/);
+    });
     // free-sleep-update.service ExecStarts update_service.sh, which runs
     // update.sh. If either loses its exec bit the unit dies with 203/EXEC
     // before writing a single log line.
@@ -58,16 +64,15 @@ describe('updater shell scripts', () => {
     // install.sh is the from-scratch bootstrap, and it installs this fork. The
     // units and sudoers rules it goes on to wire up (rollback, revert to stock)
     // name scripts that exist only here, so pointing it at the stock upstream
-    // archive would install a tree those rules do not match.
-    // main only moves at a release, so its tip is the newest release. The units
-    // and sudoers rules install.sh wires up name scripts that exist only in this
-    // fork, so the stock upstream archive would not match them.
-    it('install.sh installs the tip of this fork\'s main branch', () => {
+    // archive would install a tree those rules do not match. It installs a
+    // tagged release, never the tip of a branch.
+    it('install.sh installs a tagged release of this fork', () => {
         const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
-        assert.match(src, /REPO_URL="https:\/\/github\.com\/LTimothy\/nightstand\/archive\/refs\/heads\/main\.zip"/);
+        assert.match(src, /REPO_URL="https:\/\/github\.com\/LTimothy\/nightstand\/archive\/refs\/tags\/v\$\{VERSION\}\.zip"/);
+        assert.doesNotMatch(src, /refs\/heads\//);
     });
-    // GitHub names an archive's top directory after the repo and ref, so it is
-    // nightstand-main today. Hardcoding a name breaks on a rename.
+    // GitHub names an archive's top directory after the repo and ref, such as
+    // nightstand-3.5.1 for a tag. Hardcoding a name breaks on a rename.
     it('install.sh resolves the unpacked archive directory instead of hardcoding it', () => {
         const src = readFileSync(path.join(repoRoot, 'scripts/install.sh'), 'utf8');
         assert.match(src, /SRC_DIR=\$\(find "\$UNZIP_DIR" -mindepth 1 -maxdepth 1 -type d/);
@@ -159,7 +164,7 @@ describe('update.sh will not ship code onto a schema that did not migrate', () =
     };
     it('stops the biometrics streamer before it migrates', () => {
         assertOrder([
-            'systemctl stop free-sleep-stream',
+            'stop_writer free-sleep-stream',
             'prisma migrate deploy',
         ], 'stop-before-migrate');
     });
@@ -181,7 +186,7 @@ describe('update.sh will not ship code onto a schema that did not migrate', () =
     });
     it('decides whether to migrate from what the database is missing, not from a schema diff', () => {
         assertOrder([
-            'systemctl stop free-sleep-stream',
+            'stop_writer free-sleep-stream',
             'Downgrade: skipping prisma migrate',
             'prisma migrate status',
             'prisma migrate deploy',
@@ -264,6 +269,48 @@ describe('update.sh hands the rest of an update to the version it installs', () 
         // reason; indenting them hands python an IndentationError mid-update.
         assert.match(src, /\nimport json, sys\n/);
         assert.match(src, /\ndef parts\(v\): return/);
+    });
+});
+// The first arming of the hardware watchdog can reset the Pod. Inside an
+// update, a reset before the health check would skip the automatic rollback,
+// so it runs only once the update has succeeded.
+describe('the hardware watchdog is turned on only after a successful install or update', () => {
+    const read = (file) => readFileSync(path.join(repoRoot, file), 'utf8');
+    it('update.sh arms it only in the success branch, after the health check', () => {
+        const src = read('scripts/update.sh');
+        const calls = [...src.matchAll(/^\s*arm_watchdog\s*$/gm)].map((m) => m.index ?? -1);
+        assert.ok(calls.length >= 1, 'update.sh must arm the watchdog after success');
+        const health = src.indexOf('Health check (up to 90s)');
+        const rollback = src.indexOf('Health check FAILED: rolling back');
+        for (const at of calls) {
+            assert.ok(at > health && at < rollback, 'arm_watchdog must sit in the success branch');
+            const before = src.lastIndexOf('say "SUCCESS: pod is serving', at);
+            assert.ok(before > health && src.indexOf('exit 0', before) > at, 'arm only after SUCCESS is logged, before exiting');
+        }
+    });
+    it('update.sh runs only the script that carries the trial, never an older hand-run copy', () => {
+        const src = read('scripts/update.sh');
+        const fn = src.slice(src.indexOf('arm_watchdog() {'), src.indexOf('\n}\n', src.indexOf('arm_watchdog() {')));
+        assert.match(fn, /grep -q[^\n]*NIGHTSTAND_WATCHDOG_TRIAL/);
+        assert.match(read('scripts/setup_watchdog.sh'), /NIGHTSTAND_WATCHDOG_TRIAL/);
+    });
+    // Without --auto the script takes the run as the owner's and clears a
+    // note left by --remove, turning the watchdog back on.
+    it('install.sh and update.sh run it with --auto, so an owner\'s --remove stays in force', () => {
+        const update = read('scripts/update.sh');
+        const fn = update.slice(update.indexOf('arm_watchdog() {'), update.indexOf('\n}\n', update.indexOf('arm_watchdog() {')));
+        assert.match(fn, /bash "\$script" --auto /);
+        assert.match(read('scripts/install.sh'), /bash "\$REPO_DIR\/scripts\/setup_watchdog\.sh" --auto /);
+    });
+    it('setup_services.sh never arms it, since it runs before the update is checked', () => {
+        assert.doesNotMatch(read('scripts/setup_services.sh'), /setup_watchdog/);
+    });
+    it('install.sh arms it last, and not after a failed migration', () => {
+        const src = read('scripts/install.sh');
+        const arm = src.indexOf('scripts/setup_watchdog.sh');
+        assert.ok(arm > src.indexOf('Installation complete!'), 'install.sh must arm the watchdog last');
+        // A failed migration ends the install before it gets that far.
+        assert.match(src, /Prisma migrations failed![^\n]*\n\s*exit 1\n/);
     });
 });
 //# sourceMappingURL=updaterScripts.test.js.map

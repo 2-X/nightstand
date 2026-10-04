@@ -2,17 +2,56 @@ export const FEATURES_MANIFEST = [
     {
         id: 'agent',
         title: 'Updates and rollback',
-        description: 'In-app updates, rollback, switching to upstream free-sleep, and the Settings > Software & updates page.',
+        description: 'In-app updates, rollback, switching to upstream free-sleep, and the Settings > Software page. '
+            + 'Install and reset share the operation lock with updates, rollbacks and switches; install holds it '
+            + 'through its health check and any restore. A systemd tmpfiles rule provisions the lock after boot.',
         category: 'platform',
-        version: '3.0.0',
+        version: '3.6.0',
         flag: null,
         default: true,
-        touchpoints: ['scripts/update.sh', 'scripts/rollback_pod.sh', 'app/src/pages/SettingsPage/VersionsPage'],
+        touchpoints: [
+            'scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/switch-to-upstream.sh', 'scripts/install.sh',
+            'scripts/reset.sh', 'scripts/setup_services.sh', 'server/src/jobs/operationLock.ts',
+            'app/src/pages/SettingsPage/VersionsPage',
+        ],
         depends_on: [],
         reversible: false,
-        tests: ['server/src/updaterScripts.test.ts', 'server/src/rollbackScript.test.ts'],
+        tests: [
+            'server/src/updaterScripts.test.ts', 'server/src/rollbackScript.test.ts', 'server/src/installScript.test.ts',
+            'server/src/resetScript.test.ts', 'server/src/operationSafety.test.ts', 'server/src/setupServicesScript.test.ts',
+            'scripts/tests/test_operation_portability.py',
+        ],
         upstream_offer: false,
         rationale: 'Always on, not individually removable: it is what makes everything else installable and reversible.',
+    },
+    {
+        id: 'update-recovery',
+        title: 'Recover an interrupted update at boot',
+        description: 'An update marks its swap before moving the live tree. A timer starts one recovery attempt '
+            + '45 seconds after boot when the marker remains: keep a healthy live install or try to restore the previous tree. '
+            + 'The marker clears only after a health check passes. A timeout or failed restore keeps it for manual '
+            + 'recovery. Database and settings backups are not restored. Checked on one Pod 5 with no marker, a hand-set '
+            + 'marker and a power cut after the server stopped, before the tree move. A cut during the move is covered '
+            + 'only by automated tests. An interrupted update records no new result, so the last result stays at the previous run.',
+        category: 'safety',
+        version: '3.6.0',
+        flag: null,
+        default: true,
+        touchpoints: [
+            'scripts/update.sh', 'scripts/recover_update.sh', 'scripts/restore_helpers.sh', 'scripts/setup_services.sh',
+            'scripts/systemd/free-sleep-recover-update.service', 'scripts/systemd/free-sleep-recover-update.timer',
+            'scripts/rollback_pod.sh', 'scripts/switch-to-upstream.sh',
+        ],
+        depends_on: ['agent'],
+        reversible: true,
+        tests: [
+            'server/src/updateRecoveryScript.test.ts', 'server/src/setupServicesScript.test.ts',
+            'server/src/updaterBehavior.test.ts', 'server/src/updateResult.test.ts',
+        ],
+        upstream_offer: false,
+        rationale: 'Always on: a power loss cannot run the updater exit trap, so a marked swap needs a recovery '
+            + 'attempt at boot. It acts only with a swap marker. Switching to upstream removes the recovery units '
+            + 'and helpers after any pending recovery is settled.',
     },
     {
         id: 'no-telemetry',
@@ -80,33 +119,44 @@ export const FEATURES_MANIFEST = [
     {
         id: 'biometrics',
         title: 'Biometrics',
-        description: 'Heart rate, HRV, breathing rate, and presence detection from the piezo stream, plus every accuracy fix within that subsystem.',
+        description: 'Heart rate, HRV, breathing rate, and presence detection from the piezo stream. At startup '
+            + 'and after the setting is saved, reconcile the stream service with the Biometrics switch: enable '
+            + 'and start when on, stop and disable when off. Retry while another operation or update recovery is pending.',
         category: 'biometrics',
-        version: '3.0.0',
+        version: '3.6.0',
         flag: 'services.biometrics.enabled',
         default: false,
-        touchpoints: ['server/src/db/servicesSchema.ts', 'server/src/jobs/biometrics.ts', 'app/src/pages/SettingsPage/FeaturesSection'],
+        touchpoints: [
+            'server/src/db/servicesSchema.ts', 'server/src/jobs/biometrics.ts', 'server/src/routes/services/services.ts',
+            'server/src/jobs/biometricsSync.ts', 'server/src/jobs/operationLock.ts', 'server/src/server.ts',
+            'scripts/setup_services.sh', 'app/src/pages/SettingsPage/FeaturesSection',
+        ],
         depends_on: ['agent'],
         reversible: true,
-        tests: ['server/src/db/services.test.ts'],
+        tests: [
+            'server/src/db/services.test.ts', 'server/src/jobs/biometrics.test.ts', 'server/src/jobs/privilegedJobs.test.ts',
+            'server/src/jobs/biometricsSwitchOrder.test.ts', 'server/src/jobs/biometricsReconcile.test.ts',
+            'server/src/jobs/biometricsSync.test.ts',
+            'server/src/routes/services/servicesBiometricsSwitch.test.ts', 'server/src/setupServicesScript.test.ts',
+        ],
         upstream_offer: false,
         rationale: 'Real, existing, user-facing toggle, but with install-precondition and '
-            + 'systemd-stop side effects a plain settings.features boolean does not fit, so it '
+            + 'systemd start and stop side effects a plain settings.features boolean does not fit, so it '
             + 'stays in its own store rather than joining FeaturesSchema. One coarse feature, not '
             + 'many: the presence-accuracy fixes within it are baseline correctness, not '
             + 'separately toggleable.',
     },
     {
         id: 'sleep-stages-score',
-        title: 'Sleep score and stages',
-        description: 'The estimated sleep score and sleep-stages chart on the Sleep page.',
+        title: 'Sleep score',
+        description: 'The sleep score API. Not shown in the app.',
         category: 'biometrics',
         version: '3.0.1',
         flag: 'sleepScore',
         default: true,
         touchpoints: [
             'server/src/routes/metrics/sleepScore.ts', 'server/src/routes/metrics/sleepStages.ts',
-            'app/src/components/SleepFitnessCard.tsx', 'app/src/components/SleepStagesCard.tsx',
+            'app/src/components/SleepFitnessCard.tsx',
         ],
         depends_on: ['biometrics'],
         reversible: true,
@@ -170,19 +220,23 @@ export const FEATURES_MANIFEST = [
     {
         id: 'design-system',
         title: 'Design system',
-        description: 'System typography, dark surfaces, neutral controls and a shared temperature color scale.',
+        description: 'Three themes, chosen per device in Settings > Bed and sides: lamp (the default), free-sleep classic and jmew. '
+            + 'One token set per theme for colour, type voice and '
+            + 'corners, a temperature scale per theme with a neutral zero, and the same layout and 44 px targets in each.',
         category: 'ui',
         version: 'n/a',
         flag: null,
         default: true,
-        touchpoints: ['app/src/theme.ts', 'app/src/design/GlassCard.tsx'],
+        touchpoints: ['app/src/theme.ts', 'app/src/design/tokens.ts', 'app/src/design/themes', 'app/src/design/themePreference.ts',
+            'app/src/design/themeBoot.ts', 'app/src/pages/SettingsPage/ThemePicker.tsx'],
         depends_on: ['agent'],
         reversible: false,
-        tests: [],
+        tests: ['app/src/design/themes/themes.test.ts', 'app/src/design/themePreference.test.ts',
+            'app/src/pages/SettingsPage/ThemePicker.test.tsx'],
         upstream_offer: false,
-        rationale: 'Always on. A features.nightstandTheme key exists in settings from 3.1.0, '
-            + 'but nothing reads it and Settings does not show it; it stays in the schema so '
-            + 'stored settings keep validating. A real toggle would need a second whole theme.',
+        rationale: 'Always on: a look is a per device preference kept in the browser, not a server setting, so older versions '
+            + 'ignore it and going back needs no migration. The features.nightstandTheme key from 3.1.0 is still not read; it stays '
+            + 'in the schema so stored settings keep validating.',
     },
     {
         id: 'logs-viewer',
@@ -243,7 +297,8 @@ export const FEATURES_MANIFEST = [
         id: 'biometrics-v2',
         title: 'New sleep tracking (beta)',
         description: 'Tells the two sides apart with the bed\'s capacitance sensors, in live presence and the '
-            + 'nightly analysis, and keeps vitals through short trips out of bed.',
+            + 'nightly analysis, keeps vitals through short trips out of bed, and estimates heart rate and '
+            + 'breathing with methods built for the bed\'s vibration sensors.',
         category: 'biometrics',
         version: '3.5.0',
         flag: 'biometricsV2',
@@ -257,6 +312,10 @@ export const FEATURES_MANIFEST = [
             'app/src/pages/SettingsPage/FeaturesSection', 'app/src/pages/SettingsPage/SettingsPage.tsx',
             'server/src/features/sleepTrackingValidation.ts', 'server/src/routes/calibration',
             'app/src/api/sleepTrackingValidation.ts',
+            'biometrics/vitals2', 'biometrics/stream/vitals2_stream.py', 'biometrics/stream/pump_speed.py',
+            'biometrics/db.py',
+            'server/src/routes/metrics/vitalsV2.ts', 'server/src/routes/metrics/vitals.ts',
+            'server/src/db/vitalsRecordSchema.ts', 'app/src/pages/DataPage/SleepPage/SleepPage.tsx',
         ],
         depends_on: ['biometrics'],
         reversible: true,
@@ -275,6 +334,11 @@ export const FEATURES_MANIFEST = [
             'biometrics/__tests__/test_presence_v2_identity.py', 'biometrics/__tests__/test_presence_model.py',
             'server/src/features/sleepTrackingValidation.test.ts',
             'server/src/routes/calibration/calibrationView.test.ts',
+            'biometrics/__tests__/test_stream_vitals2.py', 'biometrics/__tests__/test_stream_vitals_legacy_output.py',
+            'biometrics/__tests__/test_vitals2_hr.py', 'biometrics/__tests__/test_vitals2_attribution.py',
+            'biometrics/__tests__/test_vitals2_hrv.py', 'biometrics/__tests__/test_vitals2_resp.py',
+            'biometrics/__tests__/test_vitals2_lazy_import.py', 'server/src/routes/metrics/vitals.test.ts',
+            'app/src/pages/DataPage/SleepPage/SleepPage.vitals2.test.tsx',
         ],
         upstream_offer: false,
         rationale: 'Off by default while it is checked against more nights and more beds. Off leaves live '
@@ -348,6 +412,103 @@ export const FEATURES_MANIFEST = [
         rationale: 'Always on, as a safety measure. Switching to upstream free-sleep removes the limits.',
     },
     {
+        id: 'health-restart',
+        title: 'Restart a server that stops answering',
+        description: 'A one-minute timer restarts the server after three failed status checks in a row, '
+            + 'except while an install, reset, update, rollback or switch holds the operation lock or the server has just started.',
+        category: 'safety',
+        version: '3.6.0',
+        flag: null,
+        default: true,
+        touchpoints: [
+            'scripts/health_check.sh', 'scripts/systemd/free-sleep-health.service', 'scripts/systemd/free-sleep-health.timer',
+            'scripts/setup_services.sh', 'scripts/switch-to-upstream.sh',
+        ],
+        depends_on: ['agent'],
+        reversible: true,
+        tests: ['server/src/healthCheckScript.test.ts', 'server/src/setupServicesScript.test.ts'],
+        upstream_offer: false,
+        rationale: 'Safety: restarts a server that stops answering, since schedules and alarms run in it. '
+            + 'Switching to upstream free-sleep removes the timer; an older release leaves it installed as a no-op.',
+    },
+    {
+        id: 'snapshot-pruning',
+        title: 'Prune old database snapshots',
+        description: 'Updates, switches, installs and database resets keep the newest three database snapshots and any '
+            + 'from the last week, then remove more, oldest first, only while free space on /persistent is under 512 MB. '
+            + 'Only files named like Nightstand\'s own snapshots are ever removed.',
+        category: 'safety',
+        version: 'n/a',
+        flag: null,
+        default: true,
+        touchpoints: [
+            'scripts/prune_db_snapshots.sh', 'scripts/update.sh', 'scripts/switch-to-upstream.sh', 'scripts/install.sh',
+            'scripts/reset_db.sh',
+        ],
+        depends_on: ['agent'],
+        reversible: true,
+        tests: ['server/src/pruneSnapshotsScript.test.ts'],
+        upstream_offer: false,
+        rationale: 'Safety: every update, switch, install and reset adds a full database copy, and /persistent also holds '
+            + 'firmware data and Wi-Fi settings. Always on, since the space floor is what protects the Pod. Older releases '
+            + 'and upstream free-sleep do not prune; migration snapshots are never removed.',
+    },
+    {
+        id: 'hardware-watchdog',
+        title: 'Hardware watchdog',
+        description: 'After a successful install or update, sets systemd\'s RuntimeWatchdogSec to 30 seconds through a drop-in, '
+            + 'after a one-minute trial from /run, so a frozen kernel or PID 1 resets the Pod. Pod 5 only (mtk-wdt, 31 s '
+            + 'maximum, hub revision G53 or later); skipped where the device, systemd or the driver\'s timeout limits cannot '
+            + 'hold it, after a trial that did not finish, and after the owner turned it off with --remove.',
+        category: 'safety',
+        version: 'n/a',
+        flag: null,
+        default: true,
+        touchpoints: [
+            'scripts/setup_watchdog.sh', 'scripts/update.sh', 'scripts/install.sh', 'scripts/migrate/pod-installer.sh',
+            'scripts/switch-to-upstream.sh', 'scripts/rollback_pod.sh', 'scripts/reset.sh',
+        ],
+        depends_on: ['agent'],
+        reversible: true,
+        tests: [
+            'server/src/watchdogScript.test.ts', 'server/src/updaterScripts.test.ts', 'server/src/migrationScripts.test.ts',
+            'server/src/rollbackScript.test.ts', 'server/src/switchToUpstreamScript.test.ts', 'server/src/resetScript.test.ts',
+        ],
+        upstream_offer: false,
+        rationale: 'Safety: a frozen system otherwise leaves the Pod with no server and no cooling until it is unplugged. '
+            + 'Switching to upstream free-sleep removes the drop-in; it never overrides a watchdog set up some other way.',
+    },
+    {
+        id: 'network-watchdog',
+        title: 'Restart the Pod when its Wi-Fi driver has died',
+        description: 'Where the stock Wi-Fi driver is loaded and the hardware watchdog is on, a one-minute timer restarts '
+            + 'the Pod when the gateway has not answered for 5 minutes after a crash of that driver, or for 20 minutes '
+            + 'while its scans fail with the error the crashed driver gives. A router that is away while scans work never '
+            + 'counts. Not in the first 10 minutes after boot or while an update, rollback, switch, install, reset or '
+            + 'biometrics install runs; at most once in 6 hours and 3 times in 24.',
+        category: 'safety',
+        version: 'n/a',
+        flag: null,
+        default: true,
+        touchpoints: [
+            'scripts/network_watchdog.sh', 'scripts/systemd/free-sleep-network-watchdog.service',
+            'scripts/systemd/free-sleep-network-watchdog.timer', 'scripts/setup_services.sh', 'scripts/rollback_pod.sh',
+            'scripts/switch-to-upstream.sh', 'scripts/migrate/restore-original-fork.sh',
+        ],
+        depends_on: ['agent'],
+        reversible: true,
+        tests: [
+            'server/src/networkWatchdogScript.test.ts', 'server/src/setupServicesScript.test.ts',
+            'server/src/rollbackScript.test.ts', 'server/src/switchToUpstreamScript.test.ts',
+        ],
+        upstream_offer: false,
+        rationale: 'Safety: when the driver dies the Pod keeps running but cannot be reached, and unplugging it has '
+            + 'been the only known fix; whether a restart brings Wi-Fi back is not yet confirmed. A restart after this '
+            + 'crash can hang, so it waits unless the hardware watchdog can reset a hung shutdown. Always on, '
+            + 'since the evidence rules and rate limits keep it from restarting for an ordinary outage. Switching to '
+            + 'upstream free-sleep removes the timer; an older release leaves it installed as a no-op.',
+    },
+    {
         id: 'primary-navigation',
         title: 'Named primary navigation',
         description: 'Bed, Schedule, Sleep and Settings links follow the current page and support browser history.',
@@ -418,7 +579,10 @@ export const FEATURES_MANIFEST = [
         touchpoints: ['app/src/components/SideControl.tsx', 'app/src/pages/ControlTempPage'],
         depends_on: ['agent'],
         reversible: false,
-        tests: ['app/src/components/SideControl.test.tsx', 'app/src/lib/temperatureColor.test.ts', 'app/src/pages/ControlTempPage/Slider.test.tsx'],
+        tests: [
+            'app/src/components/SideControl.test.tsx', 'app/src/lib/temperatureColor.test.ts',
+            'app/src/pages/ControlTempPage/TemperatureDial.test.tsx', 'app/src/pages/ControlTempPage/TemperatureButtons.queue.test.tsx',
+        ],
         upstream_offer: false,
         rationale: 'Side identity and readable controls are required for operating the bed.',
     },
@@ -440,7 +604,7 @@ export const FEATURES_MANIFEST = [
     {
         id: 'sleep-night-summary',
         title: 'Recorded night summary',
-        description: 'The latest recorded night, estimated score contributors and explicit missing-data states.',
+        description: 'The latest recorded night, time in bed, trips out of bed and explicit missing-data states.',
         category: 'ui',
         version: 'n/a',
         flag: null,
@@ -454,7 +618,7 @@ export const FEATURES_MANIFEST = [
             'app/src/components/SleepFitnessCard.test.tsx',
         ],
         upstream_offer: false,
-        rationale: 'The summary presents existing sleep data; biometrics and estimated scores retain their own toggles.',
+        rationale: 'The summary presents existing sleep data; Biometrics controls whether that data is recorded.',
     },
     {
         id: 'settings-groups',
@@ -478,13 +642,14 @@ export const FEATURES_MANIFEST = [
         id: 'schedule-pause',
         title: 'Pause schedule',
         description: 'Pause one side\'s schedule for tonight, until a set time or until resumed. '
-            + 'The saved schedule and the one-time alarm are kept.',
+            + 'An off side turns on when the pause ends if its night is in progress. The saved schedule and the one-time alarm are kept.',
         category: 'platform',
-        version: '3.5.0',
+        version: '3.6.0',
         flag: null,
         default: true,
         touchpoints: [
-            'server/src/jobs/schedulePause.ts', 'server/src/jobs/pauseResume.ts', 'server/src/jobs/powerScheduler.ts',
+            'server/src/jobs/schedulePause.ts', 'server/src/jobs/pauseResume.ts', 'server/src/jobs/resumeSchedule.ts',
+            'server/src/jobs/powerScheduler.ts',
             'server/src/jobs/temperatureScheduler.ts', 'server/src/jobs/alarmScheduler.ts', 'server/src/jobs/jobScheduler.ts',
             'server/src/8sleep/presenceAutoOffMonitor.ts', 'server/src/routes/settings/settingsGuards.ts',
             'app/src/pages/ControlTempPage/PauseScheduleSheet.tsx', 'app/src/pages/ControlTempPage/SchedulePauseNotice.tsx',
@@ -494,7 +659,7 @@ export const FEATURES_MANIFEST = [
         reversible: true,
         tests: [
             'server/src/jobs/schedulePause.test.ts', 'server/src/jobs/schedulePauseJobs.test.ts',
-            'server/src/jobs/schedulePauseAlarms.test.ts', 'server/src/jobs/pauseResume.test.ts',
+            'server/src/jobs/schedulePauseAlarms.test.ts', 'server/src/jobs/pauseResume.test.ts', 'server/src/jobs/pauseResumeSchedule.test.ts',
             'server/src/jobs/jobSchedulerPause.test.ts', 'server/src/routes/settings/settingsGuards.test.ts',
             'app/src/pages/ControlTempPage/PauseScheduleSheet.test.tsx', 'app/src/pages/ControlTempPage/UpcomingNight.pause.test.tsx',
             'app/e2e/pause-schedule.spec.ts',
@@ -502,6 +667,30 @@ export const FEATURES_MANIFEST = [
         upstream_offer: false,
         rationale: 'A user action with no background behavior change until someone pauses a side, so there is nothing to turn off. '
             + 'Older versions ignore the setting.',
+    },
+    {
+        id: 'missed-alarm-report',
+        title: 'Missed alarm report',
+        description: 'Records alarms that could not ring: the server was not running, the Pod answered too late, '
+            + 'the command failed or was not confirmed, this server hit an error, or the side was off.',
+        category: 'safety',
+        version: 'n/a',
+        flag: null,
+        default: true,
+        touchpoints: [
+            'server/src/jobs/alarmLedger.ts', 'server/src/jobs/alarmScheduler.ts', 'server/src/jobs/alarmActivity.ts',
+            'server/src/jobs/jobScheduler.ts', 'server/src/jobs/alarmOverrideGate.ts', 'server/src/jobs/rhythms/scheduleRhythms.ts',
+            'server/src/routes/alarm/missedAlarms.ts', 'server/src/setup/routes.ts',
+        ],
+        depends_on: ['agent'],
+        reversible: true,
+        tests: [
+            'server/src/jobs/alarmLedger.test.ts', 'server/src/jobs/alarmLedgerOverride.test.ts',
+            'server/src/routes/alarm/missedAlarms.test.ts',
+        ],
+        upstream_offer: false,
+        rationale: 'Safety: tells the user when an alarm could not ring. Always on, with nothing to turn off. '
+            + 'It writes one extra file in the data folder, which older versions ignore.',
     },
     {
         id: 'rhythms',
@@ -517,7 +706,7 @@ export const FEATURES_MANIFEST = [
             'server/src/jobs/alarmActivity.ts', 'server/src/jobs/alarmScheduler.ts', 'server/src/jobs/powerScheduler.ts',
             'server/src/routes/deviceStatus/updateDeviceStatus.ts', 'server/src/routes/settings/settingsGuards.ts',
             'server/src/routes/update/update.ts', 'server/src/setup/routes.ts',
-            'scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh',
+            'scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/switch-to-upstream.sh',
             'server/src/db/smartCurve.ts', 'server/src/8sleep/presenceStale.ts', 'server/src/8sleep/presenceAutoOffMonitor.ts',
             'server/src/jobs/scheduleOverride.ts', 'app/src/api/smartCurve.ts',
             'app/src/api/rhythms.ts', 'app/src/api/rhythmsResponse.ts', 'app/src/api/rhythmDays.ts', 'app/src/api/rhythmWake.ts',
@@ -527,6 +716,9 @@ export const FEATURES_MANIFEST = [
             'app/src/pages/SettingsPage/FeaturesSection/DisableRhythmsDialog.tsx',
             'app/src/pages/SettingsPage/FeaturesSection/turnOffPreview.ts', 'app/src/pages/SettingsPage/VersionsPage/RhythmsLeaveNote.tsx',
             'app/src/mocks/rhythmsMock.ts',
+            'server/src/db/smartOff.ts', 'server/src/jobs/rebootTime.ts', 'server/src/jobs/primeScheduler.ts', 'server/src/jobs/rebuildState.ts',
+            'app/src/api/smartOff.ts', 'fixtures/compat/v3.5.0/rhythmsSchema.ts.txt',
+            'app/src/pages/SchedulePage/ScheduleTimeline.tsx', 'app/src/pages/ControlTempPage/TemperatureLabel.tsx', 'app/src/mocks/handlers.ts',
         ],
         depends_on: ['agent'],
         reversible: true,
@@ -545,10 +737,43 @@ export const FEATURES_MANIFEST = [
             'server/src/routes/rhythms/rhythmsLive.test.ts', 'app/src/api/smartCurve.test.ts',
             'app/src/api/rhythms.test.tsx', 'app/src/pages/SchedulePage/rhythms/RhythmsPage.test.tsx',
             'app/src/pages/ControlTempPage/BedRhythms.test.tsx', 'app/src/pages/SettingsPage/FeaturesSection/turnOffPreview.test.ts',
+            'server/src/db/rhythmsCompat.test.ts', 'server/src/db/smartOff.test.ts', 'server/src/jobs/rebootTime.test.ts',
+            'server/src/jobs/rhythms/offWhenUp.test.ts', 'server/src/jobs/rhythms/resolveOff.test.ts', 'server/src/jobs/alarmActivity.test.ts',
+            'server/src/jobs/rhythms/curveControllerOff.test.ts', 'server/src/jobs/rhythms/smartOffRuntime.test.ts',
+            'app/src/pages/SchedulePage/ScheduleTimeline.getUp.test.tsx', 'app/src/api/rhythmsLiveOff.test.ts',
         ],
         upstream_offer: false,
         rationale: 'Off by default. Its data lives only in rhythmsDB.json and it never writes schedulesDB.json, so turning it '
-            + 'off, rolling back or switching to upstream leaves the weekly schedule exactly as it was.',
+            + 'off, rolling back or switching to upstream leaves the weekly schedule exactly as it was.'
+            + ' A rhythm set to turn off when the person gets up carries one optional key, which 3.5.0 drops on read.',
+    },
+    {
+        id: 'tap-alarm',
+        title: 'Alarm taps',
+        description: 'Accepts the alarm tap action upstream uses, which has no effect yet. On a Pod 5 the firmware '
+            + 'handles a double or triple tap during an alarm and does not pass it through the tap counters. '
+            + 'A later dismissAlarm value above the highest seen for the same active alarm clears the side\'s ringing '
+            + 'record and pending snooze without sending a command. Confirmed on one Pod 5: a double tap stopped '
+            + 'the alarm in firmware, dismissAlarm rose, and Nightstand cleared its ringing state and logged the dismissal.',
+        category: 'platform',
+        version: '3.6.0',
+        flag: null,
+        default: true,
+        touchpoints: [
+            'server/src/8sleep/tapAlarm.ts', 'server/src/8sleep/frankenMonitor.ts', 'server/src/jobs/activeAlarms.ts',
+            'server/src/jobs/alarmScheduler.ts', 'server/src/8sleep/firmwareAlarmDismiss.ts',
+            'server/src/8sleep/loadDeviceStatus.ts', 'server/src/8sleep/frankenServer.ts',
+        ],
+        depends_on: ['agent'],
+        reversible: true,
+        tests: [
+            'server/src/8sleep/tapAlarm.test.ts', 'server/src/8sleep/alarmDismiss.test.ts', 'server/src/8sleep/frankenMonitor.test.ts',
+            'server/src/8sleep/firmwareAlarmDismiss.test.ts', 'server/src/8sleep/frankenAlarmDismiss.test.ts',
+            'server/src/8sleep/loadDeviceStatus.test.ts',
+        ],
+        upstream_offer: false,
+        rationale: 'Always on: accepts an existing tap setting and reads firmware dismissals so the server can '
+            + 'clear a stale ringing record. A tap set to anything else behaves as before, and older versions keep the setting.',
     },
 ];
 //# sourceMappingURL=featuresManifest.js.map

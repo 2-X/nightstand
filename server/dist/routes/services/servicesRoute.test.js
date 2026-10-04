@@ -9,7 +9,11 @@ mkdirSync(path.join(folder, 'lowdb'));
 process.env.DATA_FOLDER = `${folder}/`;
 process.env.ENV = 'local';
 mock.module(new URL('../../jobs/biometrics.js', import.meta.url).href, {
-    namedExports: { shouldDisableBiometrics: () => false, triggerBiometricsDisable: async () => { } },
+    namedExports: {
+        shouldDisableBiometrics: () => false, triggerBiometricsDisable: async () => { },
+        shouldEnableBiometrics: () => false, triggerBiometricsEnable: async () => { },
+        reconcileBiometrics: async () => { },
+    },
 });
 const { default: router } = await import('./services.js');
 const { default: servicesDB } = await import('../../db/services.js');

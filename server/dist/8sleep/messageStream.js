@@ -1,4 +1,5 @@
 import binarySplit from 'binary-split';
+import { FrankenConnectionClosedError } from './frankenErrors.js';
 export class MessageStream {
     splitter;
     queue = [];
@@ -31,7 +32,7 @@ export class MessageStream {
                 throw err;
             }
             if (this.ended) {
-                throw new Error('stream ended');
+                throw new FrankenConnectionClosedError('stream ended');
             }
             if (signal?.aborted) {
                 throw signal.reason ?? new Error('readMessage aborted');

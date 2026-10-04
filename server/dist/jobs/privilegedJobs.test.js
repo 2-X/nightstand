@@ -31,21 +31,28 @@ mock.module('child_process', { namedExports: {
                 callback((denied || (startFailed && !args.includes('-l'))) ? new Error('denied') : null, '');
         },
     } });
-const { assertOperationsIdle } = await import('./privilegedCommand.js');
+const { assertOperationsIdle, OperationBusyError } = await import('./privilegedCommand.js');
 const { triggerUpdateService } = await import('./update.js');
 const { triggerRollbackService } = await import('./rollback.js');
 const { triggerRevertToStockService } = await import('./revertToStock.js');
-const { triggerBiometricsDisable } = await import('./biometrics.js');
+const { triggerBiometricsDisable, triggerBiometricsEnable } = await import('./biometrics.js');
+const failedStart = { biometrics: /Unable to stop and disable/ };
 for (const [name, trigger] of [
     ['update', triggerUpdateService], ['rollback', triggerRollbackService],
     ['switch', triggerRevertToStockService], ['biometrics', triggerBiometricsDisable],
+    ['biometrics on', triggerBiometricsEnable],
 ]) {
-    it(`${name} rejects a missing unit before executing sudo`, async () => {
+    it(`${name} ${name === 'biometrics' ? 'turns off' : 'rejects'} a missing unit without executing sudo`, async () => {
         calls.length = 0;
         loadState = 'not-found';
         denied = false;
         startFailed = false;
-        await assert.rejects(async () => trigger(), /successful update.*repair/i);
+        // With no stream unit there is nothing to stop, so turning Biometrics
+        // off still succeeds; everything else needs its unit.
+        if (name === 'biometrics')
+            await trigger();
+        else
+            await assert.rejects(async () => trigger(), /successful update.*repair/i);
         assert.equal(calls.some(args => args[0] === 'sudo'), false);
     });
     it(`${name} rejects missing sudo permissions and failed starts`, async () => {
@@ -54,7 +61,7 @@ for (const [name, trigger] of [
         await assert.rejects(async () => trigger(), /successful update.*repair/i);
         denied = false;
         startFailed = true;
-        await assert.rejects(async () => trigger(), name === 'biometrics' ? /Unable to stop and disable/ : /Unable to start/);
+        await assert.rejects(async () => trigger(), failedStart[name] ?? /Unable to start/);
         startFailed = false;
     });
     it(`${name} checks exact sudo command before awaiting success`, async () => {
@@ -129,6 +136,52 @@ it('does not run target hooks when another operation is active', async () => {
     finally {
         activeUnit = '';
     }
+});
+// The Biometrics switch would otherwise start or stop the stream while one
+// of these moves the code it runs from.
+for (const unit of ['free-sleep-update.service', 'free-sleep-rollback.service', 'free-sleep-revert.service']) {
+    it(`does not turn Biometrics on or off while ${unit} is running`, async () => {
+        calls.length = 0;
+        loadState = 'loaded';
+        denied = false;
+        startFailed = false;
+        activeUnit = unit;
+        try {
+            for (const trigger of [triggerBiometricsEnable, triggerBiometricsDisable]) {
+                let saved = false;
+                await assert.rejects(trigger(async () => { saved = true; }), (error) => error instanceof OperationBusyError && /already running/.test(error.message));
+                assert.equal(saved, false);
+            }
+            assert.equal(calls.some(args => args[0] === 'sudo'), false);
+        }
+        finally {
+            activeUnit = '';
+        }
+    });
+}
+it('does not turn Biometrics on while an update is being started', async () => {
+    let release;
+    holdLoadCheck = resume => { release = resume; holdLoadCheck = undefined; };
+    const update = triggerUpdateService();
+    try {
+        await assert.rejects(triggerBiometricsEnable(), /already running/);
+    }
+    finally {
+        holdLoadCheck = undefined;
+        release?.();
+        await update;
+    }
+});
+it('turns the stream on with the one command its sudo rule allows, not enable_biometrics.sh', async () => {
+    calls.length = 0;
+    loadState = 'loaded';
+    denied = false;
+    startFailed = false;
+    await triggerBiometricsEnable();
+    const start = calls.find(args => args[0] === 'sudo' && !args.includes('-l'));
+    assert.deepEqual(start, ['sudo', '-n', '--', '/bin/systemctl', 'enable', '--now', 'free-sleep-stream.service']);
+    assert.ok(!calls.flat().some(arg => arg.includes('enable_biometrics')));
+    assert.ok(calls.some(args => args[0] === '/bin/systemctl' && args.includes('free-sleep-stream.service')), 'checks the unit is loaded');
 });
 it('allows the synchronous biometrics stop longer than the systemd stop deadline', async () => {
     calls.length = 0;

@@ -4,7 +4,6 @@ import settingsDB from '../../db/settings.js';
 import servicesDB from '../../db/services.js';
 import { isSleepScoreActive } from './sleepScoreGuard.js';
 import { parseNightQuery } from './metricsQuery.js';
-import { loadStageSummary } from './sleepStages.js';
 const router = express.Router();
 // --- Component scorers (each returns 0-100) ---
 function scoreDuration(seconds) {
@@ -14,46 +13,20 @@ function scoreDuration(seconds) {
     return Math.max(0, Math.round(100 - delta * 10));
 }
 function scoreContinuity(timesExited) {
-    // 0 exits = 100, -15 per exit, floor at 0
+    // 0 trips = 100, -15 per trip, floor at 0
     return Math.max(0, 100 - timesExited * 15);
-}
-function scoreHrv(avgHrv) {
-    // Bands tuned for sleep HRV (RMSSD-ish, ms)
-    if (avgHrv >= 70)
-        return 95;
-    if (avgHrv >= 50)
-        return 85;
-    if (avgHrv >= 30)
-        return 70;
-    return 50;
-}
-function scoreRestingHr(minHr) {
-    // Lower min HR during sleep = deeper rest
-    if (minHr === 0)
-        return 0;
-    if (minHr < 55)
-        return 95;
-    if (minHr < 65)
-        return 85;
-    if (minHr < 75)
-        return 70;
-    if (minHr < 85)
-        return 55;
-    return 40;
 }
 function formatHours(seconds) {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     return `${h}h${m ? ` ${m}m` : ''}`;
 }
-// Scores the same asleep time the stages headline shows, or time in bed when
-// vitals coverage is too sparse for the stages to say when sleep began.
-export function durationComponent(inBedSeconds, stages) {
-    const [seconds, label] = stages.lowCoverage ? [inBedSeconds, 'in bed'] : [stages.asleepSeconds, 'asleep'];
+// Scores time in bed: the stages classifier cannot yet place sleep onset reliably.
+export function durationComponent(inBedSeconds) {
     return {
-        score: scoreDuration(seconds),
+        score: scoreDuration(inBedSeconds),
         weight: 0.4,
-        value: `${formatHours(seconds)} ${label}`,
+        value: `${formatHours(inBedSeconds)} in bed`,
         available: true,
     };
 }
@@ -83,37 +56,30 @@ router.get('/sleep-score', async (req, res) => {
         timestamp: { gte: startUnix, lte: endUnix },
     };
     const hrAgg = await prisma.vitals.aggregate({
-        where: vitalsQuery,
+        where: { ...vitalsQuery, heart_rate: { gt: 0 } },
         _min: { heart_rate: true },
     });
-    const hrvAgg = await prisma.vitals.aggregate({
-        where: { ...vitalsQuery, hrv: { not: 0, lte: 120, gte: 30 } },
-        _avg: { hrv: true },
-    });
     const inBedSec = sleepRecord?.sleep_period_seconds ?? endUnix - startUnix;
-    const stages = await loadStageSummary(side, startUnix, endUnix);
     const exits = sleepRecord?.times_exited_bed ?? 0;
     const minHr = hrAgg._min.heart_rate ?? 0;
-    const avgHrv = hrvAgg._avg.hrv ?? 0;
     const components = {
-        duration: durationComponent(inBedSec, stages),
+        duration: durationComponent(inBedSec),
         continuity: {
             score: scoreContinuity(exits),
             weight: 0.3,
-            value: `${exits} ${exits === 1 ? 'exit' : 'exits'}`,
+            value: `${exits} ${exits === 1 ? 'trip' : 'trips'} out of bed`,
             available: true,
         },
-        hrv: {
-            score: scoreHrv(avgHrv),
-            weight: 0.15,
-            value: avgHrv > 0 ? `${Math.round(avgHrv)} ms` : '\u2014',
-            available: avgHrv > 0,
-        },
+        // Kept in the response for older apps. The estimate is not used in the
+        // score, so its weight goes to the other components.
+        hrv: { score: 0, weight: 0.15, value: '', available: false },
+        // The lowest estimate is reported for the info sheet only: one low
+        // reading says little about rest, so it carries no weight in the score.
         restingHr: {
-            score: scoreRestingHr(minHr),
+            score: 0,
             weight: 0.15,
-            value: minHr > 0 ? `${Math.round(minHr)} bpm` : '\u2014',
-            available: minHr > 0,
+            value: minHr > 0 ? `${Math.round(minHr)} bpm` : '',
+            available: false,
         },
     };
     // Reweight: distribute missing components' weight proportionally across present ones.

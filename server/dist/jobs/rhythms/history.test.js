@@ -33,6 +33,9 @@ const record = (date, powerOff) => ({
     bedExitsLastHour: 0,
     upEarlyAt: null,
     outOfBedAt: null,
+    offWhenUp: false,
+    actualOff: powerOff,
+    offReason: 'set-time',
     onsetEstimate: null,
     onsetNote: 'no-vitals',
 });

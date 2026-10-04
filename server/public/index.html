@@ -39,6 +39,21 @@
     <title>Nightstand</title>
 
     <script type="module" crossorigin src="/index.js"></script>
+    <script>(function () {
+var key = "nightstand-theme", backgrounds = {"lamp":"#000000","classic":"#010101","glass":"#000000"};
+var theme = "lamp";
+try {
+  var stored = window.localStorage.getItem(key);
+  if (stored && Object.prototype.hasOwnProperty.call(backgrounds, stored)) theme = stored;
+} catch (error) {}
+var root = document.documentElement;
+root.setAttribute('data-theme', theme);
+root.style.backgroundColor = backgrounds[theme];
+root.style.colorScheme = 'dark';
+document.querySelectorAll('meta[name="theme-color"], meta[name="msapplication-TileColor"]').forEach(function (meta) {
+  meta.setAttribute('content', backgrounds[theme]);
+});
+})();</script>
   </head>
   <body>
     <div id="root"></div>

@@ -25,6 +25,13 @@ const { default: settingsDB } = await import('../../db/settings.js');
 const { FrankenSupersededError } = await import('../../8sleep/frankenErrors.js');
 const { keptSleeps, rememberKeptAlarms } = await import('../../jobs/rhythms/keptAlarms.js');
 describe('updateDeviceStatus', () => {
+    for (const payload of [{ isOn: true }, { isOn: true, secondsRemaining: 0 }]) {
+        it(`keeps the manual power-on default for ${JSON.stringify(payload)}`, async () => {
+            executeFunctionMock.mock.resetCalls();
+            await updateDeviceStatus({ left: payload });
+            assert.deepEqual(executeFunctionMock.mock.calls.map(call => call.arguments.slice(0, 2)), [['LEFT_TEMP_DURATION', '43200']]);
+        });
+    }
     it('applies an explicit targetTemperatureF of 0 instead of silently dropping it', async () => {
         executeFunctionMock.mock.resetCalls();
         await updateDeviceStatus({ left: { targetTemperatureF: 0 } });
@@ -47,7 +54,10 @@ describe('updateDeviceStatus', () => {
             .find(call => call.arguments[0] === command)?.arguments[2];
         assert.equal(options('LEFT_TEMP_DURATION')?.latest, true);
         assert.equal(options('TEMP_LEVEL_LEFT')?.latest, true);
-        assert.equal(options('ALARM_CLEAR')?.latest, undefined);
+        for (const command of ['ALARM_LEFT', 'ALARM_CLEAR']) {
+            assert.ok(executeFunctionMock.mock.calls.some(call => call.arguments[0] === command), `${command} was never sent`);
+            assert.equal(options(command)?.latest, undefined);
+        }
     });
     it('stops quietly when a newer update replaced this one while the Pod was unreachable', async () => {
         executeFunctionMock.mock.resetCalls();
@@ -72,6 +82,45 @@ describe('updateDeviceStatus', () => {
             ['TEMP_LEVEL_LEFT', '-9'], ['TEMP_LEVEL_RIGHT', '-9'],
             ['LEFT_TEMP_DURATION', '29100'], ['RIGHT_TEMP_DURATION', '29100'],
         ]);
+    });
+    it('turns a side on until a set time in one duration write, counted when it is sent', async (t) => {
+        const now = Date.parse('2026-10-05T21:00:00Z');
+        t.mock.timers.enable({ apis: ['Date'], now });
+        const onUntil = new Date(now + 10 * 3600_000);
+        const sent = [];
+        executeFunctionMock.mock.resetCalls();
+        executeFunctionMock.mock.mockImplementation(async (command, arg) => {
+            // The Pod answers 15 minutes late.
+            t.mock.timers.tick(15 * 60_000);
+            sent.push([command, typeof arg === 'function' ? arg() : String(arg)]);
+        });
+        try {
+            await updateDeviceStatus({ left: { isOn: true, targetTemperatureF: 80 } }, { background: true, onUntil });
+        }
+        finally {
+            executeFunctionMock.mock.restore();
+        }
+        assert.deepEqual(sent, [['LEFT_TEMP_DURATION', String(10 * 3600 - 15 * 60)], ['TEMP_LEVEL_LEFT', '-9']]);
+        const options = executeFunctionMock.mock.calls[0].arguments[2];
+        assert.equal(options.latest, true);
+        assert.equal(options.notAfter, onUntil.getTime(), 'a power-on that can only go out after its end is not sent');
+        assert.equal(options.onUntil, undefined);
+    });
+    it('caps a set end at the firmware maximum', async () => {
+        executeFunctionMock.mock.resetCalls();
+        const onUntil = new Date(Date.now() + 13 * 3600_000);
+        await updateDeviceStatus({ right: { isOn: true } }, { background: true, onUntil });
+        const [command, arg] = executeFunctionMock.mock.calls[0].arguments;
+        assert.equal(command, 'RIGHT_TEMP_DURATION');
+        assert.equal(typeof arg === 'function' ? arg() : arg, '43200');
+        assert.equal(executeFunctionMock.mock.callCount(), 1);
+    });
+    it('treats an end that is not a time as a plain power-on', async () => {
+        executeFunctionMock.mock.resetCalls();
+        await updateDeviceStatus({ left: { isOn: true } }, { background: true, onUntil: new Date(Number.NaN) });
+        assert.deepEqual(executeFunctionMock.mock.calls.map(call => call.arguments.slice(0, 2)), [['LEFT_TEMP_DURATION', '43200']]);
+        const options = executeFunctionMock.mock.calls[0].arguments[2];
+        assert.equal(options.notAfter, undefined);
     });
     it('forgets the kept alarms of a side that is turned off', async () => {
         const name = 'rhythm-left-2026-09-28-alarm-0600-0';

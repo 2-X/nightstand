@@ -7,6 +7,8 @@ import { initWaterLevel } from './8sleep/waterLevel.js';
 import { startPresenceAutoOff, stopPresenceAutoOff } from './8sleep/presenceAutoOffMonitor.js';
 import './jobs/jobScheduler.js';
 import { abortAlarmWaits } from './jobs/alarmActivity.js';
+import { setRebuilding } from './jobs/rebuildState.js';
+import { stopScheduleResumes } from './jobs/resumeSchedule.js';
 // Setup code
 import setupMiddleware from './setup/middleware.js';
 import setupRoutes from './setup/routes.js';
@@ -18,6 +20,7 @@ import metrics from './metrics/metrics.js';
 import { wsServer } from './ws/wsServer.js';
 import settingsDB from './db/settings.js';
 import { syncRawArchiveConf } from './jobs/rawArchiveConf.js';
+import { syncBiometrics } from './jobs/biometricsSync.js';
 const port = 3000;
 const app = express();
 let server;
@@ -47,6 +50,7 @@ async function disconnectPrisma() {
 }
 // Graceful Shutdown Function
 async function gracefulShutdown(signal) {
+    stopScheduleResumes();
     logger.debug(`\nReceived ${signal}. Initiating graceful shutdown...`);
     let finishedExiting = false;
     // Force shutdown after 10 seconds
@@ -60,6 +64,8 @@ async function gracefulShutdown(signal) {
     logger.debug('Stopping node-schedule');
     // A power-off waiting for an alarm goes out now; the shutdown waits for it.
     abortAlarmWaits();
+    // Cancelling every job leaves the list empty for the rest of the process.
+    setRebuilding(true);
     await schedule.gracefulShutdown();
     await disconnectPrisma();
     try {
@@ -133,6 +139,7 @@ async function startServer() {
     serverStatus.status.logger.status = 'healthy';
     // An update or a first boot can leave the file missing or stale.
     void syncRawArchiveConf(settingsDB.data.rawArchiveRetentionDays);
+    void syncBiometrics();
     // Initialize Franken once before listening
     if (!config.remoteDevMode) {
         void initFranken()

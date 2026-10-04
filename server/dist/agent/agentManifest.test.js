@@ -73,6 +73,12 @@ describe('the agent manifest', () => {
             assert.ok(existsSync(path.join(repoRoot, entry.path)), `${entry.path} is in the manifest but not in the tree`);
         }
     });
+    it('ships the shared restore helper and recovery files needed by the shell scripts', () => {
+        for (const file of ['scripts/restore_helpers.sh', 'scripts/recover_update.sh',
+            'scripts/systemd/free-sleep-recover-update.service', 'scripts/systemd/free-sleep-recover-update.timer']) {
+            assert.ok(agentPaths.has(file), `${file} is required by the shipped shell scripts`);
+        }
+    });
     it('pins the base by a full commit sha, since upstream publishes no tags', () => {
         assert.match(AGENT_BASE.sha, /^[0-9a-f]{40}$/);
         assert.match(AGENT_BASE.version, /^\d+\.\d+\.\d+$/);

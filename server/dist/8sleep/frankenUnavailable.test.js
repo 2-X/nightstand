@@ -13,12 +13,14 @@ const previousEnv = {
     FRANKEN_CONNECT_WAIT_MS: process.env.FRANKEN_CONNECT_WAIT_MS,
     FRANKEN_CONNECTION_TIMEOUT_MS: process.env.FRANKEN_CONNECTION_TIMEOUT_MS,
     FRANKEN_BACKGROUND_CONNECT_WAIT_MS: process.env.FRANKEN_BACKGROUND_CONNECT_WAIT_MS,
+    FRANKEN_COMMAND_TIMEOUT_MS: process.env.FRANKEN_COMMAND_TIMEOUT_MS,
 };
 process.env.DATA_FOLDER = `${folder}/`;
 process.env.ENV = 'local';
 process.env.FRANKEN_CONNECT_WAIT_MS = '100';
 process.env.FRANKEN_CONNECTION_TIMEOUT_MS = '200';
 process.env.FRANKEN_BACKGROUND_CONNECT_WAIT_MS = '800';
+process.env.FRANKEN_COMMAND_TIMEOUT_MS = '300';
 // The firmware connects when the test says so, like a Pod whose firmware
 // is restarting.
 let deliver;
@@ -36,6 +38,7 @@ const { disconnectFranken, isFrankenConnected, FrankenUnavailableError } = await
 const { FrankenSupersededError } = await import('./frankenErrors.js');
 const { executeFunction } = await import('./deviceApi.js');
 const { executeAlarm } = await import('../jobs/alarmScheduler.js');
+const ledger = await import('../jobs/alarmLedger.js');
 const listener = net.createServer();
 listener.listen(0, '127.0.0.1');
 await new Promise(resolve => listener.once('listening', resolve));
@@ -46,28 +49,32 @@ const leftOnStatus = [
     'tgHeatLevelR = 0', 'tgHeatLevelL = 0', 'heatTimeL = 3600', 'heatLevelL = 0', 'heatTimeR = 0',
     'heatLevelR = 0', 'sensorLabel = test', 'waterLevel = true', 'priming = false', `settings = ${cbor.encode({}).toString('hex')}`,
 ].join('\n') + '\n\n';
-// Connects a fake firmware client that records every command it receives.
-// It answers a status request with a real status and any other command with
-// its own bytes.
-async function connectFirmware() {
+async function connectFirmware(fault = {}) {
     const accepted = new Promise(resolve => listener.once('connection', resolve));
     const client = net.createConnection(listener.address().port, '127.0.0.1');
     const peer = await accepted;
     sockets.push(client, peer);
     const received = [];
     peer.on('data', data => {
-        received.push(data.toString());
-        peer.write(data.toString() === '14\n\n' ? leftOnStatus : data);
+        const message = data.toString();
+        received.push(message);
+        const injected = message === '14\n\n' ? fault.status : message.startsWith('5\n') ? fault.alarm : undefined;
+        if (injected === 'close')
+            peer.destroy();
+        else if (injected === undefined)
+            peer.write(message === '14\n\n' ? leftOnStatus : data);
     });
     while (!deliver)
         await new Promise(resolve => setTimeout(resolve, 5));
     deliver(client);
     deliver = undefined;
-    while (!isFrankenConnected())
+    while (!isFrankenConnected() && received.length === 0)
         await new Promise(resolve => setTimeout(resolve, 5));
     return received;
 }
 afterEach(async () => {
+    ledger.resetAlarmLedgerForTests();
+    rmSync(path.join(folder, 'alarm-ledger.json'), { force: true });
     await disconnectFranken();
     deliver = undefined;
     sockets.splice(0).forEach(socket => socket.destroy());
@@ -121,6 +128,7 @@ const unrefLongTimers = (t) => {
 const alarm = { side: 'left', vibrationIntensity: 50, duration: 10, vibrationPattern: 'rise' };
 test('a scheduled alarm that would start minutes late is skipped', async (t) => {
     unrefLongTimers(t);
+    ledger.startAlarmLedger(new Date());
     let clock = Date.now();
     t.mock.method(Date, 'now', () => clock);
     const ringing = executeAlarm(alarm, undefined, { background: true });
@@ -130,6 +138,34 @@ test('a scheduled alarm that would start minutes late is skipped', async (t) => 
     await ringing;
     await pause(50);
     assert.deepEqual(received, ['14\n\n'], 'the alarm should have checked the side and then stopped');
+    assert.deepEqual(ledger.listMissedAlarms().map(item => item.reason), ['late']);
+});
+test('a scheduled alarm the Pod could not be reached for is reported as late', async () => {
+    ledger.startAlarmLedger(new Date());
+    assert.equal(await executeAlarm(alarm, undefined, { background: true }), 0);
+    assert.deepEqual(ledger.listMissedAlarms().map(item => item.reason), ['late']);
+    assert.equal(await executeAlarm({ ...alarm, force: true }), 0);
+    assert.equal(ledger.listMissedAlarms().length, 1, 'a manual alarm is never reported');
+});
+const missedAfter = async (fault) => {
+    ledger.startAlarmLedger(new Date());
+    const ringing = executeAlarm(alarm, undefined, { background: true });
+    await pause(50);
+    await connectFirmware(fault);
+    assert.equal(await ringing, 0);
+    return ledger.listMissedAlarms().map(item => item.reason);
+};
+test('an alarm written to a Pod that then drops the connection is unconfirmed', async () => {
+    assert.deepEqual(await missedAfter({ alarm: 'close' }), ['unconfirmed']);
+});
+test('an alarm written to a Pod that never answers is unconfirmed', async () => {
+    assert.deepEqual(await missedAfter({ alarm: 'silent' }), ['unconfirmed']);
+});
+test('a Pod that does not answer the side check in time counts as late', async () => {
+    assert.deepEqual(await missedAfter({ status: 'silent' }), ['late']);
+});
+test('a connection that drops during the side check counts as late', async () => {
+    assert.deepEqual(await missedAfter({ status: 'close' }), ['late']);
 });
 test('a scheduled alarm that is on time is sent', async (t) => {
     unrefLongTimers(t);
@@ -176,5 +212,46 @@ test('only the newest waiting state command for a setting is applied on reconnec
     await Promise.all([off, level]);
     assert.ok(await onOutcome instanceof FrankenSupersededError);
     assert.deepEqual([...received].sort(), ['11\n10\n\n', '9\n0\n\n']);
+});
+test('a deferred state command is worked out when it is finally sent', async (t) => {
+    let clock = Date.now();
+    t.mock.method(Date, 'now', () => clock);
+    const until = clock + 3_600_000;
+    const pending = executeFunction('LEFT_TEMP_DURATION', () => String(Math.ceil((until - Date.now()) / 1000)), {
+        background: true, latest: true, notAfter: until,
+    });
+    await pause(50);
+    clock += 600_000;
+    const received = await connectFirmware();
+    await pending;
+    assert.deepEqual(received, ['9\n3000\n\n']);
+});
+test('a deferred state command is not sent once its end has passed', async (t) => {
+    let clock = Date.now();
+    t.mock.method(Date, 'now', () => clock);
+    const until = clock + 3_600_000;
+    let worked = false;
+    const sending = executeFunction('LEFT_TEMP_DURATION', () => { worked = true; return '1'; }, {
+        background: true, latest: true, notAfter: until,
+    });
+    const outcome = sending.then(() => undefined, (error) => error);
+    await pause(50);
+    clock = until + 1;
+    const received = await connectFirmware();
+    assert.ok(await outcome instanceof FrankenUnavailableError);
+    await pause(50);
+    assert.deepEqual(received, []);
+    assert.equal(worked, false);
+});
+test('a deferred argument that throws fails the command and sends nothing', async () => {
+    const sending = executeFunction('LEFT_TEMP_DURATION', () => { throw new Error('no end'); }, { background: true, latest: true });
+    const outcome = sending.then(() => undefined, (error) => error);
+    await pause(20);
+    const received = await connectFirmware();
+    assert.match(String(await outcome), /no end/);
+    await pause(50);
+    assert.deepEqual(received, []);
+    await executeFunction('LEFT_TEMP_DURATION', '0', { background: true, latest: true });
+    assert.deepEqual(received, ['9\n0\n\n']);
 });
 //# sourceMappingURL=frankenUnavailable.test.js.map

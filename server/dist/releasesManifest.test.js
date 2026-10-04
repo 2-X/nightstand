@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { UPDATE_CHANNELS } from './db/settingsSchema.js';
@@ -62,6 +63,37 @@ describe('releases.json', () => {
         for (const release of releases) {
             assert.ok(manifest.channels.includes(release.channel), `channel "${release.channel}" is not declared`);
         }
+    });
+    it('publishes tree checksums as 64 hex characters', () => {
+        for (const release of releases.filter((entry) => entry.treeSha256 !== undefined)) {
+            assert.match(release.treeSha256 ?? '', /^[0-9a-f]{64}$/, `${release.version} has a malformed treeSha256`);
+        }
+    });
+    // Updaters refuse a download whose digest differs, so a wrong value here
+    // blocks that release on every Pod. The newest three releases with a local
+    // tag are checked against git archive of the tag, which is what GitHub
+    // serves. A clone without tags checks nothing.
+    it('publishes the checksum of each recent tagged release tree', (t) => {
+        const tagged = releases.filter((release) => {
+            const found = spawnSync('git', ['-C', repoRoot, 'rev-parse', '-q', '--verify', `refs/tags/v${release.version}`]).status === 0;
+            if (!found)
+                t.diagnostic(`skipping v${release.version}: no local tag`);
+            return found;
+        }).slice(0, 3);
+        for (const release of tagged) {
+            const digest = execFileSync('bash', ['-c', 'git -C "$1" archive "v$2" | python3 "$1/scripts/tree_digest.py" --tar -',
+                'digest', repoRoot, release.version], { encoding: 'utf8' }).trim();
+            assert.equal(release.treeSha256, digest, `v${release.version} publishes the wrong treeSha256`);
+        }
+    });
+    it('records the checked upstream commit, if any, in the shape the switch reads', () => {
+        const pin = manifest.upstreamSwitch;
+        if (pin === undefined)
+            return;
+        assert.match(pin.commit ?? '', /^[0-9a-f]{40}$/, 'upstreamSwitch.commit must be a full commit id');
+        assert.match(pin.date ?? '', /^\d{4}-\d{2}-\d{2}$/);
+        if (pin.treeSha256 !== undefined)
+            assert.match(pin.treeSha256, /^[0-9a-f]{64}$/);
     });
 });
 describe('serverInfo.json', () => {

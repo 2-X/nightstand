@@ -1,20 +1,15 @@
 import moment from 'moment-timezone';
 import { wakeFromNight } from '../../db/rhythmWake.js';
 import { SCHEDULE_DAYS } from '../../db/scheduleKeys.js';
-import { compareTimes, isValidTime, scheduleWrapsToNextDay } from '../utils.js';
+import { addDays, rhythmSleepBounds, wallClock } from '../../db/rhythmTimes.js';
+import { compareTimes, isValidTime } from '../utils.js';
 import { normalizeNight } from './night.js';
 import { applySmartCurve } from './smartSleep.js';
 // Longer than any caller needs, so a mistaken window cannot resolve years of sleeps.
 export const MAX_RESOLVE_WINDOW_MS = 70 * 24 * 60 * 60 * 1000;
 const KIND_ORDER = { 'power-on': 0, temperature: 1, alarm: 2, 'power-off': 3 };
 const DATE_FORMAT = 'YYYY-MM-DD';
-const addDays = (date, days) => moment.utc(date, DATE_FORMAT, true).add(days, 'day').format(DATE_FORMAT);
 const weekdayOf = (date) => SCHEDULE_DAYS[moment.utc(date, DATE_FORMAT, true).day()];
-// A time that does not exist on this date (spring forward) moves forward by
-// the gap; a time that happens twice (fall back) takes the first occurrence.
-function wallClock(date, time, timeZone) {
-    return moment.tz(`${date} ${time}`, `${DATE_FORMAT} HH:mm`, true, timeZone).toDate();
-}
 // Times at or after power on belong to the start date, earlier ones to the next.
 const dateForTime = (date, time, powerOn) => (compareTimes(time, powerOn) >= 0 ? date : addDays(date, 1));
 function resolveNight(side, date, source, timeZone) {
@@ -22,8 +17,8 @@ function resolveNight(side, date, source, timeZone) {
     const { power } = night;
     if (!power.enabled || !isValidTime(power.on) || !isValidTime(power.off))
         return null;
-    const start = wallClock(date, power.on, timeZone);
-    const end = wallClock(scheduleWrapsToNextDay(power) ? addDays(date, 1) : date, power.off, timeZone);
+    const wakeTime = source.wake !== undefined && isValidTime(source.wake) ? source.wake : wakeFromNight(night);
+    const { start, end, wake } = rhythmSleepBounds(date, power, wakeTime, timeZone);
     // A short night starting in a spring-forward gap can lose its whole length.
     // The legacy engine skips that power on and leaves the side off.
     if (end <= start)
@@ -41,15 +36,21 @@ function resolveNight(side, date, source, timeZone) {
     });
     events.push({ kind: 'power-off', at: end });
     events.sort((a, b) => a.at.getTime() - b.at.getTime() || KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
-    const wakeTime = source.wake !== undefined && isValidTime(source.wake) ? source.wake : wakeFromNight(night);
-    // Waking at the turn off means the end, even when off equals on.
-    const wakeAt = wakeTime === power.off ? end.getTime() : wallClock(dateForTime(date, wakeTime, power.on), wakeTime, timeZone).getTime();
-    const wake = new Date(Math.min(Math.max(wakeAt, start.getTime()), end.getTime()));
     const sleep = { side, date, rhythmId: source.rhythmId, start, end, wake, night, mode: source.mode, events };
     if (source.mode === 'smart' && source.smart)
         sleep.smart = { ...source.smart };
     return sleep;
 }
+// Ends a sleep at its actual off: later while kept on for someone in bed,
+// earlier once they got up. Anything due at or after an earlier end is dropped.
+export function withPowerOff(sleep, at) {
+    if (!at || at.getTime() === sleep.end.getTime() || at.getTime() <= sleep.start.getTime())
+        return sleep;
+    const events = sleep.events.filter(event => event.kind !== 'power-off' && event.at.getTime() < at.getTime());
+    events.push({ kind: 'power-off', at });
+    return { ...sleep, end: at, setOff: sleep.end, wake: new Date(Math.min(sleep.wake.getTime(), at.getTime())), events };
+}
+export const turnsOffWhenUp = (sleep) => sleep.mode === 'smart' && sleep.smart?.offWhenUp === true;
 // A sleep starting the day before `from` can still be running at `from`.
 function resolveWindow(window, sourceFor) {
     const { side, timeZone, from, to } = window;
@@ -63,8 +64,9 @@ function resolveWindow(window, sourceFor) {
     for (let date = addDays(moment.tz(from, timeZone).format(DATE_FORMAT), -1); date <= last; date = addDays(date, 1)) {
         const source = sourceFor(date);
         const night = source ? resolveNight(side, date, source, timeZone) : null;
+        const ended = night && withPowerOff(night, window.powerOffFor?.(side, date));
         // The pre-warm moves a Smart Schedule start earlier, so the curve goes on before the window check.
-        const sleep = night && applySmartCurve(night, timeZone, window.coolStartFor?.(side, date));
+        const sleep = ended && applySmartCurve(ended, timeZone, window.coolStartFor?.(side, date));
         if (sleep && sleep.start <= to && sleep.end >= from)
             sleeps.push(sleep);
     }

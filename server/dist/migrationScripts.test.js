@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, existsSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 // The fork-switch tool is the
@@ -40,22 +41,12 @@ describe('fork-switch tool scripts', () => {
             const mode = statSync(full).mode;
             assert.ok(mode & 0o111, `${script} must carry the exec bit`);
         });
-        it(`${script} passes shellcheck when available (non-fatal)`, () => {
-            const full = path.join(repoRoot, script);
-            try {
-                execFileSync('which', ['shellcheck'], { stdio: 'ignore' });
-            }
-            catch {
-                return; // shellcheck not installed on this machine, skip, don't fail CI-of-one
-            }
-            try {
-                execFileSync('shellcheck', ['-S', 'error', full], { stdio: 'pipe' });
-            }
-            catch (err) {
-                console.warn(`shellcheck warnings for ${script}:\n${err.stdout?.toString?.() ?? err}`);
-            }
-        });
     }
+    it('pod-installer.sh re-runs itself under bash and installs no Python packages', () => {
+        const src = readScript('scripts/migrate/pod-installer.sh');
+        assert.match(src, /^\[ -n "\$\{BASH_VERSION:-\}" \] \|\| exec bash "\$0" "\$@"$/m);
+        assert.doesNotMatch(src, /\bpip3?\b|requirements/);
+    });
     it('data-compat-check.mjs exists and parses', () => {
         const full = path.join(repoRoot, 'scripts/migrate/data-compat-check.mjs');
         assert.equal(existsSync(full), true);
@@ -171,6 +162,23 @@ describe('fork-switch tool scripts', () => {
             ], 'pod-installer.sh');
             assert.doesNotMatch(src, /\/etc\/sudoers/, 'sudoers changes belong in setup_services.sh');
         });
+        // The first arming of the hardware watchdog can reset the Pod. Before the
+        // sentinel is disarmed, that reset would restore their fork 12 minutes
+        // after boot even though the migration had succeeded.
+        it('turns on the hardware watchdog only after the sentinel is disarmed', () => {
+            const success = src.slice(src.indexOf('Health check passed'));
+            const disarm = success.indexOf('\ndisarm_sentinel\n');
+            const arm = success.indexOf('bash "$LIVE/scripts/setup_watchdog.sh"');
+            assert.ok(disarm > 0, 'expected the sentinel to be disarmed on success');
+            assert.ok(arm > disarm, 'setup_watchdog.sh must run after disarm_sentinel');
+            // A reset during the trial must not leave a healthy migration recorded
+            // as unfinished, so the success record and line come first.
+            assert.ok(arm > success.indexOf('write_status "install" "success"'), 'arm after the success status is written');
+            assert.ok(arm > success.indexOf('say "SUCCESS: migrated'), 'arm after the SUCCESS line');
+            assert.ok(arm > success.indexOf('rm -f "$SWAP_MARKER"'), 'arm after the swap marker is cleared');
+            assert.equal(src.split('setup_watchdog.sh').length - 1, 2, 'one guard and one call, both after the swap succeeded');
+            assert.match(success, /bash "\$LIVE\/scripts\/setup_watchdog\.sh" --auto /, 'an owner\'s --remove stays in force');
+        });
         it('applies this fork\'s WAN policy only after the health check succeeds', () => {
             assertOrder(src, [
                 'if [ "$HEALTHY" != yes ]',
@@ -239,9 +247,96 @@ describe('fork-switch tool scripts', () => {
                 'systemctl start free-sleep-stream',
             ], 'pod-installer.sh stream restart');
         });
+        // As update.sh does: only a stream that was running before the swap is
+        // started again. The other fork's Biometrics flag is not read, since a
+        // first install there can leave it off while the stream runs.
+        it('starts free-sleep-stream again only if it was running before the swap', () => {
+            const before = src.indexOf('systemctl stop free-sleep-stream');
+            const captured = src.lastIndexOf('systemctl is-active free-sleep-stream', before);
+            assert.ok(captured > 0 && captured < before, 'read whether it ran before stopping it');
+            // Run that part with each state systemd can report. A stream between
+            // restarts reads activating, and it was running too.
+            const from = src.indexOf('STREAM_WAS_ACTIVE=no');
+            const block = src.slice(from, src.indexOf('if [ -f "$DATABASE" ]', from));
+            for (const [state, expected] of [['active', 'active'], ['activating', 'active'], ['reloading', 'active'],
+                ['inactive', 'no'], ['failed', 'no']]) {
+                const out = execFileSync('bash', ['-c', `systemctl() { [ "$1" = is-active ] && echo ${state}; return 0; }
+restore_and_report() { :; }
+${block}
+echo "$STREAM_WAS_ACTIVE"`], { encoding: 'utf8' });
+                assert.equal(out.trim().split('\n').pop(), expected, state);
+            }
+            const start = src.indexOf('systemctl start free-sleep-stream', before);
+            const gate = src.lastIndexOf('\n', start);
+            assert.match(src.slice(src.lastIndexOf('\n', gate - 1), start), /if \[ "\$STREAM_WAS_ACTIVE" = active \]; then\s*$/);
+            assert.equal(src.split('systemctl start free-sleep-stream').length - 1, 1, 'no other start');
+            assert.doesNotMatch(src, /servicesDB/, 'the other fork\'s flag is not consulted');
+        });
+        // A fork moving here has no update channel yet; the server would default
+        // to stable and offer a Pod on a beta nothing until a stable passed it.
+        it('saves the installed release\'s channel after the swap, before the server starts', () => {
+            assert.match(src, /read -r TARGET_VERSION TARGET_CHANNEL <<< "\$PICK"/);
+            assertOrder(src, [
+                'mv "$STAGE" "$LIVE"',
+                '# A fork moving here has no update channel yet',
+                '/persistent/free-sleep-data/lowdb/settingsDB.json "$TARGET_CHANNEL"',
+                'systemctl start free-sleep ||',
+            ], 'pod-installer.sh channel save');
+            const block = src.slice(src.indexOf('# A fork moving here has no update channel yet'), src.indexOf('systemctl start free-sleep ||'));
+            assert.match(block, /if "updateChannel" in data:\n\s+sys\.exit\(0\)/, 'keeps a channel the carried-over settings already have');
+            assert.match(block, /\|\| say "WARNING: could not save the update channel"/, 'never fails the migration over it');
+        });
+        it('adds the channel only where the carried-over settings have none, keeping the file mode', () => {
+            const block = src.slice(src.indexOf('# A fork moving here has no update channel yet'), src.indexOf('systemctl start free-sleep ||'));
+            const run = (existing, channel, failWrite = false) => {
+                const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-migrate-'));
+                const settings = path.join(dir, 'settingsDB.json');
+                if (existing !== null) {
+                    writeFileSync(settings, existing);
+                    chmodSync(settings, 0o660);
+                }
+                let section = block.replaceAll('/persistent/free-sleep-data/lowdb/settingsDB.json', settings);
+                if (failWrite)
+                    section = section.replace('os.replace(tmp, path)', 'raise OSError("simulated")');
+                const result = spawnSync('bash', ['-c', `say() { echo "$*"; }\nTARGET_CHANNEL="$TEST_CHANNEL"\n${section}`], {
+                    env: { ...process.env, TEST_CHANNEL: channel }, encoding: 'utf8',
+                });
+                const saved = existsSync(settings) ? JSON.parse(readFileSync(settings, 'utf8')) : null;
+                const mode = existsSync(settings) ? statSync(settings).mode & 0o777 : null;
+                const tmpKept = existsSync(`${settings}.tmp`);
+                rmSync(dir, { recursive: true, force: true });
+                assert.equal(result.status, 0, result.stderr);
+                assert.doesNotMatch(result.stderr, /Traceback/);
+                return { saved, mode, tmpKept, out: result.stdout };
+            };
+            assert.deepEqual(run(null, 'beta').saved, { updateChannel: 'beta' });
+            const added = run('{"timeZone":"UTC"}', 'beta');
+            assert.deepEqual([added.saved, added.mode], [{ timeZone: 'UTC', updateChannel: 'beta' }, 0o660]);
+            const failed = run('{"timeZone":"UTC"}', 'beta', true);
+            assert.deepEqual([failed.saved, failed.tmpKept], [{ timeZone: 'UTC' }, false]);
+            assert.match(failed.out, /WARNING: could not save the update channel/);
+            assert.deepEqual(run('{"updateChannel":"stable"}', 'beta').saved, { updateChannel: 'stable' });
+            assert.equal(run(null, 'nightly').saved, null);
+        });
     });
     describe('restore-original-fork.sh idempotency', () => {
         const src = readScript('scripts/migrate/restore-original-fork.sh');
+        // Their stream comes back only if their Pod had it enabled. The restore
+        // can run after a reboot, so it reads systemd's saved state, which the
+        // migration never changes, rather than whether it was running.
+        it('starts their stream again only if it is enabled', () => {
+            const fn = src.slice(src.indexOf('start_stream_if_enabled() {'), src.indexOf('\n}\n', src.indexOf('start_stream_if_enabled() {')) + 3);
+            for (const [state, started] of [['enabled', true], ['disabled', false], ['masked', false], ['', false]]) {
+                const out = execFileSync('bash', ['-c', `LOG=$(mktemp)
+systemctl() { echo "systemctl $*" >> "$LOG"; [ "$1" = is-enabled ] && echo "${state}"; return 0; }
+${fn}
+start_stream_if_enabled
+cat "$LOG"; rm -f "$LOG"`], { encoding: 'utf8' });
+                assert.equal(out.includes('systemctl start free-sleep-stream'), started, `${state}: ${out}`);
+            }
+            assert.equal(src.split('systemctl start free-sleep-stream').length - 1, 1, 'only the gated start');
+            assert.equal(src.split('\nstart_stream_if_enabled\n').length - 1 + src.split('  start_stream_if_enabled\n').length - 1, 2, 'both the no-op and the revert path use it');
+        });
         it('documents the swap-never/half/already-happened decision table', () => {
             assert.match(src, /never happened, half\s*\n?#?\s*happened, or already happened/);
         });
@@ -325,6 +420,20 @@ describe('pod-installer.sh and serverInfo.json agree about the fork field', () =
         const expected = /\[ "\$STAGED_FORK" = "([^"]+)" \]/.exec(src)?.[1];
         assert.ok(expected, 'could not find the fork comparison in pod-installer.sh');
         assert.equal(serverInfo.fork, expected, `pod-installer.sh accepts a staged tree only when its fork field is "${expected}"`);
+    });
+});
+// The tool's report and success text send people to the app's rollback, so
+// they must name the labels the app shows today.
+describe('the fork-switch tool names the app\'s real rollback path', () => {
+    const tool = ['scripts/migrate/switch-to-this-fork.sh', 'scripts/migrate/pod-installer.sh'].map(readScript).join('\n');
+    it('points at Settings > Software > Recovery', () => {
+        assert.doesNotMatch(tool, /Software & updates/);
+        assert.doesNotMatch(tool, /"Roll back"|> Roll back|in-app Roll back/);
+        assert.equal(tool.split('Settings > Software > Recovery').length - 1, 4, tool.match(/Settings >[^\n]*/g)?.join('\n'));
+    });
+    it('uses labels the app shows', () => {
+        assert.match(readScript('app/src/pages/SettingsPage/settingsCategories.ts'), /key: 'versions', title: 'Software'/);
+        assert.match(readScript('app/src/pages/SettingsPage/VersionsPage/VersionsPage.tsx'), />Recovery<\/AccordionSummary>/);
     });
 });
 //# sourceMappingURL=migrationScripts.test.js.map

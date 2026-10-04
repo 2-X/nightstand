@@ -1,4 +1,6 @@
 import _ from 'lodash';
+import { resumeSchedule } from '../../jobs/resumeSchedule.js';
+import { SCHEDULE_SIDES } from '../../db/scheduleKeys.js';
 import express from 'express';
 import logger from '../../logger.js';
 const router = express.Router();
@@ -27,6 +29,8 @@ router.post('/settings', async (req, res) => {
     // into settingsDB.data verbatim if the raw body were merged instead.
     const validatedUpdate = validationResult.data;
     delete validatedUpdate.id;
+    const resumed = [];
+    const resumedAt = new Date();
     let conflict = '';
     const rejected = {};
     const saved = await updateSettings(draft => {
@@ -43,6 +47,10 @@ router.post('/settings', async (req, res) => {
             rejected.error = pauseError;
             return false;
         }
+        for (const side of SCHEDULE_SIDES) {
+            if (draft[side].scheduleOverrides.pause.active && validatedUpdate[side]?.scheduleOverrides?.pause?.active === false)
+                resumed.push(side);
+        }
         _.merge(draft, validatedUpdate);
     }, async (draft) => {
         if (validatedUpdate.rawArchiveRetentionDays !== undefined) {
@@ -57,6 +65,8 @@ router.post('/settings', async (req, res) => {
         res.status(400).json({ error: rejected.error });
         return;
     }
+    for (const side of resumed)
+        await resumeSchedule(side, resumedAt);
     res.status(200).json(saved);
 });
 export default router;

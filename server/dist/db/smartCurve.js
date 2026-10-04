@@ -69,6 +69,11 @@ export function buildCurve(input) {
             points.push({ at: new Date(at), level, phase });
     };
     const afterWake = wake + CURVE.afterWakeMinutes * MINUTE;
+    // A sleep that turns off when the person gets up holds the wake level to the end.
+    const after = () => {
+        if (!smart.offWhenUp)
+            push(afterWake, base, 'after');
+    };
     if (windowMinutes < CURVE.veryShortWindowMinutes) {
         push(prewarmStart, base, 'prewarm');
         push(bedtime, base, 'bedtime');
@@ -77,7 +82,7 @@ export function buildCurve(input) {
         if (wakeLevel !== base)
             push(warmAt, wakeLevel, 'warmup');
         push(wake, wakeLevel, 'wake');
-        push(afterWake, base, 'after');
+        after();
         return points;
     }
     const short = windowMinutes < CURVE.shortWindowMinutes;
@@ -108,7 +113,7 @@ export function buildCurve(input) {
     }
     if (!smart.warmUp) {
         push(wake, level, 'wake');
-        push(afterWake, base, 'after');
+        after();
         return points;
     }
     const steps = Math.max(0, wakeLevel - level);
@@ -128,7 +133,7 @@ export function buildCurve(input) {
     });
     if (steps === 0)
         push(wake, level, 'wake');
-    push(afterWake, base, 'after');
+    after();
     return points;
 }
 // Level in effect at `at`: the last point at or before it, else the first point.

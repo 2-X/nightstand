@@ -40,6 +40,9 @@ const { abortAlarmWaits, resetAlarmActivity } = await import('../alarmActivity.j
 const { resetPowerOnTimes } = await import('../powerScheduler.js');
 const { resetOffTimes } = await import('./runEvent.js');
 const { setEngineActivation } = await import('../scheduleQueries.js');
+const { DEFAULT_SMART } = await import('../../db/rhythmsSchema.js');
+const { resolveSleeps } = await import('./resolve.js');
+const { smartResolveHooks, startCurveController, stopCurveController } = await import('./curveController.js');
 const NIGHT = testNight('22:00', '06:00', { temperatures: { '02:00': 72 }, alarms: ['05:45'] });
 const at = (iso) => new Date(iso);
 const setNow = (iso) => mock.timers.setTime(Date.parse(iso));
@@ -419,5 +422,126 @@ it('does not turn a sleep on late again once it turned on', async () => {
     await schedule.scheduledJobs[LATE_ON].invoke();
     await schedule.scheduledJobs[LATE_ON].invoke();
     assert.equal(updates.length, 1);
+});
+it('plans the analyses after the actual off and leaves the timer of a sleep kept on to its steps', () => {
+    const side = everyNight(NIGHT);
+    side.rhythms['every-night'].temperatureMode = 'smart';
+    side.rhythms['every-night'].smart = { ...DEFAULT_SMART, offWhenUp: true };
+    const db = testRhythmsDB(schedulesDB.data, side);
+    const stamp = () => new Date().toISOString();
+    const controller = startCurveController({
+        now: () => new Date(),
+        presence: () => ({ left: { present: true, lastUpdatedAt: stamp(), stateChangedAt: stamp() }, right: { present: false } }),
+        awayMode: () => ({ left: false, right: false }),
+        isPaused: () => false,
+        sleeps: (sleepSide, from, to) => resolveSleeps({ db, side: sleepSide, timeZone: 'UTC', from, to, ...smartResolveHooks }),
+        applyLevel: async () => { },
+        retime: () => { },
+        recordHistory: async () => { },
+        smartOff: {
+            sideIsOn: async () => true,
+            powerOff: async () => true,
+            armTimer: async () => true,
+            alarmPending: () => false,
+            nextRestart: () => null,
+        },
+    });
+    try {
+        setNow('2026-09-29T06:00:00Z');
+        const [sleep] = resolveSleeps({ db, side: 'left', timeZone: 'UTC', from: at('2026-09-29T05:00:00Z'), to: at('2026-09-29T05:59:00Z') });
+        assert.equal(controller.decideOff('left', sleep, new Date()), 'keep');
+        setNow('2026-09-29T06:01:00Z');
+        scheduleRhythms(settingsDB.data, db, new Date());
+        const tonight = rhythmNames().filter(name => name.startsWith('rhythm-left-2026-09-28-') && /power-off|analysis|rearm/.test(name));
+        assert.deepEqual(tonight, [
+            'rhythm-left-2026-09-28-analysis-0915-0', 'rhythm-left-2026-09-28-analysis-1100-1', 'rhythm-left-2026-09-28-power-off-0900-0',
+        ]);
+    }
+    finally {
+        stopCurveController();
+    }
+});
+// A "When I get up" day sleep on Tuesday only, from 08:00 with an 11:00 wake,
+// so the noon analysis has no other sleep to step aside for.
+const tuesdayDaySleep = (off) => {
+    const side = everyNight(testNight('08:00', off));
+    const rhythm = side.rhythms['every-night'];
+    rhythm.wake = '11:00';
+    rhythm.temperatureMode = 'smart';
+    rhythm.smart = { ...DEFAULT_SMART, offWhenUp: true };
+    for (const day of Object.keys(side.week))
+        if (day !== 'tuesday')
+            side.week[day] = null;
+    return testRhythmsDB(schedulesDB.data, side);
+};
+const smartOffController = (db, present, since) => startCurveController({
+    now: () => new Date(),
+    presence: () => ({ left: { present, lastUpdatedAt: new Date().toISOString(), stateChangedAt: since }, right: { present: false } }),
+    awayMode: () => ({ left: false, right: false }),
+    isPaused: () => false,
+    sleeps: (sleepSide, from, to) => resolveSleeps({ db, side: sleepSide, timeZone: 'UTC', from, to, ...smartResolveHooks }),
+    applyLevel: async () => { },
+    retime: () => { },
+    recordHistory: async () => { },
+    smartOff: {
+        sideIsOn: async () => true,
+        powerOff: async () => true,
+        armTimer: async () => true,
+        alarmPending: () => false,
+        nextRestart: () => null,
+    },
+});
+// The rebuild that follows an early off or a keep.
+const rebuildAt = (db, iso) => {
+    Object.keys(schedule.scheduledJobs).forEach(name => schedule.cancelJob(name));
+    setNow(iso);
+    scheduleRhythms(settingsDB.data, db, new Date());
+    return rhythmNames().filter(name => name.startsWith('rhythm-left-2026-09-29-') && /power-off-|analysis-/.test(name));
+};
+it('moves the analyses to an early off and does not repeat them at noon', async () => {
+    const db = tuesdayDaySleep('13:00');
+    setNow('2026-09-28T11:00:00Z');
+    scheduleRhythms(settingsDB.data, db, new Date());
+    const noon = schedule.scheduledJobs['daily-analyze-sleep-left'];
+    assert.ok(noon, 'the day before the sleep keeps its noon analysis');
+    const controller = smartOffController(db, false, '2026-09-29T11:15:00Z');
+    try {
+        setNow('2026-09-29T11:30:00Z');
+        await controller.tick();
+        assert.equal(controller.powerOffFor('left', '2026-09-29')?.toISOString(), '2026-09-29T11:30:00.000Z');
+        setNow('2026-09-29T12:00:00Z');
+        await noon.invoke();
+        assert.deepEqual(analyses, [], 'the noon run repeated the analysis of the sleep that ended early');
+        assert.deepEqual(rebuildAt(db, '2026-09-29T11:31:00Z'), [
+            'rhythm-left-2026-09-29-analysis-1145-0', 'rhythm-left-2026-09-29-analysis-1330-1',
+        ]);
+        assert.equal(schedule.scheduledJobs['daily-analyze-sleep-left'], undefined);
+    }
+    finally {
+        stopCurveController();
+    }
+});
+it('keeps the noon analysis out for a sleep kept on past noon', async () => {
+    const db = tuesdayDaySleep('11:30');
+    setNow('2026-09-28T11:00:00Z');
+    scheduleRhythms(settingsDB.data, db, new Date());
+    const noon = schedule.scheduledJobs['daily-analyze-sleep-left'];
+    assert.ok(noon, 'the day before the sleep keeps its noon analysis');
+    const controller = smartOffController(db, true, '2026-09-29T08:30:00Z');
+    try {
+        setNow('2026-09-29T11:30:00Z');
+        const [sleep] = resolveSleeps({ db, side: 'left', timeZone: 'UTC', from: at('2026-09-29T11:00:00Z'), to: at('2026-09-29T11:29:00Z') });
+        assert.equal(controller.decideOff('left', sleep, new Date()), 'keep');
+        setNow('2026-09-29T12:00:00Z');
+        await noon.invoke();
+        assert.deepEqual(analyses, [], 'the noon run analysed a sleep still kept on');
+        assert.deepEqual(rebuildAt(db, '2026-09-29T11:31:00Z'), [
+            'rhythm-left-2026-09-29-analysis-1445-0', 'rhythm-left-2026-09-29-analysis-1630-1', 'rhythm-left-2026-09-29-power-off-1430-0',
+        ]);
+        assert.equal(schedule.scheduledJobs['daily-analyze-sleep-left'], undefined);
+    }
+    finally {
+        stopCurveController();
+    }
 });
 //# sourceMappingURL=scheduleRhythms.test.js.map

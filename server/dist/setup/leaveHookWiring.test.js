@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, it, mock } from 'node:test';
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import express from 'express';
@@ -37,4 +37,33 @@ it('the mounted routes hand Rhythms sleeps back when a script prepares to stop',
     assert.equal(response.status, 204);
     assert.deepEqual(handoffs, ['revert']);
 });
+// A rollback, a downgrade or a switch leaves for a version that keeps no
+// alarm record, so the alarms saved here would read as missed on the way back.
+const ledgerFile = path.join(folder, 'alarm-ledger.json');
+const later = (minutes) => new Date(Date.now() + minutes * 60_000);
+for (const body of [
+    { reason: 'rollback' }, { reason: 'downgrade' }, { reason: 'revert' },
+    { reason: 'rollback', handBack: false }, { reason: 'downgrade', handBack: false },
+]) {
+    it(`forgets the saved alarms before stopping for ${JSON.stringify(body)}`, async () => {
+        const ledger = await import('../jobs/alarmLedger.js');
+        ledger.resetAlarmLedgerForTests();
+        writeFileSync(ledgerFile, JSON.stringify({
+            version: 1, aliveAt: new Date().toISOString(), started: [], missed: [],
+            upcoming: [{ side: 'left', at: later(5).toISOString(), jobName: 'left-one-off-alarm' }],
+        }));
+        ledger.startAlarmLedger(new Date());
+        handoffs.length = 0;
+        const response = await fetch(`${url}/api/update/prepare-to-stop`, {
+            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+        });
+        assert.equal(response.status, 204);
+        assert.deepEqual(JSON.parse(readFileSync(ledgerFile, 'utf8')).upcoming, []);
+        // The target continues Rhythms sleeps itself when told not to hand them back.
+        assert.deepEqual(handoffs, body.handBack === false ? [] : [body.reason]);
+        ledger.resetAlarmLedgerForTests();
+        assert.deepEqual(ledger.startAlarmLedger(later(60)), []);
+        ledger.resetAlarmLedgerForTests();
+    });
+}
 //# sourceMappingURL=leaveHookWiring.test.js.map

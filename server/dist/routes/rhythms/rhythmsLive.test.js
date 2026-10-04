@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { after, afterEach, before, describe, it } from 'node:test';
+import { after, afterEach, before, describe, it, mock } from 'node:test';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -17,9 +17,13 @@ const { RhythmsLiveResponseSchema } = await import('../../db/rhythmsSchema.js');
 const { applySmartCurve } = await import('../../jobs/rhythms/smartSleep.js');
 const { startCurveController, stopCurveController } = await import('../../jobs/rhythms/curveController.js');
 const MINUTE = 60_000;
+// Smart Schedule curves differ for a sleep whose midpoint falls in daytime, so a wall clock that
+// moves the fixture's night into the day changes the next change the route reports.
+const NOW = Date.parse('2026-09-29T23:00:00Z');
 let server;
 let baseUrl;
 before(async () => {
+    mock.timers.enable({ apis: ['Date'], now: NOW });
     const app = express();
     app.use(express.json());
     app.use(router);
@@ -28,6 +32,7 @@ before(async () => {
     baseUrl = `http://127.0.0.1:${server.address().port}`;
 });
 after(async () => {
+    mock.timers.reset();
     stopCurveController();
     await new Promise(resolve => {
         server.closeAllConnections();
@@ -39,7 +44,7 @@ const alarm = {
     time: '06:30', enabled: true, alarmTemperature: 82, vibrationIntensity: 50, vibrationPattern: 'rise', duration: 60,
 };
 // A Smart Schedule night that starts at bedtime and lasts the given minutes.
-const smartNight = (bedtime, minutes) => {
+const smartNight = (bedtime, minutes, offWhenUp = false) => {
     const end = new Date(bedtime.getTime() + minutes * MINUTE);
     return applySmartCurve({
         side: 'left',
@@ -50,7 +55,7 @@ const smartNight = (bedtime, minutes) => {
         wake: new Date(end.getTime() - 60 * MINUTE),
         night: { temperatures: {}, alarm, alarms: [], power: { on: '22:45', off: '07:45', onTemperature: 80, enabled: true } },
         mode: 'smart',
-        smart: { baseLevel: 0, intensity: 'standard', warmStart: true, warmUp: true, upEarly: false },
+        smart: { baseLevel: 0, intensity: 'standard', warmStart: true, warmUp: true, upEarly: false, ...(offWhenUp ? { offWhenUp } : {}) },
         events: [
             { kind: 'power-on', at: bedtime, temperatureF: 80 },
             { kind: 'alarm', at: new Date(end.getTime() - 60 * MINUTE), alarm, index: 0 },
@@ -134,6 +139,32 @@ describe('GET /rhythms/live', () => {
         assert.ok(state);
         assert.ok(state.baseSince && Math.abs(Date.parse(state.baseSince) - Date.now()) < 5_000);
         assert.equal(state.waiting, false);
+    });
+    it('says when a "When I get up" sleep turns off at the latest while presence is fresh', async () => {
+        const sleep = smartNight(new Date(Math.floor(Date.now() / MINUTE) * MINUTE - 60 * MINUTE), 9 * 60, true);
+        const controller = startCurveController({
+            now: () => new Date(),
+            presence: () => {
+                const stamp = new Date().toISOString();
+                return { left: { present: true, lastUpdatedAt: stamp, stateChangedAt: stamp }, right: { present: false } };
+            },
+            awayMode: () => ({ left: false, right: false }),
+            isPaused: () => false,
+            sleeps: side => (side === 'left' ? [sleep] : []),
+            applyLevel: async () => { },
+            retime: () => { },
+            recordHistory: async () => { },
+            smartOff: {
+                sideIsOn: async () => true,
+                powerOff: async () => true,
+                armTimer: async () => true,
+                alarmPending: () => false,
+                nextRestart: () => null,
+            },
+        });
+        await controller.tick();
+        const state = RhythmsLiveResponseSchema.parse((await live('?side=left')).body);
+        assert.equal(state?.offWhenUp?.by, new Date(sleep.end.getTime() + 3 * 60 * MINUTE).toISOString());
     });
 });
 //# sourceMappingURL=rhythmsLive.test.js.map

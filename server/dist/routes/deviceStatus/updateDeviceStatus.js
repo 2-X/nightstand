@@ -2,19 +2,22 @@ import _ from 'lodash';
 import cbor from 'cbor';
 import { MAX_ON_DURATION_SECONDS } from './deviceStatusSchema.js';
 import { executeFunction } from '../../8sleep/deviceApi.js';
+import { dismissAlarm } from '../../8sleep/dismissAlarm.js';
 import { FrankenSupersededError } from '../../8sleep/frankenErrors.js';
 import logger from '../../logger.js';
 import settingsDB from '../../db/settings.js';
 import memoryDB from '../../db/memoryDB.js';
 import { INVERTED_SETTINGS_KEY_MAPPING } from '../../8sleep/loadDeviceStatus.js';
 import { forgetKeptAlarms } from '../../jobs/rhythms/keptAlarms.js';
+import { forgetActiveAlarm } from '../../jobs/activeAlarms.js';
+import { firmwareSecondsUntil } from '../../jobs/firmwareTimer.js';
 // Inverse of loadDeviceStatus.ts's calculateTempInF. Same fixed firmware
 // level scale, so the two files must be changed together.
 const calculateLevelFromF = (temperatureF) => {
     const level = (temperatureF - 82.5) / 27.5 * 100;
     return Math.round(level).toString();
 };
-const updateSide = async (side, sideStatus, options) => {
+const updateSide = async (side, sideStatus, options, onUntil) => {
     await settingsDB.read();
     const settings = settingsDB.data;
     if (side === 'left') {
@@ -37,7 +40,20 @@ const updateSide = async (side, sideStatus, options) => {
     if (controlBothSides) {
         logger.debug('One side is in away mode, updating both sides...');
     }
-    if (isOn !== undefined) {
+    if (onUntil && !Number.isFinite(onUntil.getTime())) {
+        logger.warn(`Ignoring an invalid end for the ${side} side, using the ${MAX_ON_DURATION_SECONDS} s default`);
+        onUntil = undefined;
+    }
+    if (isOn && onUntil) {
+        const until = onUntil.getTime();
+        const onDuration = () => String(firmwareSecondsUntil(onUntil, new Date()));
+        const timedOptions = { ...stateOptions, notAfter: Math.min(until, stateOptions.notAfter ?? until) };
+        if (updateLeft)
+            await executeFunction('LEFT_TEMP_DURATION', onDuration, timedOptions);
+        if (updateRight)
+            await executeFunction('RIGHT_TEMP_DURATION', onDuration, timedOptions);
+    }
+    else if (isOn !== undefined) {
         const onDuration = isOn ? String(MAX_ON_DURATION_SECONDS) : '0';
         if (updateLeft)
             await executeFunction('LEFT_TEMP_DURATION', onDuration, stateOptions);
@@ -67,8 +83,10 @@ const updateSide = async (side, sideStatus, options) => {
     }
     if (isAlarmVibrating !== undefined) {
         logger.debug('Can only set isAlarmVibrating to false for now...');
-        if (!isAlarmVibrating)
-            await executeFunction('ALARM_CLEAR', 'empty', options);
+        if (!isAlarmVibrating) {
+            await dismissAlarm(side, options);
+            forgetActiveAlarm(side);
+        }
         await memoryDB.read();
         memoryDB.data[side].isAlarmVibrating = false;
         await memoryDB.write();
@@ -81,17 +99,18 @@ const updateSettings = async (settings, options) => {
     await executeFunction('SET_SETTINGS', hexString, options);
 };
 // Scheduled callers pass { background: true } to wait longer for the hardware.
-export const updateDeviceStatus = async (deviceStatus, options = {}) => {
+export const updateDeviceStatus = async (deviceStatus, updateOptions = {}) => {
     logger.info(`Updating device status..`);
+    const { onUntil, ...options } = updateOptions;
     try {
         if (deviceStatus.isPriming === true)
             await executeFunction('PRIME', 'empty', options);
         else if (deviceStatus.isPriming === false)
             await executeFunction('STOP_PRIME', 'empty', options);
         if (deviceStatus?.left)
-            await updateSide('left', deviceStatus.left, options);
+            await updateSide('left', deviceStatus.left, options, onUntil);
         if (deviceStatus?.right)
-            await updateSide('right', deviceStatus.right, options);
+            await updateSide('right', deviceStatus.right, options, onUntil);
         if (deviceStatus?.settings)
             await updateSettings(deviceStatus.settings, options);
     }

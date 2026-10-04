@@ -1,6 +1,7 @@
 import express from 'express';
 import { frankenCommands, executeFunction } from '../../8sleep/deviceApi.js';
 import { normalizeExecuteArg } from './executeHelpers.js';
+import { noteManualPowerChange } from '../../jobs/manualPowerChange.js';
 const router = express.Router();
 router.post('/execute', async (req, res) => {
     const { command, arg } = (req.body ?? {});
@@ -14,6 +15,10 @@ router.post('/execute', async (req, res) => {
         res.status(400).json({ message: `Invalid arg for ${command}` });
         return;
     }
+    if (command === 'LEFT_TEMP_DURATION')
+        noteManualPowerChange('left');
+    if (command === 'RIGHT_TEMP_DURATION')
+        noteManualPowerChange('right');
     // Execute the 8sleep command
     await executeFunction(command, normalizedArg);
     // Respond with success

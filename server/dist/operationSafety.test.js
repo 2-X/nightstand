@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 const root = path.resolve('..');
 const script = (name) => readFileSync(path.join(root, 'scripts', name), 'utf8');
-for (const name of ['update.sh', 'revert-to-stock.sh']) {
+for (const name of ['update.sh', 'switch-to-upstream.sh']) {
     it(`${name} does not clean the incumbent stage when its lock is refused`, () => {
         const folder = mkdtempSync(path.join(tmpdir(), 'operation-refused-'));
         try {
@@ -37,7 +37,7 @@ it('real flock refuses all operations while another owns the shared lock', { ski
             holder.once('exit', () => reject(new Error('lock holder exited')));
             holder.stdout.once('data', () => resolve());
         });
-        for (const name of ['update.sh', 'rollback_pod.sh', 'revert-to-stock.sh']) {
+        for (const name of ['update.sh', 'rollback_pod.sh', 'switch-to-upstream.sh']) {
             const source = script(name);
             const begin = source.indexOf('# Keep the descriptor');
             const end = source.indexOf('\nfi', begin) + 3;
@@ -54,7 +54,88 @@ it('real flock refuses all operations while another owns the shared lock', { ski
         rmSync(folder, { recursive: true, force: true });
     }
 });
-for (const name of ['update.sh', 'revert-to-stock.sh']) {
+for (const name of ['install.sh', 'reset.sh']) {
+    it(`${name} refuses admission while stream reconciliation owns the lock`, async () => {
+        const folder = mkdtempSync(path.join(tmpdir(), 'operation-admission-'));
+        const lock = path.join(folder, 'operation.lock');
+        const source = script(name);
+        const start = source.indexOf('# Share admission');
+        const end = source.indexOf(name === 'reset.sh' ? 'SOCK_PATH=""' : '# Variables', start);
+        assert.ok(start >= 0 && end > start);
+        const admission = source.slice(start, end);
+        const run = () => spawnSync('bash', ['-c', admission + '\necho admitted'], {
+            encoding: 'utf8', env: { ...process.env, NIGHTSTAND_OPERATION_LOCK: lock },
+        });
+        const holder = spawn('python3', ['-c',
+            'import fcntl, sys; handle=open(sys.argv[1], "a+"); fcntl.flock(handle, fcntl.LOCK_EX);'
+                + ' print("ready", flush=True); sys.stdin.read()', lock]);
+        const closed = new Promise(resolve => holder.once('close', () => resolve()));
+        try {
+            await new Promise((resolve, reject) => {
+                holder.once('error', reject);
+                holder.once('exit', () => reject(new Error('lock holder exited')));
+                holder.stdout.once('data', () => resolve());
+            });
+            const denied = run();
+            assert.equal(denied.status, 1, denied.stdout + denied.stderr);
+            assert.match(denied.stdout, /already running/);
+            assert.doesNotMatch(denied.stdout, /admitted/);
+            holder.stdin.end();
+            await closed;
+            const accepted = run();
+            assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+            assert.match(accepted.stdout, /admitted/);
+        }
+        finally {
+            holder.stdin.end();
+            await closed;
+            rmSync(folder, { recursive: true, force: true });
+        }
+    });
+}
+for (const name of ['install.sh', 'reset.sh']) {
+    it(`${name} preserves inherited ownership across an exec handoff without a gap`, () => {
+        const folder = mkdtempSync(path.join(tmpdir(), 'operation-handoff-'));
+        const lock = path.join(folder, 'operation.lock');
+        try {
+            writeFileSync(lock, '');
+            const source = script(name);
+            const start = source.indexOf('# Share admission');
+            const end = source.indexOf(name === 'reset.sh' ? 'SOCK_PATH=""' : '# Variables', start);
+            assert.ok(start >= 0 && end > start);
+            const handoff = path.join(folder, 'handoff.sh');
+            writeFileSync(handoff, `
+flock() {
+  python3 -c 'import fcntl, sys; fcntl.flock(open(sys.argv[1], "r"), fcntl.LOCK_EX | fcntl.LOCK_NB)' "$NIGHTSTAND_OPERATION_LOCK" \
+    && { echo 'gap: independent contender acquired lock'; return 1; }
+  python3 -c 'import fcntl; fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)'
+}
+${source.slice(start, end)}
+python3 -c 'import fcntl, sys
+try: fcntl.flock(open(sys.argv[1], "r"), fcntl.LOCK_EX | fcntl.LOCK_NB)
+except BlockingIOError: sys.exit(0)
+sys.exit("contender entered during the handoff")' "$NIGHTSTAND_OPERATION_LOCK"
+`);
+            const result = spawnSync('bash', ['-c', `
+exec 9<"$NIGHTSTAND_OPERATION_LOCK"
+python3 -c 'import fcntl; fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)' || exit 1
+export NIGHTSTAND_OPERATION_OWNER=$$
+exec bash "$1"
+`, 'handoff', handoff], {
+                encoding: 'utf8', env: { ...process.env, NIGHTSTAND_OPERATION_LOCK: lock },
+            });
+            assert.equal(result.status, 0, result.stdout + result.stderr);
+            assert.doesNotMatch(result.stdout, /gap:/);
+            const contender = spawnSync('python3', ['-c',
+                'import fcntl, sys; fcntl.flock(open(sys.argv[1], "r"), fcntl.LOCK_EX | fcntl.LOCK_NB)', lock]);
+            assert.equal(contender.status, 0, 'the descriptor is released when the script exits');
+        }
+        finally {
+            rmSync(folder, { recursive: true, force: true });
+        }
+    });
+}
+for (const name of ['update.sh', 'switch-to-upstream.sh']) {
     it(`${name} snapshots committed WAL rows separately from rotated code backups`, () => {
         const source = script(name);
         const block = source.slice(source.indexOf('# --- backup'), source.indexOf('# --- atomic swap'));
@@ -71,7 +152,9 @@ with tempfile.TemporaryDirectory() as folder:
  block=block.replace('/persistent/free-sleep-database-backups', str(root/'database-backups'))
  setup='''set -uo pipefail
 BACKUPS="'''+str(root/'code-backups')+'''"; DATABASE_BACKUPS="'''+str(root/'database-backups')+'''"
-SQLITE_SAFETY="'''+sys.argv[2]+'''"; KEEP_BACKUPS=5; CUR_VERSION=3.3.1
+SQLITE_SAFETY="'''+sys.argv[2]+'''"
+PRUNE_SNAPSHOTS="'''+str(pathlib.Path(sys.argv[2]).parent/'prune_db_snapshots.sh')+'''"
+KEEP_BACKUPS=5; CUR_VERSION=3.3.1
 say() { echo "$*"; }; fail() { echo "$*"; exit 1; }; tar() { :; }
 '''
  run=subprocess.run(['bash','-c',setup+block],capture_output=True,text=True)
@@ -114,7 +197,7 @@ it('downgrades stay in the current updater instead of handing off safety checks'
     const condition = source.slice(source.lastIndexOf('\n  if ', source.indexOf('say "Handing the rest')), source.indexOf('say "Handing the rest'));
     assert.match(condition, /IS_DOWNGRADE.*!=.*yes/);
 });
-for (const name of ['update.sh', 'rollback_pod.sh', 'revert-to-stock.sh']) {
+for (const name of ['update.sh', 'rollback_pod.sh', 'switch-to-upstream.sh']) {
     it(`${name} takes the same exclusive operation lock before preflight`, () => {
         const source = script(name);
         assert.match(source, /NIGHTSTAND_OPERATION_LOCK.*\/run\/lock\/free-sleep-operation.lock/);

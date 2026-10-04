@@ -16,6 +16,25 @@ function checkIfDacSockPathConfigured() {
         logger.error(error);
     }
 }
+const FRANK_SCRIPT = '/opt/eight/bin/frank.sh';
+// The installer copies the firmware's socket path out of frank.sh; read it
+// the same way when that copy is missing, rather than assume a Pod 3.
+export function sockPathFromFrankScript(text) {
+    return /DAC_SOCKET=([^\s]*dac\.sock)/.exec(text)?.[1];
+}
+function sockPathFromFirmware() {
+    try {
+        return existsSync(FRANK_SCRIPT) ? sockPathFromFrankScript(readFileSync(FRANK_SCRIPT, 'utf8')) : undefined;
+    }
+    catch (error) {
+        logger.error(error);
+        return undefined;
+    }
+}
+// An empty copy counts as missing, so the firmware's path still wins over the Pod 3 default.
+export function pickSockPath(configured, remoteDevMode, fromFirmware) {
+    return configured || (remoteDevMode ? undefined : fromFirmware());
+}
 const FIRMWARE_MAP = {
     remoteDevMode: {
         dacLocation: `${process.env.DATA_FOLDER}/dac.sock`,
@@ -44,7 +63,7 @@ class Config {
         this.lowDbFolder = `${this.dbFolder}lowdb/`;
     }
     detectSockPath() {
-        const dacSockPath = checkIfDacSockPathConfigured();
+        const dacSockPath = pickSockPath(checkIfDacSockPathConfigured(), this.remoteDevMode, sockPathFromFirmware);
         if (dacSockPath) {
             logger.debug(`'Custom dac.sock path configured, using ${dacSockPath}`);
             return dacSockPath;

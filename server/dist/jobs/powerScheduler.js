@@ -12,6 +12,7 @@ import { isTempScheduleOverridden } from './scheduleOverride.js';
 import { describePause, isSchedulePaused } from './schedulePause.js';
 import { SLEEP_ANALYSIS_HOUR, SLEEP_ANALYSIS_MINUTE } from '../sleepAnalysisSchedule.js';
 import { letAlarmsFinish } from './alarmActivity.js';
+import { nextScheduledOff, noteWeeklyArmed, weeklyFirmwareEnd } from './firmwareTimer.js';
 // Minute of each side's latest scheduled power-on. A power-off due in that
 // minute or earlier ends the night before, and must not switch off the
 // session the power-on just started.
@@ -24,23 +25,10 @@ export const notePowerOn = (side, at) => {
     lastPowerOn.set(side, minuteOf(at));
 };
 export const poweredOnSince = (side, dueAt) => (lastPowerOn.get(side) ?? -Infinity) >= minuteOf(dueAt);
-export const schedulePowerOn = (settingsData, side, day, power) => {
-    if (!power.enabled)
-        return;
-    if (settingsData[side].awayMode)
-        return;
-    if (settingsData.timeZone === null)
-        return;
-    const onRule = new schedule.RecurrenceRule();
+export const weeklyPowerOnJob = (side, day, power, timeZone) => {
     const dayOfWeekIndex = getDayOfWeekIndex(day);
-    onRule.dayOfWeek = dayOfWeekIndex;
-    const [onHour, onMinute] = power.on.split(':').map(Number);
     const time = power.on;
-    onRule.hour = onHour;
-    onRule.minute = onMinute;
-    onRule.tz = settingsData.timeZone;
-    logJob('Scheduling power on job', side, day, dayOfWeekIndex, time);
-    schedule.scheduleJob(`${side}-${day}-${time}-power-on`, onRule, async (fireDate) => {
+    return async (fireDate) => {
         lastPowerOn.set(side, minuteOf(fireDate ?? new Date()));
         try {
             logJob('Executing power on job', side, day, dayOfWeekIndex, time);
@@ -57,11 +45,17 @@ export const schedulePowerOn = (settingsData, side, day, power) => {
             if (overridden) {
                 logJob('Temperature schedule overridden, powering on without setting temperature', side, day, dayOfWeekIndex, time);
             }
+            // The firmware turns the side off by itself at this time if this server
+            // stops, instead of 12 hours after the power-on.
+            const firedAt = fireDate ?? new Date();
+            const onUntil = weeklyFirmwareEnd(side, nextScheduledOff(firedAt, power.off, timeZone));
+            logger.info(`Executing weekly power-on for ${side} (${day})`);
             await updateDeviceStatus({
                 [side]: overridden
                     ? { isOn: true }
                     : { isOn: true, targetTemperatureF: power.onTemperature },
-            }, { background: true });
+            }, { background: true, onUntil });
+            noteWeeklyArmed(side, day, firedAt, onUntil);
             serverStatus.status.powerSchedule.status = 'healthy';
             serverStatus.status.powerSchedule.message = '';
         }
@@ -71,7 +65,26 @@ export const schedulePowerOn = (settingsData, side, day, power) => {
             serverStatus.status.powerSchedule.message = message;
             logger.error(error);
         }
-    });
+    };
+};
+export const schedulePowerOn = (settingsData, side, day, power) => {
+    if (!power.enabled)
+        return;
+    if (settingsData[side].awayMode)
+        return;
+    if (settingsData.timeZone === null)
+        return;
+    const timeZone = settingsData.timeZone;
+    const onRule = new schedule.RecurrenceRule();
+    const dayOfWeekIndex = getDayOfWeekIndex(day);
+    onRule.dayOfWeek = dayOfWeekIndex;
+    const [onHour, onMinute] = power.on.split(':').map(Number);
+    const time = power.on;
+    onRule.hour = onHour;
+    onRule.minute = onMinute;
+    onRule.tz = settingsData.timeZone;
+    logJob('Scheduling power on job', side, day, dayOfWeekIndex, time);
+    schedule.scheduleJob(`${side}-${day}-${time}-power-on`, onRule, weeklyPowerOnJob(side, day, power, timeZone));
 };
 // Analyze a full sleep day for each side, independent of temperature schedules.
 export const scheduleSleepAnalysis = (settingsData, side, skipAt) => {
@@ -145,6 +158,7 @@ export const schedulePowerOff = (settingsData, side, day, power) => {
                 logJob('Skipping power off, the next session already started', side, day, dayOfWeekIndex, time);
                 return;
             }
+            logger.info(`Executing weekly power-off for ${side} (${day})`);
             await updateDeviceStatus({
                 [side]: {
                     isOn: false,

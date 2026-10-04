@@ -83,6 +83,25 @@ async function runGestureTick(previous, next) {
     }
     return seen;
 }
+// Feeds reads through one monitor the way the poll loop does.
+async function runGestureTicks(reads) {
+    const monitor = new FrankenMonitor();
+    monitor.deviceStatus = reads[0];
+    const seen = [];
+    const onUnhandled = (reason) => seen.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+        for (const next of reads.slice(1)) {
+            monitor.processGestures(next);
+            monitor.deviceStatus = next;
+            await settle();
+        }
+    }
+    finally {
+        process.off('unhandledRejection', onUnhandled);
+    }
+    return seen;
+}
 describe('FrankenMonitor gesture handling', () => {
     beforeEach(async () => {
         updateRejectsWith = null;
@@ -103,6 +122,41 @@ describe('FrankenMonitor gesture handling', () => {
         const seen = await runGestureTick(unchanged, deviceStatus({ doubleTap: 1, tripleTap: 0, quadTap: 0 }));
         assert.equal(updateCalls, 0);
         assert.deepEqual(seen, []);
+    });
+    it('ignores a tap counter missing from the previous read', async () => {
+        const seen = await runGestureTick(deviceStatus(undefined), deviceStatus({ doubleTap: 2, tripleTap: 0, quadTap: 0 }));
+        assert.equal(updateCalls, 0);
+        assert.deepEqual(seen, []);
+    });
+    it('ignores a tap counter missing from the new read', async () => {
+        const seen = await runGestureTick(deviceStatus({ doubleTap: 1, tripleTap: 0, quadTap: 0 }), deviceStatus(undefined));
+        assert.equal(updateCalls, 0);
+        assert.deepEqual(seen, []);
+    });
+    it('sees a tap made across a read that is missing the counter', async () => {
+        const seen = await runGestureTicks([
+            deviceStatus({ doubleTap: 1, tripleTap: 0, quadTap: 0 }),
+            deviceStatus(undefined),
+            deviceStatus({ doubleTap: 2, tripleTap: 0, quadTap: 0 }),
+        ]);
+        assert.equal(updateCalls, 1);
+        assert.deepEqual(seen, []);
+    });
+    it('does not count a counter that comes back unchanged as a tap', async () => {
+        await runGestureTicks([
+            deviceStatus({ doubleTap: 1, tripleTap: 0, quadTap: 0 }),
+            deviceStatus(undefined),
+            deviceStatus({ doubleTap: 1, tripleTap: 0, quadTap: 0 }),
+        ]);
+        assert.equal(updateCalls, 0);
+    });
+    it('sees the first tap after the counter starts being reported', async () => {
+        await runGestureTicks([
+            deviceStatus(undefined),
+            deviceStatus({ doubleTap: 5, tripleTap: 0, quadTap: 0 }),
+            deviceStatus({ doubleTap: 6, tripleTap: 0, quadTap: 0 }),
+        ]);
+        assert.equal(updateCalls, 1, 'the first report is a baseline, the change after it is a tap');
     });
     // The regression this file exists for. processGesture runs detached so a
     // slow base move cannot stall the poll loop, which means the surrounding

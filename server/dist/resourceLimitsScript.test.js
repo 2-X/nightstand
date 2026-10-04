@@ -20,8 +20,9 @@ function runScript() {
     execFileSync('bash', [SCRIPT], {
         env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, NIGHTSTAND_SYSTEMD_DIR: root },
     });
-    const dropin = (unit) => readFileSync(path.join(root, `${unit}.d`, '10-nightstand-limits.conf'), 'utf8');
-    return { dropin, calls: readFileSync(calls, 'utf8') };
+    const dropinNamed = (unit, file) => readFileSync(path.join(root, `${unit}.d`, file), 'utf8');
+    const dropin = (unit) => dropinNamed(unit, '10-nightstand-limits.conf');
+    return { dropin, dropinNamed, calls: readFileSync(calls, 'utf8') };
 }
 describe('setup_resource_limits.sh', () => {
     it('parses and carries the exec bit', () => {
@@ -39,6 +40,21 @@ describe('setup_resource_limits.sh', () => {
         const conf = runScript().dropin('free-sleep-stream.service');
         assert.match(conf, /^MemoryMax=512M$/m);
         assert.match(conf, /^OOMScoreAdjust=300$/m);
+    });
+    it('restarts the server five seconds after any exit, with no start limit', () => {
+        const conf = runScript().dropinNamed('free-sleep.service', '20-nightstand-restart.conf');
+        assert.match(conf, /^\[Unit\]\nStartLimitIntervalSec=0$/m);
+        assert.match(conf, /^Restart=always$/m);
+        assert.match(conf, /^RestartSec=5$/m);
+    });
+    it('also sets the older StartLimitInterval spelling in [Service] for systemd before 230', () => {
+        const conf = runScript().dropinNamed('free-sleep.service', '20-nightstand-restart.conf');
+        const service = conf.slice(conf.indexOf('[Service]'));
+        assert.match(service, /^StartLimitInterval=0$/m);
+        assert.doesNotMatch(conf.slice(0, conf.indexOf('[Service]')), /^StartLimitInterval=/m);
+    });
+    it('leaves the stream service restart behaviour alone', () => {
+        assert.throws(() => runScript().dropinNamed('free-sleep-stream.service', '20-nightstand-restart.conf'));
     });
     it('reloads systemd and restarts nothing itself', () => {
         const { calls } = runScript();

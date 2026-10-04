@@ -7,10 +7,12 @@ import { getDeviceStatusCoalesced, isFrankenConnected } from '../../8sleep/frank
 import { updateDeviceStatus } from '../../routes/deviceStatus/updateDeviceStatus.js';
 import { hasAlarmOccurrence } from '../alarmScheduler.js';
 import { isAlarmPaused, isSchedulePaused } from '../schedulePause.js';
+import { noteManualPowerChange } from '../manualPowerChange.js';
 import { drivingSide, engineActivation } from '../scheduleQueries.js';
-import { resolveLegacySleeps, resolveSleeps } from './resolve.js';
+import { resolveLegacySleeps, resolveSleeps, turnsOffWhenUp } from './resolve.js';
 import { alarmOccurrenceId, firmwareSeconds, forgetArmedEnds, holdForHandBack } from './runEvent.js';
 import { keepSleepAlarms } from './scheduleRhythms.js';
+import { smartPowerOffFor } from './curveController.js';
 const DAY_MS = 24 * 60 * 60 * 1000;
 function errorMessage(error) {
     return error instanceof Error ? error.message : String(error);
@@ -20,13 +22,13 @@ function sleepAt(sleeps, now) {
     return sleeps.find(sleep => sleep.start.getTime() <= t && t < sleep.end.getTime());
 }
 export function planHandoff(input) {
-    const { settings, schedules, db, now, powerOffNow, isOn, alarmRang } = input;
+    const { settings, schedules, db, now, powerOffNow, isOn, alarmRang, powerOffFor } = input;
     const timeZone = settings.timeZone || 'UTC';
     return SCHEDULE_SIDES.map((side) => {
         const driver = drivingSide(settings, side);
         if (!driver || !isOn(side))
             return { side, action: 'none' };
-        const sleep = sleepAt(resolveSleeps({ db, side: driver, timeZone, from: now, to: now }), now);
+        const sleep = sleepAt(resolveSleeps({ db, side: driver, timeZone, from: now, to: now, powerOffFor }), now);
         if (!sleep)
             return { side, action: 'none' };
         if (powerOffNow)
@@ -40,8 +42,14 @@ export function planHandoff(input) {
                 .find(night => night.start <= bedtime && night.end > now);
         }
         // Alarms ring only on the present side.
-        if (!legacy)
-            return { side, action: 'kept-on-until', until: sleep.end, ...(side === driver ? { keptSleep: sleep } : {}) };
+        if (!legacy) {
+            const rearm = turnsOffWhenUp(sleep);
+            return {
+                side, action: 'kept-on-until', until: sleep.end,
+                ...(rearm ? { rearm: true } : {}),
+                ...(side === driver ? { keptSleep: sleep } : {}),
+            };
+        }
         const plan = { side, action: 'legacy-takes-over', until: legacy.end };
         const rhythmAlarmRang = sleep.events.some(event => event.kind === 'alarm'
             && event.at.getTime() <= now.getTime()
@@ -92,12 +100,21 @@ async function applyHandoff(plans, now) {
     const failed = new Set();
     for (const plan of plans) {
         try {
-            if (plan.action === 'powered-off')
+            if (plan.action === 'powered-off') {
+                await settingsDB.read();
+                const targets = settingsDB.data.left.awayMode || settingsDB.data.right.awayMode ? SCHEDULE_SIDES : [plan.side];
+                for (const side of targets)
+                    noteManualPowerChange(side);
                 await updateDeviceStatus({ [plan.side]: { isOn: false } });
+            }
             if (plan.action === 'legacy-takes-over' && plan.until) {
                 await updateDeviceStatus({ [plan.side]: { secondsRemaining: firmwareSeconds(plan.until, now) } });
                 // Rhythms sends its end again if it takes back over: turned back on, or
                 // still running once the hold before a stop has ended.
+                forgetArmedEnds(plan.side);
+            }
+            if (plan.action === 'kept-on-until' && plan.rearm && plan.until) {
+                await updateDeviceStatus({ [plan.side]: { secondsRemaining: firmwareSeconds(plan.until, now) } });
                 forgetArmedEnds(plan.side);
             }
         }
@@ -151,6 +168,7 @@ async function planNow(powerOffNow, now) {
         powerOffNow,
         isOn: await readOnStates(),
         alarmRang: hasAlarmOccurrence,
+        powerOffFor: smartPowerOffFor,
     });
 }
 export async function prepareToLeaveRhythms(reason) {

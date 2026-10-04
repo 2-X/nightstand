@@ -30,15 +30,17 @@ export const frankenCommands = {
     STOP_PRIME: '17',
 };
 export const invertedFrankenCommands = _.invert(frankenCommands);
+// A function arg is worked out once the Pod is reachable, for values that
+// depend on when the command is sent.
 export async function executeFunction(command, arg = 'empty', options = {}) {
-    logger.debug(`Executing command | command: ${command} | arg: ${arg}`);
+    logger.debug(`Executing command | command: ${command} | arg: ${typeof arg === 'string' ? arg : 'when sent'}`);
     const franken = await connectFrankenWithin(options, command);
     // const frankenCommand = funcNameToFrankenCommand[name];
     // if franken disconnects right before a function call this will throw
     // the error will bubble up to the main loop of the device-api-client (protocol handling)
     // and the client will crash disconnecting from device-api - this is safe, it's correctly cleaned-up,
     // deviceApiLoop will take care of reconnecting to device-api
-    const response = await franken.callFunction(command, arg);
+    const response = await franken.callFunction(command, typeof arg === 'string' ? arg : arg());
     logger.debug(response);
     return response;
 }

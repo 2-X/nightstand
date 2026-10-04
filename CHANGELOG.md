@@ -6,9 +6,9 @@ is a hard fork; for the history of the projects it descends from, see
 [jmew/free-sleep](https://github.com/jmew/free-sleep) and
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
 
-## [Unreleased]
+## [3.6.0] - 2026-10-07
 
-Themes, a plainer Sleep page, safer updates and recovery, and support for Pod firmware that keeps its sensor data in a local stream.
+Adds themes, safer updates, saved copies of the original system settings, and time in bed instead of estimated sleep.
 
 ### What changes in the app
 
@@ -223,6 +223,11 @@ Themes, a plainer Sleep page, safer updates and recovery, and support for Pod fi
 - Bed settings stay locked until they have loaded, so a
   failed load can no longer save defaults such as Fahrenheit. Old readings
   on the Schedule page show as Not responding in grey, as on the Bed page.
+
+Checked on: 2026-10-07, my Pod 5, updates, rollback, reset and restore,
+boot recovery, alarms, pause resume, firmware off timers, hardware watchdog,
+final controls and overnight health. See [the hardware checks and remaining
+gaps](docs/TESTING.md#hardware-checks).
 
 ## [3.5.1] - 2026-10-01
 

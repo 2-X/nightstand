@@ -3,10 +3,11 @@ import { levelToF } from '../../db/smartCurve.js';
 import { getPresenceData } from '../../routes/metrics/presence.js';
 import { updateDeviceStatus } from '../../routes/deviceStatus/updateDeviceStatus.js';
 import { isSchedulePaused } from '../schedulePause.js';
-import { resolveSleeps } from './resolve.js';
+import { applyAlarmsEnabled, resolveSleeps } from './resolve.js';
+import { isAlarmOverridden } from './gates.js';
 import { appendHistory } from './history.js';
 import { estimateOnset, ONSET_BASELINE_DAYS } from './onsetEstimate.js';
-import { smartCoolStartFor, startCurveController, stopCurveController, } from './curveController.js';
+import { smartResolveHooks, startCurveController, stopCurveController, } from './curveController.js';
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
 export const CURVE_TICK_MS = MINUTE;
@@ -42,7 +43,14 @@ export async function recordSleepHistory(summary, loadHeartRates = loadHeartRate
     }
     await appendHistory({ ...summary, onsetEstimate, onsetNote }, historyFile ? { path: historyFile } : {});
 }
-export function curveDeps(retime) {
+// Alarms that will not ring, off for the side or skipped by an override, do
+// not hold back an early off. An override's replacement time is its own job.
+export function ringableAlarms(sleeps, settings, side, now) {
+    return applyAlarmsEnabled(sleeps, settings[side].alarmsEnabled !== false).map(sleep => (isAlarmOverridden(settings, side, sleep, now)
+        ? { ...sleep, events: sleep.events.filter(event => event.kind !== 'alarm') }
+        : sleep));
+}
+export function curveDeps(retime, smartOff) {
     return {
         now: () => new Date(),
         presence: () => getPresenceData(),
@@ -51,7 +59,8 @@ export function curveDeps(retime) {
         sleeps: (side, from, to) => {
             if (!plan?.settings.timeZone)
                 return [];
-            return resolveSleeps({ db: plan.db, side, timeZone: plan.settings.timeZone, from, to, coolStartFor: smartCoolStartFor });
+            const sleeps = resolveSleeps({ db: plan.db, side, timeZone: plan.settings.timeZone, from, to, ...smartResolveHooks });
+            return ringableAlarms(sleeps, plan.settings, side, new Date());
         },
         // Scheduled work: waits out a reconnect, where a newer set point for the
         // side replaces it. Not awaited, so a waiting write never stalls the tick.
@@ -64,6 +73,7 @@ export function curveDeps(retime) {
         },
         retime,
         recordHistory: summary => recordSleepHistory(summary),
+        ...(smartOff ? { smartOff } : {}),
     };
 }
 // The job scheduler registers its rebuild here once at load.
@@ -73,10 +83,10 @@ export function setCurveRetime(retime) {
 export function syncCurvePlan(settings, db) {
     plan = { settings, db };
 }
-export function startCurveRuntime() {
+export function startCurveRuntime(smartOff) {
     if (timer)
         return;
-    const controller = startCurveController(curveDeps(() => retimeJobs()));
+    const controller = startCurveController(curveDeps(() => retimeJobs(), smartOff));
     // A slow tick (the history append at power off) must not overlap the next.
     let ticking = false;
     timer = setInterval(() => {

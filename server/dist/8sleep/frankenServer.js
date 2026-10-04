@@ -4,11 +4,12 @@ import { frankenCommands } from './deviceApi.js';
 import { UnixSocketServer } from './unixSocketServer.js';
 import logger from '../logger.js';
 import { loadDeviceStatus } from './loadDeviceStatus.js';
+import { FirmwareAlarmDismiss } from './firmwareAlarmDismiss.js';
 import config from '../config.js';
 import { wait } from './promises.js';
 import { promiseWithTimeout } from './timeoutPromise.js';
 import metrics from '../metrics/metrics.js';
-import { FrankenSupersededError } from './frankenErrors.js';
+import { FrankenConnectionClosedError, FrankenSupersededError, markCommandWritten } from './frankenErrors.js';
 // 0 disables the connection timeout; only a missing or non-numeric value falls back.
 const connectionTimeoutFromEnv = (raw) => {
     const parsed = raw === undefined || raw.trim() === '' ? Number.NaN : Number(raw);
@@ -59,12 +60,14 @@ export class Franken {
     sequentialQueue;
     static responseDelayMs = 10;
     lifetime = new AbortController();
+    firmwareAlarmDismiss = new FirmwareAlarmDismiss();
     constructor(socket, messageStream, sequentialQueue) {
         this.socket = socket;
         this.messageStream = messageStream;
         this.sequentialQueue = sequentialQueue;
         socket.once('close', () => {
-            this.lifetime.abort(new Error('Franken connection closed'));
+            this.lifetime.abort(new FrankenConnectionClosedError());
+            this.firmwareAlarmDismiss.reset();
             // A dropped socket aborts reads before their timeout can trigger recovery.
             // Retire only this active connection; late events must not close a newer one.
             if (franken === this) {
@@ -117,7 +120,11 @@ export class Franken {
             logger.debug(`Message sent successfully to sock | message: ${message}`);
             return response;
         }
-        catch (error) {
+        catch (caught) {
+            // The abort reason is shared by every command on this connection.
+            const error = caught === this.lifetime.signal.reason ? new FrankenConnectionClosedError() : caught;
+            if (writeCompleted && error instanceof Error)
+                markCommandWritten(error);
             if (error instanceof FrankenCommandTimeoutError) {
                 timedOut = true;
                 metrics.recordFrankenCommand(Date.now() - startedAt, true);
@@ -156,10 +163,12 @@ export class Franken {
         const command = 'DEVICE_STATUS';
         const commandNumber = frankenCommands[command];
         const response = await this.sendMessage(commandNumber);
-        return await loadDeviceStatus(response, getGestures);
+        this.lifetime.signal.throwIfAborted();
+        return await loadDeviceStatus(response, getGestures, this.firmwareAlarmDismiss);
     }
     close() {
-        this.lifetime.abort(new Error('Franken connection closed'));
+        this.lifetime.abort(new FrankenConnectionClosedError());
+        this.firmwareAlarmDismiss.reset();
         const socket = this.socket;
         if (!socket.destroyed)
             socket.destroy();

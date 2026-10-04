@@ -10,6 +10,8 @@ import serverInfo from '../serverInfo.json' with { type: 'json' };
 import servicesDB from '../db/services.js';
 import { WIFI_SIGNAL_STRENGTH } from './wifiSignalStrength.js';
 import { GestureSchema } from '../db/settingsSchema.js';
+import { FirmwareAlarmDismiss } from './firmwareAlarmDismiss.js';
+const firmwareAlarmDismiss = new FirmwareAlarmDismiss();
 const RawDeviceData = z.object({
     tgHeatLevelR: z.string().regex(/^-?\d+$/, { message: 'tgHeatLevelR must be a numeric value in a string' }),
     tgHeatLevelL: z.string().regex(/^-?\d+$/, { message: 'tgHeatLevelL must be a numeric value in a string' }),
@@ -24,9 +26,10 @@ const RawDeviceData = z.object({
     doubleTap: z.string().optional(),
     tripleTap: z.string().optional(),
     quadTap: z.string().optional(),
+    dismissAlarm: z.string().optional(),
 });
 // Reads & validates the raw response data from socket and converts it to an object
-const parseRawDeviceData = (response) => {
+export const parseRawDeviceData = (response) => {
     const rawDeviceData = Object.fromEntries(response.split('\n').map(l => l.split(' = ')));
     try {
         RawDeviceData.parse(rawDeviceData);
@@ -46,7 +49,7 @@ const parseRawDeviceData = (response) => {
 // This mapping comes from the pod firmware's fixed level scale, not a
 // setting of ours, so 82.5/27.5 cannot change without the firmware itself
 // changing what a "level" means.
-const calculateTempInF = (value) => {
+export const calculateTempInF = (value) => {
     const level = Number(value);
     if (level === 0) {
         // Technically 0 is 82.5, rounding the temperature simplifies everything though...
@@ -145,8 +148,9 @@ const detectHubVersion = async () => {
 };
 const HUB_VERSION = await detectHubVersion();
 // The default naming convention was ugly... This remaps the keys to human-readable names
-export async function loadDeviceStatus(response, getGestures) {
+export async function loadDeviceStatus(response, getGestures, dismissalObserver = firmwareAlarmDismiss) {
     const rawDeviceData = parseRawDeviceData(response);
+    await dismissalObserver.observe(rawDeviceData.dismissAlarm);
     const leftSideSecondsRemaining = Number(rawDeviceData.heatTimeL);
     const rightSideSecondsRemaining = Number(rawDeviceData.heatTimeR);
     await memoryDB.read();

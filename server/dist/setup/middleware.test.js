@@ -6,7 +6,7 @@ describe('getLocalSubnetPrefixes', () => {
     it('collects the /24 of every non-internal IPv4 interface', (t) => {
         t.mock.method(os, 'networkInterfaces', () => ({
             eth0: [
-                { family: 'IPv4', internal: false, address: '192.168.5.42' },
+                { family: 'IPv4', internal: false, address: '192.168.1.42' },
             ],
             tailscale0: [
                 { family: 'IPv4', internal: false, address: '100.64.1.7' },
@@ -15,7 +15,7 @@ describe('getLocalSubnetPrefixes', () => {
                 { family: 'IPv4', internal: true, address: '127.0.0.1' },
             ],
         }));
-        assert.deepEqual(getLocalSubnetPrefixes(), ['192.168.5.', '100.64.1.']);
+        assert.deepEqual(getLocalSubnetPrefixes(), ['192.168.1.', '100.64.1.']);
         mock.restoreAll();
     });
     it('ignores IPv6 interfaces', (t) => {
@@ -31,11 +31,11 @@ describe('getLocalSubnetPrefixes', () => {
 describe('isAllowedOrigin', () => {
     it('rejects hostname and configured-origin prefix impersonation', (t) => {
         t.mock.method(os, 'networkInterfaces', () => ({
-            eth0: [{ family: 'IPv4', internal: false, address: '192.168.5.42' }],
+            eth0: [{ family: 'IPv4', internal: false, address: '192.168.1.42' }],
         }));
         for (const origin of [
             'http://localhost.attacker.example', 'http://localhost@attacker.example',
-            'http://192.168.5.attacker.example', 'http://192.168.5.4.attacker.example',
+            'http://192.168.1.attacker.example', 'http://192.168.1.4.attacker.example',
             'http://localhost:3000/path', 'null', 'file:///etc/passwd',
         ])
             assert.equal(isAllowedOrigin(origin), false, origin);
@@ -58,9 +58,9 @@ describe('isAllowedOrigin', () => {
     });
     it('accepts exact loopback and same-subnet IP origins', (t) => {
         t.mock.method(os, 'networkInterfaces', () => ({
-            eth0: [{ family: 'IPv4', internal: false, address: '192.168.5.42' }],
+            eth0: [{ family: 'IPv4', internal: false, address: '192.168.1.42' }],
         }));
-        for (const origin of ['http://localhost:5173', 'http://127.0.0.1:3000', 'http://192.168.5.20:5173']) {
+        for (const origin of ['http://localhost:5173', 'http://127.0.0.1:3000', 'http://192.168.1.20:5173']) {
             assert.equal(isAllowedOrigin(origin), true, origin);
         }
         assert.equal(isAllowedOrigin('http://192.168.6.20:5173'), false);
@@ -94,28 +94,28 @@ test('invalid configured origins leave built-in local access available', async (
             process.env.ALLOWED_ORIGIN = previous;
     });
     t.mock.method(os, 'networkInterfaces', () => ({
-        eth0: [{ family: 'IPv4', internal: false, address: '192.168.5.42' }],
+        eth0: [{ family: 'IPv4', internal: false, address: '192.168.1.42' }],
     }));
     const { isAllowedOrigin: allowed } = await import(`./middleware.js?invalid=${Date.now()}`);
-    for (const origin of ['http://localhost:5173', 'http://[::1]:3000', 'http://eight-pod.local', 'http://192.168.5.20']) {
+    for (const origin of ['http://localhost:5173', 'http://[::1]:3000', 'http://eight-pod.local', 'http://192.168.1.20']) {
         assert.equal(allowed(origin), true, origin);
     }
 });
 test('subnet discovery is cached and refreshes after an interface change', async (t) => {
     let now = 1_000;
-    let address = '192.168.5.42';
+    let address = '192.168.1.42';
     const interfaces = t.mock.method(os, 'networkInterfaces', () => ({
         eth0: [{ family: 'IPv4', internal: false, address }],
     }));
     t.mock.method(Date, 'now', () => now);
     const { isAllowedOrigin: allowed } = await import(`./middleware.js?subnet-cache=${now}`);
-    assert.equal(allowed('http://192.168.5.20'), true);
-    assert.equal(allowed('http://192.168.5.20'), true);
+    assert.equal(allowed('http://192.168.1.20'), true);
+    assert.equal(allowed('http://192.168.1.20'), true);
     assert.equal(interfaces.mock.callCount(), 1);
     now += 30_000;
     address = '192.168.6.42';
     assert.equal(allowed('http://192.168.6.20'), true);
-    assert.equal(allowed('http://192.168.5.20'), false);
+    assert.equal(allowed('http://192.168.1.20'), false);
     assert.equal(interfaces.mock.callCount(), 2);
 });
 test('rejected origins are blocked before parsing malformed JSON', async (t) => {

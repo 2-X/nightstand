@@ -1,17 +1,19 @@
 import express from 'express';
 import { parseMetricsQuery, parseRowsQuery, ROWS_QUERY_ERROR } from './metricsQuery.js';
 import { prisma } from '../../db/prisma.js';
+import { biometricsV2Enabled } from '../../features/biometricsV2.js';
+import { averageRespRate, legacyVitalsSelect } from './vitalsV2.js';
 const router = express.Router();
 router.get('/vitals', async (req, res) => {
     const range = parseRowsQuery(req.query);
     if (!range)
         return res.status(400).json({ error: ROWS_QUERY_ERROR });
     const query = { side: range.side, timestamp: { gte: range.start, lte: range.end } };
-    // Use Prisma's generated type for the records
-    const vitals = await prisma.vitals.findMany({
-        where: query,
-        orderBy: { timestamp: 'asc' },
-    });
+    // With new sleep tracking off the response carries only the columns every
+    // release has sent; on, the newer estimate columns come too.
+    const vitals = biometricsV2Enabled()
+        ? await prisma.vitals.findMany({ where: query, orderBy: { timestamp: 'asc' } })
+        : await prisma.vitals.findMany({ where: query, orderBy: { timestamp: 'asc' }, select: legacyVitalsSelect });
     // Timestamps go out as the epoch seconds they are stored as. They used to
     // be reformatted here into an ISO8601 string in the user's timezone, which
     // silently emptied the chart: the client scales the value to milliseconds
@@ -32,14 +34,23 @@ router.get('/vitals/summary', async (req, res) => {
         _max: { heart_rate: true },
         _avg: { heart_rate: true },
     });
-    // Query: Average Breathing Rate (excluding 0)
-    const avgBreathingRate = await prisma.vitals.aggregate({
-        where: {
-            ...query,
-            breathing_rate: { not: 0, lte: 20, gte: 5 }, // Exclude zero values
-        },
-        _avg: { breathing_rate: true },
-    });
+    // With new sleep tracking on, breathing is the newer estimate only: nights
+    // without one show 0 rather than the older estimator's number.
+    let avgBreathingRate;
+    if (biometricsV2Enabled()) {
+        avgBreathingRate = await averageRespRate(query);
+    }
+    else {
+        // Query: Average Breathing Rate (excluding 0)
+        const legacyBreathing = await prisma.vitals.aggregate({
+            where: {
+                ...query,
+                breathing_rate: { not: 0, lte: 20, gte: 5 }, // Exclude zero values
+            },
+            _avg: { breathing_rate: true },
+        });
+        avgBreathingRate = legacyBreathing._avg.breathing_rate || 0;
+    }
     // Query: Average HRV (excluding 0)
     const avgHRV = await prisma.vitals.aggregate({
         where: {
@@ -53,7 +64,7 @@ router.get('/vitals/summary', async (req, res) => {
         minHeartRate: Math.round(heartRateSummary._min.heart_rate || 0),
         maxHeartRate: Math.round(heartRateSummary._max.heart_rate || 0),
         avgHRV: Math.round(avgHRV._avg.hrv || 0),
-        avgBreathingRate: Math.round(avgBreathingRate._avg.breathing_rate || 0),
+        avgBreathingRate: Math.round(avgBreathingRate),
     });
 });
 export default router;

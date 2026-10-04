@@ -78,6 +78,8 @@ export const AGENT_MANIFEST = [
     { path: 'app/src/api/updateSchema.ts', mode: 'add', why: 'shared update request and response types' },
     { path: 'app/src/state/updateAttentionStore.ts', mode: 'add', why: 'retains update request outcomes while navigating the app' },
     { path: 'app/src/api/useUpdateProgress.ts', mode: 'add', why: 'polls for the pod coming back on a new version' },
+    { path: 'app/src/api/bedInUse.ts', mode: 'add', why: 'reads the reasons an update, rollback or switch is held while the bed may be in use' },
+    { path: 'app/src/components/InUseConfirm.tsx', mode: 'add', why: 'shows those reasons before the second confirmation' },
     { path: 'app/src/components/VersionStatus.tsx', mode: 'copy', why: 'hosts the update prompt and the rollback and revert rows' },
     { path: 'app/src/pages/SettingsPage/DeviceSettingsSection/UpdateFreeSleepButton.tsx', mode: 'copy', why: 'triggers the pod self-updater' },
     { path: 'app/src/pages/SettingsPage/VersionsPage/RollbackRow.tsx', mode: 'add', why: 'instant offline rollback to the previous tree' },
@@ -96,23 +98,33 @@ export const AGENT_MANIFEST = [
     { path: 'scripts/update.sh', mode: 'copy', why: 'download, back up, swap, health check, auto rollback' },
     { path: 'scripts/update_service.sh', mode: 'copy', why: 'systemd entry point for the updater' },
     { path: 'scripts/setup_services.sh', mode: 'add', why: 'installs the updater, rollback and revert units and their sudoers rules' },
+    { path: 'scripts/restore_helpers.sh', mode: 'add', why: 'shared writer, dependency, firewall and restart steps for restores' },
+    { path: 'scripts/recover_update.sh', mode: 'add', why: 'settles marked update swaps after an interruption' },
+    { path: 'scripts/systemd/free-sleep-recover-update.service', mode: 'add', why: 'bounds one recovery attempt after boot' },
+    { path: 'scripts/systemd/free-sleep-recover-update.timer', mode: 'add', why: 'schedules recovery without holding boot completion' },
     { path: 'scripts/rollback_pod.sh', mode: 'add', why: 'swaps the live and previous trees offline' },
+    { path: 'scripts/close_update_window.sh', mode: 'add', why: 'closes the download window after the update or revert unit stops' },
     // No snapshot exists to restore. Upstream ships no tags, so this downloads
-    // whatever main is that day, which is not pinned to AGENT_BASE.sha and need
-    // not equal the tree the pod started from.
-    { path: 'scripts/revert-to-stock.sh', mode: 'add', why: 'the reversibility claim: downloads and installs plain upstream main' },
+    // the upstream commit releases.json records as checked with the switch, or
+    // main until one is recorded. Neither is pinned to AGENT_BASE.sha, and
+    // neither need equal the tree the pod started from.
+    { path: 'scripts/switch-to-upstream.sh', mode: 'add', why: 'the reversibility claim: downloads and installs plain upstream' },
+    { path: 'scripts/revert-to-stock.sh', mode: 'add', why: 'the old name of switch-to-upstream.sh, which older units and docs still run' },
     { path: 'scripts/systemd/free-sleep-rollback.service', mode: 'add', why: 'stock has no systemd directory; it writes its unit inline' },
     { path: 'scripts/systemd/free-sleep-revert.service', mode: 'add', why: 'stock has no systemd directory; it writes its unit inline' },
     { path: 'scripts/sqlite-safety.py', mode: 'add', why: 'consistent database snapshots and verified migration recovery' },
     { path: 'scripts/prepare-downgrade.py', mode: 'add', why: 'preserves configured sensor archive retention in older trees' },
     { path: 'scripts/prepare-upstream.py', mode: 'add', why: 'prepares settings accepted by the upstream reader' },
+    { path: 'scripts/write_result.py', mode: 'add', why: 'records how an update, rollback or switch ended, so the app can report it' },
+    { path: 'scripts/tree_digest.py', mode: 'add', why: 'checks a downloaded release against the checksum releases.json publishes for it' },
     // Server routes and jobs.
     { path: 'server/src/jobs/privilegedCommand.ts', mode: 'add', why: 'checks unit and sudo readiness before accepting an operation' },
     { path: 'server/src/jobs/update.ts', mode: 'copy', why: 'runs update.sh via the sudoers-permitted unit' },
     { path: 'server/src/jobs/rollback.ts', mode: 'add', why: 'runs rollback_pod.sh via its unit' },
-    { path: 'server/src/jobs/revertToStock.ts', mode: 'add', why: 'runs revert-to-stock.sh via its unit' },
+    { path: 'server/src/jobs/revertToStock.ts', mode: 'add', why: 'runs switch-to-upstream.sh via its unit' },
     { path: 'server/src/routes/update/update.ts', mode: 'add', why: 'POST /api/update and the rollback availability read' },
     { path: 'server/src/routes/update/updateSchema.ts', mode: 'add', why: 'validates the update target' },
+    { path: 'server/src/routes/update/inUseText.ts', mode: 'add', why: 'says why an update waits while the bed may be in use' },
     { path: 'server/src/serverInfo.json', mode: 'copy', why: 'identifies the build: version, branch, fork, upstream base' },
     {
         path: 'server/package.json',
@@ -123,6 +135,6 @@ export const AGENT_MANIFEST = [
     // Tests travel with the code they cover.
     { path: 'server/src/updaterScripts.test.ts', mode: 'add', why: 'pins update.sh invariants' },
     { path: 'server/src/rollbackScript.test.ts', mode: 'add', why: 'pins rollback_pod.sh invariants' },
-    { path: 'server/src/revertToStockScript.test.ts', mode: 'add', why: 'pins revert-to-stock.sh invariants' },
+    { path: 'server/src/switchToUpstreamScript.test.ts', mode: 'add', why: 'pins switch-to-upstream.sh invariants' },
 ];
 //# sourceMappingURL=agentManifest.js.map
