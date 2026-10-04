@@ -6,6 +6,43 @@ import { DEFAULT_THEME_ID, THEME_IDS, THEME_STORAGE_KEY } from '../src/design/th
 import { DESKTOP, NARROW, PHONE, SCREENS, openThemed, overflows, smallTargets } from './themeHelpers';
 
 for (const id of THEME_IDS) {
+  test(`demo banner in ${id} stays compact with usable targets`, async ({ page }) => {
+    await openThemed(page, id, '/', PHONE);
+    await SCREENS[0].ready(page);
+    await page.evaluate(() => document.fonts.ready);
+    const link = page.getByRole('link', { name: 'View on GitHub' });
+    const banner = page.locator('.MuiAlert-root').filter({ has: link });
+    for (const width of [320, 390, 768, 1280, 1600]) {
+      await page.setViewportSize({ width, height: 900 });
+      const metrics = await banner.evaluate(element => {
+        const message = element.querySelector('.MuiAlert-message')!;
+        const range = document.createRange();
+        range.selectNodeContents(message);
+        const textRects = [...range.getClientRects()].filter(rect => rect.height < 30 && rect.width > 0);
+        const lines = [...new Set(textRects.map(rect => Math.round(rect.top)))].sort((a, b) => a - b);
+        return { height: element.getBoundingClientRect().height, lines };
+      });
+      expect(metrics.height).toBeLessThanOrEqual(width >= 1280 ? 48 : 88);
+      if (width >= 1280) expect(metrics.lines).toHaveLength(1);
+      for (let line = 1; line < metrics.lines.length; line++) {
+        expect(metrics.lines[line] - metrics.lines[line - 1]).toBeLessThanOrEqual(21);
+      }
+      for (const target of [link, banner.getByRole('button', { name: 'Close' })]) {
+        const box = (await target.boundingBox())!;
+        expect(box.width).toBeGreaterThanOrEqual(44);
+        expect(box.height).toBeGreaterThanOrEqual(44);
+      }
+      expect(await overflows(page)).toBe(false);
+    }
+    await link.press('Tab');
+    const close = banner.getByRole('button', { name: 'Close' });
+    await expect(close).toBeFocused();
+    expect(await close.evaluate(element => getComputedStyle(element).outlineStyle)).toBe('solid');
+    await close.press('Shift+Tab');
+    await expect(link).toBeFocused();
+    expect(await link.evaluate(element => getComputedStyle(element).outlineStyle)).toBe('solid');
+  });
+
   for (const screen of SCREENS) {
     for (const [label, size] of [['a phone', PHONE], ['a desktop', DESKTOP]] as const) {
       test(`${screen.name} in ${id} on ${label} fits the width and keeps 44 px targets`, async ({ page }) => {
