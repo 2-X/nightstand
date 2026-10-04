@@ -8,130 +8,179 @@ is a hard fork; for the history of the projects it descends from, see
 
 ## [Unreleased]
 
-- Settings > Bed and sides has a Theme setting with four themes, saved on
-  each device. nightstand, the new default, is how 3.3.2 looked, with its
-  contrast raised to AA and its cards drawn flat. lamp keeps the warm white
-  colours of the previous release. free-sleep classic follows the original
-  free-sleep app, and jmew follows jmew's fork of it. Every theme has the
-  same screens, layout and 44 px targets, keeps level 0 neutral, and draws
-  last known and off states in grey. Roboto and Geist are bundled with
-  the app, so no theme loads anything from another site. Thanks to
-  throwaway31265 and jmew for the designs these themes are based on.
-- Settings > Features says that biometrics are estimates checked only on a
-  Pod 5, and marks other models, or a Pod whose model has not loaded yet, as
-  not checked.
-- Smart Schedule now says it cools once you have settled in bed (it does not
-  detect sleep), that a shared bed can fool its presence sensing, and that
-  its research list is background, not a test of this curve.
-- The sleep score no longer calls a night good, fair or rough. The Sleep
-  page leads with time asleep and shows the score as a small estimate,
-  because it is mostly a measure of how long you slept and has not been
-  validated.
-- With "New sleep tracking (beta)" on, heart rate and breathing rate come
-  from newer estimators built for the bed's vibration sensors. They write a
-  value only while the bed's presence sensor says that side is occupied, and
-  leave a minute blank when the signal is unclear or the sleeper is moving a
-  lot. Until the presence sensor is ready, for example before its first
-  calibration, the existing estimates are used instead. The Sleep page shows
-  the breathing rate again while the switch is on; HRV is stored but not
-  shown. On a public dataset recorded with chest straps, the newer heart
-  rate was within about 1.3 bpm on average. On a shared bed, one side can
-  still pick up the partner's heart rate. These remain estimates from bed
-  sensors, not medical measurements. With the switch off, the estimates are
-  the same as before.
-- HRV is no longer shown in the app, and the sleep score no longer uses it.
-  Checked against chest-strap recordings, the stored estimate was no more
-  accurate than a fixed guess. It is still stored and returned by the API.
-- The Sleep page no longer shows deep sleep and REM. They came from fixed
-  rules over heart rate and movement and looked about the same every night,
-  so it shows time awake and asleep instead.
-- Sleep labels say what they measure: average heart rate, with a note that a
-  shared bed can mix in the other sleeper; trips out of bed instead of
-  continuity; the lowest heart rate is no longer scored; the sleep range is 7
-  to 9 hours, with its source in the score's info sheet.
-- Settings > Software now says when you are running a beta while your update
-  channel is Stable, and offers to switch. Releases are marked Stable or Beta
-  in the version list and the release notes, and installing a beta says so.
-- A new install now installs a tagged release and saves that release's
-  channel, so a Pod installed on a beta keeps getting beta fixes. A reinstall
-  follows the channel already saved. Installing a release older than the
-  installer itself is refused with a message saying what to do.
-- Updates now check a downloaded release against a checksum published in
-  the release list before installing it. This catches a corrupted or swapped
-  download, not a compromised GitHub account. Switching to upstream installs
-  the upstream version the switch was last checked with, once one is
-  recorded.
-- Nightstand now removes old database snapshots, keeping the newest three and
-  any from the last week, so they cannot fill a Pod's storage. It removes more,
-  oldest first, only when space runs low.
-- When an update stops or rolls back, the app now says so within seconds, with
-  the reason, instead of waiting ten minutes.
-- Nightstand now restarts its server if it is running but stops answering for
-  three minutes, except while an update, rollback or switch is in progress.
-- Installs and updates now turn on the hardware watchdog on the Pod 5, so a
-  Pod whose system freezes restarts itself within about 30 seconds instead of
-  staying down until it is unplugged. Other models are left as they are for
-  now. It also stays off where a watchdog is already set up some other way,
-  and switching to upstream turns it off again (on some Pods, at the next
-  restart). Checked by hand on one Pod 5; the automatic setup is checked on
-  hardware before release.
-- On a Pod whose hardware watchdog is on, Nightstand now tries restarting
-  the Pod when the stock Wi-Fi driver has crashed and Wi-Fi stays down for 5
-  minutes, or when Wi-Fi scans keep failing for 20 minutes. Until now only
-  unplugging the Pod brought Wi-Fi back, and whether a restart does is not
-  yet confirmed. It waits during updates and restarts at most once every six
-  hours and three times a day.
-- Updates no longer turn the firewall off while downloading. They allow only
-  HTTPS and name lookups out for the download and keep blocking the
-  firmware's upload port, and a stalled dependency install now gives up after
-  15 minutes.
-- If an update or the switch to upstream is killed while downloading, its
-  service now removes the download rules when it stops. A release that pins
-  a different Node now has it fetched during the download, while internet
-  access is still allowed, so the update no longer fails and rolls back.
-- If Nightstand's server crashes repeatedly, systemd now keeps restarting it
-  every five seconds instead of giving up until the next reboot.
-- A side turned on by the weekly schedule now turns itself off a few minutes
-  after its scheduled off time if Nightstand stops, instead of 12 hours after
-  it was turned on. This also applies when a pause skips the scheduled off,
-  as it already did for Rhythms. Editing tonight's off time moves this timer
-  too. A power-on that cannot reach the Pod before those few minutes after
-  the off time is skipped and shown as a power schedule error.
-- A rhythm can also turn a side off when you get up: after your wake time
-  the side stays on at the wake temperature while you are in bed, and turns
-  off about 10 minutes after you get up, at most 3 hours past the set off
-  time. If Nightstand stops, the Pod's own timer still turns the side off
-  within about 15 minutes.
-- fs-reset keeps the Pod's hardware socket path, creates an empty database
-  and always starts Nightstand again. Before, on a Pod 4 or Pod 5 it could
-  leave Nightstand running but unable to reach the bed, and on an
-  up-to-date Pod it left the server stopped.
-- The app now says when an alarm did not ring and why: Nightstand was not
-  running, the Pod did not answer in time, the alarm could not be sent to the
-  Pod, that side was off, or Nightstand hit an error. If the Pod did not
-  confirm an alarm, the message says it may not have rung. The message shows
-  at the top of every page until you dismiss it or a week passes.
-- Updating, rolling back or switching from the app now warns and asks you to
-  confirm when a side is on, an alarm is due within 15 minutes, or the bed's
-  state cannot be read. The update dialog now says that Nightstand restarts,
-  not the Pod.
-- Time sync can resolve its servers without Tailscale when the network uses
-  DNS resolvers outside the LAN. The firewall allows DNS only to the
-  resolvers configured when the block script last ran (Tailscale still
-  allows it everywhere), and the script prints which resolvers it allowed.
-  Adapted from [EpicPi's pull request 51 to
-  throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep/pull/51).
-- Alarm dismiss now sends a one-second replacement alarm before clearing the
-  armed alarm and invalidates the dismissed alarm timer. Reported by caseyWebb
-  in [upstream issue 54](https://github.com/throwaway31265/free-sleep/issues/54).
-- On Pods whose firmware publishes sensor records to its local NATS stream,
-  live biometrics now read every sensor type from it, not only the first. If
-  the stream carries no sensor records for two minutes, the RAW files are
-  read as well. The Status page now shows sleep tracking as stopped after 30
-  minutes without new sensor data, and as running again once data returns.
-- Nightstand now includes nats-py, which the newer Eight Sleep firmware's
-  local sensor stream needs, so updated Pods can read it without downloading
-  anything.
+Themes, a plainer Sleep page, safer updates and recovery, and support for Pod firmware that keeps its sensor data in a local stream.
+
+### What changes in the app
+
+- Settings > Bed and sides has a new Theme setting with
+  four themes, saved on each device: nightstand (the default, the 3.3.2
+  look with higher contrast), lamp (the look of 3.4.0 to 3.5.1), free-sleep
+  classic and jmew. Thanks to [throwaway31265](https://github.com/throwaway31265/free-sleep)
+  and [jmew](https://github.com/jmew/free-sleep) for the designs these are
+  based on.
+- The Sleep page now leads with time in bed and no
+  longer shows the sleep score: without an estimate of time asleep it only
+  reflected time in bed and trips out of bed. It also no longer marks nights
+  against a 7 to 9 hour range, which is a range for sleep, not time in bed.
+  The score is still returned by the API. Charts break where readings are
+  missing, and the breathing chart's shaded band, which looked like a normal
+  range, is gone.
+- The Sleep page no longer shows deep sleep and REM, or time
+  asleep. Deep sleep and REM came from fixed rules over heart rate and
+  movement and looked about the same every night, and the rule for when you
+  fell asleep counted the first hours of most nights as awake. It shows time
+  in bed instead.
+- Smart Schedule now says it cools once you have settled
+  in bed, and that a shared bed can fool its presence sensing. The Tonight
+  card no longer says it is cooling before anyone is in bed.
+- A rhythm can also turn a side off when you get up: after
+  your wake time the side stays on at the wake temperature while you are in
+  bed, and turns off about 10 minutes after you get up, at most 3 hours past
+  the set off time. If Nightstand stops, the Pod's own timer still turns the
+  side off about 15 minutes after the set off time, or within about 15
+  minutes if the side is already being kept on past it. While the schedule
+  is paused, it turns off at the latest off time instead.
+- Settings > Features now says biometrics are estimates,
+  not medical measurements, and have only been checked on a Pod 5. New sleep
+  tracking (beta) says which part has been checked and what else it changes.
+- Settings > Software > Recovery now says how to go back to Eight Sleep's
+  software on each model, and that on a Pod 5 no reset procedure has been
+  checked yet.
+
+### Updates, recovery and alarms
+
+- Updating, rolling back or switching from the app now
+  asks you to confirm when a side is on, an alarm is due within 15 minutes,
+  or the bed's state cannot be read, and checks again just before Nightstand
+  stops. The update dialog now says that Nightstand restarts, not the Pod.
+- When an update, rollback or switch stops or goes back,
+  the app now says so within seconds, with the reason, instead of waiting
+  ten minutes.
+- Updates, rollbacks and the switch to upstream now change
+  nothing if Nightstand cannot stop cleanly, and one interrupted mid-swap
+  puts the previous version back. Running the installer over a working
+  install now keeps the old one until the new one starts. Tested on a
+  computer, not yet on a Pod.
+- An interrupted or failed update, switch to upstream or reinstall now keeps
+  the previous version ready until the new one answers, and puts it back
+  otherwise. A reinstall whose database migration fails now stops with an
+  error instead of starting.
+- Nightstand now keeps a copy of the Pod's original SSH, firewall and time
+  sync settings in /persistent/nightstand-stock/ the first time it changes
+  them. On a Pod installed earlier, each copy is taken the next time
+  Nightstand changes that setting (the firewall at the next update) and is
+  marked as taken after the change.
+- The script behind Switch to upstream free-sleep is now
+  scripts/switch-to-upstream.sh. The old name, revert-to-stock.sh, still
+  works.
+- Updates now check a downloaded release against a checksum
+  published in the release list before installing it. This catches a
+  corrupted or swapped download, not a compromised GitHub account. Switching
+  to upstream installs the upstream version the switch was last checked
+  with, once one is recorded.
+- Updates no longer turn the firewall off while
+  downloading; they open only what the download needs and close it even if
+  killed partway. A release that needs a different Node version now gets it
+  during the download instead of failing and rolling back.
+- Settings > Software now says when you are running a beta
+  while your update channel is Stable, and offers to switch. Releases are
+  marked Stable or Beta in the version list and the release notes, and
+  installing a beta says so.
+- A new install now installs a tagged release and saves that
+  release's channel, so a Pod installed on a beta keeps getting beta fixes.
+  A reinstall follows the channel already saved. Installing a release older
+  than the installer itself is refused with a message saying what to do.
+- Nightstand now restarts its server if it is running but
+  stops answering for three minutes, except while an update, rollback or
+  switch is in progress.
+- Installs and updates now turn on the hardware watchdog on
+  the Pod 5, so a Pod whose system freezes restarts itself within about 30
+  seconds instead of staying down until it is unplugged. Other models are
+  left as they are for now. It also stays off where a watchdog is already
+  set up some other way, and switching to upstream turns it off again (on
+  some Pods, at the next restart). Checked by hand on one Pod 5; the
+  automatic setup is checked on hardware before this release is marked
+  stable.
+- If you turned the hardware watchdog off with
+  setup_watchdog.sh --remove, installs and updates now leave it off. Run
+  setup_watchdog.sh again to turn it back on.
+- With the hardware watchdog on, Nightstand now restarts
+  the Pod when the stock Wi-Fi driver has crashed and the router has not
+  answered for 5 minutes, or when the router has not answered and Wi-Fi scans
+  have failed for 20 minutes; a router that is away while scans still work
+  never counts. It restarts at most 3 times a day and never during an
+  update or install. Whether a restart brings Wi-Fi back is not yet
+  confirmed, and this has not yet run on a Pod.
+- If Nightstand stops, a side turned on by the weekly
+  schedule now turns itself off a few minutes after its scheduled off time,
+  instead of 12 hours after it came on, including when a pause skips that
+  off. Not yet checked on a Pod.
+- The app now says when an alarm did not ring, or may not
+  have rung, and why. The message stays at the top of every page until you
+  dismiss it or a week passes.
+- A tap set to the alarm action now works while an alarm is ringing on that
+  side: it dismisses the alarm, or snoozes it and rings again after the
+  snooze time with the same strength and pattern. During a snooze, a dismiss
+  tap cancels it. With no alarm ringing the tap does nothing; its option to
+  turn the side on or off is not used yet. A snooze still rings if the side
+  is turned off or set to away after the tap, and a server restart drops it.
+
+### Newer firmware and fixes from upstream
+
+- Some newer Eight Sleep firmware, seen on at least one
+  Pod 3, sends sensor data to a local NATS stream instead of writing RAW
+  files; on such a Pod, live biometrics and the nightly sleep analysis,
+  calibration and vitals jobs now read that stream. Thanks to jfrykman, whose
+  [upstream pull request 57](https://github.com/throwaway31265/free-sleep/pull/57)
+  described the firmware change. Tested on a computer, not yet on a Pod with
+  this firmware.
+- Without Tailscale, the firewall blocked DNS to resolvers
+  outside the local network, so on some networks the Pod's clock never
+  synced. It now allows DNS to the resolvers the Pod was set up with. Adapted
+  from [EpicPi's pull request 51 to
+  throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep/pull/51);
+  not yet checked on a Pod.
+- Dismissing an alarm now stops one that is already
+  ringing. Reported by caseyWebb in [upstream issue
+  54](https://github.com/throwaway31265/free-sleep/issues/54); not yet
+  checked on a Pod.
+
+### Sleep tracking and biometrics
+
+- With "New sleep tracking (beta)" on, heart rate and
+  breathing rate come from newer estimators built for the bed's vibration
+  sensors. They write a value only while the bed's presence sensor says that
+  side is occupied, and leave a minute blank when the signal is unclear or
+  the sleeper is moving a lot. Until the presence sensor is ready, for
+  example before its first calibration, the existing estimates are used
+  instead. The Sleep page shows the breathing rate again while the switch is
+  on; HRV is stored but not shown. On a public dataset recorded with chest
+  straps, the newer heart rate was within about 1.3 bpm on average. On a
+  shared bed, one side can still pick up the partner's heart rate. These
+  remain estimates from bed sensors, not medical measurements. With the
+  switch off, the estimates are the same as before.
+- HRV is no longer shown in the app, and the sleep score no
+  longer uses it. Checked against chest-strap recordings, the stored
+  estimate was no more accurate than a fixed guess. It is still stored and
+  returned by the API.
+- Turning the Biometrics switch on now starts sleep
+  tracking instead of only saving the setting, and restarts, resets,
+  installs and switching forks now respect the switch.
+
+### Smaller fixes
+
+- Nightstand now removes old database snapshots, keeping the
+  newest three and any from the last week, so they cannot fill a Pod's
+  storage. It removes more, oldest first, only when space runs low.
+- If Nightstand's server crashes repeatedly, it now keeps
+  restarting every five seconds instead of giving up until the next reboot.
+- fs-reset now always starts Nightstand again with an
+  empty database; before, it could leave a Pod 4 or Pod 5 unable to reach
+  the bed, or the server stopped. fs-reset-db can now reset a damaged
+  database, keeping a copy first.
+- Bed settings stay locked until they have loaded, so a
+  failed load can no longer save defaults such as Fahrenheit. Old readings
+  on the Schedule page show as Not responding in grey, as on the Bed page.
 
 ## [3.5.1] - 2026-10-01
 
@@ -143,9 +192,11 @@ Keeps biometrics RAW files from filling the disk on a Pod 3 with internet access
   now applies its retention to the firmware's own RAW files too. When space
   runs low it removes the oldest file from both places, never the file being
   written, and its free-space floor scales with the partition, so a small
-  disk no longer has its archive emptied every minute. Pod 4 and Pod 5 work
-  as before. Thanks to @sim- for the report
-  (https://github.com/LTimothy/nightstand/issues/1).
+  disk no longer has its archive emptied every minute. Pod 4 and Pod 5 are
+  not changed by this fix (only a Pod 5 has been tested). Thanks to @sim- for
+  the report (https://github.com/LTimothy/nightstand/issues/1). Not yet
+  confirmed on a Pod 3; tested with unit tests and on a Pod 5. The maintainer
+  does not have a Pod 3.
 
   A Pod 3 whose /persistent is already full may not have room for the
   update. Removing some of the oldest RAW files first frees space; this
@@ -169,7 +220,8 @@ Rhythms with an optional Smart Schedule, pausing a side's schedule, a new beta s
   date changes save at once and can be undone. The Schedule tab, the Bed
   page and the Tonight card all follow the same sleeps. With biometrics on,
   each Rhythms sleep is analyzed 15 minutes after it ends and again 2 hours
-  after, in place of the noon analysis.
+  after, in place of the noon analysis. Rhythms and Pause schedule have been
+  used on one Pod 5. They have not been tried on a Pod 3 or Pod 4.
 
   The first time Rhythms is turned on, it copies the weekly schedule into
   rhythms named after their days and leaves the weekly schedule as it is.
@@ -180,12 +232,12 @@ Rhythms with an optional Smart Schedule, pausing a side's schedule, a new beta s
   middle of a sleep, you choose whether it stays on until that sleep ends,
   with its remaining alarm still ringing, or turns off now.
 
-  A rhythm sets its temperatures by hand or with Smart Schedule, which is off
-  unless you choose it for that rhythm. Smart Schedule follows the pattern
-  described in sleep and thermoregulation research such as Kräuchi et al.
-  (1999), Raymann et al. (2005) and Herberger et al. (2024, Sci Rep):
-  comfortable when you lie down, a little cooler once you are settled, and
-  warming gently before your wake time. Changes are small and stay within a
+  A rhythm sets its temperatures by hand or with Smart Schedule. Rhythms
+  copied from your weekly schedule keep your hand-set temperatures. A rhythm
+  you add starts on Smart Schedule, and you can switch it to manual. Smart
+  Schedule is loosely based on sleep research (the editor lists the studies
+  and what each tested). Warming a little before wake time is our own
+  addition and no study tested it. Changes are small and stay within a
   few steps of a base temperature you pick. With biometrics on, the
   cool-down waits until you have settled in bed. A temperature you set by
   hand holds until the curve's next phase. The step sizes and timings are
@@ -233,8 +285,9 @@ Rhythms with an optional Smart Schedule, pausing a side's schedule, a new beta s
 
   On one night checked against both sleepers' own notes, the old live
   presence split the two sleepers' nights into 20 and 31 pieces, and the old
-  nightly record gave both sides the same bed times. The new tracking closely
-  matched each person's notes, including two short trips out of bed. See the
+  nightly record gave both sides the same bed times. The new tracking
+  matched each person's notes on that night, including two short trips out of
+  bed. See the
   [before and after](https://github.com/LTimothy/nightstand/blob/main/docs/presence-before-after.png).
   So far this has been checked on one Pod 5 over a handful of nights.
 
@@ -453,7 +506,7 @@ A redesigned app, sleep records that start at your real bedtime, and safer updat
   reset the database when it finds differences.
 
 - The app works when opened at http://eight-pod.local:3000. Changes made
-  from that address were refused before. From Kris's fork, 2-X/nightstand.
+  from that address were refused before. Adapted from [2-X/nightstand](https://github.com/2-X/nightstand).
 
 - Re-running the firewall script no longer piles up duplicate rules, and the
   outbound rules Tailscale needs are only added while Tailscale is running, so
@@ -463,11 +516,11 @@ A redesigned app, sleep records that start at your real bedtime, and safer updat
   Updates apply the installed version's rules after the swap, and rollback
   applies the restored version's rules. If you set up Tailscale later, run the
   block script again once it is running. Applying the rules removes hand-added
-  INPUT and OUTPUT rules, including custom VPN exceptions. From Kris's fork,
-  2-X/nightstand.
+  INPUT and OUTPUT rules, including custom VPN exceptions. Adapted from
+  [2-X/nightstand](https://github.com/2-X/nightstand).
 
 - After a restart, replayed sensor records no longer show old temperatures on
-  the Status page or trip a false pump alert. From Kris's fork, 2-X/nightstand.
+  the Status page or trip a false pump alert. Adapted from [2-X/nightstand](https://github.com/2-X/nightstand).
 
 - Presence auto-off, which turns a side off after 45 minutes with no one on it
   outside its scheduled on-window, can now be turned off in Settings >
@@ -504,7 +557,9 @@ Fixes the firmware getting stuck on some Pod 3 units while internet access is bl
   units. The firewall now refuses the firmware's cloud connection right away
   instead of silently ignoring it, which left the firmware waiting. Thanks to
   @sim- for tracking this down
-  (https://github.com/LTimothy/nightstand/issues/1).
+  (https://github.com/LTimothy/nightstand/issues/1). The port 1337 rule was
+  found and tested by the reporter on their Pod 3. The maintainer does not
+  have a Pod 3.
 
   The update that installs this version blocks internet access again with the
   previous version's firewall script, so the new rule is not in place yet. To
@@ -516,6 +571,10 @@ Fixes the firmware getting stuck on some Pod 3 units while internet access is bl
 
   A fresh install applies it, and so does the next update after this one.
 
+Moved from stable to beta with 3.6.0: it had about a day of use on one Pod 5
+before going to stable. It includes everything in 3.0.1 to 3.3.1, which were
+beta releases.
+
 ## [3.3.1] - 2026-09-28
 
 Biometrics setup on Pod 3 units installed from an SD card, safer installs, and updates that download exactly the chosen release.
@@ -525,7 +584,8 @@ Biometrics setup on Pod 3 units installed from an SD card, safer installs, and u
   than that pod has, so creating the Python environment failed. It is now
   built against an older library that every supported pod has. The setup
   step also looked for Python's files in the wrong folder on that pod, and
-  now asks Python where they are.
+  now asks Python where they are. Confirmed on the reporter's Pod 3 (they
+  applied the rebuilt file by hand). The maintainer does not have a Pod 3.
 
 - The installer stops if the download fails, and only removes an existing
   install once the new files have unpacked.
@@ -568,9 +628,9 @@ A water tank status, longer and adjustable sensor recording retention, and memor
   are installed by this update and apply from the next time each service
   starts. Reverting to stock removes them.
 
-- Settings no longer links to community chat or donation pages. Nightstand is
-  maintained independently of the projects it builds on; for help, open an
-  issue on this repository.
+- Settings no longer links to the community chat and donation pages of the
+  projects Nightstand builds on, since they cannot help with this fork. For
+  help, open an issue on this repository.
 
 - The guides were checked against the current code and corrected where they
   had drifted, most of all the API reference.
