@@ -1,4 +1,9 @@
 {
+  "upstreamSwitch": {
+    "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+    "date": "2026-10-04",
+    "treeSha256": "f216ae7c7b47400f63cfb3d239a240c08a2ef43155e4e8d2680e3c83b41069b3"
+  },
   "channels": [
     "stable",
     "beta"

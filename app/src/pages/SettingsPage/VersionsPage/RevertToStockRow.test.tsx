@@ -63,6 +63,10 @@ describe('RevertToStockRow says what the switch installs', () => {
   const UNCHECKED_UPSTREAM_NOTE = 'Installs upstream free-sleep\'s newest code, which this switch has not been checked with.';
 
   it('says upstream\'s newest code is unchecked while no checked commit is recorded', async () => {
+    server.use(http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json', () => HttpResponse.json({
+      channels: ['stable', 'beta'],
+      releases: [],
+    })));
     const { user } = renderWithProviders(<RevertToStockRow runningVersion="3.0.0"/>);
     await user.click(screen.getByText('Switch to upstream free-sleep'));
     expect(await screen.findByText(UNCHECKED_UPSTREAM_NOTE)).toBeInTheDocument();
