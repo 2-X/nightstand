@@ -2,8 +2,8 @@ import { VitalsRecord } from '@api/vitals.ts';
 
 export type VitalsMetric = 'heart_rate' | 'hrv' | 'breathing_rate' | 'resp_rate';
 
-// Readings the 7-night HRV average uses (the Pod's plausibility window),
-// so the headline and chart agree with it.
+// HRV readings outside this range are not plausible and are dropped from
+// chart points.
 export const HRV_RANGE = [30, 120] as const;
 
 export type VitalsPoint = { timestamp: Date; value: number };

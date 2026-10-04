@@ -42,17 +42,7 @@ export default function useAnalyzeSleep() {
       if (!latestJob) continue;
       previousJobs.current[jobSide] = { status: latestJob.status, timestamp: latestJob.timestamp };
       const completed = ['healthy', 'waiting_for_data', 'failed'].includes(latestJob.status);
-      const completedAt = Date.parse(latestJob.timestamp ?? '');
-      // A job can finish while this page is closed. Only expire cached results
-      // older than that completion, so returning to fresh history stays cheap.
-      if (completed && !previous && Number.isFinite(completedAt)) {
-        void queryClient.invalidateQueries({ predicate: query => {
-          const resultForSide = query.queryKey[0] === 'useSleepStages' && query.queryKey[1] === jobSide;
-          return resultForSide && query.state.dataUpdatedAt > 0 && query.state.dataUpdatedAt < completedAt;
-        } });
-      }
       if (completed && previous && (previous.status !== latestJob.status || previous.timestamp !== latestJob.timestamp)) {
-        void queryClient.invalidateQueries({ queryKey: ['useSleepStages', jobSide] });
         void queryClient.invalidateQueries({ queryKey: ['useSleepRecords'] });
       }
     }

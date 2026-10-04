@@ -1,5 +1,3 @@
-/* eslint-disable react/no-multi-comp */
-import { useState } from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { act, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
@@ -100,43 +98,14 @@ it('does not let a late left response clear a new right submission', async () =>
 });
 
 
-it('invalidates completed analysis results for the analyzed side only', async () => {
+it('invalidates cached sleep records when an analysis completes', async () => {
   fixture.status = 'started';
   const { queryClient } = renderWithProviders(<AnalysisControl/>);
-  const leftStages = ['useSleepStages', 'left', 'start', 'end'];
-  const rightStages = ['useSleepStages', 'right', 'start', 'end'];
-  queryClient.setQueryData(leftStages, { active: true });
-  queryClient.setQueryData(rightStages, { active: true });
+  const records = ['useSleepRecords', { side: 'left' }];
+  queryClient.setQueryData(records, []);
   fixture.status = 'healthy';
   act(() => useAppStore.setState({ isUpdating: true }));
-  await waitFor(() => expect(queryClient.getQueryState(leftStages)?.isInvalidated).toBe(true));
-  expect(queryClient.getQueryState(rightStages)?.isInvalidated).toBe(false);
-});
-
-
-function AnalysisPage() {
-  const [visible, setVisible] = useState(true);
-  return <>
-    <button onClick={ () => setVisible(previous => !previous) }>Toggle analysis page</button>
-    { visible && <AnalysisControl/> }
-  </>;
-}
-
-it('refreshes cached classifications when returning after analysis completed elsewhere', async () => {
-  fixture.status = 'started';
-  const { queryClient, user } = renderWithProviders(<AnalysisPage/>);
-  const olderStages = ['useSleepStages', 'left', 'older', 'end'];
-  const recentStages = ['useSleepStages', 'left', 'recent', 'end'];
-  const otherSideStages = ['useSleepStages', 'right', 'older', 'end'];
-  queryClient.setQueryData(olderStages, { active: true }, { updatedAt: Date.parse('2026-09-27T18:00:00Z') });
-  queryClient.setQueryData(recentStages, { active: true }, { updatedAt: Date.parse('2026-09-27T20:00:00Z') });
-  queryClient.setQueryData(otherSideStages, { active: true }, { updatedAt: Date.parse('2026-09-27T18:00:00Z') });
-  await user.click(screen.getByRole('button', { name: 'Toggle analysis page' }));
-  fixture.status = 'healthy';
-  await user.click(screen.getByRole('button', { name: 'Toggle analysis page' }));
-  await waitFor(() => expect(queryClient.getQueryState(olderStages)?.isInvalidated).toBe(true));
-  expect(queryClient.getQueryState(recentStages)?.isInvalidated).toBe(false);
-  expect(queryClient.getQueryState(otherSideStages)?.isInvalidated).toBe(false);
+  await waitFor(() => expect(queryClient.getQueryState(records)?.isInvalidated).toBe(true));
 });
 
 it('treats a 409 as already queued or running, not a failure', async () => {
