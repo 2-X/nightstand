@@ -226,7 +226,7 @@ function cleanup(f: Fixture) {
   rmSync(f.dir, { recursive: true, force: true });
 }
 
-for (const file of ['scripts/update.sh', 'scripts/revert-to-stock.sh']) {
+for (const file of ['scripts/update.sh', 'scripts/switch-to-upstream.sh']) {
   describe(`${file} internet window`, () => {
     const src = read(file);
 
@@ -372,8 +372,8 @@ fail "download failed"`)], { env: f.env, encoding: 'utf8', timeout: 10000 });
   });
 }
 
-it('revert-to-stock.sh puts a time limit on the biometrics package install', () => {
-  assert.match(read('scripts/revert-to-stock.sh'), /run_limited 600 "\$\{PIP_RUNNER\[@\]\}" \/home\/dac\/venv\/bin\/python -m pip install/);
+it('switch-to-upstream.sh puts a time limit on the biometrics package install', () => {
+  assert.match(read('scripts/switch-to-upstream.sh'), /run_limited 600 "\$\{PIP_RUNNER\[@\]\}" \/home\/dac\/venv\/bin\/python -m pip install/);
 });
 
 // An updater killed outright never runs its cleanup; the units' ExecStopPost
@@ -396,7 +396,7 @@ const calls = (f: Fixture) => {
   try { return readFileSync(path.join(f.dir, 'fw/calls'), 'utf8'); } catch { return ''; }
 };
 
-for (const file of ['scripts/update.sh', 'scripts/revert-to-stock.sh', 'scripts/close_update_window.sh', 'ops/deploy.sh']) {
+for (const file of ['scripts/update.sh', 'scripts/switch-to-upstream.sh', 'scripts/close_update_window.sh', 'ops/deploy.sh']) {
   it(`${file} never hard-codes the -w 5 form of iptables`, () => {
     assert.doesNotMatch(read(file), /ip6?tables -w 5/);
   });
@@ -405,7 +405,7 @@ for (const file of ['scripts/update.sh', 'scripts/revert-to-stock.sh', 'scripts/
 // iptables before 1.6.0 rejects "-w 5", and before 1.4.20 rejects -w at all.
 // The window must still open and close on those builds.
 for (const mode of ['bare', 'none']) {
-  for (const file of ['scripts/update.sh', 'scripts/revert-to-stock.sh']) {
+  for (const file of ['scripts/update.sh', 'scripts/switch-to-upstream.sh']) {
     it(`${file} opens and closes the window on iptables with ${mode === 'bare' ? 'a bare -w' : 'no -w'}`, () => {
       const f = fixture(true);
       try {
@@ -445,7 +445,7 @@ describe('after the update or revert unit stops', () => {
     assert.ok(statSync(path.join(repoRoot, 'scripts/close_update_window.sh')).mode & 0o111);
   });
 
-  for (const file of ['scripts/update.sh', 'scripts/revert-to-stock.sh']) {
+  for (const file of ['scripts/update.sh', 'scripts/switch-to-upstream.sh']) {
     for (const tailscale of [false, true]) {
       it(`closes the window ${file} left when it was killed${tailscale ? ' with Tailscale' : ''}`, () => {
         const f = fixture(tailscale);
@@ -605,7 +605,7 @@ echo finished`], { env: { ...process.env, F: dir, FETCH_FAILS: c.fetchFails ? 'y
   return { ...result, log: log.replaceAll(dir, '$F') };
 }
 
-for (const file of ['scripts/update.sh', 'scripts/revert-to-stock.sh']) {
+for (const file of ['scripts/update.sh', 'scripts/switch-to-upstream.sh']) {
   describe(`${file} fetches a newly pinned Node inside the window`, () => {
     const FETCH = "limited 600\nsudo -u dac bash -c cd '$F/stage/server' && 'npm' --version\n";
 

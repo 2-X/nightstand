@@ -47,7 +47,7 @@ PROC_LOCKS="${NIGHTSTAND_PROC_LOCKS:-/proc/locks}"
 OPERATION_UNITS="free-sleep-update.service free-sleep-rollback.service free-sleep-revert.service free-sleep-migrate.service"
 # Scripts that install, reset or replace Nightstand. install.sh run from curl
 # shows up as bash -c with its source, recognized by its first setting.
-OPERATION_SCRIPTS='(^|[ /])(install|update|update_service|rollback_pod|revert-to-stock|reset|reset_db|enable_biometrics|setup_python|install_python_packages|pod-installer|agent-bootstrap-installer|restore-original-fork)\.sh( |$)|MIN_INSTALL_VERSION='
+OPERATION_SCRIPTS='(^|[ /])(install|update|update_service|rollback_pod|switch-to-upstream|revert-to-stock|reset|reset_db|enable_biometrics|setup_python|install_python_packages|pod-installer|agent-bootstrap-installer|restore-original-fork)\.sh( |$)|MIN_INSTALL_VERSION='
 
 DRY=no
 case "${1:-}" in

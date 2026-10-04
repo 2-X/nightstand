@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { useReleases } from '@api/releases.ts';
-import { postRevertToStock } from '@api/update.ts';
+import { postSwitchToUpstream } from '@api/update.ts';
 import { useUpdateProgress } from '@api/useUpdateProgress.ts';
 import InUseConfirm from '../../../components/InUseConfirm';
 import RhythmsLeaveNote from './RhythmsLeaveNote';
@@ -21,7 +21,7 @@ export default function RevertToStockRow({ runningVersion }: Props) {
   const { phase, error, inUse, recordedOutcome, start, reset } = useUpdateProgress(runningVersion, undefined, 'switch');
   const checked = useReleases().data?.upstreamSwitch;
 
-  const revert = () => start(confirmInUse => postRevertToStock(confirmInUse ? { confirmInUse } : undefined));
+  const revert = () => start(confirmInUse => postSwitchToUpstream(confirmInUse ? { confirmInUse } : undefined));
 
   return (
     // The dialog is a sibling of the row, not a child of it. A portalled

@@ -19,7 +19,7 @@ def source(name):
 
 class PortabilityTests(unittest.TestCase):
     def test_python_lock_and_missing_run_lock_directory(self):
-        for name, native, missing in itertools.product(['update.sh', 'rollback_pod.sh', 'revert-to-stock.sh'], [False, True], [False, True]):
+        for name, native, missing in itertools.product(['update.sh', 'rollback_pod.sh', 'switch-to-upstream.sh'], [False, True], [False, True]):
             if native and not shutil.which('flock'):
                 continue
             with self.subTest(script=name, native=native, missing=missing), tempfile.TemporaryDirectory() as tmp:

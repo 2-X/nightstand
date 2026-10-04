@@ -32,7 +32,7 @@ record_result() { :; }
             return result, log.read_text() if log.exists() else ''
 
     def test_every_revert_restore_failure_restarts_server(self):
-        script = read('revert-to-stock.sh')
+        script = read('switch-to-upstream.sh')
         helper = ''
         if 'restore_switch_data_or_fail()' in script:
             helper = section(script, 'restore_switch_data_or_fail()', '\nWAN_OPEN=')
@@ -52,7 +52,7 @@ BK=fixture-backup
                 self.assertIn('start free-sleep-archive-raw.timer\n', log)
 
     def test_failed_restore_is_not_repeated_by_cleanup(self):
-        script = read('revert-to-stock.sh')
+        script = read('switch-to-upstream.sh')
         functions = section(script, 'DATA_CHANGED=no', '# Keep the descriptor')
         result, log = self.run_shell(functions + '\n' + """
 DATA_CHANGED=yes
@@ -154,7 +154,7 @@ cat "$FIXTURE"/backups/*-reset-raw.db
                 self.assertIn('start free-sleep\n', log)
 
     def test_sentry_install_is_pinned_and_uses_writable_venv_owner(self):
-        script = read('revert-to-stock.sh')
+        script = read('switch-to-upstream.sh')
         block = section(script, '# Upstream imports', '\nclose_wan\n')
         for writable in (True, False):
             with self.subTest(writable=writable):

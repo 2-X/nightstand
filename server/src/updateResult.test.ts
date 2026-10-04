@@ -15,7 +15,7 @@ const read = (file: string) => readFileSync(path.join(repoRoot, file), 'utf8');
 const SCRIPTS = [
   ['scripts/update.sh', 'update'],
   ['scripts/rollback_pod.sh', 'rollback'],
-  ['scripts/revert-to-stock.sh', 'switch'],
+  ['scripts/switch-to-upstream.sh', 'switch'],
 ] as const;
 const BLOCK_START = '# How this run ended';
 
@@ -125,7 +125,7 @@ describe('how each script records its ending', () => {
     // An interrupted swap is put right before the staged tree is removed.
     const cleanup = /^cleanup\(\) \{ local status=\$\?;.*finish_interrupted_swap; rm -rf "\$STAGE".*record_result "\$status"; \}$/m;
     assert.match(read('scripts/update.sh'), cleanup);
-    assert.match(read('scripts/revert-to-stock.sh'), cleanup);
+    assert.match(read('scripts/switch-to-upstream.sh'), cleanup);
     assert.match(read('scripts/rollback_pod.sh'),
       /^trap 'status=\$\?; trap "" HUP INT TERM; finish_interrupted_swap; record_result "\$status"' EXIT$/m);
   });
@@ -194,7 +194,7 @@ record_result ${status}
   // The wording for a rollback and a switch names these versions, so each script must record the right ones.
   const versions: [string, string, string, string][] = [
     ['scripts/rollback_pod.sh', 'CUR_VERSION=3.6.0; TARGET_VERSION=3.5.1', '3.6.0', '3.5.1'],
-    ['scripts/revert-to-stock.sh', 'CUR_VERSION=3.6.0; STAGED_VERSION=1.0.0', '3.6.0', '1.0.0'],
+    ['scripts/switch-to-upstream.sh', 'CUR_VERSION=3.6.0; STAGED_VERSION=1.0.0', '3.6.0', '1.0.0'],
   ];
   for (const [file, assignments, from, to] of versions) {
     it(`${file} records the version it left and the one it moved to`, () => {
@@ -276,9 +276,9 @@ record_result 0
     assert.match(record.message, /^no previous install at .*free-sleep-prev; nothing to roll back to$/);
   });
 
-  it('revert-to-stock.sh records a refusal before anything changed as stopped', () => {
-    const src = read('scripts/revert-to-stock.sh');
-    const { status, record } = runScript(upTo(src, '# --- download + stage'), 'revert-to-stock.sh', lowPersistent);
+  it('switch-to-upstream.sh records a refusal before anything changed as stopped', () => {
+    const src = read('scripts/switch-to-upstream.sh');
+    const { status, record } = runScript(upTo(src, '# --- download + stage'), 'switch-to-upstream.sh', lowPersistent);
     assert.equal(status, 1);
     assert.equal(record.operation, 'switch');
     assert.equal(record.outcome, 'stopped');
@@ -410,8 +410,8 @@ wait $!
     }
   });
 
-  it('revert-to-stock.sh marks the swap and its own rollback', () => {
-    const src = read('scripts/revert-to-stock.sh');
+  it('switch-to-upstream.sh marks the swap and its own rollback', () => {
+    const src = read('scripts/switch-to-upstream.sh');
     assert.ok(src.indexOf('RESULT_PHASE=swapped') > src.indexOf('mv "$STAGE" "$LIVE" || {'));
     const rollback = src.indexOf('# --- automatic rollback');
     assert.ok(src.indexOf('RESULT_PHASE=restored', rollback) > src.indexOf('mv "$PREV" "$LIVE" || {', rollback));
@@ -459,7 +459,7 @@ ${section}
       'the new version could not be put in place, so it never started',
     ],
     [
-      'scripts/revert-to-stock.sh', 'switch', 'rm -rf "$PREV"\nmv "$LIVE" "$PREV" || {',
+      'scripts/switch-to-upstream.sh', 'switch', 'rm -rf "$PREV"\nmv "$LIVE" "$PREV" || {',
       'upstream free-sleep could not be put in place, so it never started',
     ],
   ];
@@ -522,7 +522,7 @@ ${src.slice(start)}
   const restores: [string, string, string][] = [
     ['scripts/update.sh', 'update', '# --- automatic rollback'],
     ['scripts/rollback_pod.sh', 'rollback', '# --- swap back on failure'],
-    ['scripts/revert-to-stock.sh', 'switch', '# --- automatic rollback to this fork'],
+    ['scripts/switch-to-upstream.sh', 'switch', '# --- automatic rollback to this fork'],
   ];
   for (const [file, operation, header] of restores) {
     it(`${operation}: a previous version that takes 30 s to reach the Pod is restored`, () => {

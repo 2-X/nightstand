@@ -6,7 +6,8 @@ export const postUpdate = (body: UpdateRequest = {}) => axios.post('/update', bo
 
 export const postRollback = (body?: OperationRequest) => axios.post('/update/rollback', body, { timeout: LONG_REQUEST_TIMEOUT_MS });
 
-export const postRevertToStock = (body?: OperationRequest) => axios.post('/update/revert-to-stock', body, { timeout: LONG_REQUEST_TIMEOUT_MS });
+export const postSwitchToUpstream = (body?: OperationRequest) =>
+  axios.post('/update/switch-to-upstream', body, { timeout: LONG_REQUEST_TIMEOUT_MS });
 
 export const useRollbackInfo = () => useQuery<RollbackInfo>({
   queryKey: ['useRollbackInfo'],

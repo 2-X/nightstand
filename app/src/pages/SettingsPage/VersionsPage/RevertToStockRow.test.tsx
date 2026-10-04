@@ -10,7 +10,7 @@ describe('RevertToStockRow', () => {
   it('closes the confirm dialog on Cancel and fires no request', async () => {
     let reverted = false;
     server.use(
-      http.post('*/update/revert-to-stock', () => {
+      http.post('*/update/switch-to-upstream', () => {
         reverted = true;
         return HttpResponse.json({});
       }),
@@ -41,7 +41,7 @@ describe('RevertToStockRow when the bed may be in use', () => {
   };
 
   it('asks again after a refusal and sends a confirmed request only on Continue anyway', async () => {
-    const bodies = serveInUse('*/update/revert-to-stock', ['left-on']);
+    const bodies = serveInUse('*/update/switch-to-upstream', ['left-on']);
     const { user } = await open();
     await user.click(await screen.findByRole('button', { name: 'Switch to upstream free-sleep' }));
     expect(await screen.findByText(SIDE_ON)).toBeInTheDocument();
@@ -51,7 +51,7 @@ describe('RevertToStockRow when the bed may be in use', () => {
   });
 
   it('sends no confirmation when the bed is idle', async () => {
-    const bodies = serveInUse('*/update/revert-to-stock', []);
+    const bodies = serveInUse('*/update/switch-to-upstream', []);
     const { user } = await open();
     await user.click(await screen.findByRole('button', { name: 'Switch to upstream free-sleep' }));
     await waitFor(() => expect(bodies).toEqual([undefined]));

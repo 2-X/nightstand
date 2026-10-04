@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('cancelling the revert-to-stock dialog closes it without reverting', async ({ page }) => {
+test('cancelling the switch-to-upstream dialog closes it without reverting', async ({ page }) => {
   await page.goto('/settings/versions');
 
   await page.getByRole('button', { name: 'Recovery', exact: true }).click();

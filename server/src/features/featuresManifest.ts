@@ -405,7 +405,7 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     default: true,
     touchpoints: [
       'scripts/health_check.sh', 'scripts/systemd/free-sleep-health.service', 'scripts/systemd/free-sleep-health.timer',
-      'scripts/setup_services.sh', 'scripts/revert-to-stock.sh',
+      'scripts/setup_services.sh', 'scripts/switch-to-upstream.sh',
     ],
     depends_on: ['agent'],
     reversible: true,
@@ -425,7 +425,7 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     flag: null,
     default: true,
     touchpoints: [
-      'scripts/prune_db_snapshots.sh', 'scripts/update.sh', 'scripts/revert-to-stock.sh', 'scripts/install.sh',
+      'scripts/prune_db_snapshots.sh', 'scripts/update.sh', 'scripts/switch-to-upstream.sh', 'scripts/install.sh',
       'scripts/reset_db.sh',
     ],
     depends_on: ['agent'],
@@ -449,13 +449,13 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     default: true,
     touchpoints: [
       'scripts/setup_watchdog.sh', 'scripts/update.sh', 'scripts/install.sh', 'scripts/migrate/pod-installer.sh',
-      'scripts/revert-to-stock.sh', 'scripts/rollback_pod.sh', 'scripts/reset.sh',
+      'scripts/switch-to-upstream.sh', 'scripts/rollback_pod.sh', 'scripts/reset.sh',
     ],
     depends_on: ['agent'],
     reversible: true,
     tests: [
       'server/src/watchdogScript.test.ts', 'server/src/updaterScripts.test.ts', 'server/src/migrationScripts.test.ts',
-      'server/src/rollbackScript.test.ts', 'server/src/revertToStockScript.test.ts', 'server/src/resetScript.test.ts',
+      'server/src/rollbackScript.test.ts', 'server/src/switchToUpstreamScript.test.ts', 'server/src/resetScript.test.ts',
     ],
     upstream_offer: false,
     rationale: 'Safety: a frozen system otherwise leaves the Pod with no server and no cooling until it is unplugged. '
@@ -476,13 +476,13 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     touchpoints: [
       'scripts/network_watchdog.sh', 'scripts/systemd/free-sleep-network-watchdog.service',
       'scripts/systemd/free-sleep-network-watchdog.timer', 'scripts/setup_services.sh', 'scripts/rollback_pod.sh',
-      'scripts/revert-to-stock.sh', 'scripts/migrate/restore-original-fork.sh',
+      'scripts/switch-to-upstream.sh', 'scripts/migrate/restore-original-fork.sh',
     ],
     depends_on: ['agent'],
     reversible: true,
     tests: [
       'server/src/networkWatchdogScript.test.ts', 'server/src/setupServicesScript.test.ts',
-      'server/src/rollbackScript.test.ts', 'server/src/revertToStockScript.test.ts',
+      'server/src/rollbackScript.test.ts', 'server/src/switchToUpstreamScript.test.ts',
     ],
     upstream_offer: false,
     rationale: 'Safety: when the driver dies the Pod keeps running but cannot be reached, and unplugging it has '
@@ -689,7 +689,7 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
       'server/src/jobs/alarmActivity.ts', 'server/src/jobs/alarmScheduler.ts', 'server/src/jobs/powerScheduler.ts',
       'server/src/routes/deviceStatus/updateDeviceStatus.ts', 'server/src/routes/settings/settingsGuards.ts',
       'server/src/routes/update/update.ts', 'server/src/setup/routes.ts',
-      'scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh',
+      'scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/switch-to-upstream.sh',
       'server/src/db/smartCurve.ts', 'server/src/8sleep/presenceStale.ts', 'server/src/8sleep/presenceAutoOffMonitor.ts',
       'server/src/jobs/scheduleOverride.ts', 'app/src/api/smartCurve.ts',
       'app/src/api/rhythms.ts', 'app/src/api/rhythmsResponse.ts', 'app/src/api/rhythmDays.ts', 'app/src/api/rhythmWake.ts',

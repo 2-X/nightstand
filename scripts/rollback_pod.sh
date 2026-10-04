@@ -69,7 +69,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 # Bed-in-use helpers, kept identical in update.sh, rollback_pod.sh and
-# revert-to-stock.sh. The app writes REQUEST_FILE as it starts one of them.
+# switch-to-upstream.sh. The app writes REQUEST_FILE as it starts one of them.
 # A request the owner did not confirm while the bed was in use is checked
 # again just before the services stop, as the bed may have come into use
 # since. Without the file or its field, as from an older server, an older

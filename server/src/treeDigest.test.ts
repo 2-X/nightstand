@@ -246,8 +246,8 @@ describe('update.sh with a published checksum', () => {
   });
 });
 
-describe('revert-to-stock.sh installs the upstream commit the switch was checked with', () => {
-  const src = readFileSync(path.join(repoRoot, 'scripts/revert-to-stock.sh'), 'utf8');
+describe('switch-to-upstream.sh installs the upstream commit the switch was checked with', () => {
+  const src = readFileSync(path.join(repoRoot, 'scripts/switch-to-upstream.sh'), 'utf8');
   const commit = 'a'.repeat(40);
   const upstream = {
     'server/src/serverInfo.json': '{"version":"2.1.5"}',

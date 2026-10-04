@@ -1,11 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { readFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// scripts/revert-to-stock.sh swaps the live install for plain upstream
+// scripts/switch-to-upstream.sh swaps the live install for plain upstream
 // free-sleep. It's bash, so like update.sh and rollback_pod.sh it can't be
 // unit-tested directly: gate the invariants that would otherwise brick a
 // revert silently: it points at upstream (not this fork), it re-blocks WAN
@@ -14,10 +15,10 @@ import { fileURLToPath } from 'node:url';
 // restores this fork on a failed health check rather than leaving the pod
 // on neither tree.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const SCRIPT = 'scripts/revert-to-stock.sh';
+const SCRIPT = 'scripts/switch-to-upstream.sh';
 const UNIT = 'scripts/systemd/free-sleep-revert.service';
 
-describe('revert-to-stock.sh', () => {
+describe('switch-to-upstream.sh', () => {
   it('exists, parses (bash -n), and carries the exec bit', () => {
     const full = path.join(repoRoot, SCRIPT);
     assert.equal(existsSync(full), true, `${SCRIPT} is missing`);
@@ -115,10 +116,54 @@ describe('revert-to-stock.sh', () => {
     const full = path.join(repoRoot, UNIT);
     assert.equal(existsSync(full), true, `${UNIT} is missing`);
     const src = readFileSync(full, 'utf8');
-    assert.match(src, /ExecStart=\/bin\/bash \/home\/dac\/free-sleep\/scripts\/revert-to-stock\.sh/);
+    assert.match(src, /^ExecStart=\/bin\/bash -c '[^'\n]*exec \/bin\/bash \/home\/dac\/free-sleep\/scripts\/switch-to-upstream\.sh;/m);
   });
 
-  it('setup_services.sh installs the revert-to-stock service and its sudoers rule', () => {
+  it('keeps the old name working as a shim', () => {
+    const shim = readFileSync(path.join(repoRoot, 'scripts/revert-to-stock.sh'), 'utf8');
+    assert.match(shim, /exec bash "\$\(dirname "\$\{BASH_SOURCE\[0\]\}"\)\/switch-to-upstream\.sh" "\$@"/);
+    assert.ok(statSync(path.join(repoRoot, 'scripts/revert-to-stock.sh')).mode & 0o111);
+    assert.equal(spawnSync('bash', ['-n', path.join(repoRoot, 'scripts/switch-to-upstream.sh')]).status, 0);
+  });
+  it('the unit runs the new name', () => {
+    assert.match(readFileSync(path.join(repoRoot, 'scripts/systemd/free-sleep-revert.service'), 'utf8'), /switch-to-upstream\.sh/);
+  });
+
+  it('the shim runs switch-to-upstream.sh beside it with the same arguments', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-shim-'));
+    try {
+      writeFileSync(path.join(dir, 'revert-to-stock.sh'), readFileSync(path.join(repoRoot, 'scripts/revert-to-stock.sh')));
+      writeFileSync(path.join(dir, 'switch-to-upstream.sh'), 'echo "switch $*"; exit 7\n');
+      const result = spawnSync('bash', [path.join(dir, 'revert-to-stock.sh'), 'a', 'b c'], { encoding: 'utf8' });
+      assert.equal(result.stdout, 'switch a b c\n');
+      assert.equal(result.status, 7);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // A rollback swaps trees without reinstalling units, so the unit must also
+  // work on a tree from before the rename.
+  it('the unit falls back to the old name on a tree that has only that', () => {
+    const line = readFileSync(path.join(repoRoot, UNIT), 'utf8').split('\n').find(l => l.startsWith('ExecStart='));
+    const match = /^ExecStart=\/bin\/bash -c '([^']*)'$/.exec(line ?? '');
+    assert.ok(match, 'ExecStart is not a single bash -c command');
+    const command: string = match[1];
+    assert.doesNotMatch(command, /[$%]/, 'systemd would expand $ or % in the command');
+    for (const names of [['switch-to-upstream.sh', 'revert-to-stock.sh'], ['revert-to-stock.sh']]) {
+      const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-unit-'));
+      try {
+        mkdirSync(path.join(dir, 'scripts'));
+        for (const name of names) writeFileSync(path.join(dir, 'scripts', name), `echo ${name}\n`);
+        const run = spawnSync('bash', ['-c', command.replaceAll('/home/dac/free-sleep', dir)], { encoding: 'utf8' });
+        assert.equal(run.stdout, `${names[0]}\n`);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('setup_services.sh installs the switch service and its sudoers rule', () => {
     const src = readFileSync(path.join(repoRoot, 'scripts/setup_services.sh'), 'utf8');
     assert.match(src, /free-sleep-revert\.service/);
     assert.match(src, /NOPASSWD: \/bin\/systemctl start free-sleep-revert\.service --no-block/);

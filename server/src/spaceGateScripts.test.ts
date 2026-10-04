@@ -15,7 +15,7 @@ const read = (file: string) => readFileSync(path.join(repoRoot, file), 'utf8');
 
 const HELPER_FILES = [
   'scripts/update.sh',
-  'scripts/revert-to-stock.sh',
+  'scripts/switch-to-upstream.sh',
   'scripts/migrate/pod-installer.sh',
   'scripts/migrate/switch-to-this-fork.sh',
   'ops/deploy.sh',
@@ -75,8 +75,8 @@ const CHECKS: Record<string, (handoff?: boolean) => string> = {
 ${helpers(src)}${knobCheck(src)}${between(src, '# --- preflight', 'if [ "$HANDOFF" = 1 ]; then')}
 echo "PASSED / $ROOT_NEED /persistent $PERS_NEED"`;
   },
-  'revert-to-stock.sh': () => {
-    const src = read('scripts/revert-to-stock.sh');
+  'switch-to-upstream.sh': () => {
+    const src = read('scripts/switch-to-upstream.sh');
     return `${PRELUDE}LIVE='${live}'; PRUNE_SNAPSHOTS='${live}/prune_db_snapshots.sh'
 ${helpers(src)}${knobCheck(src)}${between(src, '# --- preflight', '# --- download + stage')}
 echo "PASSED / $ROOT_NEED /persistent $PERS_NEED"`;
@@ -171,7 +171,7 @@ echo "$(free_mb '${dir}') $(size_mb '${dir}') $(size_mb '${dir}/missing')"`], { 
 
   // About 1 GB of /persistent, held near a quarter free by the RAW archive.
   const pod3 = { rootFreeMb: 1200, persFreeMb: 250 };
-  for (const name of ['update.sh', 'revert-to-stock.sh', 'pod-installer.sh', 'deploy.sh']) {
+  for (const name of ['update.sh', 'switch-to-upstream.sh', 'pod-installer.sh', 'deploy.sh']) {
     it(`${name} passes on a 1 GB /persistent that has the room`, () => {
       const result = run(CHECKS[name](), pod3);
       assert.equal(result.status, 0, result.out);
@@ -216,7 +216,7 @@ echo "$(free_mb '${dir}') $(size_mb '${dir}') $(size_mb '${dir}/missing')"`], { 
   }
 
   // A test can ask for more room than the script needs, never less.
-  for (const name of ['update.sh', 'revert-to-stock.sh']) {
+  for (const name of ['update.sh', 'switch-to-upstream.sh']) {
     it(`${name} refuses on /persistent when a test asks for more room than is free`, () => {
       const result = run(CHECKS[name](), pod3, { NIGHTSTAND_TEST_EXTRA_PERSISTENT_MB: '100000' });
       assert.equal(result.status, 1, result.out);
@@ -292,7 +292,7 @@ echo PASSED`;
     const grep = spawnSync('grep', ['-rlE', 'NIGHTSTAND_TEST_EXTRA_(ROOT|PERSISTENT)_MB', 'server/src', 'app/src', 'scripts', 'ops'],
       { cwd: repoRoot, encoding: 'utf8' });
     const files = grep.stdout.split('\n').filter(Boolean).filter((f) => !f.endsWith('spaceGateScripts.test.ts')).sort();
-    assert.deepEqual(files, ['scripts/revert-to-stock.sh', 'scripts/update.sh']);
+    assert.deepEqual(files, ['scripts/switch-to-upstream.sh', 'scripts/update.sh']);
   });
 
   it('update.sh sizes the 1 GB case from the install: code, database and a half, settings, margin', () => {
@@ -324,7 +324,7 @@ echo PASSED`;
     assert.match(fetched.out, /LOW_DISK_ROOT: 870M free, 880M needed/);
   });
 
-  for (const file of ['scripts/update.sh', 'scripts/revert-to-stock.sh']) {
+  for (const file of ['scripts/update.sh', 'scripts/switch-to-upstream.sh']) {
     it(`${file} checks / again once staged, for its dependencies and a new Node`, () => {
       try {
         assert.match(run(stagedCheck(file, false), { rootFreeMb: 100, persFreeMb: 0 }).out, /PASSED \/ 64$/m);
@@ -410,7 +410,7 @@ echo PASSED`;
     assert.ok(update.indexOf('PERS_NEED') < update.indexOf('open_wan\n'));
     assert.ok(update.indexOf('DEPS_NEED') < update.indexOf('npm install'));
     assert.ok(update.indexOf('DEPS_NEED') < update.indexOf('# --- backup'));
-    const revert = read('scripts/revert-to-stock.sh');
+    const revert = read('scripts/switch-to-upstream.sh');
     assert.ok(revert.indexOf('PERS_NEED') < revert.indexOf('open_wan\n'));
     assert.ok(revert.indexOf('DEPS_NEED') < revert.indexOf('npm install'));
     const installer = read('scripts/migrate/pod-installer.sh');

@@ -254,7 +254,7 @@ describe('prune_db_snapshots.sh', () => {
   });
 
   it('runs before the update gates and again after the new snapshot', () => {
-    for (const script of ['update.sh', 'revert-to-stock.sh']) {
+    for (const script of ['update.sh', 'switch-to-upstream.sh']) {
       const src = readFileSync(path.join(repoRoot, 'scripts', script), 'utf8');
       const calls = src.match(/bash "\$PRUNE_SNAPSHOTS"[^\n]*\|\| true/g) ?? [];
       assert.equal(calls.length, 2, script);
@@ -267,7 +267,7 @@ describe('prune_db_snapshots.sh', () => {
   });
 
   it('finds the script next to the running updater, so the first update prunes too', () => {
-    for (const script of ['update.sh', 'revert-to-stock.sh']) {
+    for (const script of ['update.sh', 'switch-to-upstream.sh']) {
       const src = readFileSync(path.join(repoRoot, 'scripts', script), 'utf8');
       assert.match(src, /^PRUNE_SNAPSHOTS="\$\(dirname "\$\{BASH_SOURCE\[0\]\}"\)\/prune_db_snapshots\.sh"$/m, script);
       assert.doesNotMatch(src, /\$LIVE\/scripts\/prune_db_snapshots\.sh/, script);

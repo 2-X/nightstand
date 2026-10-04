@@ -466,6 +466,8 @@ describe('network_watchdog.sh', () => {
       ['sh', '/home/dac/free-sleep/scripts/install_python_packages.sh'],
       ['sh', '/home/dac/free-sleep/scripts/setup_python.sh'],
       ['/bin/bash', '/home/dac/free-sleep/scripts/update_service.sh'],
+      ['bash', '/home/dac/free-sleep/scripts/switch-to-upstream.sh'],
+      ['bash', '/home/dac/free-sleep/scripts/revert-to-stock.sh'],
       ['bash', '/home/dac/migrate/pod-installer.sh'],
       ['bash', '/home/dac/migrate/agent-bootstrap-installer.sh'],
       ['/bin/bash', '/home/dac/restore-original-fork.sh', '--sentinel'],

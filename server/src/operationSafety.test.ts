@@ -8,7 +8,7 @@ import { spawn, spawnSync } from 'node:child_process';
 const root = path.resolve('..');
 const script = (name: string) => readFileSync(path.join(root, 'scripts', name), 'utf8');
 
-for (const name of ['update.sh', 'revert-to-stock.sh']) {
+for (const name of ['update.sh', 'switch-to-upstream.sh']) {
   it(`${name} does not clean the incumbent stage when its lock is refused`, () => {
     const folder = mkdtempSync(path.join(tmpdir(), 'operation-refused-'));
     try {
@@ -37,7 +37,7 @@ it('real flock refuses all operations while another owns the shared lock', { ski
       holder.once('exit', () => reject(new Error('lock holder exited')));
       holder.stdout.once('data', () => resolve());
     });
-    for (const name of ['update.sh', 'rollback_pod.sh', 'revert-to-stock.sh']) {
+    for (const name of ['update.sh', 'rollback_pod.sh', 'switch-to-upstream.sh']) {
       const source = script(name);
       const begin = source.indexOf('# Keep the descriptor');
       const end = source.indexOf('\nfi', begin) + 3;
@@ -54,7 +54,7 @@ it('real flock refuses all operations while another owns the shared lock', { ski
   }
 });
 
-for (const name of ['update.sh', 'revert-to-stock.sh']) {
+for (const name of ['update.sh', 'switch-to-upstream.sh']) {
   it(`${name} snapshots committed WAL rows separately from rotated code backups`, () => {
     const source = script(name);
     const block = source.slice(source.indexOf('# --- backup'), source.indexOf('# --- atomic swap'));
@@ -117,7 +117,7 @@ it('downgrades stay in the current updater instead of handing off safety checks'
   assert.match(condition, /IS_DOWNGRADE.*!=.*yes/);
 });
 
-for (const name of ['update.sh', 'rollback_pod.sh', 'revert-to-stock.sh']) {
+for (const name of ['update.sh', 'rollback_pod.sh', 'switch-to-upstream.sh']) {
   it(`${name} takes the same exclusive operation lock before preflight`, () => {
     const source = script(name);
     assert.match(source, /NIGHTSTAND_OPERATION_LOCK.*\/run\/lock\/free-sleep-operation.lock/);

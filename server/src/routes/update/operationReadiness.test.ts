@@ -72,7 +72,7 @@ before(async () => {
 });
 after(() => new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()); }));
 
-for (const endpoint of ['/update', '/update/rollback', '/update/revert-to-stock', '/services']) {
+for (const endpoint of ['/update', '/update/rollback', '/update/switch-to-upstream', '/update/revert-to-stock', '/services']) {
   it(`${endpoint} waits for permission failure and reports repair instructions`, async () => {
     fail = true;
     if (endpoint === '/services') {
@@ -126,6 +126,7 @@ it('starts an update, rollback or switch without handing Rhythms sleeps back', a
   assert.equal((await postJson('/update', {})).status, 204);
   assert.equal((await postJson('/update', { targetVersion: '3.4.0', allowDowngrade: true })).status, 204);
   assert.equal((await postJson('/update/rollback', {})).status, 204);
+  assert.equal((await postJson('/update/switch-to-upstream', {})).status, 204);
   assert.equal((await postJson('/update/revert-to-stock', {})).status, 204);
   assert.deepEqual(handoffs, []);
 });

@@ -119,7 +119,7 @@ NODE_PIN=$(git show HEAD:server/package.json | python3 -c 'import json, sys; pri
 SSH "bash -s -- $LIVE $NODE_PIN" <<'PREFLIGHT' || die "pod preflight failed"
 LIVE=$1
 [ -d "$LIVE" ] || { echo 'NO_LIVE_INSTALL'; exit 1; }
-# Free-space helpers, kept identical in update.sh, revert-to-stock.sh,
+# Free-space helpers, kept identical in update.sh, switch-to-upstream.sh,
 # migrate/pod-installer.sh, migrate/switch-to-this-fork.sh and ops/deploy.sh.
 # Sizes are whole MB, rounded up, and a missing path counts as 0.
 # SPACE_MARGIN_MB stays free for the firmware, the server and the logs while

@@ -48,7 +48,7 @@ describe('the dialog title after a recorded failure', () => {
 
   it('says the switch did not finish', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    serve('switch', '*/update/revert-to-stock');
+    serve('switch', '*/update/switch-to-upstream');
     const { user } = renderWithProviders(<RevertToStockRow runningVersion="3.3.0"/>);
     await user.click(screen.getByText('Switch to upstream free-sleep'));
     await user.click(await screen.findByRole('button', { name: 'Switch to upstream free-sleep' }));

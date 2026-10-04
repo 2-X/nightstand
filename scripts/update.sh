@@ -223,7 +223,7 @@ cleanup() { local status=$?; trap '' HUP INT TERM; close_wan; finish_interrupted
 fail() { say "FATAL: $*"; [ -n "${RESULT_REASON:-}" ] || RESULT_REASON="$*"; exit 1; }
 
 # Bed-in-use helpers, kept identical in update.sh, rollback_pod.sh and
-# revert-to-stock.sh. The app writes REQUEST_FILE as it starts one of them.
+# switch-to-upstream.sh. The app writes REQUEST_FILE as it starts one of them.
 # A request the owner did not confirm while the bed was in use is checked
 # again just before the services stop, as the bed may have come into use
 # since. Without the file or its field, as from an older server, an older
@@ -283,7 +283,7 @@ for release in json.load(sys.stdin).get("releases", []):
   say "v$EXPECTED_VERSION matches its published checksum"
 }
 
-# Free-space helpers, kept identical in update.sh, revert-to-stock.sh,
+# Free-space helpers, kept identical in update.sh, switch-to-upstream.sh,
 # migrate/pod-installer.sh, migrate/switch-to-this-fork.sh and ops/deploy.sh.
 # Sizes are whole MB, rounded up, and a missing path counts as 0.
 # SPACE_MARGIN_MB stays free for the firmware, the server and the logs while

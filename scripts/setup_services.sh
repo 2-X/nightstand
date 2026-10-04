@@ -23,7 +23,7 @@ warn() { echo "WARNING: $*"; STATUS=1; }
 
 # Units exec these directly on older installs, and a missing exec bit fails a
 # unit with 203/EXEC before it can log anything.
-for script in update.sh update_service.sh rollback_pod.sh revert-to-stock.sh; do
+for script in update.sh update_service.sh rollback_pod.sh switch-to-upstream.sh revert-to-stock.sh; do
   [ -f "$REPO_DIR/scripts/$script" ] && chmod 755 "$REPO_DIR/scripts/$script"
 done
 

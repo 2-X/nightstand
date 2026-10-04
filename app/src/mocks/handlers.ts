@@ -350,7 +350,7 @@ export const handlers = [
     demoMissedAlarms = missedAlarmsForDemo().filter(item => !ids.includes(item.id));
     return new HttpResponse(null, { status: 204 });
   }),
-  http.post('/api/update/revert-to-stock', async ({ request }) => (await refuseWhileInUse(request)) ?? HttpResponse.json({ success: true })),
+  http.post('/api/update/switch-to-upstream', async ({ request }) => (await refuseWhileInUse(request)) ?? HttpResponse.json({ success: true })),
   http.post('/api/update/rollback', async ({ request }) => (await refuseWhileInUse(request)) ?? HttpResponse.json({ success: true })),
   http.post('/api/jobs', async ({ request }) => {
     const jobs = (await request.json()) as Jobs;

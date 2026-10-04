@@ -103,7 +103,7 @@ it('a failed fork migration restores the original without starting the failed bu
 for (const [file, marker] of [
   ['scripts/update.sh', '# --- automatic rollback'],
   ['scripts/rollback_pod.sh', '# --- swap back on failure'],
-  ['scripts/revert-to-stock.sh', '# --- automatic rollback'],
+  ['scripts/switch-to-upstream.sh', '# --- automatic rollback'],
 ]) {
   it(`${file} restarts biometrics from the restored tree after failure`, () => {
     const result = run(section(file, marker));
@@ -317,7 +317,7 @@ mv() { if [ "$1" = "$TMP" ] && [ "$2" = "$PREV" ]; then return 1; else command m
   assert.match(result.services, /restart free-sleep-stream restored/);
 });
 
-for (const file of ['scripts/update.sh', 'scripts/revert-to-stock.sh']) {
+for (const file of ['scripts/update.sh', 'scripts/switch-to-upstream.sh']) {
   for (const failedSource of ['LIVE', 'PREV']) {
     it(`${file} restarts the available tree when moving ${failedSource} fails during recovery`, () => {
       const result = run(section(file, '# --- automatic rollback'), `
@@ -520,7 +520,7 @@ const recordCurl = (status: number) => `curl() { echo "curl $*" >> "$FIXTURE/ser
 for (const [file, from, to, reason, setup] of [
   ['scripts/update.sh', '# --- atomic swap', 'rm -rf "$PREV"', 'downgrade', 'IS_DOWNGRADE=yes; STAGED_VERSION=3.0.0; STAGE="$FIXTURE/stage"'],
   ['scripts/rollback_pod.sh', '# --- swap', 'rm -rf "$TMP"', 'rollback', ''],
-  ['scripts/revert-to-stock.sh', '# --- atomic swap', 'ARCHIVE_WAS_ACTIVE=', 'revert', 'STAGED_VERSION=1.0.0; STAGE="$FIXTURE/stage"'],
+  ['scripts/switch-to-upstream.sh', '# --- atomic swap', 'ARCHIVE_WAS_ACTIVE=', 'revert', 'STAGED_VERSION=1.0.0; STAGE="$FIXTURE/stage"'],
 ]) {
   for (const status of [0, 7]) {
     it(`${file} lets the server prepare just before it stops${status ? ', even when that fails' : ''}`, () => {
@@ -596,10 +596,10 @@ for (const [file, from, to, setup, liveAfterMove] of [
   ['scripts/update.sh', '# --- automatic rollback', '', 'RESULT_PHASE=swapped', 'restored'],
   ['scripts/rollback_pod.sh', '# --- swap', '# --- health check', '', 'failed'],
   ['scripts/rollback_pod.sh', '# --- swap back on failure', '', '', 'restored'],
-  ['scripts/revert-to-stock.sh', '# --- atomic swap', 'MOVED_MODULES=no',
+  ['scripts/switch-to-upstream.sh', '# --- atomic swap', 'MOVED_MODULES=no',
     `RESULT_PHASE=preflight; STAGED_VERSION=1.0.0; BK="$FIXTURE/bk"; mkdir -p "$BK/lowdb"
 restore_switch_data() { DATA_CHANGED=no; }; ${staged}`, 'failed'],
-  ['scripts/revert-to-stock.sh', '# --- automatic rollback', '', 'RESULT_PHASE=swapped', 'restored'],
+  ['scripts/switch-to-upstream.sh', '# --- automatic rollback', '', 'RESULT_PHASE=swapped', 'restored'],
 ]) {
   const swap = section(file, from, to || undefined);
   for (const [phase, interrupt, liveVersion] of [
@@ -641,7 +641,7 @@ mv() { command mv "$@" || return; [ "$1 $2" != "$STAGE $LIVE" ] || kill -TERM $$
 for (const [file, from, to, setup] of [
   ['scripts/update.sh', '# --- atomic swap', 'MOVED_MODULES=no', `IS_DOWNGRADE=no; STAGED_VERSION=3.2.0; ${staged}`],
   ['scripts/rollback_pod.sh', '# --- swap', '# --- health check', ''],
-  ['scripts/revert-to-stock.sh', '# --- atomic swap', 'MOVED_MODULES=no',
+  ['scripts/switch-to-upstream.sh', '# --- atomic swap', 'MOVED_MODULES=no',
     `STAGED_VERSION=1.0.0; BK="$FIXTURE/bk"; mkdir -p "$BK/lowdb"; ${staged}`],
 ]) {
   const swap = section(file, from, to);
@@ -652,7 +652,7 @@ for (const [file, from, to, setup] of [
       assert.equal(result.status, 1, result.stdout + result.stderr);
       assert.equal(result.liveVersion, 'failed', result.stdout);
       assert.equal(result.previousVersion, 'restored', result.stdout);
-      assert.match(result.stdout, file === 'scripts/revert-to-stock.sh'
+      assert.match(result.stdout, file === 'scripts/switch-to-upstream.sh'
         ? /could not stop the server before converting settings/
         : /could not stop the running services; live install untouched/);
       assert.equal(result.serverState, 'active', result.services);
@@ -692,7 +692,7 @@ const streamAtMove = 'mv() { cat "$FIXTURE/state-free-sleep-stream" >> "$FIXTURE
 for (const [file, from, to, setup] of [
   ['scripts/update.sh', '# --- atomic swap', 'MOVED_MODULES=no', `IS_DOWNGRADE=no; STAGED_VERSION=3.2.0; ${staged}`],
   ['scripts/rollback_pod.sh', '# --- swap', '# --- health check', ''],
-  ['scripts/revert-to-stock.sh', '# --- atomic swap', 'MOVED_MODULES=no',
+  ['scripts/switch-to-upstream.sh', '# --- atomic swap', 'MOVED_MODULES=no',
     `STAGED_VERSION=1.0.0; BK="$FIXTURE/bk"; mkdir -p "$BK/lowdb"; ${staged}`],
 ]) {
   const swap = `${section(file, from, to)}\necho "$STREAM_WAS_ACTIVE" > "$FIXTURE/restored"`;
@@ -721,16 +721,16 @@ for (const [file, from, to, setup] of [
 
 // A recovery swap moves nothing, and puts no settings back, under a writer
 // that does not stop. The version that failed keeps running.
-const revertSettings = `${section('scripts/revert-to-stock.sh', 'restore_switch_data() {', '\n# While downloading')}`;
+const revertSettings = `${section('scripts/switch-to-upstream.sh', 'restore_switch_data() {', '\n# While downloading')}`;
 const switchedSettings = `DATA_CHANGED=yes; RESTORE_ATTEMPTED=no; ARCHIVE_WAS_ACTIVE=inactive; BK="$FIXTURE/bk"
 mkdir -p "$BK/lowdb"; echo original > "$BK/lowdb/settingsDB.json"; echo original > "$BK/lowdb/schedulesDB.json"`;
 const recordMoves = 'mv() { echo "mv $*" >> "$FIXTURE/ssh"; command mv "$@"; }';
 for (const [file, marker] of [
   ['scripts/update.sh', '# --- automatic rollback'],
   ['scripts/rollback_pod.sh', '# --- swap back on failure'],
-  ['scripts/revert-to-stock.sh', '# --- automatic rollback'],
+  ['scripts/switch-to-upstream.sh', '# --- automatic rollback'],
 ]) {
-  const revert = file === 'scripts/revert-to-stock.sh';
+  const revert = file === 'scripts/switch-to-upstream.sh';
   const recovery = `${revert ? `${revertSettings}\necho converted > /persistent/free-sleep-data/lowdb/settingsDB.json\n` : ''}`
     + withExitHandling(file, section(file, marker));
   const setup = `${stubs}\n${statefulServices()}\nRESULT_PHASE=swapped\n${revert ? switchedSettings : ''}
@@ -763,7 +763,7 @@ mkdir -p "$FAILED" "$TMP"; echo earlier > "$FAILED/version"; echo earlier > "$TM
   });
 }
 
-it('revert-to-stock.sh puts no settings back while a writer still runs', () => {
+it('switch-to-upstream.sh puts no settings back while a writer still runs', () => {
   for (const [states, settings] of [['active active', 'converted\n'], ['inactive active', 'converted\n'],
     ['inactive inactive', 'original\n']]) {
     const result = run(`${revertSettings}\necho converted > /persistent/free-sleep-data/lowdb/settingsDB.json
@@ -777,10 +777,10 @@ read -r server stream <<< "${states}"; echo "$server" > "$FIXTURE/state-free-sle
 it('the writer stop is the same in every script that stops the writers', () => {
   const stopWriter = (file: string) => section(file, '# Stops a service that writes the data', '\n}\n');
   const lateStream = (file: string) => section(file, '# Until the server has stopped, its Biometrics', '\n}\n');
-  const [firstLate, ...restLate] = ['scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh',
+  const [firstLate, ...restLate] = ['scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/switch-to-upstream.sh',
     'scripts/reset.sh'].map(lateStream);
   for (const helper of restLate) assert.equal(helper, firstLate);
-  const scripts = ['scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh', 'scripts/reset.sh',
+  const scripts = ['scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/switch-to-upstream.sh', 'scripts/reset.sh',
     'scripts/install.sh'];
   const [first, ...rest] = scripts.map(stopWriter);
   for (const helper of rest) assert.equal(helper, first);
@@ -794,7 +794,7 @@ function inUseHelpers(file: string) {
   const last = src.indexOf('recheck_in_use() {', start);
   return src.slice(start, src.indexOf('\n}\n', last) + 3);
 }
-const OPERATIONS = ['scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh'];
+const OPERATIONS = ['scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/switch-to-upstream.sh'];
 
 it('the bed-in-use helpers are the same in every script', () => {
   const [first, ...rest] = OPERATIONS.map(inUseHelpers);
@@ -837,7 +837,7 @@ for (const [file, from, to, setup] of [
   ['scripts/update.sh', '# --- atomic swap', 'MOVED_MODULES=no', `IS_DOWNGRADE=no; STAGED_VERSION=3.2.0; ${staged}`],
   // A rollback to another fork stops the archive timer first, so it is checked before that.
   ['scripts/rollback_pod.sh', '# Before the archive timer below stops', '# --- health check', 'ARCHIVE_WAS_ACTIVE=active'],
-  ['scripts/revert-to-stock.sh', '# --- atomic swap', 'MOVED_MODULES=no',
+  ['scripts/switch-to-upstream.sh', '# --- atomic swap', 'MOVED_MODULES=no',
     `STAGED_VERSION=1.0.0; BK="$FIXTURE/bk"; mkdir -p "$BK/lowdb"; ${staged}`],
 ]) {
   const script = (recheck: string) => `${inUseHelpers(file)}\nRECHECK_IN_USE=${recheck}\n${withExitHandling(file, section(file, from, to))}`;
@@ -885,7 +885,7 @@ it('update.sh carries the request across the handoff, and an older updater means
 });
 
 it('rollback and switch read the request before anything else', () => {
-  for (const file of ['scripts/rollback_pod.sh', 'scripts/revert-to-stock.sh']) {
+  for (const file of ['scripts/rollback_pod.sh', 'scripts/switch-to-upstream.sh']) {
     const src = readFileSync(path.join(root, file), 'utf8');
     const read = src.search(/^read_request$/m);
     assert.ok(read > 0 && read < src.indexOf('# --- preflight'), file);

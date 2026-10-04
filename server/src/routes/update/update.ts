@@ -210,7 +210,7 @@ router.post('/rollback', async (req, res) => {
 // Switch the app to upstream free-sleep. System configuration and backups can remain.
 // Reversible only by re-adopting via scripts/migrate/switch-to-this-fork.sh
 // afterward. There's no in-app way back once upstream free-sleep is running.
-router.post('/revert-to-stock', async (req, res) => {
+async function switchToUpstream(req: express.Request, res: express.Response) {
   const hooks = await admitted(req, res);
   if (!hooks) return;
   try {
@@ -222,6 +222,9 @@ router.post('/revert-to-stock', async (req, res) => {
       message: error instanceof PrivilegedCommandError ? error.message : 'Could not start switching to upstream free-sleep.',
     });
   }
-});
+}
+router.post('/switch-to-upstream', switchToUpstream);
+// The old name, for apps from before the rename.
+router.post('/revert-to-stock', switchToUpstream);
 
 export default router;

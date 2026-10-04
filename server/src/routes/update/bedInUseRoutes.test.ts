@@ -77,7 +77,8 @@ const send = async (method: string, route: string, body?: unknown) => {
 const post = (route: string, body?: unknown) => send('POST', route, body);
 
 const routes = [
-  ['/api/update', {}], ['/api/update/rollback', undefined], ['/api/update/revert-to-stock', undefined],
+  ['/api/update', {}], ['/api/update/rollback', undefined],
+  ['/api/update/switch-to-upstream', undefined], ['/api/update/revert-to-stock', undefined],
 ] as const;
 for (const [route, body] of routes) {
   describe(route, () => {
@@ -146,7 +147,7 @@ it('reports the reasons to the app', async () => {
   assert.deepEqual((await send('GET', '/api/update/in-use')).body, { reasons: [] });
 });
 it('rejects unknown fields on rollback and switch', async () => {
-  for (const route of ['/api/update/rollback', '/api/update/revert-to-stock']) {
+  for (const route of ['/api/update/rollback', '/api/update/switch-to-upstream', '/api/update/revert-to-stock']) {
     const response = await post(route, { confirmInUse: true, extra: 1 });
     assert.equal(response.status, 400);
   }
