@@ -35,6 +35,12 @@ async function shoot(name, time, setup) {
     viewport: VIEWPORT, deviceScaleFactor: 2, reducedMotion: 'reduce', colorScheme: 'light',
     hasTouch: true, isMobile: true, baseURL: BASE_URL,
   });
+  // The live demo shows its banner; the README pictures leave it out. They
+  // show the weekly schedule a new install starts with, except the Rhythms editor.
+  await context.addInitScript(() => sessionStorage.setItem('nightstand-demo-banner-dismissed', 'true'));
+  if (name !== 'rhythm-editor') {
+    await context.addInitScript(() => localStorage.setItem('nightstand-demo-rhythms', 'off'));
+  }
   const page = await context.newPage();
   await page.clock.install({ time });
   await setup(page);
@@ -71,7 +77,7 @@ await shoot('elevation', MONDAY_NOON, async page => { await goto(page, '/elevati
 
 await shoot('schedules', MONDAY_NOON, async page => {
   await goto(page, '/schedules');
-  await page.getByRole('heading', { name: 'Coming up', exact: true }).waitFor();
+  await page.getByText('Monday night to Tuesday morning').waitFor();
 });
 
 await shoot('rhythm-editor', MONDAY_NOON, async page => {
@@ -83,7 +89,7 @@ await shoot('rhythm-editor', MONDAY_NOON, async page => {
 
 await shoot('sleep', MONDAY_LATE, async page => {
   await goto(page, '/sleep');
-  await page.getByText('Woke Mon, Sep 28').first().waitFor();
+  await page.getByText('Out of bed Mon, Sep 28').first().waitFor();
 });
 
 await shoot('status', MONDAY_NOON, async page => {
