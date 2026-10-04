@@ -168,8 +168,33 @@ jobs:
           pip install -r scripts/python/requirements.txt
           pip install pytest
 
+      - name: Install nats-server
+        env:
+          NATS_VERSION: v2.14.7
+          NATS_SHA256: e5c20b1cb2c0566b54c544312e91e011f9e130c5c80f16a14f4cf28ef30b8be2
+        run: |
+          archive="nats-server-${NATS_VERSION}-linux-amd64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/nats-io/nats-server/releases/download/${NATS_VERSION}/${archive}"
+          echo "${NATS_SHA256}  $RUNNER_TEMP/$archive" | sha256sum --check -
+          mkdir -p "$RUNNER_TEMP/nats-bin"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/nats-bin" --strip-components=1 \
+            "nats-server-${NATS_VERSION}-linux-amd64/nats-server"
+          echo "$RUNNER_TEMP/nats-bin" >> "$GITHUB_PATH"
+
       - name: Test
-        run: python -m pytest biometrics/__tests__/ -v
+        # bash here adds pipefail, so a failing pytest is not hidden by tee.
+        shell: bash
+        run: |
+          nats-server --version
+          python -m pytest biometrics/__tests__/ -v -rs | tee "$RUNNER_TEMP/pytest.log"
+
+      - name: Require NATS integration tests to run
+        run: |
+          if grep -E '^SKIPPED .*nats' "$RUNNER_TEMP/pytest.log"; then
+            echo 'NATS integration tests were skipped' >&2
+            exit 1
+          fi
 
   e2e:
     name: E2E
