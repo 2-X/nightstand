@@ -51,6 +51,7 @@ export default function RhythmsPage({ db }: { db: RhythmsDB }) {
   const [undo, setUndo] = useState<Undo>();
   const [showAllDates, setShowAllDates] = useState(false);
   const [using, setUsing] = useState<string>();
+  const [headingFocus, setHeadingFocus] = useState(0);
   const closedEditor = useRef<{ id: string | null; created: boolean } | undefined>(undefined);
   const location = useLocation();
   const navigate = useNavigate();
@@ -79,6 +80,10 @@ export default function RhythmsPage({ db }: { db: RhythmsDB }) {
     const card = closed.id ? next ?? document.querySelector<HTMLElement>(`[data-rhythm-id="${closed.id}"]`) : null;
     (card ?? document.getElementById('rhythms-heading'))?.focus({ preventScroll: true });
   }, [editing, db, side]);
+  // Runs after the commit that shows the list, so the heading exists whatever the browser's frame timing.
+  useEffect(() => {
+    if (headingFocus) document.getElementById('rhythms-heading')?.focus({ preventScroll: true });
+  }, [headingFocus]);
   const timeZone = settings?.timeZone ?? moment.tz.guess();
   const format = settings?.temperatureFormat ?? 'fahrenheit';
   const today = moment.tz(timeZone).format('YYYY-MM-DD');
@@ -177,7 +182,7 @@ export default function RhythmsPage({ db }: { db: RhythmsDB }) {
     closedEditor.current = undefined;
     setEditing(undefined);
     setError('');
-    requestAnimationFrame(() => document.getElementById('rhythms-heading')?.focus({ preventScroll: true }));
+    setHeadingFocus(count => count + 1);
     return true;
   };
   const undoPick = async () => {
@@ -187,7 +192,7 @@ export default function RhythmsPage({ db }: { db: RhythmsDB }) {
     if (next === sideData && refused) {
       setUndo(undefined);
       setError(refused(sideData));
-      requestAnimationFrame(() => document.getElementById('rhythms-heading')?.focus({ preventScroll: true }));
+      setHeadingFocus(count => count + 1);
       return;
     }
     // The bar stays until the save lands, so a failed undo can be tried again.

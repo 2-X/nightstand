@@ -6,7 +6,7 @@ const baseURL = `http://localhost:${PORT}`;
 // NIGHTSTAND_THEME=<id> runs every spec in that look, for checking a look against the layout specs.
 const theme = process.env.NIGHTSTAND_THEME;
 
-// Drives the pre-built demo (app/dist) in headless Chromium. The demo's MSW
+// Drives the pre-built demo (app/dist) in headless Chromium and WebKit. The demo's MSW
 // service worker intercepts every request, so this runs fully offline. Build
 // the demo first with `npm run build:demo` (the CI job does this in a prior
 // step); the webServer below only serves it.
@@ -46,6 +46,12 @@ export default defineConfig({
         timezoneId: 'America/Los_Angeles',
       },
     })),
+    // Most people add the app from Safari on an iPhone.
+    {
+      name: 'webkit',
+      testMatch: /(bed-off|sleep-context|rhythms|pause-schedule|navigation|layout-sweep)\.spec\.ts/,
+      use: { ...devices['iPhone 13'], timezoneId: 'America/Los_Angeles' },
+    },
   ],
   webServer: {
     command: `VITE_ENV=demo npx vite preview --port ${PORT} --strictPort`,

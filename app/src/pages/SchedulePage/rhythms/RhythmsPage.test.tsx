@@ -165,6 +165,18 @@ it('deletes a rhythm and brings it back with Undo', async () => {
   expect(getMockRhythms()?.left.week.saturday).toBe('weekend');
 });
 
+// WebKit can run the next frame before React commits the list, so focus must not wait on a frame.
+it('focuses the Rhythms heading once the list is back, even if a frame runs before it', async () => {
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    callback(0);
+    return 0;
+  });
+  const { user } = renderWithProviders(<ScheduleTab/>);
+  await deleteWeekend(user);
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Rhythms' })).toHaveFocus());
+  vi.unstubAllGlobals();
+});
+
 it('says so when a deleted rhythm cannot come back', async () => {
   const weekend = structuredClone(getMockRhythms()!.left.rhythms.weekend);
   const { user, queryClient } = renderWithProviders(<ScheduleTab/>);
