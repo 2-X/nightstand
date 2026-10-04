@@ -45,6 +45,15 @@ it('keeps recovery actions collapsed until requested', async () => {
   expect(await screen.findByRole('button', { name: 'Switch to upstream free-sleep' })).toBeVisible();
 });
 
+it('explains how to go back to Eight Sleep, without offering an action', async () => {
+  const { user } = renderWithProviders(<VersionsPage/>);
+  await user.click(await screen.findByRole('button', { name: 'Recovery' }));
+  expect(await screen.findByText('Go back to Eight Sleep')).toBeInTheDocument();
+  expect(screen.getByText(/On Pod 5 no reset procedure has been checked yet\./)).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Read the steps' })).toHaveAttribute('href', expect.stringContaining('INSTALLATION.md#'));
+  expect(screen.queryByRole('button', { name: /Eight Sleep/ })).toBeNull();
+});
+
 it('surfaces a rejected update on Software after closing the dialog', async () => {
   server.use(
     http.get('*/api/deviceStatus', () => HttpResponse.json({

@@ -3,7 +3,8 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { useUpdateAttentionStore, type UpdateOutcome } from '@state/updateAttentionStore';
 import {
   Accordion, AccordionDetails, AccordionSummary,
-  Alert, Box, Button, Drawer, FormControlLabel, List, ListItemButton, ListItemText, Radio, RadioGroup, Typography,
+  Alert, Box, Button, Drawer, FormControlLabel, Link as MuiLink, List, ListItem, ListItemButton, ListItemText, Radio, RadioGroup,
+  Typography,
 } from '@mui/material';
 import semver from 'semver';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -38,6 +39,8 @@ import { weight } from '@design/tokens';
 // service, so it is the floor. Keep it in step with FLOOR_VERSION in
 // scripts/update.sh, which gates the same picker from the Pod side.
 const CAPABLE_FLOOR = '3.0.0';
+const EIGHT_SLEEP_STEPS_URL = 'https://github.com/LTimothy/nightstand/blob/main/INSTALLATION.md'
+  + '#how-to-revert-changes-and-go-back-to-using-your-eight-sleep-through-their-app';
 
 export default function VersionsPage() {
   const { data: deviceStatus } = useDeviceStatus();
@@ -242,6 +245,22 @@ export default function VersionsPage() {
               </Typography>
               <RevertToStockRow runningVersion={ running }/>
             </Box>
+
+            <ListItem component="div" disableGutters sx={ { display: 'block', py: 0 } }>
+              <ListItemText
+                primary="Go back to Eight Sleep"
+                secondary={ 'Nightstand cannot restore Eight Sleep\'s software from here. On Pod 3 and Pod 4 this needs a '
+                  + 'firmware reset. On Pod 5 no reset procedure has been checked yet.' }
+              />
+              <MuiLink
+                href={ EIGHT_SLEEP_STEPS_URL }
+                target="_blank"
+                rel="noopener noreferrer"
+                variant="body2"
+                sx={ { display: 'inline-flex', alignItems: 'center', minHeight: 44 } }>
+                Read the steps
+              </MuiLink>
+            </ListItem>
           </AccordionDetails>
         </Accordion>
       </List>
