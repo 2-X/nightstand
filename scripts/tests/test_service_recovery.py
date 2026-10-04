@@ -113,7 +113,7 @@ MISSING_UNITS=""" + ('0' if existing else '1'))
 mkdir -p "$FIXTURE/data"
 echo damaged > "$FIXTURE/data/free-sleep.db"
 python3() {
-  if [ "$1" = -c ]; then [ "$BIOMETRICS" = on ]; return; fi
+  if [ "$1" = -c ]; then [ "$BIOMETRICS" = on ]; return "$?"; fi
   [ "$FAILURE" != sqlite_module ] && [ "$2" != "$FAILURE" ]
 }
 su() { echo su >> "$FIXTURE/services"; [ "$FAILURE" != migration ]; }
