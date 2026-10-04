@@ -12,10 +12,6 @@ const night = {
   id: 1, side: 'left', entered_bed_at: '2026-09-22T22:00:00-07:00', left_bed_at: '2026-09-23T06:30:00-07:00',
   sleep_period_seconds: 30_000, times_exited_bed: 0, present_intervals: [], not_present_intervals: [],
 };
-const score = {
-  active: true, score: 86,
-  components: { duration: { score: 80, weight: 0.4, value: '7h 12m in bed', available: true } },
-};
 
 function leftSide(isOn: boolean) {
   const status = getDeviceStatus();
@@ -28,7 +24,6 @@ describe('last night on the Bed page', () => {
     useControlTempStore.setState({ commandError: undefined, deviceStatus: undefined, pendingEdits: 0 });
     server.use(
       http.get('*/metrics/sleep', () => HttpResponse.json([night])),
-      http.get('*/metrics/sleep-score', () => HttpResponse.json(score)),
     );
   });
 
@@ -40,18 +35,17 @@ describe('last night on the Bed page', () => {
     expect(link).toHaveAttribute('href', '/sleep');
     expect(link).toHaveTextContent('View sleep');
     expect(link.closest('[data-controls-row]')).not.toBeNull();
-    expect(screen.getByText('Last night: 7h 12m in bed')).toBeInTheDocument();
+    expect(screen.getByText('Last night: 8h 20m in bed')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Turn on' })).toBeInTheDocument();
-    // The chip is not shown as well, and the score is never shown.
+    // The chip is not shown as well.
     expect(screen.getAllByText(/^Last night:/)).toHaveLength(1);
-    expect(screen.queryByText(/Last night: 86/)).not.toBeInTheDocument();
   });
 
   it('keeps the chip below the controls while the side is on', async () => {
     leftSide(true);
     const { container } = renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
 
-    expect(await screen.findByText('Last night: 7h 12m in bed')).toBeInTheDocument();
+    expect(await screen.findByText('Last night: 8h 20m in bed')).toBeInTheDocument();
     const chip = container.querySelector('[data-last-night-chip]')!;
     expect(chip).toContainElement(screen.getByRole('link', { name: 'View last night\'s sleep' }));
     expect(screen.getByRole('button', { name: 'Warmer' })).toBeInTheDocument();
@@ -71,30 +65,30 @@ describe('last night on the Bed page', () => {
     expect(screen.queryByRole('button', { name: 'Warmer' })).not.toBeInTheDocument();
   });
 
-  it('says time in bed when coverage is low', async () => {
+  it('shows the chip with the sleep score feature off, without asking for a score', async () => {
     leftSide(false);
-    server.use(http.get('*/metrics/sleep-score', () => HttpResponse.json({
-      ...score, components: { duration: { score: 70, weight: 0.4, value: '8h in bed', available: true } },
-    })));
+    const settings = getSettings();
+    let scored = false;
+    server.use(
+      http.get('*/api/settings', () => HttpResponse.json({ ...settings, features: { ...settings.features, sleepScore: false } })),
+      http.get('*/metrics/sleep-score', () => { scored = true; return HttpResponse.json({}); }),
+    );
     renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
-    expect(await screen.findByText('Last night: 8h in bed')).toBeInTheDocument();
+    expect(await screen.findByText('Last night: 8h 20m in bed')).toBeInTheDocument();
+    expect(scored).toBe(false);
   });
 
   it.each([
-    ['no night was recorded', [], score],
-    ['sleep score is off', [night], { active: false, score: null, components: {} }],
-    ['the score has no duration', [night], { ...score, components: { duration: { score: 0, weight: 0.4, value: '', available: false } } }],
-  ])('shows nothing under the dial when %s', async (_, records, response) => {
+    ['no night was recorded', []],
+    ['the night has no time in bed', [{ ...night, sleep_period_seconds: 0 }]],
+  ])('shows nothing under the dial when %s', async (_, records) => {
     leftSide(false);
     let answered = 0;
-    server.use(
-      http.get('*/metrics/sleep', () => { answered++; return HttpResponse.json(records); }),
-      http.get('*/metrics/sleep-score', () => { answered++; return HttpResponse.json(response); }),
-    );
+    server.use(http.get('*/metrics/sleep', () => { answered++; return HttpResponse.json(records); }));
     renderWithProviders(<ControlTempPage />, { initialRoute: '/' });
 
     await screen.findByRole('button', { name: 'Turn on' });
-    await waitFor(() => expect(answered).toBe(records.length ? 2 : 1));
+    await waitFor(() => expect(answered).toBeGreaterThan(0));
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(screen.queryByText(/^Last night/)).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'View last night\'s sleep' })).not.toBeInTheDocument();

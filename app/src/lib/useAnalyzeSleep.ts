@@ -47,14 +47,12 @@ export default function useAnalyzeSleep() {
       // older than that completion, so returning to fresh history stays cheap.
       if (completed && !previous && Number.isFinite(completedAt)) {
         void queryClient.invalidateQueries({ predicate: query => {
-          const resultForSide = (query.queryKey[0] === 'useSleepStages' || query.queryKey[0] === 'useSleepScore')
-            && query.queryKey[1] === jobSide;
+          const resultForSide = query.queryKey[0] === 'useSleepStages' && query.queryKey[1] === jobSide;
           return resultForSide && query.state.dataUpdatedAt > 0 && query.state.dataUpdatedAt < completedAt;
         } });
       }
       if (completed && previous && (previous.status !== latestJob.status || previous.timestamp !== latestJob.timestamp)) {
         void queryClient.invalidateQueries({ queryKey: ['useSleepStages', jobSide] });
-        void queryClient.invalidateQueries({ queryKey: ['useSleepScore', jobSide] });
         void queryClient.invalidateQueries({ queryKey: ['useSleepRecords'] });
       }
     }

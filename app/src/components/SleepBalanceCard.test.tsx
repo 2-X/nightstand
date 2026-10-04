@@ -23,7 +23,7 @@ describe('Sleep balance coverage', () => {
     renderWithProviders(<SleepBalanceCard records={ [{ ...base, sleep_period_seconds: 0 }] } weekStart={ weekStart } timeZone={ timeZone }/>);
     expect(screen.getByText('1 of 7 nights recorded')).toBeInTheDocument();
     expect(await screen.findByText('0h in bed on average')).toBeInTheDocument();
-    expect(screen.getByText(/Under the 7h to 9h range for time in bed/)).toBeInTheDocument();
+    expect(screen.queryByText(/7h to 9h range/)).not.toBeInTheDocument();
   });
   it('uses the same longest session as Night when a day has multiple sessions', async () => {
     renderWithProviders(<SleepBalanceCard

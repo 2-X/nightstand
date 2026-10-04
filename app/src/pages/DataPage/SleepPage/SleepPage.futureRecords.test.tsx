@@ -41,7 +41,7 @@ describe('Sleep records dated in the future', () => {
     renderWithProviders(<SleepPage />);
     expect(await screen.findByText('8h')).toBeInTheDocument();
     expect(screen.getByText('Sep 21 - Sep 27')).toBeInTheDocument();
-    expect(screen.getByText('Woke Wed, Sep 23')).toBeInTheDocument();
+    expect(screen.getByText('Out of bed Wed, Sep 23')).toBeInTheDocument();
     expect(screen.queryByText(/2099|Jun 1/)).not.toBeInTheDocument();
   });
 
@@ -84,13 +84,13 @@ describe('Sleep dates outside the current year', () => {
     records = [record(1, '2025-12-30', 7)];
     renderWithProviders(<SleepPage />);
     expect(await screen.findByText('Dec 29, 2025 - Jan 4, 2026')).toBeInTheDocument();
-    expect(await screen.findByText('Woke Tue, Dec 30, 2025')).toBeInTheDocument();
+    expect(await screen.findByText('Out of bed Tue, Dec 30, 2025')).toBeInTheDocument();
   });
 
   it('leaves the year out for the current year', async () => {
     records = [record(1, '2026-09-23', 8)];
     renderWithProviders(<SleepPage />);
-    expect(await screen.findByText('Woke Wed, Sep 23')).toBeInTheDocument();
+    expect(await screen.findByText('Out of bed Wed, Sep 23')).toBeInTheDocument();
     expect(screen.getByText('Sep 21 - Sep 27')).toBeInTheDocument();
   });
 });

@@ -3,21 +3,18 @@ import moment from 'moment-timezone';
 
 import { useAppStore } from '@state/appStore.tsx';
 import { useSleepRecords } from '@api/sleep.ts';
-import { useSleepScore, useSleepScoreEnabled } from '@api/sleepScore.ts';
 import { useSettings } from '@api/settings.ts';
-import { recordForNight } from '../DataPage/SleepPage/sleepContext.ts';
+import { formatSleepDuration, recordForNight } from '../DataPage/SleepPage/sleepContext.ts';
 
 export type LastNight = {
-  score: number;
-  // The score's own duration line, such as "7h 12m in bed".
-  duration?: string;
+  // Such as "7h 12m in bed".
+  duration: string;
 };
 
-// The selected side's last night's sleep estimate, or undefined while loading, when
-// there is no night, or when sleep score is off.
+// The selected side's last night's time in bed, or undefined while loading or
+// when there is no night.
 export function useLastNight(): LastNight | undefined {
   const { side } = useAppStore();
-  const sleepScoreEnabled = useSleepScoreEnabled();
   const { data: settings } = useSettings();
   // Unset means UTC, as on the Sleep page; wait only while settings load.
   const timeZone = settings ? settings.timeZone ?? 'UTC' : undefined;
@@ -39,16 +36,6 @@ export function useLastNight(): LastNight | undefined {
     return newest && recordForNight(sideRecords, moment.tz(newest.left_bed_at, timeZone).format('YYYY-MM-DD'), timeZone);
   }, [records, side, timeZone]);
 
-  const { data: score } = useSleepScore(
-    {
-      side,
-      startTime: last?.entered_bed_at,
-      endTime: last?.left_bed_at,
-    },
-    sleepScoreEnabled && !!last,
-  );
-
-  if (!sleepScoreEnabled || !last || !score?.active || !Number.isFinite(score.score) || score.score === null) return undefined;
-  const duration = score.components.duration;
-  return { score: score.score, duration: duration?.available && duration.value ? duration.value : undefined };
+  if (!last || last.sleep_period_seconds <= 0) return undefined;
+  return { duration: `${formatSleepDuration(last.sleep_period_seconds)} in bed` };
 }

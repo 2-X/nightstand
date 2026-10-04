@@ -36,10 +36,11 @@ it('keeps software actions on Software without repeating its link on Device', as
 
 it('keeps optional toggles together and bed maintenance with the sides', async () => {
   const { unmount } = renderWithProviders(<SettingsPage/>, { initialRoute: '/settings/features' });
-  for (const label of ['Biometrics', 'Sleep score', 'Presence auto-off', 'New sleep tracking (beta)',
+  for (const label of ['Biometrics', 'Presence auto-off', 'New sleep tracking (beta)',
     'Level temperature display', 'One-time alarm', 'Rhythms']) {
     expect(await screen.findByRole('switch', { name: label })).toBeInTheDocument();
   }
+  expect(screen.queryByRole('switch', { name: 'Sleep score' })).not.toBeInTheDocument();
   expect(screen.queryByText('Priming')).not.toBeInTheDocument();
   unmount();
   renderWithProviders(<SettingsPage/>, { initialRoute: '/settings/bed' });
@@ -54,7 +55,7 @@ it('counts every visible feature switch', async () => {
   const total = screen.getAllByRole('switch').length;
   features.unmount();
   renderWithProviders(<SettingsPage/>, { initialRoute: '/settings' });
-  expect(await screen.findByText(`5 of ${total} on`)).toBeVisible();
+  expect(await screen.findByText(`4 of ${total} on`)).toBeVisible();
   expect(screen.queryByText(`${total} of ${total} on`)).not.toBeInTheDocument();
 });
 
@@ -62,7 +63,7 @@ it('counts new sleep tracking once it is on', async () => {
   const settings = getSettings();
   server.use(http.get('*/settings', () => HttpResponse.json({ ...settings, features: { ...settings.features, biometricsV2: true } })));
   renderWithProviders(<SettingsPage/>, { initialRoute: '/settings' });
-  expect(await screen.findByText('6 of 7 on')).toBeVisible();
+  expect(await screen.findByText('5 of 6 on')).toBeVisible();
 });
 
 it('does not claim the Pod is running before all core services are ready', async () => {
@@ -79,7 +80,7 @@ it('does not count dependent feature switches while biometrics is off', async ()
   const services = getServices();
   server.use(http.get('*/services', () => HttpResponse.json({ ...services, biometrics: { ...services.biometrics, enabled: false } })));
   renderWithProviders(<SettingsPage/>, { initialRoute: '/settings' });
-  expect(await screen.findByText('2 of 7 on')).toBeVisible();
+  expect(await screen.findByText('2 of 6 on')).toBeVisible();
 });
 
 

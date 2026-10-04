@@ -15,7 +15,7 @@ const LOG_DESCRIPTIONS: Array<{ pattern: RegExp; description: string }> = [
   },
   {
     pattern: /^sleep-analyzer\d*\.log$/,
-    description: 'The overnight sleep-analysis job: turns raw sensor data from the previous night into sleep stages and a sleep score.',
+    description: 'The overnight sleep-analysis job: finds time in bed and movement in the previous night\'s raw sensor data.',
   },
   {
     pattern: /^calibrate-sensor\d*\.log$/,

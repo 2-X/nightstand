@@ -7,11 +7,6 @@ import { server } from '@test/setup';
 import type { SleepRecord } from '@api/sleepSchema';
 import SleepSideControl from './SleepSideControl';
 
-vi.mock('@api/sleepScore', async importOriginal => ({
-  ...await importOriginal<typeof import('@api/sleepScore')>(),
-  useSleepScoreEnabled: () => true,
-}));
-
 const record = (side: string, hours: number): SleepRecord => ({
   id: hours, side, entered_bed_at: '2026-09-23T06:00:00-07:00',
   left_bed_at: `2026-09-23T${String(6 + hours).padStart(2, '0')}:00:00-07:00`,

@@ -133,7 +133,7 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
   {
     id: 'sleep-stages-score',
     title: 'Sleep score',
-    description: 'The estimated sleep score on the Sleep page.',
+    description: 'The sleep score API. Not shown in the app.',
     category: 'biometrics',
     version: '3.0.1',
     flag: 'sleepScore',
@@ -588,7 +588,7 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
   {
     id: 'sleep-night-summary',
     title: 'Recorded night summary',
-    description: 'The latest recorded night, estimated score contributors and explicit missing-data states.',
+    description: 'The latest recorded night, time in bed, trips out of bed and explicit missing-data states.',
     category: 'ui',
     version: 'n/a',
     flag: null,
@@ -602,7 +602,7 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
       'app/src/components/SleepFitnessCard.test.tsx',
     ],
     upstream_offer: false,
-    rationale: 'The summary presents existing sleep data; biometrics and estimated scores retain their own toggles.',
+    rationale: 'The summary presents existing sleep data; Biometrics controls whether that data is recorded.',
   },
   {
     id: 'settings-groups',

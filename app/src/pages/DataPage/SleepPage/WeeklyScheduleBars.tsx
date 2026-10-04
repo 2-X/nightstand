@@ -20,7 +20,7 @@ export default function WeeklyScheduleBars({ records, weekStart, timeZone, onSel
   const minimum = Math.min(0, ...days.filter(day => day.record).map(day => day.start));
   const maximum = Math.max(1440, ...days.map(day => day.end));
   return (
-    <Box aria-label="Bedtime to wake time by night">
+    <Box aria-label="Time in bed by night">
       { days.map(({ day, record, start, end }) => {
         const future = day.isAfter(moment.tz(timeZone), 'day');
         const times = record

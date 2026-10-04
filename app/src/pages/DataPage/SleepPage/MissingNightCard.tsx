@@ -13,7 +13,7 @@ const COPY: Record<MissingNightState, { title: string; description: string }> = 
   empty: { title: 'Nothing recorded', description: "The bed didn't detect anyone on this side." },
   failed: { title: "Couldn't analyze this night", description: 'Try again, or check Pod and diagnostics in Settings.' },
   off: { title: 'Sleep tracking is off', description: 'Turn it on to record new nights.' },
-  zero: { title: 'No sleep detected', description: 'Someone was in bed, but no sleep was found.' },
+  zero: { title: 'No time in bed recorded', description: 'This night was analyzed, but no time in bed was found.' },
 };
 
 export const RHYTHMS_PENDING_DESCRIPTION = 'A Rhythms sleep is analyzed about 15 minutes after it ends, '

@@ -1,8 +1,4 @@
-import axios, { LONG_REQUEST_TIMEOUT_MS } from './api';
-import { useQuery } from '@tanstack/react-query';
-import { useSettings } from './settings.ts';
-import { useServices } from './services.ts';
-
+// Response shape of /metrics/sleep-score. The app no longer requests it.
 export type SleepScoreComponent = {
   score: number;
   weight: number;
@@ -21,35 +17,4 @@ export type SleepScore = {
     continuity: SleepScoreComponent;
     restingHr: SleepScoreComponent;
   }>;
-};
-
-type Args = {
-  side: 'left' | 'right';
-  startTime?: string;
-  endTime?: string;
-};
-
-export const useSleepScore = ({ side, startTime, endTime }: Args, enabled = true) => {
-  return useQuery<SleepScore>({
-    staleTime: 5 * 60 * 1000,
-    queryKey: ['useSleepScore', side, startTime, endTime],
-    queryFn: async ({ signal }) => {
-      const response = await axios.get<SleepScore>('/metrics/sleep-score', {
-        params: { side, startTime, endTime },
-        signal,
-        timeout: LONG_REQUEST_TIMEOUT_MS,
-      });
-      return response.data;
-    },
-    enabled: enabled && !!startTime && !!endTime,
-  });
-};
-
-// Mirrors the server's isSleepScoreActive: sleep score and stages need real
-// biometrics data to mean anything, so the feature is only active when both
-// its own flag and biometrics itself are on.
-export const useSleepScoreEnabled = (): boolean => {
-  const { data: settings } = useSettings();
-  const { data: services } = useServices();
-  return !!settings?.features?.sleepScore && !!services?.biometrics?.enabled;
 };

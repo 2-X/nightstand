@@ -12,7 +12,7 @@ type Screen = { name: string; path: string; ready: (page: Page) => Promise<void>
 export const SCREENS: Screen[] = [
   { name: 'bed', path: '/', ready: page => expect(page.getByRole('button', { name: /^Turn (off|on)$/ })).toBeVisible() },
   { name: 'schedule', path: '/schedules', ready: page => expect(page.getByRole('heading', { name: 'Coming up', exact: true })).toBeVisible() },
-  { name: 'sleep', path: '/sleep', ready: page => expect(page.getByText(/Woke Mon, Sep 28/).first()).toBeVisible() },
+  { name: 'sleep', path: '/sleep', ready: page => expect(page.getByText(/Out of bed Mon, Sep 28/).first()).toBeVisible() },
   { name: 'settings', path: '/settings', ready: page => expect(page.getByRole('link', { name: /^Bed and sides/ })).toBeVisible() },
 ];
 

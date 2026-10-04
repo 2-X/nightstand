@@ -67,7 +67,7 @@ const SWEEP: Screen[] = [
       },
     ],
   },
-  { path: '/sleep', opens: [clickThenDialog('About the sleep estimate')] },
+  { path: '/sleep' },
   { path: '/sleep?metric=heart_rate' },
   { path: '/settings' },
   { path: '/settings/bed', opens: [click('Prime now')] },

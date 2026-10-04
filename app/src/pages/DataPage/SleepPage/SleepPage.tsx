@@ -161,7 +161,7 @@ function SleepContext({ side, timeZone, biometricsV2 }: { side: Side; timeZone: 
   const displayed = selected?.sleep_period_seconds === 0 ? undefined : selected ?? fallback;
   const nightTitle = (wakeDate: string) => {
     const wake = moment.tz(wakeDate, timeZone);
-    return wake.format(wake.year() === today.year() ? '[Woke] ddd, MMM D' : '[Woke] ddd, MMM D, YYYY');
+    return wake.format(wake.year() === today.year() ? '[Out of bed] ddd, MMM D' : '[Out of bed] ddd, MMM D, YYYY');
   };
   const phoneZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const podZoneLabel = timeZone.split('/').slice(-1)[0]?.replace(/_/g, ' ') ?? timeZone;
@@ -206,7 +206,7 @@ function SleepContext({ side, timeZone, biometricsV2 }: { side: Side; timeZone: 
         { isError ? (
           <Alert severity="error" action={ <Button onClick={ () => refetch() }>Retry</Button> }>Sleep records could not be loaded.</Alert>
         ) : isPending ? <CircularProgress aria-label="Loading sleep records"/> : view === 'week' ? (
-          <ErrorBoundary componentName="Weekly sleep">
+          <ErrorBoundary componentName="Weekly time in bed">
             <SleepBalanceCard
               records={ records }
               weekStart={ weekStart }

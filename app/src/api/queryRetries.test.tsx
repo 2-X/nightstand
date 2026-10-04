@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { AxiosError, AxiosHeaders } from 'axios';
 import api from './api';
-import { useSleepScore } from './sleepScore';
 import { useSleepStages } from './sleepStages';
 import { useBaseConfigured } from './baseControl';
 import { useResolvedSleeps, useRhythms, useRhythmsLive } from './rhythms';
@@ -19,7 +18,6 @@ const answer = (status: number) => new AxiosError('failed', 'ERR_BAD_RESPONSE', 
 
 const args = { side: 'left', startTime: '2026-09-27T00:00:00Z', endTime: '2026-09-27T08:00:00Z' } as const;
 const hooks: Record<string, () => unknown> = {
-  'sleep score': () => useSleepScore(args),
   'sleep stages': () => useSleepStages(args),
   'base control': () => useBaseConfigured(),
   'rhythms': () => useRhythms(),
@@ -55,7 +53,7 @@ it('retries a server error, at most twice', async () => {
   const get = vi.spyOn(api, 'get').mockRejectedValue(answer(503));
   const client = createQueryClient();
   client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, retryDelay: 0 } });
-  const { result } = renderHook(() => useSleepScore(args), { wrapper: wrapperFor(client) });
+  const { result } = renderHook(() => useRhythms(), { wrapper: wrapperFor(client) });
   await waitFor(() => expect(result.current.isError).toBe(true));
   expect(get).toHaveBeenCalledTimes(3);
 });

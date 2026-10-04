@@ -45,7 +45,7 @@ export default function SettingsPage() {
   const { isError: statusError, attention, keys: statusKeys, coreReady } = useStatusSummary();
   const biometricsEnabled = !!services?.biometrics?.enabled;
   const biometricsInstalled = services?.biometrics?.jobs?.installation?.status === 'healthy';
-  const featureSwitches = [biometricsEnabled && settings?.features?.sleepScore, biometricsEnabled && settings?.features?.presenceAutoOff,
+  const featureSwitches = [biometricsEnabled && settings?.features?.presenceAutoOff,
     biometricsEnabled && settings?.features?.biometricsV2,
     settings?.features?.levelTemps, settings?.features?.oneOffAlarms, biometricsInstalled && biometricsEnabled,
     settings?.features?.rhythms];

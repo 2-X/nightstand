@@ -16,12 +16,12 @@ import { useAppStore } from '@state/appStore.tsx';
 import { DeepPartial } from 'ts-essentials';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
-const BIOMETRICS_ESTIMATES = 'Estimates heart rate and sleep from the bed\'s sensors. '
+const BIOMETRICS_ESTIMATES = 'Detects time in bed and estimates heart rate from the bed\'s sensors. '
   + 'These are estimates, not medical measurements, and have only been checked on a Pod 5.';
 const BIOMETRICS_UNCHECKED_MODEL = 'Not checked on this Pod model. Numbers may be further off than on a Pod 5.';
 const NEW_SLEEP_TRACKING_CHECKED = 'Tells the two sides apart with the bed\'s capacitance sensors, for bed times, '
   + 'the in-bed indicator, auto-off and Smart Schedule; that part has been checked on one Pod 5. '
-  + 'Heart rate and breathing use newer estimates, which also change the score.';
+  + 'Heart rate and breathing use newer estimates.';
 
 export default function FeaturesSection() {
   const [error, setError] = useState<string | null>(null);
@@ -132,19 +132,6 @@ export default function FeaturesSection() {
             } }>Copy command</Button>
         </AccordionDetails>
       </Accordion> }
-      <Box sx={ { pl: 2, borderLeft: 1, borderColor: 'divider' } }>
-        <FeatureToggleRow
-          label="Sleep score"
-          disabled={ isUpdating || features?.sleepScore === undefined || !biometricsEnabled }
-          checked={ features?.sleepScore ?? false }
-          onChange={ (next) => updateFeature({ sleepScore: next }) }
-          description={
-            !biometricsEnabled
-              ? <Link href="#biometrics" sx={ { display: 'inline-flex', minHeight: 44, alignItems: 'center' } }>Needs Biometrics</Link>
-              : 'The estimated sleep score on the Sleep page.'
-          }
-        />
-      </Box>
       <Box sx={ { pl: 2, borderLeft: 1, borderColor: 'divider' } }>
         <FeatureToggleRow
           label="Presence auto-off"

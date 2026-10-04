@@ -107,12 +107,10 @@ it('invalidates completed analysis results for the analyzed side only', async ()
   const rightStages = ['useSleepStages', 'right', 'start', 'end'];
   queryClient.setQueryData(leftStages, { active: true });
   queryClient.setQueryData(rightStages, { active: true });
-  queryClient.setQueryData(['useSleepScore', 'left', 'start', 'end'], { score: 80 });
   fixture.status = 'healthy';
   act(() => useAppStore.setState({ isUpdating: true }));
   await waitFor(() => expect(queryClient.getQueryState(leftStages)?.isInvalidated).toBe(true));
   expect(queryClient.getQueryState(rightStages)?.isInvalidated).toBe(false);
-  expect(queryClient.getQueryState(['useSleepScore', 'left', 'start', 'end'])?.isInvalidated).toBe(true);
 });
 
 

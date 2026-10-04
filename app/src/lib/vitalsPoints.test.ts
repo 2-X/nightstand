@@ -39,7 +39,7 @@ describe('vitalsRecordsToPoints', () => {
     expect(point.value).toBe(12);
   });
 
-  it('keeps HRV readings inside the range the sleep score uses', () => {
+  it('keeps HRV readings inside the plausibility window of the Pod', () => {
     expect(HRV_RANGE).toEqual([30, 120]);
     const points = vitalsRecordsToPoints(
       [29, 30, 65, 120, 121, 250].map(hrv => record({ hrv })),

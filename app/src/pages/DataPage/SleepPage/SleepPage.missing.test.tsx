@@ -67,9 +67,9 @@ it('links disabled tracking to Features', async () => {
 it('keeps a measured zero distinct from a missing night', async () => {
   server.use(http.get('*/metrics/sleep', () => HttpResponse.json([{ ...older, sleep_period_seconds: 0 }])));
   const { user } = renderWithProviders(<SleepPage/>);
-  await screen.findByText('No sleep detected');
+  await screen.findByText('No time in bed recorded');
   await user.click(screen.getByRole('button', { name: /Saturday, September 26/ }));
-  expect(await screen.findByText('No sleep detected')).toBeInTheDocument();
+  expect(await screen.findByText('No time in bed recorded')).toBeInTheDocument();
   expect(screen.queryByText('Nothing recorded')).not.toBeInTheDocument();
 });
 it('shows the latest recorded night below a pending selected morning without changing the selection', async () => {
@@ -79,7 +79,7 @@ it('shows the latest recorded night below a pending selected morning without cha
   await user.click(screen.getByRole('button', { name: /Sunday, September 27/ }));
   expect(screen.getByRole('button', { name: /Sunday, September 27/ })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByText('Not ready yet')).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: 'Woke Sat, Sep 26' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Out of bed Sat, Sep 26' })).toBeInTheDocument();
   expect(screen.getByLabelText('Night summary')).toBeInTheDocument();
 });
 it('does not apply a recent failed job to an explicitly chosen older empty night', async () => {
@@ -141,7 +141,7 @@ it('selects the current wake date when showing pending analysis above an older r
   server.use(http.get('*/metrics/sleep', () => HttpResponse.json([older])));
   renderWithProviders(<SleepPage/>);
   expect(await screen.findByText('Not ready yet')).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: 'Woke Sun, Sep 27' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Out of bed Sun, Sep 27' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Sunday, September 27/ })).toHaveAttribute('aria-pressed', 'true');
 });
 
@@ -157,9 +157,9 @@ it.each(['waiting_for_data', 'healthy'] as const)('keeps today selected when ana
   vi.mocked(moment.now).mockReturnValue(Date.parse('2026-09-28T01:00:00Z'));
   await act(() => queryClient.invalidateQueries({ queryKey: ['useServices'] }));
   expect(await screen.findByText('Nothing recorded')).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: 'Woke Sun, Sep 27' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Out of bed Sun, Sep 27' })).toBeInTheDocument();
   expect(screen.getByText('Most recent recording')).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: 'Woke Sat, Sep 26' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Out of bed Sat, Sep 26' })).toBeInTheDocument();
   expect(screen.getByLabelText('Night summary')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Sunday, September 27/ })).toHaveAttribute('aria-pressed', 'true');
 });
@@ -172,14 +172,14 @@ it.each(['waiting_for_data', 'healthy'] as const)('opens today completed %s resu
   const { user } = renderWithProviders(<SleepPage/>);
   await screen.findByRole('button', { name: /Saturday, September 26: recorded/ });
   expect(screen.getByText('Nothing recorded')).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: 'Woke Sun, Sep 27' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Out of bed Sun, Sep 27' })).toBeInTheDocument();
   expect(screen.getByText('Most recent recording')).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: 'Woke Sat, Sep 26' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Out of bed Sat, Sep 26' })).toBeInTheDocument();
   expect(screen.getByLabelText('Night summary')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Sunday, September 27/ })).toHaveAttribute('aria-pressed', 'true');
   await user.click(screen.getByRole('button', { name: /Saturday, September 26/ }));
   expect(await screen.findByLabelText('Night summary')).toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: 'Woke Sat, Sep 26' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Out of bed Sat, Sep 26' })).toBeInTheDocument();
 });
 
 it('keeps an explicit older selection when today analysis completes without a recording', async () => {
@@ -198,7 +198,6 @@ it('keeps an explicit older selection when today analysis completes without a re
 
 
 it('keeps the side tile aligned with the most recent displayed recording', async () => {
-  settings.features.sleepScore = false;
   server.use(http.get('*/metrics/sleep', () => HttpResponse.json([older])));
   renderWithProviders(<SleepPage/>);
   await screen.findByText('Most recent recording');
@@ -239,7 +238,6 @@ it('shows measurement failures in collapsed vitals instead of no estimate', asyn
 
 
 it('uses the same longest session for the fallback summary and side tile', async () => {
-  settings.features.sleepScore = false;
   server.use(http.get('*/metrics/sleep', () => HttpResponse.json([older, {
     ...older, id: 2, entered_bed_at: '2026-09-26T20:00:00Z', left_bed_at: '2026-09-26T21:00:00Z', sleep_period_seconds: 3600,
   }])));
