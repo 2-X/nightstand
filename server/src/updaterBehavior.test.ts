@@ -27,7 +27,7 @@ function run(script: string, setup = '') {
   const fixtureScript = script.replaceAll('/home/dac/free-sleep', `${dir}/live`)
     .replaceAll('/persistent/', `${dir}/persistent/`);
   const result = spawnSync('bash', ['-c', `set -uo pipefail
-LIVE="$FIXTURE/live"; PREV="$FIXTURE/prev"; FAILED="$FIXTURE/failed"; TMP="$FIXTURE/tmp"
+LIVE="$FIXTURE/live"; PREV="$FIXTURE/prev"; FAILED="$FIXTURE/failed"; TMP="$FIXTURE/tmp"; STAGE="$FIXTURE/stage"
 BK=backup; CUR_VERSION=3.0.0; TARGET_VERSION=3.1.0; MOVED_MODULES=no; STREAM_WAS_ACTIVE=active
 NPM=npm; NPX=npx; SSH_PORT=22; DRY_RUN=yes
 say() { echo "$*"; }
@@ -55,7 +55,7 @@ ${fixtureScript}`], { env, encoding: 'utf8', input: 'y\n', timeout: 5000 });
     liveVersion: read('live/version'), previousVersion: read('prev/version'), marker: read('marker'),
     serverState: read('state-free-sleep').trim(), streamState: read('state-free-sleep-stream').trim(), phase: read('phase'),
     failedVersion: read('failed/version'), tmpVersion: read('tmp/version'),
-    settings: read('persistent/free-sleep-data/lowdb/settingsDB.json'),
+    settings: read('persistent/free-sleep-data/lowdb/settingsDB.json'), modules: read('live/server/node_modules/marker'),
   };
   rmSync(dir, { recursive: true, force: true });
   return output;
@@ -602,8 +602,10 @@ restore_switch_data() { DATA_CHANGED=no; }; ${staged}`, 'failed'],
   ['scripts/switch-to-upstream.sh', '# --- automatic rollback', '', 'RESULT_PHASE=swapped', 'restored'],
 ]) {
   const swap = section(file, from, to || undefined);
+  // update.sh's rollback puts the previous tree back once the writers stop.
+  const liveAfterStop = file === 'scripts/update.sh' && from === '# --- automatic rollback' ? 'restored' : 'failed';
   for (const [phase, interrupt, liveVersion] of [
-    ['while stopping the server', 'TERM_ON="stop free-sleep"', 'failed'],
+    ['while stopping the server', 'TERM_ON="stop free-sleep"', liveAfterStop],
     ['after moving the live tree', termAfterMovingLive, liveAfterMove],
   ]) {
     it(`${file} (${from}) interrupted ${phase} leaves a live tree and its services running`, () => {
@@ -637,6 +639,10 @@ mv() { command mv "$@" || return; [ "$1 $2" != "$STAGE $LIVE" ] || kill -TERM $$
   }
 }
 
+// These swaps stop short of the health check. Past it, the previous tree no
+// longer goes back when the run ends.
+const passed = (file: string) => (file === 'scripts/rollback_pod.sh' ? '' : '\nRESTORE_TREE=\nSWAP_NEW=');
+
 // Every writer must be stopped, or confirmed absent, before a tree moves.
 for (const [file, from, to, setup] of [
   ['scripts/update.sh', '# --- atomic swap', 'MOVED_MODULES=no', `IS_DOWNGRADE=no; STAGED_VERSION=3.2.0; ${staged}`],
@@ -644,7 +650,7 @@ for (const [file, from, to, setup] of [
   ['scripts/switch-to-upstream.sh', '# --- atomic swap', 'MOVED_MODULES=no',
     `STAGED_VERSION=1.0.0; BK="$FIXTURE/bk"; mkdir -p "$BK/lowdb"; ${staged}`],
 ]) {
-  const swap = section(file, from, to);
+  const swap = `${section(file, from, to)}${passed(file)}`;
   for (const failure of ['STOP_FAILS=free-sleep', 'STAYS_ACTIVE=free-sleep', 'DEACTIVATING=free-sleep',
     'STOP_FAILS=free-sleep-stream', 'STAYS_ACTIVE=free-sleep-stream']) {
     it(`${file} changes nothing and restarts the services when ${failure}`, () => {
@@ -695,7 +701,7 @@ for (const [file, from, to, setup] of [
   ['scripts/switch-to-upstream.sh', '# --- atomic swap', 'MOVED_MODULES=no',
     `STAGED_VERSION=1.0.0; BK="$FIXTURE/bk"; mkdir -p "$BK/lowdb"; ${staged}`],
 ]) {
-  const swap = `${section(file, from, to)}\necho "$STREAM_WAS_ACTIVE" > "$FIXTURE/restored"`;
+  const swap = `${section(file, from, to)}${passed(file)}\necho "$STREAM_WAS_ACTIVE" > "$FIXTURE/restored"`;
   it(`${file} stops a stream the server started while it stopped, before the swap`, () => {
     const result = run(withExitHandling(file, swap),
       `${stubs}\n${statefulServices('free-sleep-stream')}\n${setup}\nSTREAM_ON="stop free-sleep"\n${streamAtMove}`);
@@ -889,5 +895,149 @@ it('rollback and switch read the request before anything else', () => {
     const src = readFileSync(path.join(root, file), 'utf8');
     const read = src.search(/^read_request$/m);
     assert.ok(read > 0 && read < src.indexOf('# --- preflight'), file);
+  }
+});
+
+// From the swap through the new version's health check, the previous tree
+// waits at PREV. A run that ends anywhere in there puts it back, with the
+// dependencies it lent the new tree, and starts it again.
+const systemFiles = (script: string) => script.replaceAll('/etc/systemd/system/', '$FIXTURE/etc/');
+const answering = (version: string, temperature = '80') => `curl() {
+  local out=/dev/null
+  while [ $# -gt 0 ]; do [ "$1" != -o ] || out=$2; shift; done
+  if [ "$out" != /dev/null ] && [ -n "\${TERM_ON_HEALTH:-}" ]; then kill -TERM $$; fi
+  printf '%s' '{"freeSleep":{"version":"${version}"},"left":{"currentTemperatureF":${temperature}}}' > "$out"; printf 200
+}`;
+// The new version never answers; the restored one does.
+const notAnswering = 'curl() { case "$*" in *" -o /dev/null "*) printf 200;; *) printf 503;; esac; }';
+const lentModules = 'LOCK_SAME=yes; mkdir -p "$LIVE/server/node_modules" "$FIXTURE/etc"; echo deps > "$LIVE/server/node_modules/marker"';
+const pendingMigrations = `sudo() {
+  echo "sudo $*" >> "$FIXTURE/services"
+  case "$*" in
+    *"migrate deploy"*) if [ -n "\${TERM_ON_DEPLOY:-}" ]; then kill -TERM $$; return 1; fi; touch "$FIXTURE/migrated";;
+    *"migrate status"*) [ -f "$FIXTURE/migrated" ];;
+  esac
+}`;
+// Runs a hook just before the given systemctl call when the live tree is the given one.
+const onSystemctl = (call: string, tree: string, hook: string) => `eval "orig_$(declare -f systemctl)"
+systemctl() { [ "$* $(cat "$LIVE/version" 2>/dev/null)" != "${call} ${tree}" ] || ${hook}; orig_systemctl "$@"; }`;
+const settingsFile = '"$FIXTURE/persistent/free-sleep-data/lowdb/settingsDB.json"';
+const switchSettings = `DATA_CHANGED=no; RESTORE_ATTEMPTED=no; ARCHIVE_WAS_ACTIVE=inactive
+echo original > ${settingsFile}; echo original > "$FIXTURE/persistent/free-sleep-data/lowdb/schedulesDB.json"
+python3() { case "$1" in -c) command python3 "$@";; *prepare-upstream.py) echo converted > "$2/settingsDB.json";; esac; }
+eval "inner_$(declare -f systemctl)"
+systemctl() { [ "$*" != "start free-sleep" ] || echo "start on $(cat ${settingsFile})" >> "$FIXTURE/ssh"; inner_systemctl "$@"; }`;
+
+for (const [file, staging, healthyVersion] of [
+  ['scripts/update.sh', `IS_DOWNGRADE=no; STAGED_VERSION=3.2.0; ${staged}\n${pendingMigrations}`, '3.2.0'],
+  ['scripts/switch-to-upstream.sh', `RESULT_PHASE=preflight; STAGED_VERSION=1.0.0; BK="$FIXTURE/bk"; mkdir -p "$BK/lowdb"; ${staged}
+${switchSettings}`, '1.0.0'],
+]) {
+  const revert = file === 'scripts/switch-to-upstream.sh';
+  const script = `${revert ? `${revertSettings}\n` : ''}${withExitHandling(file, systemFiles(section(file, '# --- atomic swap')))}`;
+  const setup = (extra: string) => `${stubs}\n${statefulServices()}\n${lentModules}\nfw4() { :; }; sh() { :; }\n${staging}\n${extra}`;
+  const interruptions: [string, string][] = [
+    ['after the dependencies move', 'mv() { command mv "$@" || return; [ "$1" != "$PREV/server/node_modules" ] || kill -TERM $$; }'],
+    ['after the new server starts', `TERM_ON="start free-sleep"\n${answering(healthyVersion)}`],
+    ['during the health check', `TERM_ON_HEALTH=1\n${answering(healthyVersion)}`],
+  ];
+  if (!revert) interruptions.splice(1, 0, ['in the middle of the migration', 'TERM_ON_DEPLOY=1']);
+
+  for (const [when, interrupt] of interruptions) {
+    it(`${file} interrupted ${when} puts the previous tree back and starts it`, () => {
+      const result = run(script, setup(interrupt));
+      assert.equal(result.status, 143, result.stdout + result.stderr);
+      assert.equal(result.liveVersion.trim(), 'failed', result.stdout + result.stderr);
+      assert.equal(result.modules, 'deps\n', result.stdout);
+      assert.equal(result.serverState, 'active', result.services);
+      assert.equal(result.streamState, 'active', result.services);
+      const starts = result.services.split('\n').filter(line => /^start free-sleep /.test(line));
+      assert.equal(starts.at(-1), 'start free-sleep failed', result.services);
+      assert.equal(result.phase, 'restored', result.stdout);
+      if (revert) assert.equal(result.ssh.trim().split('\n').at(-1), 'start on original', result.ssh);
+    });
+  }
+
+  it(`${file} keeps the new version running when its server will not stop after an interruption`, () => {
+    const result = run(script, setup(`${answering(healthyVersion)}
+${onSystemctl('start free-sleep', 'staged', 'STAYS_ACTIVE=free-sleep')}
+TERM_ON_HEALTH=1`));
+    assert.equal(result.status, 143, result.stdout + result.stderr);
+    assert.equal(result.liveVersion.trim(), 'staged');
+    assert.equal(result.previousVersion.trim(), 'failed');
+    assert.equal(result.serverState, 'active', result.services);
+    assert.match(result.stdout, /did not stop, so .* was not put back/);
+    assert.equal(result.phase, 'swapped');
+    if (revert) assert.equal(result.settings, 'converted\n', 'settings left to the running version');
+  });
+
+  it(`${file} interrupted while rolling back after a failed health check still puts the previous tree back`, () => {
+    const result = run(script, setup(`${notAnswering}\n${onSystemctl('stop free-sleep', 'staged', 'TERM_ON="stop free-sleep"')}`));
+    assert.equal(result.status, 143, result.stdout + result.stderr);
+    assert.equal(result.liveVersion.trim(), 'failed', result.stdout);
+    assert.equal(result.modules, 'deps\n', result.stdout);
+    assert.equal(result.serverState, 'active', result.services);
+    assert.equal(result.phase, 'restored');
+  });
+
+  it(`${file} rolls back as before when the new version fails its health check`, () => {
+    const result = run(script, setup(notAnswering));
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.equal(result.liveVersion.trim(), 'failed', result.stdout);
+    assert.equal(result.failedVersion.trim(), 'staged', result.stdout);
+    assert.equal(result.modules, 'deps\n', result.stdout);
+    assert.match(result.stdout, /rollback OK/);
+    assert.equal(result.phase, 'restored');
+    if (revert) assert.equal(result.settings, 'original\n');
+  });
+
+  if (!revert) {
+    it(`${file} still needs a sensor reading from the new version`, () => {
+      const result = run(script, setup(answering(healthyVersion, 'null')));
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.equal(result.liveVersion.trim(), 'failed', result.stdout);
+      assert.equal(result.failedVersion.trim(), 'staged', result.stdout);
+    });
+
+    // A healthy version whose firewall cannot be applied is rolled back too.
+    it(`${file} interrupted while rolling back after a failed firewall still puts the previous tree back`, () => {
+      const result = run(script, setup(`${answering(healthyVersion)}\nfw4() { return 1; }
+${onSystemctl('stop free-sleep', 'staged', 'TERM_ON="stop free-sleep"')}`));
+      assert.equal(result.status, 143, result.stdout + result.stderr);
+      assert.match(result.stdout, /New firewall could not be applied/);
+      assert.equal(result.liveVersion.trim(), 'failed', result.stdout);
+      assert.equal(result.modules, 'deps\n', result.stdout);
+      assert.equal(result.serverState, 'active', result.services);
+      assert.equal(result.phase, 'restored');
+    });
+  }
+
+  it(`${file} keeps the new version once it passes its health check`, () => {
+    const result = run(script, setup(answering(healthyVersion)));
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(result.liveVersion.trim(), 'staged', result.stdout);
+    assert.equal(result.previousVersion.trim(), 'failed', result.stdout);
+    assert.equal(result.modules, 'deps\n', result.stdout);
+    assert.equal(result.serverState, 'active', result.services);
+    assert.doesNotMatch(result.services, /^stop free-sleep staged$/m);
+    assert.match(result.stdout, /SUCCESS: pod is serving/);
+    if (revert) assert.equal(result.settings, 'converted\n');
+  });
+}
+
+// The updater's own check still needs a sensor reading, and a mistyped
+// requirement fails rather than quietly checking less.
+it('update.sh checks the new version with a sensor reading', () => {
+  const src = readFileSync(path.join(root, 'scripts/update.sh'), 'utf8');
+  const calls = src.match(/^.*\bserves_version "[^\n]*$/gm) ?? [];
+  assert.deepEqual(calls, ['if [ "$MIGRATION_FAILED" != yes ] && serves_version "$STAGED_VERSION" temperature; then']);
+});
+
+it('serves_version refuses a requirement it does not know', () => {
+  const fn = section('scripts/update.sh', 'serves_version() {', '\nsay "Health check (up to 90s)"');
+  for (const [requirement, status] of [['temperatures', 2], ['Temperature', 2], ['temperature', 0], ['', 0]] as const) {
+    const result = run(`${fn}\nHBODY="$FIXTURE/health"; serves_version 3.2.0 '${requirement}'`, `${statefulServices()}
+curl() { printf '%s' '{"freeSleep":{"version":"3.2.0"},"left":{"currentTemperatureF":80}}' > "$FIXTURE/health"; printf 200; }`);
+    assert.equal(result.status, status, `${requirement}: ${result.stdout}${result.stderr}`);
   }
 });

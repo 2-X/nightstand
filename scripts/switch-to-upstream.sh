@@ -201,24 +201,33 @@ stop_late_stream() {
   stop_writer free-sleep-stream
 }
 
-# Set while the services are stopped for a swap: the tree that goes back to
-# LIVE if the run ends before the services start again. SWAP_NEW is the tree
-# being swapped in; once it has left its place it sits at LIVE not yet set up
-# (its dependencies can still be in the previous tree), so it goes back.
+# Set from the moment the services stop for a swap until upstream passes its
+# health check: the tree that goes back to LIVE if the run ends before then.
+# SWAP_NEW is the tree being swapped in; once it has left its place it sits at
+# LIVE, possibly started and possibly holding the previous tree's
+# dependencies, so it goes back. The settings go back before this fork starts.
 RESTORE_TREE=
 SWAP_NEW=
 finish_interrupted_swap() {
-  [ -n "${RESTORE_TREE:-}" ] || return 0
-  local moved=no
-  if [ -n "${SWAP_NEW:-}" ] && [ ! -d "$SWAP_NEW" ] && [ -d "$LIVE" ] && [ -d "$RESTORE_TREE" ]; then
-    mv "$LIVE" "$SWAP_NEW" || { say "Could not move the new tree at $LIVE aside; manual recovery required"; return 0; }
+  local moved=no modules_from=$FAILED
+  if [ -n "${RESTORE_TREE:-}" ] && [ -n "${SWAP_NEW:-}" ] && [ ! -d "$SWAP_NEW" ] && [ -d "$LIVE" ] && [ -d "$RESTORE_TREE" ]; then
+    # Nothing moves, and no settings go back, under a writer that will not stop.
+    if stop_writer free-sleep && stop_writer free-sleep-stream; then
+      mv "$LIVE" "$SWAP_NEW" || { say "Could not move the new tree at $LIVE aside; manual recovery required"; return 0; }
+      modules_from=$SWAP_NEW
+    else
+      DATA_CHANGED=no
+      say "A service did not stop, so this fork was not put back. It is kept at $RESTORE_TREE; its settings are in $BK/lowdb. Manual recovery required"
+    fi
   fi
+  restore_switch_data || say "WARNING: restore settings from $BK/lowdb before restarting"
+  [ -n "${RESTORE_TREE:-}" ] || return 0
   if [ ! -d "$LIVE" ]; then
     mv "$RESTORE_TREE" "$LIVE" || { say "Could not move $RESTORE_TREE back to $LIVE; manual recovery required"; return 0; }
     moved=yes
   fi
-  if [ "${MOVED_MODULES:-no}" = yes ] && [ ! -d "$LIVE/server/node_modules" ] && [ -d "$FAILED/server/node_modules" ]; then
-    mv "$FAILED/server/node_modules" "$LIVE/server/node_modules"
+  if [ "${MOVED_MODULES:-no}" = yes ] && [ ! -d "$LIVE/server/node_modules" ] && [ -d "$modules_from/server/node_modules" ]; then
+    mv "$modules_from/server/node_modules" "$LIVE/server/node_modules"
   fi
   if [ "${ARCHIVE_WAS_ACTIVE:-}" = active ]; then
     systemctl start free-sleep-archive-raw.timer >/dev/null 2>&1 || true
@@ -235,7 +244,7 @@ finish_interrupted_swap() {
     systemctl start free-sleep-stream
   fi
 }
-cleanup() { local status=$?; trap '' HUP INT TERM; close_wan; restore_switch_data || say "WARNING: restore settings from $BK/lowdb before restarting"; finish_interrupted_swap; rm -rf "$STAGE" "$STAGE.unzip" "$STAGE.health" "$ZIP"; record_result "$status"; }
+cleanup() { local status=$?; trap '' HUP INT TERM; close_wan; finish_interrupted_swap; rm -rf "$STAGE" "$STAGE.unzip" "$STAGE.health" "$ZIP"; record_result "$status"; }
 
 fail() { say "FATAL: $*"; [ -n "${RESULT_REASON:-}" ] || RESULT_REASON="$*"; exit 1; }
 
@@ -537,13 +546,11 @@ mv "$STAGE" "$LIVE" || {
   fail "swap failed; fork restored"
 }
 RESULT_PHASE=swapped
-RESTORE_TREE=
-SWAP_NEW=
 MOVED_MODULES=no
 if [ "$LOCK_SAME" = yes ]; then
+  MOVED_MODULES=yes
   mv "$PREV/server/node_modules" "$LIVE/server/node_modules"
   chown -R dac:dac "$LIVE/server/node_modules"
-  MOVED_MODULES=yes
 fi
 
 # No prisma step: migrations are additive, so upstream's schema is already
@@ -578,6 +585,8 @@ rm -f "$HBODY"
 [ "$HEALTHY" = yes ] && systemctl is-active free-sleep >/dev/null || HEALTHY=no
 
 if [ "$HEALTHY" = yes ]; then
+  RESTORE_TREE=
+  SWAP_NEW=
   DATA_CHANGED=no
   systemctl disable --now free-sleep-archive-raw.timer >/dev/null 2>&1 || true
   say "SUCCESS: pod is serving upstream free-sleep v$STAGED_VERSION. This fork kept at $PREV (no in-app way back; re-adopt via scripts/migrate/switch-to-this-fork.sh). Backup at $BK"
@@ -634,6 +643,7 @@ if ! stop_writer free-sleep || ! stop_writer free-sleep-stream; then
   fail "revert to upstream free-sleep failed and a service did not stop, so this fork was not put back. It is kept at $PREV; its settings are in $BK/lowdb. Manual recovery required"
 fi
 rm -rf "$FAILED"
+SWAP_NEW=
 mv "$LIVE" "$FAILED" || {
   restore_switch_data_or_fail "could not restore settings from $BK/lowdb"
   systemctl start free-sleep

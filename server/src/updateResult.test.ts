@@ -493,7 +493,7 @@ ${resultBlock(src).replaceAll('/persistent/free-sleep-data', dir)}
 fail() { say "FATAL: $*"; [ -n "\${RESULT_REASON:-}" ] || RESULT_REASON="$*"; exit 1; }
 trap 'record_result $?' EXIT
 CUR_VERSION=3.6.0; EXPECTED_VERSION=3.5.1; STAGED_VERSION=1.0.0; TARGET_VERSION=3.5.1
-LIVE=live; PREV=prev; TMP=tmp; FAILED=failed; BK=bk; MOVED_MODULES=no; STREAM_WAS_ACTIVE=no
+LIVE=live; PREV=prev; TMP=tmp; FAILED=failed; STAGE=stage; BK=bk; MOVED_MODULES=no; STREAM_WAS_ACTIVE=no
 RESULT_PHASE=swapped
 systemctl() { :; }; stop_writer() { :; }; rm() { :; }; mv() { :; }; sh() { :; }; tail() { :; }
 restore_switch_data_or_fail() { :; }; restart_services() { :; }; fix_shared_node_modules() { :; }

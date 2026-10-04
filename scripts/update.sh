@@ -187,24 +187,31 @@ stop_late_stream() {
   stop_writer free-sleep-stream
 }
 
-# Set while the services are stopped for a swap: the tree that goes back to
-# LIVE if the run ends before the services start again. SWAP_NEW is the tree
-# being swapped in; once it has left its place it sits at LIVE not yet set up
-# (its dependencies can still be in the previous tree), so it goes back.
+# Set from the moment the services stop for a swap until the new version
+# passes its health check: the tree that goes back to LIVE if the run ends
+# before then. SWAP_NEW is the tree being swapped in; once it has left its
+# place it sits at LIVE, possibly started and possibly holding the previous
+# tree's dependencies, so it goes back.
 RESTORE_TREE=
 SWAP_NEW=
 finish_interrupted_swap() {
   [ -n "${RESTORE_TREE:-}" ] || return 0
-  local moved=no
+  local moved=no modules_from=$FAILED
   if [ -n "${SWAP_NEW:-}" ] && [ ! -d "$SWAP_NEW" ] && [ -d "$LIVE" ] && [ -d "$RESTORE_TREE" ]; then
-    mv "$LIVE" "$SWAP_NEW" || { say "Could not move the new tree at $LIVE aside; manual recovery required"; return 0; }
+    # Nothing moves under a writer that will not stop.
+    if stop_writer free-sleep && stop_writer free-sleep-stream; then
+      mv "$LIVE" "$SWAP_NEW" || { say "Could not move the new tree at $LIVE aside; manual recovery required"; return 0; }
+      modules_from=$SWAP_NEW
+    else
+      say "A service did not stop, so v${CUR_VERSION:-} was not put back. It is kept at $RESTORE_TREE. Manual recovery required"
+    fi
   fi
   if [ ! -d "$LIVE" ]; then
     mv "$RESTORE_TREE" "$LIVE" || { say "Could not move $RESTORE_TREE back to $LIVE; manual recovery required"; return 0; }
     moved=yes
   fi
-  if [ "${MOVED_MODULES:-no}" = yes ] && [ ! -d "$LIVE/server/node_modules" ] && [ -d "$FAILED/server/node_modules" ]; then
-    mv "$FAILED/server/node_modules" "$LIVE/server/node_modules"
+  if [ "${MOVED_MODULES:-no}" = yes ] && [ ! -d "$LIVE/server/node_modules" ] && [ -d "$modules_from/server/node_modules" ]; then
+    mv "$modules_from/server/node_modules" "$LIVE/server/node_modules"
   fi
   # The previous version runs again: an interrupted swap changed nothing, and
   # an interrupted swap back is a restore.
@@ -637,13 +644,11 @@ mv "$STAGE" "$LIVE" || {
   fail "swap failed; previous version restored"
 }
 RESULT_PHASE=swapped
-RESTORE_TREE=
-SWAP_NEW=
 MOVED_MODULES=no
 if [ "$LOCK_SAME" = yes ]; then
+  MOVED_MODULES=yes
   mv "$PREV/server/node_modules" "$LIVE/server/node_modules"
   chown -R dac:dac "$LIVE/server/node_modules"
-  MOVED_MODULES=yes
 fi
 
 # Check the database for pending migrations even when the schema is unchanged.
@@ -736,30 +741,43 @@ else
 fi
 
 # --- health check --------------------------------------------------------------
-say "Health check (up to 90s)"
-HEALTHY=no
-HBODY="$STAGE.health"
-for _ in $(seq 1 30); do
-  [ "$MIGRATION_FAILED" = yes ] && break
-  sleep 3
-  # Log every attempt's HTTP status so a failed update log shows the shape of
-  # the failure on its own (000 = no/aborted response, 503 = still starting).
-  CODE=$(curl -s -o "$HBODY" -w '%{http_code}' --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" 2>/dev/null || echo 000)
-  say "  health attempt: HTTP $CODE"
-  [ "$CODE" = 200 ] || continue
-  R=$(cat "$HBODY" 2>/dev/null) || continue
-  OK=$(printf '%s' "$R" | python3 -c "
+# Waits up to 90 s for the server to answer as version $1, and with a sensor
+# reading when $2 is "temperature", keeping each answer in $HBODY. Any other
+# $2 returns 2. Kept identical in update.sh and install.sh.
+serves_version() {
+  local code body ok
+  case "${2:-}" in ""|temperature) ;; *) return 2 ;; esac
+  for _ in $(seq 1 30); do
+    sleep 3
+    # Log every attempt's HTTP status so a failed log shows the shape of the
+    # failure on its own (000 = no/aborted response, 503 = still starting).
+    code=$(curl -s -o "$HBODY" -w '%{http_code}' --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" 2>/dev/null || echo 000)
+    say "  health attempt: HTTP $code"
+    [ "$code" = 200 ] || continue
+    body=$(cat "$HBODY" 2>/dev/null) || continue
+    ok=$(printf '%s' "$body" | python3 -c "
 import json, sys
 try:
     d = json.load(sys.stdin)
-    assert d['freeSleep']['version'] == '$STAGED_VERSION'
-    assert isinstance(d['left']['currentTemperatureF'], (int, float))
+    assert d['freeSleep']['version'] == '$1'
+    if '${2:-}' == 'temperature':
+        assert isinstance(d['left']['currentTemperatureF'], (int, float))
     print('yes')
 except Exception:
     print('no')" 2>/dev/null)
-  [ "$OK" = yes ] && { HEALTHY=yes; break; }
-done
-[ "$HEALTHY" = yes ] && systemctl is-active free-sleep >/dev/null || HEALTHY=no
+    if [ "$ok" = yes ]; then
+      systemctl is-active free-sleep >/dev/null
+      return
+    fi
+  done
+  return 1
+}
+say "Health check (up to 90s)"
+HEALTHY=no
+HBODY="$STAGE.health"
+if [ "$MIGRATION_FAILED" != yes ] && serves_version "$STAGED_VERSION" temperature; then
+  HEALTHY=yes
+fi
 
 # A pod serving HTTP 200 against a half-applied schema looks healthy and is not.
 if [ "$MIGRATION_FAILED" = yes ]; then
@@ -778,6 +796,8 @@ arm_watchdog() {
 }
 
 if [ "$HEALTHY" = yes ]; then
+  RESTORE_TREE=
+  SWAP_NEW=
   for FIREWALL_ATTEMPT in 1 2; do
     sh "$LIVE/scripts/block_internet_access.sh" || say "WARNING: firewall script reported an error; checking rules"
     # Older downgrade targets intentionally restore their historical firewall.
@@ -825,7 +845,9 @@ restored_version_answers() {
 say "Health check FAILED: rolling back to v$CUR_VERSION"
 say "Last 60 server log lines from the failed build (for diagnosis):"
 tail -n 60 /persistent/free-sleep-data/logs/free-sleep.log 2>/dev/null || say "  (no server log available)"
+# Armed again when a failed firewall brings a healthy run here.
 RESTORE_TREE=$PREV
+SWAP_NEW=$STAGE
 # Nothing moves under a writer that will not stop: the failed version keeps
 # running, and both trees and the backup stay where they are.
 if ! stop_writer free-sleep || ! stop_writer free-sleep-stream; then
@@ -837,6 +859,7 @@ if ! stop_writer free-sleep || ! stop_writer free-sleep-stream; then
   fail "update failed and a service did not stop, so v$CUR_VERSION was not put back. It is kept at $PREV; backup at $BK. Manual recovery required"
 fi
 rm -rf "$FAILED"
+SWAP_NEW=
 mv "$LIVE" "$FAILED" || {
   systemctl start free-sleep
   if [ "$STREAM_WAS_ACTIVE" = active ]; then
