@@ -39,8 +39,7 @@ import { weight } from '@design/tokens';
 // service, so it is the floor. Keep it in step with FLOOR_VERSION in
 // scripts/update.sh, which gates the same picker from the Pod side.
 const CAPABLE_FLOOR = '3.0.0';
-const EIGHT_SLEEP_STEPS_URL = 'https://github.com/LTimothy/nightstand/blob/main/INSTALLATION.md'
-  + '#how-to-revert-changes-and-go-back-to-using-your-eight-sleep-through-their-app';
+const EIGHT_SLEEP_STEPS_URL = 'https://github.com/LTimothy/nightstand/blob/main/INSTALLATION.md#going-back-to-the-eight-sleep-app';
 
 export default function VersionsPage() {
   const { data: deviceStatus } = useDeviceStatus();

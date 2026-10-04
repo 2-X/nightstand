@@ -50,7 +50,10 @@ it('explains how to go back to Eight Sleep, without offering an action', async (
   await user.click(await screen.findByRole('button', { name: 'Recovery' }));
   expect(await screen.findByText('Go back to Eight Sleep')).toBeInTheDocument();
   expect(screen.getByText(/On Pod 5 no reset procedure has been checked yet\./)).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: 'Read the steps' })).toHaveAttribute('href', expect.stringContaining('INSTALLATION.md#'));
+  expect(screen.getByRole('link', { name: 'Read the steps' })).toHaveAttribute(
+    'href',
+    'https://github.com/LTimothy/nightstand/blob/main/INSTALLATION.md#going-back-to-the-eight-sleep-app',
+  );
   expect(screen.queryByRole('button', { name: /Eight Sleep/ })).toBeNull();
 });
 
