@@ -42,7 +42,7 @@ check_service_status() {
   if systemctl is-active --quiet "$service_name"; then
     print_green "  - $service_name is running ✅"
   else
-    print_red "  - $service_name is NOT running ❌ — showing last 20 log lines:"
+    print_red "  - $service_name is NOT running ❌, showing last 20 log lines:"
     journalctl -u "$service_name" -n 20 --no-pager --output=cat \
       | sed 's/^/      /' \
       | while IFS= read -r line; do
