@@ -83,6 +83,9 @@ allow_dns_to_configured_resolvers() {
 # IPv4 Rules
 echo "Configuring IPv4 rules..."
 
+# Keep the original rules and time sync settings before the first change.
+bash "$(dirname "$0")/record_stock.sh" firewall 2>/dev/null || true
+
 # Start from a clean slate so the saved ruleset is exactly what this script
 # writes. Otherwise every re-run stacks duplicates, and stale ACCEPT rules above
 # the final DROP survive and get saved at the bottom.

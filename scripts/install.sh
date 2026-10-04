@@ -196,6 +196,7 @@ mv "$SRC_DIR" "$REPO_DIR"
 rm -rf "$UNZIP_DIR"
 
 chown -R "$USERNAME":"$USERNAME" "$REPO_DIR"
+bash "$REPO_DIR/scripts/record_stock.sh" units || true
 
 # --------------------------------------------------------------------------------
 # Install or update Volta + Node (shared with the fork-switch tool's

@@ -61,6 +61,13 @@ describe('block_internet_access.sh', () => {
     }
   });
 
+  it('keeps the original rules and time sync settings before changing either', () => {
+    const record = src.indexOf('bash "$(dirname "$0")/record_stock.sh" firewall 2>/dev/null || true');
+    assert.ok(record !== -1, 'never records the originals');
+    assert.ok(record < src.indexOf('iptables -F INPUT'), 'records after the first flush');
+    assert.ok(record < src.indexOf('cat > /etc/systemd/timesyncd.conf'), 'records after time sync is rewritten');
+  });
+
   it('still saves both rulesets', () => {
     assert.match(src, /iptables-save > \/etc\/iptables\/iptables\.rules/);
     assert.match(src, /ip6tables-save > \/etc\/iptables\/ip6tables\.rules/);

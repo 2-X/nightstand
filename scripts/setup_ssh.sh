@@ -11,6 +11,9 @@ echo "Press Enter to continue or Ctrl+C to quit..."
 
 read -r
 
+# Keep the original SSH files before anything below replaces them.
+bash "$(dirname "$0")/record_stock.sh" ssh 2>/dev/null || true
+
 SERVICE_FILE="/etc/systemd/system/sshd.service"
 SSHD_CONFIG_FILE="/etc/ssh/sshd_config"
 SSH_CONFIG_FILE="/etc/ssh/ssh_config"
