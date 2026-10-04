@@ -89,14 +89,7 @@ def _load_piezo_df(start_time: datetime, end_time: datetime, side: Side, folder_
 
 
 def calculate_vitals(start_time: datetime, end_time: datetime, side: Side, folder_path: str):
-    # TESTING
-    # side = "right"
-    # start_time = datetime.strptime("2025-01-27 06:15:00", "%Y-%m-%d %H:%M:%S")
-    # end_time = datetime.strptime("2025-01-27 14:53:00", "%Y-%m-%d %H:%M:%S")
-    # folder_path = '/Users/ds/main/8sleep_biometrics/data/people/david/raw/loaded/2025-01-27/'
-
     piezo_df = _load_piezo_df(start_time, end_time, side, folder_path)
-    print(piezo_df.head())
     runtime_params: RuntimeParams = {
         'window': 10,
         'slide_by': 1,
