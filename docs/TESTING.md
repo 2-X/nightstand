@@ -23,9 +23,9 @@ Pod 3 set up with an SD card, 3.10 on the others.
 ### What the browser tests check
 
 They drive the demo, which has no Pod behind it, in headless Chromium (and
-a phone-size subset in WebKit) with
-the clock set to a time zone other than the demo's, so a check that only
-passes in Pacific time fails.
+a phone-size subset in WebKit). The main Chromium project uses Asia/Tokyo,
+a time zone other than the demo's, so a check that only passes in Pacific
+time fails there. The layout sweeps and WebKit use America/Los_Angeles.
 
 - **Bed screen states.** 13 states of the Bed screen (on, off, cooling, at
   the warmest setting, at zero, waiting for you to get up, the same with a
@@ -82,12 +82,12 @@ tag's results on GitHub.
 From the repository root, with Node 24 and Python 3.9 or newer:
 
 ```bash
-cd server && npm ci && npm run generate && npm test
-cd app && npm ci && (cd ../server && npm ci) && npm test
+(cd server && npm ci && npm run generate && npm test)
+(cd app && npm ci && npm test)
 pip install -r scripts/python/requirements.txt pytest
 python3 -m pytest biometrics/__tests__/ -q
 python3 -m unittest discover -s scripts/tests
-cd app && npm run build:demo && npx playwright test
+(cd app && npx playwright install chromium webkit && npm run build:demo && npx playwright test)
 ```
 
 The app tests need the server's packages installed, because some screens

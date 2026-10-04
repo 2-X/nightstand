@@ -270,13 +270,18 @@ sets Nightstand to start on boot. Nightstand is also restarted if it stops
 answering for 3 minutes, except during an update, rollback or fork switch.
 The checksum catches a corrupted download.
 On a first install the check comes from the same download, so it can't catch
-a swapped one; updates are checked by the Nightstand already on the Pod.
+a swapped one. An update from 3.5.1 or earlier to 3.6.0 is not checked,
+because those versions have no checksum step. After 3.6.0 is installed,
+updates with a published checksum are checked by the installed copy.
 Neither catches a compromised GitHub account. It saves the
 release's channel as the Pod's update channel, which later updates and
 reinstalls follow; to follow stable releases, choose Stable in Settings >
 Software. Run over an existing install, it keeps that install as the
-rollback copy and puts it back if a step fails, the new server doesn't
-answer within 90 seconds, or the install is interrupted.
+rollback copy and checks the new server up to 30 times, waiting 3 seconds
+before each request with a 5-second timeout (roughly 4 minutes plus overhead
+in the worst case). Until that check passes, a failure or interruption
+puts the previous install back unless Nightstand or the stream won't stop,
+in which case manual recovery is needed.
 Nightstand keeps free-sleep's folder and service names, so you'll see
 `free-sleep` in paths and commands.
 
@@ -470,18 +475,27 @@ I haven't run this exact command against a Pod.
 ## What installation changes on the Pod
 
 Nightstand never replaces Eight Sleep's programs. It changes these system
-settings, and since 3.6.0 it saves the originals the first time it changes
-them, in /persistent/nightstand-stock/. recorded.txt says whether each copy
-is the original or was taken after Nightstand had already changed it.
+settings, and since 3.6.0 it saves them the first time it changes them,
+in /persistent/nightstand-stock/. Check `recorded.txt` before restoring:
+it says whether each copy is the original or was taken after Nightstand
+had already changed it. A copy marked `after-nightstand` does not bring
+back Eight Sleep's settings.
+
+A saved item can be a marker: `NAME.absent` means the file did not exist,
+and `NAME.link` records a symlink whose target was missing. A symlink with
+a readable target is saved as a copy of that target. To restore a file,
+copy it back if there is a copy, remove the replacement if there is an
+`.absent` marker, or recreate the symlink to the target in `.link`.
 
 | Change | Made by | Original saved as | How to undo |
 | --- | --- | --- | --- |
 | Eight Sleep's update and cloud services disabled and masked | step 11 | `unit-states.txt` | `systemctl unmask` and `systemctl enable` each unit listed as enabled there. Doing this lets the Pod update its firmware, which can remove root access. |
-| SSH server config, client config, keys and service replaced | step 18 (`setup_ssh.sh`) | `sshd_config`, `ssh_config`, `authorized_keys`, `sshd.service` | Copy the first three back to /etc/ssh/, copy `sshd.service` back to /etc/systemd/system/, run `systemctl daemon-reload` and restart sshd. Step 18 removed /etc/ssh/authorized_keys and put your key in /home/root/ssh/authorized_keys. Keep a working SSH session open while you do. |
-| Firewall rules replaced | step 19 (`block_internet_access.sh`) | `iptables.rules`, `ip6tables.rules`, `iptables.rules.file`, `ip6tables.rules.file` | `iptables-restore` and `ip6tables-restore` from the saved files, then save them to /etc/iptables/. |
-| Time sync servers changed | step 19 | `timesyncd.conf` | Copy it back to /etc/systemd/ and restart systemd-timesyncd. |
+| SSH server config, client config, keys and service replaced | step 18 (`setup_ssh.sh`) | `sshd_config`, `ssh_config`, `authorized_keys`, `sshd.service` | Restore the first three under /etc/ssh/ and `sshd.service` under /etc/systemd/system/ as described above, run `systemctl daemon-reload` and restart sshd. Step 18 removed /etc/ssh/authorized_keys and put your key in /home/root/ssh/authorized_keys. Keep a working SSH session open while you do. |
+| Firewall rules replaced | step 19 (`block_internet_access.sh`) | `iptables.rules` and `ip6tables.rules` are live snapshots from `iptables-save` and `ip6tables-save`; `*.rules.file` saves the rules files from /etc/iptables/ | Use `iptables-restore` and `ip6tables-restore` with the live snapshots. Restore the rules files under /etc/iptables/ from `*.rules.file` or their markers as described above. |
+| Time sync servers changed | step 19 | `timesyncd.conf` | Restore it under /etc/systemd/ as described above and restart systemd-timesyncd. |
 | Wi-Fi profile UUIDs rewritten | step 12 | `/persistent/system-connections.stock/` (only if you made the copy in step 12) | Copy the files back to /persistent/system-connections/ and restart NetworkManager. |
-| Nightstand's services, timers, sudoers rules and memory limits added | step 13 | not needed | Remove /home/dac/free-sleep and the free-sleep units under /etc/systemd/system/, and /etc/sudoers.d/dac. |
+| Hardware watchdog enabled where the script's Pod 5 checks pass | step 13 (`setup_watchdog.sh`) | not needed | Before removing /home/dac/free-sleep, run `bash /home/dac/free-sleep/scripts/setup_watchdog.sh --remove` as root. It removes /etc/systemd/system.conf.d/10-nightstand-watchdog.conf and the trial copy under /run/systemd/system.conf.d/, and leaves a note so later installs and updates keep it off. If the kernel cannot stop the running watchdog, or systemd cannot reload the setting, it turns off only after a restart. |
+| Nightstand's services, timers, sudoers rules and memory limits added | step 13 | not needed | Stop and disable Nightstand's services and timers before removing the free-sleep units and their drop-ins under /etc/systemd/system/, /etc/sudoers.d/dac and /home/dac/free-sleep. Run `systemctl daemon-reload` after removing the units. |
 
 On Pod 5, undoing all of this has not been tried, and there is no checked
 firmware reset, so treat these steps as information, not a tested way back.

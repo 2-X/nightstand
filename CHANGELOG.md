@@ -58,13 +58,11 @@ Themes, a plainer Sleep page, safer updates and recovery, and support for Pod fi
   ten minutes.
 - Updates, rollbacks and the switch to upstream now change
   nothing if Nightstand cannot stop cleanly, and one interrupted mid-swap
-  puts the previous version back. Running the installer over a working
-  install now keeps the old one until the new one starts. Tested on a
-  computer, not yet on a Pod.
-- An interrupted or failed update, switch to upstream or reinstall now keeps
-  the previous version ready until the new one answers, and puts it back
-  otherwise. A reinstall whose database migration fails now stops with an
-  error instead of starting.
+  puts the previous version back. An update, switch to upstream or reinstall
+  keeps the previous version ready until the new one answers, and puts it
+  back after a failure or interruption unless the services won't stop.
+  A reinstall whose database migration fails now stops with an error instead
+  of starting. Tested on a computer, not yet on a Pod.
 - Nightstand now keeps a copy of the Pod's original SSH, firewall and time
   sync settings in /persistent/nightstand-stock/ the first time it changes
   them. On a Pod installed earlier, each copy is taken the next time
@@ -73,9 +71,11 @@ Themes, a plainer Sleep page, safer updates and recovery, and support for Pod fi
 - The script behind Switch to upstream free-sleep is now
   scripts/switch-to-upstream.sh. The old name, revert-to-stock.sh, still
   works.
-- Updates now check a downloaded release against a checksum
-  published in the release list before installing it. This catches a
-  corrupted or swapped download, not a compromised GitHub account. Switching
+- After 3.6.0 is installed, updates check a downloaded release against a
+  checksum published in the release list, when one exists, using the
+  installed copy. The update from 3.5.1 or earlier to 3.6.0 is not checked,
+  because those versions have no checksum step. This catches a corrupted or
+  swapped download, not a compromised GitHub account. Switching
   to upstream installs the upstream version the switch was last checked
   with, once one is recorded.
 - Updates no longer turn the firewall off while
@@ -121,9 +121,10 @@ Themes, a plainer Sleep page, safer updates and recovery, and support for Pod fi
 - A tap set to the alarm action now works while an alarm is ringing on that
   side: it dismisses the alarm, or snoozes it and rings again after the
   snooze time with the same strength and pattern. During a snooze, a dismiss
-  tap cancels it. With no alarm ringing the tap does nothing; its option to
-  turn the side on or off is not used yet. A snooze still rings if the side
-  is turned off or set to away after the tap, and a server restart drops it.
+  tap cancels it. If the alarm is neither ringing nor snoozed, the tap does
+  nothing; its option to turn the side on or off is not used yet. A snooze
+  still rings if the side is turned off or set to away after the tap, and a
+  server restart drops it.
 
 ### Newer firmware and fixes from upstream
 

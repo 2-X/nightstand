@@ -70,8 +70,9 @@ Nightstand comes with no warranty (see [License](#license)).
   recordings to Eight Sleep unless you set up the optional firewall rules
   ([installation step 19](INSTALLATION.md#19-add-firewall-rules-to-limit-internet-access),
   which also says when Nightstand adds them or briefly lifts them).
-- Alarms are vibration only and ring only while Nightstand is running and
-  the side is on. If Nightstand is stopped, restarting or updating, or the
+- Alarms are vibration only and ring only while Nightstand is running.
+  Scheduled alarms need the side on; a snoozed alarm rings even if the side
+  was turned off. If Nightstand is stopped, restarting or updating, or the
   Pod doesn't answer within 3 minutes, the alarm is missed and the app shows
   which one and why. Away mode and a paused schedule skip alarms without a
   notice, so keep another alarm until you trust your setup.
@@ -269,10 +270,15 @@ on the Pod.
 
 From 3.6.0 on, the updater checks each download
 against the checksum (a fingerprint of the file) published for it in the
-release list, when one is published; every release I offer has one. That
-catches a corrupted or swapped download, but not a compromised GitHub
-account. The update that installs this release is itself not checked,
-because the older updater has no checksum step.
+release list, when one is published, using the installed copy; every release
+I offer has one. That catches a corrupted or swapped download, but not a
+compromised GitHub account. The update from 3.5.1 or earlier to 3.6.0 is not
+checked, because those versions have no checksum step.
+
+Updating from 3.5.1 or earlier also needs more than 1,500 MB free on `/`
+and more than 2,000 MB on `/persistent`, because those versions' updaters
+check for that before they download anything. A Pod with less room can't
+take the update in the app.
 
 Schedules and alarms pause for up to 5 minutes while Nightstand restarts,
 so the app asks first if a side is on or an alarm is near

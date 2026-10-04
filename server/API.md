@@ -230,9 +230,10 @@ generic message; the details go to the server log.
     the shape upstream free-sleep uses. While that side's alarm is ringing,
     `dismiss` stops it and `snooze` stops it and rings it again after
     `snoozeDuration` seconds with the same settings; during a snooze, a
-    `dismiss` tap cancels it. With no alarm ringing the tap does nothing;
-    `inactiveAlarmBehavior: "power"` is not used yet. "Ringing" means an
-    alarm this server started, so a snooze is lost if the server restarts.
+    `dismiss` tap cancels it. If the alarm is neither ringing nor snoozed,
+    the tap does nothing; `inactiveAlarmBehavior: "power"` is not used yet.
+    "Ringing" means an alarm this server started, so a snooze is lost if the
+    server restarts.
 - `features` are feature flags. `sleepScore` turns the sleep score and sleep
   stage routes on and off; the app no longer shows either.
   `nightstandTheme` is no longer read and stays so stored settings keep
