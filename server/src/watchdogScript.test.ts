@@ -32,6 +32,11 @@ type Pod = {
   systemdVersion?: string;
   runtime?: string | null;
   sysfs?: Partial<Record<'identity' | 'timeout' | 'max_timeout' | 'min_timeout' | 'nowayout', string>> | null;
+  driver?: string;
+  compatible?: string[];
+  compatibleContents?: string;
+  compatibleReadFails?: boolean;
+  sysfsMode?: number;
   otherHolder?: boolean;
   pid1Holds?: boolean;
   // How the fake PID 1 reacts to daemon-reexec with the drop-in in place.
@@ -59,6 +64,7 @@ function pod(opts: Pod = {}) {
   const runConf = path.join(dir, 'run-system.conf.d');
   const mark = path.join(dir, ...(opts.noDataFolder ? ['missing'] : []), 'watchdog-trial');
   const sysfs = path.join(dir, 'sysfs');
+  const sysfsDevice = path.join(sysfs, 'device');
   const proc = path.join(dir, 'proc');
   const devicePath = path.join(dir, 'watchdog');
   const calls = path.join(dir, 'calls');
@@ -72,6 +78,28 @@ function pod(opts: Pod = {}) {
   if (sysfsValues) {
     mkdirSync(sysfs);
     for (const [name, value] of Object.entries(sysfsValues)) writeFileSync(path.join(sysfs, name), `${value}\n`);
+  }
+  mkdirSync(path.join(sysfsDevice, 'of_node'), { recursive: true });
+  if (opts.driver !== undefined) symlinkSync(`/drivers/${opts.driver}`, path.join(sysfsDevice, 'driver'));
+  if (opts.compatible !== undefined) {
+    writeFileSync(path.join(sysfsDevice, 'of_node', 'compatible'), `${opts.compatible.join('\0')}\0`);
+  }
+  if (opts.compatibleContents !== undefined) {
+    writeFileSync(path.join(sysfsDevice, 'of_node', 'compatible'), opts.compatibleContents);
+  }
+  if (opts.compatibleReadFails) {
+    writeFileSync(path.join(bin, 'cat'), `#!/bin/sh
+if [ "$1" = "${sysfsDevice}/of_node/compatible" ]; then
+  printf 'mediatek,mt8365-wdt\\000'
+  exit 1
+fi
+command -p cat "$@"
+`);
+    chmodSync(path.join(bin, 'cat'), 0o755);
+  }
+  if (opts.sysfsMode !== undefined) {
+    mkdirSync(sysfs, { recursive: true });
+    chmodSync(sysfs, opts.sysfsMode);
   }
   if (runtime !== null) writeFileSync(runtimeFile, runtime);
   if (pid1Holds) symlinkSync('/dev/watchdog0', path.join(proc, '1', 'fd', '3'));
@@ -132,7 +160,10 @@ exit 0
     reexecs: () => (existsSync(calls) ? readFileSync(calls, 'utf8').split('\n').filter((l) => l === 'daemon-reexec').length : 0),
     calls: () => (existsSync(calls) ? readFileSync(calls, 'utf8').split('\n') : []),
     setLabel: (text: string) => writeFileSync(labelFile, text),
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    cleanup: () => {
+      if (opts.sysfsMode !== undefined) chmodSync(sysfs, 0o755);
+      rmSync(dir, { recursive: true, force: true });
+    },
   };
 }
 
@@ -156,6 +187,140 @@ describe('setup_watchdog.sh', () => {
     assert.equal(p.trialDropin(), false, 'the trial copy in /run is gone once /etc holds it');
     assert.equal(p.mark(), null, 'a finished trial leaves no trial file');
     p.cleanup();
+  });
+
+  describe('without watchdog sysfs attributes', () => {
+    const checked: Pod = {
+      sysfs: null,
+      driver: 'mtk-wdt',
+      compatible: ['mediatek,mt8365-wdt', 'mediatek,mt6589-wdt'],
+      label: '20500-0006-H08-00000000\n',
+    };
+
+    it('arms the checked Pod 5 through the trial', () => {
+      const p = pod(checked);
+      try {
+        const result = p.run('--auto');
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.match(result.stdout, /trying it for/);
+        assert.match(result.stdout, /Hardware watchdog on/);
+        assert.match(p.dropin() ?? '', /RuntimeWatchdogSec=30s/);
+        assert.equal(p.reexecs(), 1);
+        assert.equal(p.trialDropin(), false);
+        assert.equal(p.mark(), null);
+      } finally { p.cleanup(); }
+    });
+
+    const unsupported: Array<[string, Pod, RegExp]> = [
+      ['another driver', { driver: 'omap_wdt' }, /driver omap_wdt/],
+      ['another compatible', { compatible: ['mediatek,mt6589-wdt'] }, /compatible mediatek,mt6589-wdt/],
+      ['a compatible with only a matching prefix', { compatible: ['mediatek,mt8365-wdt-other'] }, /compatible mediatek,mt8365-wdt-other/],
+      ['an older revision', { label: '20500-0005-G52-00012345\n' }, /revision G52/],
+    ];
+    for (const [why, opts, found] of unsupported) {
+      it(`skips ${why} and reports what it found`, () => {
+        const p = pod({ ...checked, ...opts });
+        try {
+          const result = p.run();
+          assert.equal(result.status, 0, result.stdout + result.stderr);
+          assert.match(result.stdout, /Hardware watchdog left off: .*Pod 5/);
+          assert.match(result.stdout, found);
+          assert.equal(p.dropin(), null);
+          assert.equal(p.reexecs(), 0);
+          assert.equal(p.mark(), null);
+        } finally { p.cleanup(); }
+      });
+    }
+
+    const malformed: Array<[string, string]> = [
+      ['an embedded newline', 'other-vendor,device\nmediatek,mt8365-wdt\0'],
+      ['an unterminated entry', 'mediatek,mt8365-wdt'],
+      ['an unterminated entry after a matching record', 'mediatek,mt8365-wdt\0other-vendor,device'],
+      ['a newline after a matching record', 'mediatek,mt8365-wdt\0other-vendor,device\n\0'],
+    ];
+    for (const [why, compatibleContents] of malformed) {
+      it(`skips a compatible list with ${why}`, () => {
+        const p = pod({ ...checked, compatibleContents });
+        try {
+          const result = p.run();
+          assert.equal(result.status, 0, result.stdout + result.stderr);
+          assert.match(result.stdout, /Hardware watchdog left off/);
+          assert.equal(p.dropin(), null);
+          assert.equal(p.reexecs(), 0);
+          assert.equal(p.mark(), null);
+        } finally { p.cleanup(); }
+      });
+    }
+
+    it('skips a failed compatible read even if it produces matching data', () => {
+      const p = pod({ ...checked, compatibleReadFails: true });
+      try {
+        const result = p.run();
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.match(result.stdout, /Hardware watchdog left off/);
+        assert.equal(p.dropin(), null);
+        assert.equal(p.reexecs(), 0);
+        assert.equal(p.mark(), null);
+      } finally { p.cleanup(); }
+    });
+
+    for (const sysfsMode of [0o300, 0o600]) {
+      it(`skips a watchdog directory with mode ${sysfsMode.toString(8)}`, {
+        skip: process.getuid?.() === 0 ? 'root ignores directory permissions' : false,
+      }, () => {
+        const p = pod({ ...checked, sysfsMode });
+        try {
+          const result = p.run();
+          assert.equal(result.status, 0, result.stdout + result.stderr);
+          assert.match(result.stdout, /Hardware watchdog left off: cannot inspect watchdog directory/);
+          assert.equal(p.dropin(), null);
+          assert.equal(p.reexecs(), 0);
+          assert.equal(p.mark(), null);
+        } finally { p.cleanup(); }
+      });
+    }
+
+    it('skips an existing runtime setting before identifying hardware', () => {
+      const p = pod({ ...checked, runtime: '1min', driver: 'omap_wdt' });
+      try {
+        const result = p.run();
+        assert.equal(result.status, 0);
+        assert.match(result.stdout, /already set to 1min outside Nightstand/);
+        assert.doesNotMatch(result.stdout, /driver omap_wdt/);
+        assert.equal(p.reexecs(), 0);
+        assert.equal(p.dropin(), null);
+        assert.equal(p.mark(), null);
+      } finally { p.cleanup(); }
+    });
+
+    it('does not use the fallback over present or partial sysfs attributes', () => {
+      for (const sysfs of [
+        { identity: 'omap_wdt', timeout: '31', max_timeout: '31', min_timeout: '1' },
+        { identity: 'mtk-wdt', timeout: '16', max_timeout: '31', min_timeout: '1' },
+        { timeout: '' },
+        { identity: 'mtk-wdt' },
+      ]) {
+        const p = pod({ ...checked, sysfs });
+        try {
+          const result = p.run();
+          assert.equal(result.status, 0);
+          assert.match(result.stdout, /Hardware watchdog left off/);
+          assert.equal(p.reexecs(), 0);
+          assert.equal(p.dropin(), null);
+        } finally { p.cleanup(); }
+      }
+    });
+
+    it('abandons the trial when PID 1 does not take the device', () => {
+      const p = pod({ ...checked, arm: 'no' });
+      try {
+        const result = p.run();
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.match(p.mark() ?? '', /PID 1 did not take the device/);
+        assert.equal(p.dropin(), null);
+        assert.equal(p.trialDropin(), false);
+      } finally { p.cleanup(); }
+    });
   });
 
   it('does not try again after a trial that never finished', () => {

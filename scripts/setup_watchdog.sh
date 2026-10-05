@@ -50,6 +50,7 @@ TRIAL_MARK="${NIGHTSTAND_WATCHDOG_TRIAL_MARK:-/persistent/free-sleep-data/watchd
 TRIAL_SECONDS="${NIGHTSTAND_WATCHDOG_TRIAL:-60}"
 DEVICE="${NIGHTSTAND_WATCHDOG_DEVICE:-/dev/watchdog}"
 SYSFS="${NIGHTSTAND_WATCHDOG_SYSFS:-/sys/class/watchdog/watchdog0}"
+SYSFS_DEVICE="$SYSFS/device"
 PROC="${NIGHTSTAND_PROC:-/proc}"
 WAIT="${NIGHTSTAND_WATCHDOG_WAIT:-10}"
 MARKER="# Managed by scripts/setup_watchdog.sh."
@@ -63,6 +64,17 @@ skip() { echo "Hardware watchdog left off: $*."; exit 0; }
 ours() { [ -f "$DROPIN" ] && head -n 1 "$DROPIN" | grep -qF "$MARKER"; }
 number() { case "${1:-}" in '' | *[!0-9]*) return 1 ;; esac; }
 sysfs() { tr -d '[:space:]' < "$SYSFS/$1" 2>/dev/null; }
+# Checks NUL-terminated records and prints them for skip messages.
+compatible_records() {
+  local record='' matched=0 invalid=0
+  while IFS= read -r -d '' record; do
+    printf '%s\n' "$record"
+    case "$record" in *$'\n'*) invalid=1 ;; esac
+    [ "$record" != 'mediatek,mt8365-wdt' ] || matched=1
+  done
+  printf '%s' "$record"
+  [ -z "$record" ] && [ "$invalid" = 0 ] && [ "$matched" = 1 ]
+}
 runtime_setting() {
   systemctl show -p RuntimeWatchdogUSec 2>/dev/null | sed -n 's/^RuntimeWatchdogUSec=//p'
 }
@@ -201,23 +213,47 @@ case "$CURRENT" in
   0 | 0s) ;;
   *) skip "RuntimeWatchdogSec is already set to $CURRENT outside Nightstand" ;;
 esac
-# Even if the new timeout fails to set, the hardware keeps this one, and PID 1
-# petting every RUNTIME/2 seconds stays well inside it.
-TIMEOUT=$(sysfs timeout)
-number "$TIMEOUT" || skip "the driver does not report its timeout"
-[ "$TIMEOUT" -ge "$RUNTIME" ] || skip "the hardware timeout is ${TIMEOUT}s, under ${RUNTIME}s"
-MAX=$(sysfs max_timeout)
-if number "$MAX" && [ "$MAX" -gt 0 ] && [ "$MAX" -lt "$RUNTIME" ]; then
-  skip "the hardware maximum is ${MAX}s, under ${RUNTIME}s"
-fi
-MIN=$(sysfs min_timeout)
-if number "$MIN" && [ "$MIN" -gt "$RUNTIME" ]; then
-  skip "the hardware minimum is ${MIN}s, over ${RUNTIME}s"
-fi
-IDENTITY=$(sysfs identity)
-REVISION=$(hub_revision)
-if [ "$IDENTITY" != "$POD5_IDENTITY" ] || [ "$MAX" != "$POD5_MAX_TIMEOUT" ] || ! pod5_revision "$REVISION"; then
-  skip "it is only turned on for the Pod 5 it was checked on (driver $POD5_IDENTITY, ${POD5_MAX_TIMEOUT}s maximum, hub revision $POD5_REVISION or later), and this Pod has driver ${IDENTITY:-unknown}, maximum ${MAX:-unknown}s, revision ${REVISION:-unknown}"
+NO_SYSFS=0
+[ -d "$SYSFS" ] && [ -r "$SYSFS" ] && [ -x "$SYSFS" ] \
+  && ls -A "$SYSFS" >/dev/null 2>&1 || skip "cannot inspect watchdog directory at $SYSFS"
+if [ ! -e "$SYSFS/identity" ] && [ ! -e "$SYSFS/timeout" ] \
+  && [ ! -e "$SYSFS/max_timeout" ] && [ ! -e "$SYSFS/min_timeout" ]; then
+  NO_SYSFS=1
+  DRIVER=$(readlink "$SYSFS_DEVICE/driver" 2>/dev/null)
+  IDENTITY=${DRIVER##*/}
+  if COMPATIBLE=$(set -o pipefail; cat "$SYSFS_DEVICE/of_node/compatible" 2>/dev/null | compatible_records); then
+    COMPATIBLE_MATCH=1
+  else
+    COMPATIBLE_MATCH=0
+  fi
+  REVISION=$(hub_revision)
+  if [ "$IDENTITY" != "$POD5_IDENTITY" ] \
+    || [ "$COMPATIBLE_MATCH" != 1 ] \
+    || ! pod5_revision "$REVISION"; then
+    skip "it is only turned on for the Pod 5 it was checked on (driver $POD5_IDENTITY, compatible mediatek,mt8365-wdt, hub revision $POD5_REVISION or later), and this Pod has driver ${IDENTITY:-unknown}, compatible $(printf '%s' "${COMPATIBLE:-unknown}" | tr '\n' ' '), revision ${REVISION:-unknown} (watchdog timeout attributes absent)"
+  fi
+  # mtk_wdt.c fixes MT8365's hardware maximum at 31 seconds.
+  MAX=$POD5_MAX_TIMEOUT
+  TIMEOUT=unknown
+else
+  # Even if the new timeout fails to set, the hardware keeps this one, and PID 1
+  # petting every RUNTIME/2 seconds stays well inside it.
+  TIMEOUT=$(sysfs timeout)
+  number "$TIMEOUT" || skip "the driver does not report its timeout"
+  [ "$TIMEOUT" -ge "$RUNTIME" ] || skip "the hardware timeout is ${TIMEOUT}s, under ${RUNTIME}s"
+  MAX=$(sysfs max_timeout)
+  if number "$MAX" && [ "$MAX" -gt 0 ] && [ "$MAX" -lt "$RUNTIME" ]; then
+    skip "the hardware maximum is ${MAX}s, under ${RUNTIME}s"
+  fi
+  MIN=$(sysfs min_timeout)
+  if number "$MIN" && [ "$MIN" -gt "$RUNTIME" ]; then
+    skip "the hardware minimum is ${MIN}s, over ${RUNTIME}s"
+  fi
+  IDENTITY=$(sysfs identity)
+  REVISION=$(hub_revision)
+  if [ "$IDENTITY" != "$POD5_IDENTITY" ] || [ "$MAX" != "$POD5_MAX_TIMEOUT" ] || ! pod5_revision "$REVISION"; then
+    skip "it is only turned on for the Pod 5 it was checked on (driver $POD5_IDENTITY, ${POD5_MAX_TIMEOUT}s maximum, hub revision $POD5_REVISION or later), and this Pod has driver ${IDENTITY:-unknown}, maximum ${MAX:-unknown}s, revision ${REVISION:-unknown}"
+  fi
 fi
 OTHERS=$(holders | grep -vx 1 | tr '\n' ' ')
 [ -z "$OTHERS" ] || skip "another program (PID ${OTHERS% }) already uses the watchdog"
@@ -239,11 +275,12 @@ if ! systemctl daemon-reexec; then
 fi
 
 # Verify rather than assume: PID 1 holds the device, systemd reports the
-# setting, and the driver took the timeout.
+# setting, and the driver took the timeout when sysfs reports it.
 i=0
 until pid1_holds && CURRENT=$(runtime_setting) && [ -n "$CURRENT" ] && [ "$CURRENT" != 0 ] \
-  && [ "$(sysfs timeout)" = "$RUNTIME" ]; do
-  [ "$i" -lt "$WAIT" ] || abandon "PID 1 did not take the device with a ${RUNTIME}s timeout (RuntimeWatchdogUSec=$(runtime_setting), driver timeout $(sysfs timeout)s)"
+  && { if [ "$NO_SYSFS" = 1 ]; then [ "$CURRENT" = "${RUNTIME}s" ];
+       else TIMEOUT=$(sysfs timeout); [ "$TIMEOUT" = "$RUNTIME" ]; fi; }; do
+  [ "$i" -lt "$WAIT" ] || abandon "PID 1 did not take the device with a ${RUNTIME}s timeout (RuntimeWatchdogUSec=$(runtime_setting), driver timeout ${TIMEOUT}s)"
   sleep 1
   i=$((i + 1))
 done
