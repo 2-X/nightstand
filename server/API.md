@@ -1133,9 +1133,9 @@ The app no longer shows the sleep score. The route stays for API clients.
 ```json
 {
   "active": true,
-  "score": 86,
+  "score": 92,
   "components": {
-    "duration": { "score": 90, "weight": 0.4, "value": "7h 45m in bed", "available": true },
+    "duration": { "score": 98, "weight": 0.4, "value": "7h 45m in bed", "available": true },
     "continuity": { "score": 85, "weight": 0.3, "value": "1 trip out of bed", "available": true },
     "hrv": { "score": 0, "weight": 0.15, "value": "", "available": false },
     "restingHr": { "score": 0, "weight": 0.15, "value": "54 bpm", "available": false }
@@ -1432,7 +1432,7 @@ the biometrics service; `/api/deviceStatus` converts them.
 ```json
 {
   "entries": [
-    { "version": "3.6.0", "date": "2026-10-10", "body": "### Added\n- ..." }
+    { "version": "3.6.0", "date": "2026-10-04", "body": "### Added\n- ..." }
   ]
 }
 ```

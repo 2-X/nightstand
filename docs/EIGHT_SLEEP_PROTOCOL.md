@@ -80,6 +80,11 @@ Response is newline-delimited `key = value` text, values as strings.
 | `doubleTap` / `tripleTap` / `quadTap` | JSON string `{l, r, s}`: unix timestamp (or `0`) of the last tap gesture per side/sensor. free-sleep uses `quadTap` to cycle the adjustable-base preset. | ✅ |
 | `dismissAlarm` | Purpose unclear | ❓ (8rp docs also mark this unknown) |
 
+On the tested Pod 5, a double or triple tap during an alarm stops it in the
+firmware, regardless of the tap settings. The gesture is not reported to
+Nightstand, so the alarm tap action cannot snooze it. Nightstand's alarm
+record stays active until the set duration ends.
+
 ## RAW biometrics stream record types
 
 Separate from `dac.sock`, this is the CBOR record stream the pod firmware
@@ -96,16 +101,16 @@ buffer truncates it. See `biometrics/load_raw_files.py` and
 | `capSense` (Pod 3, possibly some Pod 5) / `capSense2` (Pod 5 newer cover; Pod 4 not confirmed) | Capacitance sensor readings; Pod 5's `capSense2` shape is normalized to the legacy `capSense` fields (`out`/`cen`/`in`) | ✅ yes |
 | `bedTemp` (Pod 3, v1 integer centidegrees) / `bedTemp2` (Pod 4/5, float °C, `temps[]` array) | Bed-surface temperature sensors | `bedTemp` yes, `bedTemp2` intentionally not consumed yet (Pod 5 writes `bedTemp2`, kept for a future project) |
 | `frzTemp` | `{amb, hs, left, right}`: ambient, heatsink, and per-side hub sensor temps in centidegrees C | ✅ yes: feeds the Settings page sensor-temp display |
-| `frzHealth` | `{left, right, fan}`, each side `{tec: {current}, pump: {mode, rpm, water}, temps: {flowrate}}`: see [pump/thermal telemetry](#pumpthermal-telemetry-frzhealth) below | ✅ yes, as of v3.0.0: pump-stall detection only |
+| `frzHealth` | `{left, right, fan}`, each side `{tec: {current}, pump: {mode, rpm, water}, temps: {flowrate}}`: see [pump/thermal telemetry](#pumpthermal-telemetry-frzhealth) below | ✅ yes: pump-stall detection and pump-speed checks for the newer vitals estimators |
 | `frzTherm` | `{left, right}`, each either a number or `{target, power, valid, enabled}` | 📖 documented by sleepypod/core, not yet used or verified by us |
 | `log` | Firmware's own internal log lines | not consumed |
 
 ### Pump/thermal telemetry (`frzHealth`)
 
-Sample decoded from this pod's own RAW archive:
+Decoded `frzHealth` example from a Pod 5, with the timestamp replaced:
 
 ```python
-{'type': 'frzHealth', 'ts': 1783654226, 'version': 1,
+{'type': 'frzHealth', 'ts': 0, 'version': 1,
  'left':  {'tec': {'current': 11.99}, 'pump': {'mode': 'pwm', 'rpm': 1928, 'water': True}, 'temps': {'flowrate': 24.94}},
  'right': {'tec': {'current': 7.86},  'pump': {'mode': 'pwm', 'rpm': 2000, 'water': True}, 'temps': {'flowrate': 24.63}},
  'fan': {'top': {'rpm': 414}, 'bottom': {'rpm': 318}}}
@@ -138,9 +143,9 @@ element keeps drawing current, the sensor instead reads stagnant water next
 to a powered heater, a runaway number that does not reflect actual bed
 temperature.
 
-This is a real, reported failure mode: a free-sleep user hit 102°F overnight
-against an 84°F setpoint, cleared by a power cycle; sleepypod/core
-independently documented the same root cause in their ADR 0022. Nightstand
+This failure has been reported in practice, with a bed reading 102°F
+overnight against an 84°F setpoint until a power cycle cleared it;
+sleepypod/core documents the same root cause in their ADR 0022. Nightstand
 v3.0.0+ watches `frzHealth` for this (TEC actively drawing current + pump
 RPM near zero or `water: false`, sustained for a dwell window) and surfaces
 it in Settings > Pod and diagnostics > System status as "Pump health." Detection and visibility only,

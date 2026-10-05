@@ -115,7 +115,7 @@ rate near an edge can still be found.
 | `server/src/jobs/primeScheduler.ts` | calibration times | 18:30 left / 19:00 right | Evening times when the bed is usually empty. |
 | `biometrics/stream/stream.py` | `STREAM_HEALTH_INTERVAL_SECONDS` / `SOURCE_IDLE_SECONDS` | 60 s / 30 min | Stream health heartbeat, and how long without a sensor record before System status reports sleep tracking stopped. |
 | Same file | `NATS_SILENT_SECONDS` | 2 min | A connected stream with no sensor records for this long gets the RAW files read alongside it. |
-| `biometrics/stream/pump_speed.py` | `PUMP_HIGH_RPM` / `PUMP_STALE_SECONDS` | 2,500 rpm / 30 s | A `frzHealth` frame at or above this speed marks the pump fast; a frame older than 30 s, or none yet, leaves it unknown. The newer vitals keep a window only when frames show the pump slow throughout. |
+| `biometrics/stream/pump_speed.py` | `PUMP_HIGH_RPM` / `PUMP_STALE_SECONDS` | 2,500 rpm / 30 s | A `frzHealth` frame at or above this speed marks the pump fast; a frame older than 30 s, or none yet, leaves it unknown. Once a pump frame has arrived, the newer vitals keep a window only when frames show the pump slow throughout. A stream with no pump frames skips this check and warns once. |
 | `biometrics/service_health.py` | `SENSOR_TEMPS_UPDATE_INTERVAL` | 30 s | Throttle on sensor-temperature reports. |
 | Same file | `_PUMP_RPM_STALL_THRESHOLD` / `_PUMP_TEC_ACTIVE_AMPS` | 200 rpm / 1.0 A | Pump stall alert. Bed tuning from the 1900 to 2000 rpm running speed of my Pod 5; not known to hold for other pump revisions. |
 | Same file | `_PUMP_STALL_DWELL_FRAMES` / `_PUMP_RECOVERY_DWELL_FRAMES` | 6 / 3 frames | `frzHealth` frames arrive about every 10 s; six in a row raise the alert, three clear it. |

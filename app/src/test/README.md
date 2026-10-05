@@ -43,7 +43,7 @@ it('closes the confirm dialog on Cancel and fires no request', async () => {
 
   const { user } = renderWithProviders(<RevertToStockRow runningVersion="3.0.0" />);
 
-  await user.click(screen.getByText('Restore upstream free-sleep'));
+  await user.click(screen.getByText('Switch to upstream free-sleep'));
   expect(await screen.findByRole('dialog')).toBeInTheDocument();
 
   await user.click(screen.getByRole('button', { name: 'Cancel' }));

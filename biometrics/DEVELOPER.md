@@ -5,7 +5,7 @@ turns the Pod's sensor data into presence, vitals (heart rate, HRV and
 breathing rate) and sleep records, and on the server jobs that call it.
 [BIOMETRICS.md](BIOMETRICS.md) says what the results can and can't tell you,
 and [docs/CALIBRATION.md](../docs/CALIBRATION.md) lists the numeric constants
-and why each has its value. I've run everything here on one Pod 5. Failure
+and why each has its value. I test on one Pod 5, with the limits below. Failure
 and recovery paths are tested only with simulated failures, not on a real
 Pod.
 
@@ -190,12 +190,12 @@ The newer estimators (`vitals2/`) run only while capacitance presence is
 active, and a heart-rate, breathing or HRV window counts only when every
 record it reads placed the side in bed, with no reset in between, so HRV
 returns five minutes after someone gets back into bed. They sit behind
-quality, motion and signal gates, and drop a window unless the firmware's
-`frzHealth` frames (`pump_speed.py`) show the pump slow throughout: before
-the first frame, or more than 30 seconds after the newest, the speed is
-unknown and windows are dropped, logged once. A stream that has never had a
-pump frame keeps its windows and warns once, so a Pod whose firmware writes
-no `frzHealth` still gets vitals. A minute gets a row only with an accepted
+quality, motion and signal gates. Once the stream has received a pump
+frame, a window is kept only when `frzHealth` frames (`pump_speed.py`) show
+the pump slow throughout. Times before the first frame, or more than 30
+seconds after the newest, have unknown speed and are dropped, logged once.
+A stream that has never had a pump frame skips this check and warns once,
+so a Pod whose firmware writes no `frzHealth` still gets vitals. A minute gets a row only with an accepted
 heart rate. Rows carry `estimator`, `hr_quality`, `rmssd`, `sdnn`,
 `hrv_coverage`, `resp_rate` and `resp_quality`, NULL when missing; the legacy
 `hrv` and `breathing_rate` columns keep 0 for missing. A quality value is an

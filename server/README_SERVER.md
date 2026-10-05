@@ -38,8 +38,7 @@ work on the UI alone, the app's demo mode needs no server at all (see
    npm ci
    npm run generate
    ```
-2. Edit `.env.local`. The committed values are from another developer's
-   machine.
+2. Edit `.env.local`. Replace the example paths with paths on your computer.
    - `DATA_FOLDER` is an absolute path ending in `/`. The server appends
      `lowdb/` to it. The git-ignored `server/free-sleep-data/` folder works
      for this.

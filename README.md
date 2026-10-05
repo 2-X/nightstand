@@ -143,8 +143,8 @@ Releases start on the beta channel and run on my own Pod 5 before I mark
 them stable.
 
 The automated tests run the update, rollback and reset scripts through the
-simulated failures above. Roughly 2,100 server tests, 1,700 app tests and
-850 Biometrics tests, plus more than 200 browser checks against the demo
+simulated failures above. Roughly 2,200 server tests, 1,700 app tests and
+800 Biometrics tests, plus more than 200 browser checks against the demo
 build. [CI](https://github.com/LTimothy/nightstand/actions/workflows/ci.yaml)
 (GitHub's automatic checks) reruns them on every pull request and push, and
 its history is public. [docs/TESTING.md](docs/TESTING.md) lists the tests
@@ -278,7 +278,7 @@ checked, because those versions have no checksum step.
 Updating from 3.5.1 or earlier also needs more than 1,500 MB free on `/`
 and more than 2,000 MB on `/persistent`, because those versions' updaters
 check for that before they download anything. A Pod with less room can't
-take the update in the app.
+take the update through the app or `fs-update`.
 
 Schedules and alarms pause for up to 5 minutes while Nightstand restarts,
 so the app asks first if a side is on or an alarm is near
