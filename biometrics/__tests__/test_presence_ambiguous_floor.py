@@ -139,8 +139,7 @@ class TestAmbiguousFloorExit(unittest.TestCase):
         """Safety property: high floor => freeze preserved, no false exit.
 
         Two people genuinely present, symmetric amplitudes (ambiguous_both every
-        tick), left's floor high. This is exactly the case the approved bias
-        protects. Must behave like the pre-fix freeze: stay present, exit clock
+        tick), left's floor high. The presence bias protects this case. Must behave like the pre-fix freeze: stay present, exit clock
         frozen at 0, for far longer than any real exit latency.
         """
         bed = _Bed()

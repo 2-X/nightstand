@@ -38,7 +38,8 @@ class DataFolderTest(unittest.TestCase):
             folder = gl.data_folder()
         self.assertTrue(os.path.isabs(folder))
         self.assertTrue(folder.endswith(os.path.join('server', 'free-sleep-data', '')))
-        self.assertNotIn('/Users/ds', folder)
+        expected = os.path.abspath(os.path.join(os.path.dirname(gl.__file__), '..', 'server', 'free-sleep-data'))
+        self.assertEqual(folder, expected + os.sep)
 
 
 class FormatterTest(unittest.TestCase):
