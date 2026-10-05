@@ -118,13 +118,11 @@ Themes, a plainer Sleep page, safer updates and recovery, and support for Pod fi
 - The app now says when an alarm did not ring, or may not
   have rung, and why. The message stays at the top of every page until you
   dismiss it or a week passes.
-- A tap set to the alarm action now works while an alarm is ringing on that
-  side: it dismisses the alarm, or snoozes it and rings again after the
-  snooze time with the same strength and pattern. During a snooze, a dismiss
-  tap cancels it. If the alarm is neither ringing nor snoozed, the tap does
-  nothing; its option to turn the side on or off is not used yet. A snooze
-  still rings if the side is turned off or set to away after the tap, and a
-  server restart drops it.
+- A tap set to the alarm action, the shape upstream free-sleep uses, is
+  accepted but has no effect yet. On a Pod 5 the firmware handles a tap
+  while an alarm rings: a double or triple tap stops the alarm, whatever the
+  tap settings say, and the tap is not passed on to Nightstand. Nightstand
+  then treats the alarm as ringing until its set duration ends.
 
 ### Newer firmware and fixes from upstream
 

@@ -227,13 +227,10 @@ generic message; the details go to the server log.
   - `{ "type": "base_control", "behavior": "toggle_preset" }`, which moves
     an adjustable base between its `relax` and `flat` presets
   - `{ "type": "alarm", "behavior": "snooze" | "dismiss", "snoozeDuration": 60 to 600, "inactiveAlarmBehavior": "power" | "none" }`,
-    the shape upstream free-sleep uses. While that side's alarm is ringing,
-    `dismiss` stops it and `snooze` stops it and rings it again after
-    `snoozeDuration` seconds with the same settings; during a snooze, a
-    `dismiss` tap cancels it. If the alarm is neither ringing nor snoozed,
-    the tap does nothing; `inactiveAlarmBehavior: "power"` is not used yet.
-    "Ringing" means an alarm this server started, so a snooze is lost if the
-    server restarts.
+    the shape upstream free-sleep uses. It is accepted and stored but has
+    no effect yet: on a Pod 5 the firmware handles a tap while an alarm
+    rings (a double or triple tap stops it) and does not pass it on to this
+    server.
 - `features` are feature flags. `sleepScore` turns the sleep score and sleep
   stage routes on and off; the app no longer shows either.
   `nightstandTheme` is no longer read and stays so stored settings keep

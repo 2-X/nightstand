@@ -733,8 +733,8 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
   {
     id: 'tap-alarm',
     title: 'Alarm taps',
-    description: 'A tap set to the alarm action dismisses or snoozes a ringing alarm on that side. '
-      + 'If no alarm is ringing or snoozed it does nothing; its power option is not used yet.',
+    description: 'Accepts the alarm tap action upstream uses. It has no effect yet: on a Pod 5 the firmware '
+      + 'handles a tap during an alarm itself (a double or triple tap stops it) and does not report it.',
     category: 'platform',
     version: 'n/a',
     flag: null,
