@@ -4,6 +4,8 @@ import { DeviceStatusUpdateSchema } from './deviceStatusSchema.js';
 import logger from '../../logger.js';
 import { updateDeviceStatus } from './updateDeviceStatus.js';
 import { markManualTempChange } from '../../jobs/scheduleOverride.js';
+import { noteManualPowerChange } from '../../jobs/manualPowerChange.js';
+import settingsDB from '../../db/settings.js';
 
 const router = express.Router();
 
@@ -51,6 +53,13 @@ router.post('/deviceStatus', async (req: Request, res: Response) => {
   }
 
   const update = validationResult.data;
+  await settingsDB.read();
+  for (const side of ['left', 'right'] as const) {
+    if (update[side]?.isOn !== undefined || update[side]?.secondsRemaining !== undefined) {
+      const targets = settingsDB.data.left.awayMode || settingsDB.data.right.awayMode ? ['left', 'right'] as const : [side];
+      for (const target of targets) noteManualPowerChange(target);
+    }
+  }
   await updateDeviceStatus(update);
 
   // If the user manually set a target temperature on a side, maybe pause the

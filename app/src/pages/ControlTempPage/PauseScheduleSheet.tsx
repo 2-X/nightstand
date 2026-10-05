@@ -3,6 +3,7 @@ import moment from 'moment-timezone';
 import { Alert, Box, Button, Drawer, FormControlLabel, Radio, RadioGroup, TextField, Typography } from '@mui/material';
 import { useDeviceStatus } from '@api/deviceStatus.ts';
 import { postSettings, useSettings } from '@api/settings.ts';
+import { isSchedulePaused } from '@api/schedulePause.ts';
 import { useSchedules } from '@api/schedules.ts';
 import { useAppStore } from '@state/appStore.tsx';
 import { friendlyTimeZone } from '@lib/timeZone';
@@ -32,8 +33,10 @@ export default function PauseScheduleSheet({ open, onClose, onPaused }: {
   const next: NextBedTime | undefined = bed.state === 'rhythms'
     ? (after, kind) => nextSleepEvent(bed.sleeps, timeZone, after, kind)?.at
     : bed.state === 'legacy' && schedule ? weeklyTimes(schedule, timeZone) : undefined;
-  const [choice, setChoice] = useState<Choice>('tonight');
-  const [picked, setPicked] = useState<string | null>(null);
+  const editing = !!settings && isSchedulePaused(settings, side, moment().toDate());
+  const storedEnd = editing ? settings[side].scheduleOverrides.pause.expiresAt : '';
+  const [choice, setChoice] = useState<Choice>(editing ? storedEnd ? 'until' : 'resume' : 'tonight');
+  const [picked, setPicked] = useState<string | null>(storedEnd ? moment.tz(storedEnd, timeZone).format(INPUT_FORMAT) : null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -91,7 +94,7 @@ export default function PauseScheduleSheet({ open, onClose, onPaused }: {
       onClose={ close }
       slotProps={ { paper: { role: 'dialog', 'aria-modal': true, 'aria-labelledby': 'pause-schedule-title' } } }>
       <Box sx={ { p: 3, width: '100%', maxWidth: 720, mx: 'auto' } }>
-        <Typography variant="h2" id="pause-schedule-title">Pause <bdi>{ name }</bdi>'s schedule</Typography>
+        <Typography variant="h2" id="pause-schedule-title">{ editing ? 'Change pause for' : 'Pause' } <bdi>{ name }</bdi>'s schedule</Typography>
         <RadioGroup
           aria-labelledby="pause-schedule-title"
           value={ choice }
@@ -102,7 +105,7 @@ export default function PauseScheduleSheet({ open, onClose, onPaused }: {
           sx={ { my: 2 } }>
           <FormControlLabel
             value="tonight"
-            control={ <Radio autoFocus/> }
+            control={ <Radio autoFocus={ choice === 'tonight' }/> }
             label={ <Box>
               <Typography>{ onceLabel }</Typography>
               <Typography variant="caption" color="text.secondary" sx={ { display: 'block' } }>
@@ -113,7 +116,7 @@ export default function PauseScheduleSheet({ open, onClose, onPaused }: {
             sx={ { minHeight: 44, alignItems: 'flex-start', '& .MuiRadio-root': { mt: -0.5 } } }/>
           <FormControlLabel
             value="until"
-            control={ <Radio/> }
+            control={ <Radio autoFocus={ choice === 'until' }/> }
             label={ <Box>
               <Typography>Until a set time</Typography>
               { choice === 'until' && !untilError && <Typography variant="caption" color="text.secondary" sx={ { display: 'block' } }>
@@ -134,7 +137,7 @@ export default function PauseScheduleSheet({ open, onClose, onPaused }: {
             sx={ { ml: 4, mb: 1, maxWidth: 'calc(100% - 32px)' } }/> }
           <FormControlLabel
             value="resume"
-            control={ <Radio/> }
+            control={ <Radio autoFocus={ choice === 'resume' }/> }
             label={ <Box>
               <Typography>Until I resume</Typography>
               <Typography variant="caption" color="text.secondary" sx={ { display: 'block' } }>
@@ -148,6 +151,9 @@ export default function PauseScheduleSheet({ open, onClose, onPaused }: {
           Your saved schedule is kept.
           { !settings[other].awayMode && <> <bdi>{ partner }</bdi>'s side is not affected.</> }
         </Typography>
+        <Typography variant="body2" color="text.secondary" sx={ { mt: 1 } }>
+          When the pause ends, an off side turns on if its night is in progress. Skipped alarms stay skipped.
+        </Typography>
         { error && <Alert severity="error" sx={ { mt: 2 } }>{ error }</Alert> }
         <Box sx={ { display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 } }>
           <Button onClick={ close } aria-disabled={ saving || undefined } sx={ { minHeight: 44 } }>Cancel</Button>
@@ -158,7 +164,7 @@ export default function PauseScheduleSheet({ open, onClose, onPaused }: {
             disabled={ !!untilError }
             aria-disabled={ saving || undefined }
             sx={ { minHeight: 44, ...(saving ? { opacity: 0.6 } : {}) } }>
-            Pause
+            { editing ? 'Save pause' : 'Pause' }
           </Button>
         </Box>
       </Box>

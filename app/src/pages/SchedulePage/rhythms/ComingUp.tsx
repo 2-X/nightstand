@@ -80,7 +80,7 @@ export default function ComingUp({
           const text = describe(date);
           const sleep = sleeps.find(item => item.date === date);
           const running = !!sleep && Date.parse(sleep.start) <= now && now < Date.parse(sleep.end);
-          // A sleep that starts before the pause ends is skipped, so its times are dimmed.
+          // A sleep that starts before the pause ends is marked paused.
           const paused = !!sleep && pausedUntil !== undefined && (pausedUntil === null || Date.parse(sleep.start) < pausedUntil.getTime());
           const marks = [running && 'now', paused && 'paused', changed && 'changed'].filter(Boolean).join(', ');
           // Focusable while a save runs, like the Week lines, so focus comes back here after a pick.

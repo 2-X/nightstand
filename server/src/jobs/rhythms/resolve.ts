@@ -3,7 +3,8 @@ import { AlarmSchedule, DailySchedule, DayOfWeek, Schedules, Side } from '../../
 import { RhythmsDB, SmartSchedule } from '../../db/rhythmsSchema.js';
 import { wakeFromNight } from '../../db/rhythmWake.js';
 import { SCHEDULE_DAYS } from '../../db/scheduleKeys.js';
-import { compareTimes, isValidTime, scheduleWrapsToNextDay } from '../utils.js';
+import { addDays, rhythmNightBounds, wallClock } from '../../db/rhythmTimes.js';
+import { compareTimes, isValidTime } from '../utils.js';
 import { normalizeNight } from './night.js';
 import type { SmartCurveInfo } from '../../db/smartCurve.js';
 import { applySmartCurve } from './smartSleep.js';
@@ -43,14 +44,7 @@ export const MAX_RESOLVE_WINDOW_MS = 70 * 24 * 60 * 60 * 1000;
 const KIND_ORDER: Record<RhythmEvent['kind'], number> = { 'power-on': 0, temperature: 1, alarm: 2, 'power-off': 3 };
 const DATE_FORMAT = 'YYYY-MM-DD';
 
-const addDays = (date: string, days: number) => moment.utc(date, DATE_FORMAT, true).add(days, 'day').format(DATE_FORMAT);
 const weekdayOf = (date: string): DayOfWeek => SCHEDULE_DAYS[moment.utc(date, DATE_FORMAT, true).day()];
-
-// A time that does not exist on this date (spring forward) moves forward by
-// the gap; a time that happens twice (fall back) takes the first occurrence.
-function wallClock(date: string, time: string, timeZone: string): Date {
-  return moment.tz(`${date} ${time}`, `${DATE_FORMAT} HH:mm`, true, timeZone).toDate();
-}
 
 // Times at or after power on belong to the start date, earlier ones to the next.
 const dateForTime = (date: string, time: string, powerOn: string) => (compareTimes(time, powerOn) >= 0 ? date : addDays(date, 1));
@@ -59,8 +53,7 @@ function resolveNight(side: Side, date: string, source: NightSource, timeZone: s
   const night = normalizeNight(source.night);
   const { power } = night;
   if (!power.enabled || !isValidTime(power.on) || !isValidTime(power.off)) return null;
-  const start = wallClock(date, power.on, timeZone);
-  const end = wallClock(scheduleWrapsToNextDay(power) ? addDays(date, 1) : date, power.off, timeZone);
+  const { start, end } = rhythmNightBounds(date, power, timeZone);
   // A short night starting in a spring-forward gap can lose its whole length.
   // The legacy engine skips that power on and leaves the side off.
   if (end <= start) return null;

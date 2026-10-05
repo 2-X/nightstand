@@ -39,6 +39,12 @@ export function rhythmJobName(
   return `rhythm-${side}-${date}-${kind}-${moment.tz(at, timeZone).format('HHmm')}-${n}`;
 }
 
+const runningStarts = new Set<schedule.Job>();
+
+export function hasRunningRhythmStart(side: Side, date: string): boolean {
+  return [...runningStarts].some(job => job.name.startsWith(`rhythm-${side}-${date}-power-on-`));
+}
+
 // node-schedule keeps a dead entry for a date in the past, so past instants
 // and names already planned are skipped before asking it. A failed job is
 // logged: a rejected job becomes an unhandled rejection, which stops the server.
@@ -47,7 +53,16 @@ function scheduleOnce(name: string, at: Date, now: Date, run: () => Promise<unkn
   const job = () => run().catch((error: unknown) => {
     logger.error(`Rhythm job ${name} failed: ${error instanceof Error ? error.message : String(error)}`);
   });
-  if (schedule.scheduleJob(name, at, job)) return true;
+  const scheduled = schedule.scheduleJob(name, at, job);
+  if (scheduled) {
+    // One-time jobs leave scheduledJobs before their promises settle.
+    if (name.includes('-power-on-')) {
+      scheduled.on('run', () => runningStarts.add(scheduled));
+      scheduled.on('success', () => runningStarts.delete(scheduled));
+      scheduled.on('error', () => runningStarts.delete(scheduled));
+    }
+    return true;
+  }
   schedule.cancelJob(name);
   return false;
 }

@@ -13,7 +13,7 @@ import { displayTemperature } from '@lib/temperatureConversions.ts';
 import { nextBedEvent } from './bedEvents';
 import AlarmNotification from './AlarmNotification';
 import PauseScheduleSheet from './PauseScheduleSheet';
-import { MAX_PAUSE_DAYS } from './pauseTimes';
+import { MAX_PAUSE_DAYS, pauseResumeAt } from './pauseTimes';
 import SchedulePauseNotice from './SchedulePauseNotice';
 import SmartPhaseLine from './SmartPhaseLine';
 import { currentSleep, isEveningSleep, nextSleepEvent, sleepAt, warmStartBedtime, withArticle } from './sleepEvents';
@@ -26,13 +26,15 @@ export default function UpcomingNight() {
   const { data: settings, isError: settingsError, refetch: refetchSettings } = useSettings();
   const bed = useBedSleeps(side);
   const [pauseOpen, setPauseOpen] = useState(false);
+  const editingPause = useRef(false);
   const cardRef = useRef<HTMLDivElement>(null);
   // Pausing and resuming swap the card's buttons; focus moves once the expected one exists.
   const [focusWhenPaused, setFocusWhenPaused] = useState<boolean | null>(null);
   const schedulePaused = !!settings && isSchedulePaused(settings, side, moment().toDate());
   useEffect(() => {
     if (focusWhenPaused !== schedulePaused) return;
-    cardRef.current?.querySelector<HTMLElement>('[data-pause-control]')?.focus({ preventScroll: true });
+    const target = schedulePaused && editingPause.current ? '[data-pause-edit]' : '[data-pause-control]';
+    cardRef.current?.querySelector<HTMLElement>(target)?.focus({ preventScroll: true });
     setFocusWhenPaused(null);
   }, [focusWhenPaused, schedulePaused]);
   const [, tick] = useState(0);
@@ -91,6 +93,7 @@ export default function UpcomingNight() {
   const now = moment.tz(settings.timeZone);
   // An older server leaves pause out of its settings and would drop the write.
   const canPause = !schedulePaused && !settings[side].awayMode && !!settings[side].scheduleOverrides.pause;
+  const canChangePause = schedulePaused && !settings[side].awayMode;
   const dayWord = (at: moment.Moment) => at.isSame(now, 'day') ? at.hour() >= 17 ? 'tonight' : 'today'
     : at.isSame(now.clone().add(1, 'day'), 'day') ? 'tomorrow' : at.format('ddd');
   const eventDay = event && dayWord(event.at);
@@ -103,9 +106,11 @@ export default function UpcomingNight() {
   const followsPartner = bed.state === 'rhythms' && settings[side].awayMode && !settings[other].awayMode;
   const partner = followsPartner ? settings[other].name || (other === 'left' ? 'Left side' : 'Right side') : '';
   const pauseEnd = schedulePaused ? pauseEndsAt(settings, side) : null;
-  const backOn = pauseEnd && !settings[side].awayMode ? upcoming(moment(pauseEnd).subtract(1, 'ms'), 'on') : undefined;
-  const backOnName = backOn ? nameOf(backOn.at) : undefined;
-  const backOnText = backOn && `Back on schedule ${dayWord(backOn.at)} at ${backOn.at.format('h:mm A')}${backOnName ? ` (${backOnName})` : ''}`;
+  const backOn = pauseEnd && !settings[side].awayMode
+    ? pauseResumeAt(bed, schedules?.[side], settings.timeZone, moment(pauseEnd))
+      ?? upcoming(moment(pauseEnd).subtract(1, 'ms'), 'on')?.at : undefined;
+  const backOnName = backOn ? nameOf(backOn) : undefined;
+  const backOnText = backOn && `Back on schedule ${dayWord(backOn)} at ${backOn.format('h:mm A')}${backOnName ? ` (${backOnName})` : ''}`;
   const eventText = event && `${action} ${eventDay} at ${event.at.format('h:mm A')}`
     + (bedtime ? ` for ${withArticle(bedtime.format('h:mm A'))} bedtime` : '')
     + (event.kind === 'on' ? eventPaused ? ' and keeps your manual temperature' : `, set to ${temperature}` : '')
@@ -119,8 +124,17 @@ export default function UpcomingNight() {
         </SectionHeading>
         { /* Right-aligned on the heading's row; under it when the row is too narrow. */ }
         <Box sx={ { display: 'flex', ml: 'auto', mr: '-10px' } }>
-          { canPause && <Button sx={ shared.lampLink } data-pause-control onClick={ () => setPauseOpen(true) }>
+          { canPause && <Button
+            sx={ shared.lampLink }
+            data-pause-control
+            onClick={ () => { editingPause.current = false; setPauseOpen(true); } }>
             Pause schedule
+          </Button> }
+          { canChangePause && <Button
+            sx={ shared.lampLink }
+            data-pause-edit
+            onClick={ () => { editingPause.current = true; setPauseOpen(true); } }>
+            Change pause
           </Button> }
           <Button component={ Link } to="/schedules" sx={ shared.lampLink }>
             Edit schedule

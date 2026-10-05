@@ -6,11 +6,12 @@ import type { BedSleeps } from './useBedSleeps';
 
 const fixture = vi.hoisted(() => ({
   pause: { active: false, expiresAt: '' }, status: undefined as unknown, away: false, bed: { state: 'legacy' } as BedSleeps,
-  live: null as unknown, presence: undefined as unknown, partnerAway: false,
+  live: null as unknown, presence: undefined as unknown, partnerAway: false, timeZone: 'UTC',
 }));
 vi.mock('@state/appStore', () => ({ useAppStore: () => ({ side: 'left' }) }));
 vi.mock('@api/settings', () => ({ useSettings: () => ({ data: {
-  timeZone: 'UTC', left: { awayMode: fixture.away, scheduleOverrides: { pause: fixture.pause } }, right: { awayMode: fixture.partnerAway },
+  timeZone: fixture.timeZone,
+  left: { awayMode: fixture.away, scheduleOverrides: { pause: fixture.pause } }, right: { awayMode: fixture.partnerAway },
 } }) }));
 const night = (on: string) => ({ power: { enabled: true, on, off: '07:00', onTemperature: 82 }, temperatures: {} });
 vi.mock('@api/schedules', () => ({ useSchedules: () => ({ data: { left: { monday: night('21:00'), tuesday: night('22:00') } } }) }));
@@ -38,6 +39,7 @@ beforeEach(() => {
   fixture.live = null;
   fixture.presence = undefined;
   fixture.partnerAway = false;
+  fixture.timeZone = 'UTC';
 });
 
 const alarm = { time: '06:30', enabled: false, vibrationIntensity: 30, vibrationPattern: 'rise' as const, duration: 30, alarmTemperature: 83 };
@@ -74,6 +76,136 @@ it('names the first start after a timed pause, and none for a pause until resume
   fixture.pause = { active: true, expiresAt: '' };
   label(false);
   expect(screen.queryByText(/Turns on/)).not.toBeInTheDocument();
+});
+
+it.each(['legacy', 'rhythms'] as const)('predicts the pause end inside a %s night', engine => {
+  fixture.pause.expiresAt = '2026-09-28T23:00:00Z';
+  if (engine === 'rhythms') fixture.bed = { state: 'rhythms', sleeps: [sleep('2026-09-28', '2026-09-29')] };
+  label(false);
+  expect(screen.getByText('Turns on tonight at 11:00 PM')).toBeInTheDocument();
+});
+
+it.each(['legacy', 'rhythms'] as const)('predicts a resume after midnight in a %s night', engine => {
+  fixture.pause.expiresAt = '2026-09-29T02:00:00Z';
+  if (engine === 'rhythms') fixture.bed = { state: 'rhythms', sleeps: [sleep('2026-09-28', '2026-09-29')] };
+  label(false);
+  expect(screen.getByText('Turns on tomorrow at 2:00 AM')).toBeInTheDocument();
+});
+
+it.each(['legacy', 'rhythms'] as const)('keeps the next start outside a %s night', engine => {
+  fixture.pause.expiresAt = '2026-09-29T12:00:00Z';
+  if (engine === 'rhythms') fixture.bed = { state: 'rhythms', sleeps: [sleep('2026-09-28', '2026-09-29'), sleep('2026-09-29', '2026-09-30')] };
+  label(false);
+  expect(screen.getByText(`Turns on tomorrow at ${engine === 'legacy' ? '10:00' : '10:30'} PM`)).toBeInTheDocument();
+});
+
+it.each(['legacy', 'rhythms'] as const)('keeps the next start when a pause ends at the %s night end', engine => {
+  fixture.pause.expiresAt = engine === 'legacy' ? '2026-09-29T07:00:00Z' : '2026-09-29T06:45:00Z';
+  if (engine === 'rhythms') fixture.bed = { state: 'rhythms', sleeps: [sleep('2026-09-28', '2026-09-29'), sleep('2026-09-29', '2026-09-30')] };
+  label(false);
+  expect(screen.getByText(`Turns on tomorrow at ${engine === 'legacy' ? '10:00' : '10:30'} PM`)).toBeInTheDocument();
+});
+
+it.each(['legacy', 'rhythms'] as const)('keeps the next start when the delayed %s resume reaches 7 AM', engine => {
+  fixture.pause.expiresAt = '2026-09-29T06:59:00Z';
+  if (engine === 'rhythms') {
+    const ending = sleep('2026-09-28', '2026-09-29');
+    ending.end = '2026-09-29T07:00:00Z';
+    ending.night.power.off = '07:00';
+    ending.events[1] = { kind: 'power-off', at: ending.end };
+    fixture.bed = { state: 'rhythms', sleeps: [ending, sleep('2026-09-29', '2026-09-30')] };
+  }
+  label(false);
+  expect(screen.getByText(`Turns on tomorrow at ${engine === 'legacy' ? '10:00' : '10:30'} PM`)).toBeInTheDocument();
+});
+
+it('does not resume past the scheduled When I get up off time after the delay', () => {
+  fixture.pause.expiresAt = '2026-09-29T06:44:00Z';
+  const ending = sleep('2026-09-28', '2026-09-29');
+  ending.mode = 'smart';
+  ending.smart = { baseLevel: 0, intensity: 'standard', warmStart: false, warmUp: true, upEarly: false, offWhenUp: true };
+  ending.end = '2026-09-29T09:45:00Z';
+  ending.events[1] = { kind: 'power-off', at: ending.end };
+  fixture.bed = { state: 'rhythms', sleeps: [ending, sleep('2026-09-29', '2026-09-30')] };
+  label(false);
+  expect(screen.getByText('Turns on tomorrow at 10:30 PM')).toBeInTheDocument();
+});
+
+it('predicts the Rhythms pause end before an off time in the spring gap', () => {
+  fixture.timeZone = 'America/Los_Angeles';
+  vi.setSystemTime(new Date('2027-03-14T04:00:00Z'));
+  fixture.pause.expiresAt = '2027-03-14T09:45:00Z';
+  const ending = sleep('2027-03-13', '2027-03-14');
+  ending.mode = 'smart';
+  ending.smart = { baseLevel: 0, intensity: 'standard', warmStart: false, warmUp: true, upEarly: false, offWhenUp: true };
+  ending.night.power.on = '21:00';
+  ending.night.power.off = '02:30';
+  ending.start = '2027-03-14T05:00:00Z';
+  ending.end = '2027-03-14T13:30:00Z';
+  ending.events = [
+    { kind: 'power-on', at: ending.start, temperatureF: 82 },
+    { kind: 'power-off', at: ending.end },
+  ];
+  const next = sleep('2027-03-14', '2027-03-15');
+  next.night.power.on = '20:30';
+  next.start = '2027-03-15T03:30:00Z';
+  next.end = '2027-03-15T13:45:00Z';
+  next.events = [
+    { kind: 'power-on', at: next.start, temperatureF: 82 },
+    { kind: 'power-off', at: next.end },
+  ];
+  fixture.bed = { state: 'rhythms', sleeps: [ending, next] };
+  label(false);
+  expect(screen.getByText('Turns on tomorrow at 1:45 AM')).toBeInTheDocument();
+});
+
+it.each(['legacy', 'rhythms'] as const)('keeps an imminent %s scheduled start', engine => {
+  const start = engine === 'legacy' ? '21:00' : '22:30';
+  for (const minutes of [2, 0.5]) {
+    fixture.pause.expiresAt = new Date(Date.parse(`2026-09-28T${start}:00Z`) - minutes * 60_000).toISOString();
+    if (engine === 'rhythms') fixture.bed = { state: 'rhythms', sleeps: [sleep('2026-09-28', '2026-09-29')] };
+    const { unmount } = label(false);
+    expect(screen.getByText(`Turns on tonight at ${engine === 'legacy' ? '9:00' : '10:30'} PM`)).toBeInTheDocument();
+    unmount();
+  }
+});
+
+it.each(['legacy', 'rhythms'] as const)('leaves an away side without a %s resume caption', engine => {
+  fixture.pause.expiresAt = '2026-09-28T23:00:00Z';
+  fixture.away = true;
+  if (engine === 'rhythms') fixture.bed = { state: 'rhythms', sleeps: [sleep('2026-09-28', '2026-09-29')] };
+  label(false);
+  expect(screen.queryByText(/Turns on/)).not.toBeInTheDocument();
+});
+
+it.each(['legacy', 'rhythms'] as const)('formats a %s resume in the configured time zone', engine => {
+  fixture.timeZone = 'America/Los_Angeles';
+  vi.setSystemTime(new Date('2026-09-29T03:00:00Z'));
+  fixture.pause.expiresAt = '2026-09-29T06:00:00Z';
+  if (engine === 'rhythms') {
+    const localSleep = sleep('2026-09-28', '2026-09-29');
+    localSleep.start = '2026-09-29T05:30:00Z';
+    localSleep.end = '2026-09-29T13:45:00Z';
+    localSleep.events = [
+      { kind: 'power-on', at: localSleep.start, temperatureF: 82 },
+      { kind: 'power-off', at: localSleep.end },
+    ];
+    fixture.bed = { state: 'rhythms', sleeps: [localSleep] };
+  }
+  label(false);
+  expect(screen.getByText('Turns on tonight at 11:00 PM')).toBeInTheDocument();
+});
+
+it('does not resume a When I get up sleep after its scheduled off', () => {
+  fixture.pause.expiresAt = '2026-09-29T08:00:00Z';
+  const extended = sleep('2026-09-28', '2026-09-29');
+  extended.mode = 'smart';
+  extended.smart = { baseLevel: 0, intensity: 'standard', warmStart: false, warmUp: true, upEarly: false, offWhenUp: true };
+  extended.end = '2026-09-29T09:45:00Z';
+  extended.events[1] = { kind: 'power-off', at: extended.end };
+  fixture.bed = { state: 'rhythms', sleeps: [extended, sleep('2026-09-29', '2026-09-30')] };
+  label(false);
+  expect(screen.getByText('Turns on tomorrow at 10:30 PM')).toBeInTheDocument();
 });
 
 it('names the firmware timer when it turns a running side off before the next weekly night', () => {

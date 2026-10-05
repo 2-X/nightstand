@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import moment from 'moment-timezone';
-import { formatPauseEnd, pauseEndError, setTimeDefault, setTimeDefaultWith, tonightOnlyEnd, tonightOnlyEndWith } from './pauseTimes';
+import type { ResolvedSleepResponse } from '@api/rhythmsResponse';
+import {
+  formatPauseEnd, pauseEndError, pauseResumeAt, setTimeDefault, setTimeDefaultWith, tonightOnlyEnd, tonightOnlyEndWith,
+} from './pauseTimes';
 
 const night = (on: string, off: string) => ({ power: { on, off, enabled: true, onTemperature: 82 }, temperatures: {} });
 // 2026-09-28 is a Monday.
@@ -158,5 +161,65 @@ describe('pause times from any source of bed times', () => {
       ? (kind === 'off' ? off : on) : undefined;
     expect(tonightOnlyEndWith(next, 'UTC', MONDAY_8PM).toISOString()).toBe('2026-09-29T14:00:00.000Z');
     expect(setTimeDefaultWith(next, 'UTC', MONDAY_8PM).toISOString()).toBe('2026-09-29T23:30:00.000Z');
+  });
+});
+
+
+describe('weekly resume at pause end', () => {
+  it('does not resume when the delayed check reaches the night end', () => {
+    const schedule = { monday: night('21:00', '07:00') };
+    expect(pauseResumeAt({ state: 'legacy' }, schedule, 'UTC', moment.utc('2026-09-29T06:59:00Z'))).toBeUndefined();
+    expect(pauseResumeAt({ state: 'legacy' }, schedule, 'UTC', moment.utc('2026-09-29T06:58:59Z'))?.toISOString())
+      .toBe('2026-09-29T06:58:59.000Z');
+  });
+
+  it('resumes the Sunday night after the spring-forward change', () => {
+    expect(pauseResumeAt({ state: 'legacy' }, { sunday: night('21:00', '02:30') }, LA, moment.tz('2027-03-15 02:00', LA))?.format())
+      .toBe('2027-03-15T02:00:00-07:00');
+  });
+
+  it('does not resume a disabled night', () => {
+    const disabled = night('21:00', '07:00');
+    disabled.power.enabled = false;
+    expect(pauseResumeAt({ state: 'legacy' }, { monday: disabled }, 'UTC', moment.utc('2026-09-28T23:00:00Z'))).toBeUndefined();
+  });
+
+  it('includes the start of a night with equal on and off times', () => {
+    const schedule = { monday: night('21:00', '21:00') };
+    expect(pauseResumeAt({ state: 'legacy' }, schedule, 'UTC', moment.utc('2026-09-28T21:00:00Z'))?.toISOString())
+      .toBe('2026-09-28T21:00:00.000Z');
+    expect(pauseResumeAt({ state: 'legacy' }, schedule, 'UTC', moment.utc('2026-09-29T12:00:00Z'))?.toISOString())
+      .toBe('2026-09-29T12:00:00.000Z');
+    expect(pauseResumeAt({ state: 'legacy' }, schedule, 'UTC', moment.utc('2026-09-29T21:00:00Z'))).toBeUndefined();
+  });
+
+  it('does not resume without a configured time zone', () => {
+    expect(pauseResumeAt({ state: 'legacy' }, { monday: night('21:00', '07:00') }, '', moment.utc('2026-09-28T23:00:00Z')))
+      .toBeUndefined();
+  });
+});
+
+describe('Rhythms resume across a spring gap', () => {
+  const sleep: ResolvedSleepResponse = {
+    side: 'left', date: '2027-03-13', rhythmId: 'weekend', mode: 'smart',
+    start: '2027-03-14T05:00:00Z', end: '2027-03-14T13:30:00Z',
+    night: { ...night('21:00', '02:30'),
+      alarm: { enabled: false, time: '02:30', vibrationIntensity: 30, vibrationPattern: 'rise', duration: 30, alarmTemperature: 83 },
+      alarms: [] },
+    smart: { baseLevel: 0, intensity: 'standard', warmStart: false, warmUp: true, upEarly: false, offWhenUp: true },
+    events: [
+      { kind: 'power-on', at: '2027-03-14T05:00:00Z', temperatureF: 82 },
+      { kind: 'power-off', at: '2027-03-14T13:30:00Z' },
+    ],
+  };
+
+  it.each([
+    ['01:45:00', '2027-03-14T09:45:00.000Z'],
+    ['03:28:59', '2027-03-14T10:28:59.000Z'],
+    ['03:29:00', undefined],
+    ['03:30:00', undefined],
+  ])('checks the delayed resume against the resolved off at %s', (time, expected) => {
+    const end = moment.tz(`2027-03-14 ${time}`, LA);
+    expect(pauseResumeAt({ state: 'rhythms', sleeps: [sleep] }, undefined, LA, end)?.toISOString()).toBe(expected);
   });
 });

@@ -232,3 +232,9 @@ it('says a running side stays on until its own timer turns it off', () => {
   expect(screen.getByText('Alex\'s side is on now and stays as it is. It turns off at 9:30 PM today, or when you turn it off.'))
     .toBeInTheDocument();
 });
+
+it('explains that the current night resumes without replaying alarms', () => {
+  render(<PauseScheduleSheet open onClose={ onClose }/>);
+  const explanation = screen.getByText(/When the pause ends, an off side turns on if its night is in progress/);
+  expect(explanation).toHaveTextContent('Skipped alarms stay skipped.');
+});

@@ -10,6 +10,7 @@ import { getDeviceStatusCoalesced, isFrankenConnected } from '../../8sleep/frank
 import { updateDeviceStatus } from '../../routes/deviceStatus/updateDeviceStatus.js';
 import { hasAlarmOccurrence } from '../alarmScheduler.js';
 import { isAlarmPaused, isSchedulePaused } from '../schedulePause.js';
+import { noteManualPowerChange } from '../manualPowerChange.js';
 import { drivingSide, engineActivation } from '../scheduleQueries.js';
 import { resolveLegacySleeps, resolveSleeps, turnsOffWhenUp, type PowerOffFor, type ResolvedSleep } from './resolve.js';
 import { alarmOccurrenceId, firmwareSeconds, forgetArmedEnds, holdForHandBack } from './runEvent.js';
@@ -126,7 +127,12 @@ async function applyHandoff(plans: HandoffPlan[], now: Date): Promise<Set<Side>>
   const failed = new Set<Side>();
   for (const plan of plans) {
     try {
-      if (plan.action === 'powered-off') await updateDeviceStatus({ [plan.side]: { isOn: false } });
+      if (plan.action === 'powered-off') {
+        await settingsDB.read();
+        const targets = settingsDB.data.left.awayMode || settingsDB.data.right.awayMode ? SCHEDULE_SIDES : [plan.side];
+        for (const side of targets) noteManualPowerChange(side);
+        await updateDeviceStatus({ [plan.side]: { isOn: false } });
+      }
       if (plan.action === 'legacy-takes-over' && plan.until) {
         await updateDeviceStatus({ [plan.side]: { secondsRemaining: firmwareSeconds(plan.until, now) } });
         // Rhythms sends its end again if it takes back over: turned back on, or

@@ -626,13 +626,14 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     id: 'schedule-pause',
     title: 'Pause schedule',
     description: 'Pause one side\'s schedule for tonight, until a set time or until resumed. '
-      + 'The saved schedule and the one-time alarm are kept.',
+      + 'An off side turns on when the pause ends if its night is in progress. The saved schedule and the one-time alarm are kept.',
     category: 'platform',
-    version: '3.5.0',
+    version: '3.6.0',
     flag: null,
     default: true,
     touchpoints: [
-      'server/src/jobs/schedulePause.ts', 'server/src/jobs/pauseResume.ts', 'server/src/jobs/powerScheduler.ts',
+      'server/src/jobs/schedulePause.ts', 'server/src/jobs/pauseResume.ts', 'server/src/jobs/resumeSchedule.ts',
+      'server/src/jobs/powerScheduler.ts',
       'server/src/jobs/temperatureScheduler.ts', 'server/src/jobs/alarmScheduler.ts', 'server/src/jobs/jobScheduler.ts',
       'server/src/8sleep/presenceAutoOffMonitor.ts', 'server/src/routes/settings/settingsGuards.ts',
       'app/src/pages/ControlTempPage/PauseScheduleSheet.tsx', 'app/src/pages/ControlTempPage/SchedulePauseNotice.tsx',
@@ -642,7 +643,7 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     reversible: true,
     tests: [
       'server/src/jobs/schedulePause.test.ts', 'server/src/jobs/schedulePauseJobs.test.ts',
-      'server/src/jobs/schedulePauseAlarms.test.ts', 'server/src/jobs/pauseResume.test.ts',
+      'server/src/jobs/schedulePauseAlarms.test.ts', 'server/src/jobs/pauseResume.test.ts', 'server/src/jobs/pauseResumeSchedule.test.ts',
       'server/src/jobs/jobSchedulerPause.test.ts', 'server/src/routes/settings/settingsGuards.test.ts',
       'app/src/pages/ControlTempPage/PauseScheduleSheet.test.tsx', 'app/src/pages/ControlTempPage/UpcomingNight.pause.test.tsx',
       'app/e2e/pause-schedule.spec.ts',

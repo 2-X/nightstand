@@ -1,10 +1,17 @@
 import moment from 'moment-timezone';
+import type { DayOfWeek } from '@api/schedulesSchema';
+import { rhythmNightBounds } from '@api/rhythmTimes';
+import { nightBounds } from '@lib/nightBounds';
 import { nextBedEvent, type BedSchedule } from './bedEvents';
+import { currentSleep } from './sleepEvents';
+import type { BedSleeps } from './useBedSleeps';
 
 export const MAX_PAUSE_DAYS = 14;
 // Same fallback as the rest of the app when the Pod's time zone is unset.
 const UNSET_ZONE = 'UTC';
 const DAY_MS = 24 * 60 * 60 * 1000;
+// Mirrors PAUSE_RESUME_DELAY_MS in server/src/jobs/pauseResume.ts.
+const PAUSE_RESUME_DELAY_MS = 60 * 1000;
 
 // When the side next powers on or off after a moment: from the weekly
 // schedule, or from the resolved sleeps while Rhythms runs.
@@ -12,6 +19,31 @@ export type NextBedTime = (after: moment.Moment, kind: 'on' | 'off') => moment.M
 
 export const weeklyTimes = (schedule: BedSchedule, timeZone: string): NextBedTime =>
   (after, kind) => nextBedEvent(schedule, timeZone, after, kind)?.at;
+
+// Predict the pause end only when the delayed resume stays inside the night.
+export function pauseResumeAt(
+  bed: BedSleeps, schedule: BedSchedule | undefined, timeZone: string, end: moment.Moment,
+): moment.Moment | undefined {
+  if (!timeZone) return undefined;
+  const local = end.clone().tz(timeZone);
+  const resume = local.clone().add(PAUSE_RESUME_DELAY_MS, 'ms');
+  if (bed.state === 'rhythms') {
+    const sleep = currentSleep(bed.sleeps, resume.toDate());
+    if (!sleep?.events.some(event => event.kind === 'power-on') || local.isBefore(moment(sleep.start))) return undefined;
+    // When I get up can extend a sleep, but resume stops at its scheduled off.
+    if (sleep.smart?.offWhenUp && !resume.isBefore(rhythmNightBounds(sleep.date, sleep.night.power, timeZone).end)) return undefined;
+    return local;
+  }
+  if (bed.state !== 'legacy' || !schedule) return undefined;
+  for (const daysAgo of [1, 0]) {
+    const date = resume.clone().subtract(daysAgo, 'day');
+    const power = schedule[date.format('dddd').toLowerCase() as DayOfWeek]?.power;
+    if (!power?.enabled) continue;
+    const bounds = nightBounds(date, power);
+    if (local.isSameOrAfter(bounds.start) && resume.isBefore(bounds.end)) return local;
+  }
+  return undefined;
+}
 
 // Tonight's power off when one is due within a day. Otherwise noon: today
 // before 6 AM, when tonight is still going, and tomorrow after that.

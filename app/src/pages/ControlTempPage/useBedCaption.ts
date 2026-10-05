@@ -9,6 +9,7 @@ import { useSchedules } from '@api/schedules';
 import { useSettings } from '@api/settings';
 import { nextBedEvent } from './bedEvents';
 import { NBSP } from './bedText';
+import { pauseResumeAt } from './pauseTimes';
 import { currentSleep, nextSleepEvent, sleepAt, warmStartBedtime } from './sleepEvents';
 import { useBedSleeps } from './useBedSleeps';
 
@@ -26,9 +27,11 @@ export function useBedCaption(isOn: boolean): string[] {
   const [, tick] = useState(0);
   useEffect(() => { const timer = setInterval(() => tick(value => value + 1), 30_000); return () => clearInterval(timer); }, []);
   const kind = isOn ? 'off' : 'on';
-  // While paused, scheduled turn-offs are skipped and the next start is the first one after the pause.
+  // While paused, scheduled turn-offs are skipped.
   const paused = !!settings && isSchedulePaused(settings, side, new Date());
   const pauseEnd = settings && paused ? pauseEndsAt(settings, side) : null;
+  const resumeAt = !isOn && pauseEnd && settings && !settings[side].awayMode
+    ? pauseResumeAt(bed, schedules?.[side], settings.timeZone, moment(pauseEnd)) : undefined;
   const searchFrom = settings && (pauseEnd ? moment.tz(pauseEnd, settings.timeZone).subtract(1, 'ms') : moment.tz(settings.timeZone));
   const event = !settings || !searchFrom || settings[side].awayMode || (paused && (isOn || !pauseEnd)) ? undefined
     : bed.state === 'rhythms' ? nextSleepEvent(bed.sleeps, settings.timeZone, searchFrom, kind)
@@ -49,12 +52,12 @@ export function useBedCaption(isOn: boolean): string[] {
   const betweenNights = bed.state === 'rhythms' ? !currentSleep(bed.sleeps, now.toDate())
     : !event || (!!nextStart && nextStart.at.isBefore(event.at));
   const turnsOff = timerEnd && betweenNights && (!nextStart || timerEnd.isBefore(nextStart.at)) ? timerEnd : event?.at;
-  const warming = !isOn && !!event && bed.state === 'rhythms' && !!settings
+  const warming = !resumeAt && !isOn && !!event && bed.state === 'rhythms' && !!settings
     && !!warmStartBedtime(sleepAt(bed.sleeps, event.at.toDate()), settings.timeZone);
   // A "When I get up" sleep turns off when the person gets up, by its latest off.
   const upBy = isOn && !paused && !!settings && !settings[side].awayMode && live?.offWhenUp
     ? moment.tz(live.offWhenUp.by, settings.timeZone) : undefined;
-  const shownAt = upBy ?? (isOn ? turnsOff : event?.at);
+  const shownAt = upBy ?? (isOn ? turnsOff : resumeAt ?? event?.at);
   const eventDay = shownAt && (shownAt.isSame(now, 'day') ? shownAt.hour() >= 17 ? ' tonight' : ' today'
     : shownAt.isSame(now.clone().add(1, 'day'), 'day') ? ' tomorrow' : ` ${shownAt.format('ddd')}`);
   const lines: string[] = [];

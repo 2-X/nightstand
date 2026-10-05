@@ -31,6 +31,14 @@ const { FrankenSupersededError } = await import('../../8sleep/frankenErrors.js')
 const { keptSleeps, rememberKeptAlarms } = await import('../../jobs/rhythms/keptAlarms.js');
 
 describe('updateDeviceStatus', () => {
+  for (const payload of [{ isOn: true }, { isOn: true, secondsRemaining: 0 }]) {
+    it(`keeps the manual power-on default for ${JSON.stringify(payload)}`, async () => {
+      executeFunctionMock.mock.resetCalls();
+      await updateDeviceStatus({ left: payload });
+      assert.deepEqual(executeFunctionMock.mock.calls.map(call => call.arguments.slice(0, 2)), [['LEFT_TEMP_DURATION', '43200']]);
+    });
+  }
+
   it('applies an explicit targetTemperatureF of 0 instead of silently dropping it', async () => {
     executeFunctionMock.mock.resetCalls();
 

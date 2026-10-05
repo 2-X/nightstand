@@ -12,6 +12,8 @@ Themes, a plainer Sleep page, safer updates and recovery, and support for Pod fi
 
 ### What changes in the app
 
+- A side whose schedule was paused turns on when the pause ends if its night is in progress.
+
 - Settings > Bed and sides has a new Theme setting with
   four themes, saved on each device: nightstand (the default, the 3.3.2
   look with higher contrast), lamp (the look of 3.4.0 to 3.5.1), free-sleep

@@ -1,4 +1,5 @@
 import schedule from 'node-schedule';
+import { resumeSchedule } from './resumeSchedule.js';
 import logger from '../logger.js';
 import { updateSettings } from '../db/settings.js';
 import { Settings } from '../db/settingsSchema.js';
@@ -9,7 +10,7 @@ import { Side } from '../db/schedulesSchema.js';
 export const PAUSE_RESUME_DELAY_MS = 60 * 1000;
 
 // Clears only the pause that ended, so a newer pause saved meanwhile stays.
-// It never touches the bed: the next scheduled event applies as usual.
+// An off side resumes the current night after the pause is cleared.
 export async function clearEndedPause(side: Side, expiresAt: string): Promise<boolean> {
   let cleared = false;
   try {
@@ -24,7 +25,11 @@ export async function clearEndedPause(side: Side, expiresAt: string): Promise<bo
     logger.error(`Failed to end the ${side} schedule pause: ${message}`);
     return false;
   }
-  if (cleared) logger.info(`Schedule pause for ${side} ended at ${expiresAt}`);
+  if (cleared) {
+    logger.info(`Schedule pause for ${side} ended at ${expiresAt}`);
+    const endedAt = new Date(expiresAt);
+    await resumeSchedule(side, Number.isFinite(endedAt.getTime()) ? endedAt : new Date());
+  }
   return cleared;
 }
 
@@ -35,7 +40,7 @@ export async function schedulePauseResume(settings: Settings, side: Side, now = 
   if (!pause?.active || !pause.expiresAt) return false;
   const { expiresAt } = pause;
   const end = Date.parse(expiresAt);
-  if (!Number.isFinite(end) || end <= now.getTime()) return clearEndedPause(side, expiresAt);
+  if (!Number.isFinite(end) || end + PAUSE_RESUME_DELAY_MS <= now.getTime()) return clearEndedPause(side, expiresAt);
   logger.debug(`Scheduling the ${side} schedule pause to end at ${expiresAt}`);
   schedule.scheduleJob(`${side}-pause-resume`, new Date(end + PAUSE_RESUME_DELAY_MS), () => clearEndedPause(side, expiresAt));
   return false;

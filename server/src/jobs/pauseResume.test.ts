@@ -76,6 +76,14 @@ describe('schedulePauseResume', () => {
     assert.equal(nodeSchedule.scheduledJobs['right-pause-resume'], undefined);
   });
 
+  it('keeps the one minute delay when rebuilt just after the pause ends', async () => {
+    const expiresAt = new Date(Date.now() - 30_000).toISOString();
+    await setPause('left', true, expiresAt);
+    assert.equal(await schedulePauseResume(settingsDB.data, 'left'), false);
+    assert.equal(nodeSchedule.scheduledJobs['left-pause-resume'].nextInvocation()?.getTime(), Date.parse(expiresAt) + PAUSE_RESUME_DELAY_MS);
+    assert.equal((await storedPause('left')).active, true);
+  });
+
   it('arms nothing for an open-ended or inactive pause', async () => {
     await setPause('left', true, '');
     await setPause('right', false, inHours(2));
@@ -84,7 +92,7 @@ describe('schedulePauseResume', () => {
     assert.deepEqual(Object.keys(nodeSchedule.scheduledJobs), []);
   });
 
-  it('clears the pause when the job fires and leaves the bed alone', async () => {
+  it('clears the pause when the job fires outside a scheduled night', async () => {
     const expiresAt = inHours(2);
     await setPause('left', true, expiresAt);
     await schedulePauseResume(settingsDB.data, 'left');

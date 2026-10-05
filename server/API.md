@@ -219,8 +219,16 @@ generic message; the details go to the server log.
   alarm is not affected by the pause, so it rings if the side is on.
   `expiresAt` is an ISO 8601 date and time with offset, at most 14 days
   ahead, or `""` to pause until the side is resumed. When `expiresAt`
-  passes, the server clears the pause itself and does not switch the side on
-  or off at that moment.
+  passes, the server clears the pause after one minute. Ending a pause,
+  including Resume schedule in the app, turns an off side on if its scheduled
+  night is in progress. It runs the engine's scheduled power-on job at that
+  moment, with its power-on temperature, manual hold rules and scheduled off time.
+  When I get up can extend the night under its usual rules. An away side or
+  a side already on is left alone.
+  When a scheduled start is due within two minutes, resume waits for it and
+  checks once more three minutes later, but a server restart in that window
+  drops the check.
+  Skipped alarms do not ring late.
 - `taps` maps each gesture (`doubleTap`, `tripleTap`, `quadTap`) to an
   action. The app has no editor for them. The actions are:
   - `{ "type": "temperature", "change": "increment" | "decrement", "amount": 0 to 10 }`

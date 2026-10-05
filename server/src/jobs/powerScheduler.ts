@@ -33,23 +33,10 @@ export const notePowerOn = (side: Side, at: Date) => {
 };
 export const poweredOnSince = (side: Side, dueAt: Date) => (lastPowerOn.get(side) ?? -Infinity) >= minuteOf(dueAt);
 
-export const schedulePowerOn = (settingsData: Settings, side: Side, day: DayOfWeek, power: DailySchedule['power']) => {
-  if (!power.enabled) return;
-  if (settingsData[side].awayMode) return;
-  if (settingsData.timeZone === null) return;
-  const timeZone = settingsData.timeZone;
-
-  const onRule = new schedule.RecurrenceRule();
+export const weeklyPowerOnJob = (side: Side, day: DayOfWeek, power: DailySchedule['power'], timeZone: string) => {
   const dayOfWeekIndex = getDayOfWeekIndex(day);
-  onRule.dayOfWeek = dayOfWeekIndex;
-  const [onHour, onMinute] = power.on.split(':').map(Number);
   const time = power.on;
-  onRule.hour = onHour;
-  onRule.minute = onMinute;
-  onRule.tz = settingsData.timeZone;
-
-  logJob('Scheduling power on job', side, day, dayOfWeekIndex, time);
-  schedule.scheduleJob(`${side}-${day}-${time}-power-on`, onRule, async (fireDate?: Date) => {
+  return async (fireDate?: Date) => {
     lastPowerOn.set(side, minuteOf(fireDate ?? new Date()));
     try {
       logJob('Executing power on job', side, day, dayOfWeekIndex, time);
@@ -86,7 +73,26 @@ export const schedulePowerOn = (settingsData: Settings, side: Side, day: DayOfWe
       serverStatus.status.powerSchedule.message = message;
       logger.error(error);
     }
-  });
+  };
+};
+
+export const schedulePowerOn = (settingsData: Settings, side: Side, day: DayOfWeek, power: DailySchedule['power']) => {
+  if (!power.enabled) return;
+  if (settingsData[side].awayMode) return;
+  if (settingsData.timeZone === null) return;
+  const timeZone = settingsData.timeZone;
+
+  const onRule = new schedule.RecurrenceRule();
+  const dayOfWeekIndex = getDayOfWeekIndex(day);
+  onRule.dayOfWeek = dayOfWeekIndex;
+  const [onHour, onMinute] = power.on.split(':').map(Number);
+  const time = power.on;
+  onRule.hour = onHour;
+  onRule.minute = onMinute;
+  onRule.tz = settingsData.timeZone;
+
+  logJob('Scheduling power on job', side, day, dayOfWeekIndex, time);
+  schedule.scheduleJob(`${side}-${day}-${time}-power-on`, onRule, weeklyPowerOnJob(side, day, power, timeZone));
 };
 
 

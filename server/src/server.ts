@@ -9,6 +9,7 @@ import { startPresenceAutoOff, stopPresenceAutoOff } from './8sleep/presenceAuto
 import './jobs/jobScheduler.js';
 import { abortAlarmWaits } from './jobs/alarmActivity.js';
 import { setRebuilding } from './jobs/rebuildState.js';
+import { stopScheduleResumes } from './jobs/resumeSchedule.js';
 
 
 // Setup code
@@ -53,6 +54,7 @@ async function disconnectPrisma() {
 
 // Graceful Shutdown Function
 async function gracefulShutdown(signal: string) {
+  stopScheduleResumes();
   logger.debug(`\nReceived ${signal}. Initiating graceful shutdown...`);
   let finishedExiting = false;
 

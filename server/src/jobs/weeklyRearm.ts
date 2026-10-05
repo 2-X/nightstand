@@ -17,7 +17,7 @@ import { nightBounds } from './nightBounds.js';
 import { isSchedulePaused } from './schedulePause.js';
 
 // Today's night, or the one that began yesterday, if the schedule has it running now.
-function runningNight(schedules: Schedules, side: Side, now: Date, timeZone: string): Night | null {
+export function runningNight(schedules: Schedules, side: Side, now: Date, timeZone: string): Night | null {
   let found: Night | null = null;
   for (const daysAgo of [1, 0]) {
     const anchor = moment.tz(now, timeZone).subtract(daysAgo, 'day');
