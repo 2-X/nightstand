@@ -1,5 +1,7 @@
 import { execFile } from 'child_process';
-import { assertOperationsIdle, runPrivilegedCommand } from './privilegedCommand.js';
+import { existsSync } from 'node:fs';
+import { assertOperationsIdle, OperationBusyError, runPrivilegedCommand } from './privilegedCommand.js';
+import { withOperationLock } from './operationLock.js';
 
 // Pulled out so the "when do we stop the stream" decision is unit-testable
 // without spawning a real process. `deepPartial()`-parsed POST /services
@@ -23,7 +25,6 @@ export function shouldEnableBiometrics(body: { biometrics?: { enabled?: boolean 
 let last: Promise<unknown> = Promise.resolve();
 function inOrder<T>(command: () => Promise<void>, save?: () => Promise<T>): Promise<T | undefined> {
   const run = last.then(async () => {
-    await assertOperationsIdle();
     await command();
     return save?.();
   });
@@ -40,27 +41,67 @@ function streamUnitMissing() {
   });
 }
 
-// Stop and disable the stream only after verifying the installed unit and
-// grant, then run save. Without a stream unit there is nothing to stop, so
-// the switch can still be turned off.
+// A missing stream unit needs no stop command.
+async function disableStream() {
+  if (await streamUnitMissing()) return;
+  await runPrivilegedCommand([
+    '/bin/sh', '/home/dac/free-sleep/scripts/disable_biometrics.sh',
+  ], 'free-sleep-stream.service', {
+    // systemd may take 90 seconds to stop the streamer.
+    timeout: 120_000,
+    action: 'stop and disable',
+  });
+}
+
 export function triggerBiometricsDisable<T>(save?: () => Promise<T>) {
   return inOrder(async () => {
-    if (await streamUnitMissing()) return;
-    await runPrivilegedCommand([
-      '/bin/sh', '/home/dac/free-sleep/scripts/disable_biometrics.sh',
-    ], 'free-sleep-stream.service', {
-      // systemd may take 90 seconds to stop the streamer.
-      timeout: 120_000,
-      action: 'stop and disable',
-    });
+    await assertOperationsIdle();
+    await disableStream();
   }, save);
 }
 
 // The one command the sudo rule allows. It never runs enable_biometrics.sh,
 // which installs packages with the firewall open and posts back to this route.
+function enableStream() {
+  return runPrivilegedCommand(['/bin/systemctl', 'enable', '--now', 'free-sleep-stream.service'], 'free-sleep-stream.service');
+}
+
 export function triggerBiometricsEnable<T>(save?: () => Promise<T>) {
-  return inOrder(
-    () => runPrivilegedCommand(['/bin/systemctl', 'enable', '--now', 'free-sleep-stream.service'], 'free-sleep-stream.service'),
-    save,
-  );
+  return inOrder(async () => {
+    await assertOperationsIdle();
+    await enableStream();
+  }, save);
+}
+
+function assertRecoveryIdle() {
+  if (existsSync(process.env.NIGHTSTAND_SWAP_MARKER || '/persistent/free-sleep-data/update-swap.json')) {
+    throw new OperationBusyError('Update recovery is pending. Biometrics reconciliation will retry.');
+  }
+}
+
+// Read the saved switch in the toggle queue, so a pending disable wins over a stale on value.
+export function reconcileBiometrics(readEnabled: () => Promise<boolean>) {
+  return inOrder(async () => {
+    assertRecoveryIdle();
+    await withOperationLock(async () => {
+      assertRecoveryIdle();
+      await assertOperationsIdle();
+      const enabled = await readEnabled();
+      const state = await new Promise<string>((resolve, reject) => {
+        execFile('/bin/systemctl', ['show', 'free-sleep-stream.service', '--property=ActiveState,UnitFileState'],
+          { encoding: 'utf8', timeout: 30_000 }, (error, stdout) => {
+            if (error) reject(error);
+            else resolve(stdout);
+          });
+      });
+      const properties = state.trim().split(/\r?\n/);
+      if (enabled) {
+        if (properties.includes('ActiveState=active') && properties.includes('UnitFileState=enabled')) return;
+        await enableStream();
+      } else if ((!properties.includes('ActiveState=inactive') && !properties.includes('ActiveState=failed'))
+        || !properties.includes('UnitFileState=disabled')) {
+        await disableStream();
+      }
+    });
+  });
 }

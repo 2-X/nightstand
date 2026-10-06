@@ -6,6 +6,7 @@ const router = express.Router();
 import servicesDB, { updateServices } from '../../db/services.js';
 import { PrivilegedCommandError, privilegedErrorStatus } from '../../jobs/privilegedCommand.js';
 import { ServicesSchema } from '../../db/servicesSchema.js';
+import { syncBiometrics } from '../../jobs/biometricsSync.js';
 import {
   shouldDisableBiometrics, shouldEnableBiometrics, triggerBiometricsDisable, triggerBiometricsEnable,
 } from '../../jobs/biometrics.js';
@@ -53,7 +54,9 @@ router.post('/services', async (req: Request, res: Response) => {
   // The flag is saved in the same queued step, only once the command worked.
   const turnOff = shouldDisableBiometrics(validationResult.data);
   if (!turnOff && !shouldEnableBiometrics(validationResult.data)) {
-    res.status(200).json(await save());
+    const saved = await save();
+    await syncBiometrics();
+    res.status(200).json(saved);
     return;
   }
   let data;
@@ -66,6 +69,7 @@ router.post('/services', async (req: Request, res: Response) => {
     return;
   }
 
+  await syncBiometrics();
   res.status(200).json(data);
 });
 

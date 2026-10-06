@@ -1,5 +1,6 @@
 import { it, mock } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 
 // Quick Biometrics toggles must end in the state of the last request, with
 // the saved switch and the stream agreeing. Runs the real module with the
@@ -11,6 +12,7 @@ let stream: 'on' | 'off' = 'on';
 let failNext: 'on' | 'off' | undefined;
 let operationRunning = false;
 mock.module('child_process', { namedExports: {
+  spawn,
   execFile: (command: string, args: string[], _options: unknown, callback: (error: Error | null, stdout: string) => void) => {
     if (command === '/bin/systemctl' && args.includes('--property=ActiveState')) {
       callback(null, operationRunning && args.includes('free-sleep-update.service') ? 'active' : 'inactive');

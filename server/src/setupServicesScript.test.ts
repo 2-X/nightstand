@@ -24,6 +24,9 @@ function sandbox(opts: {
   const repo = path.join(root, 'repo');
   const calls = path.join(root, 'systemctl-calls');
   const sudoers = path.join(root, 'sudoers');
+  const tmpfiles = path.join(root, 'tmpfiles');
+  const lock = path.join(root, 'operation.lock');
+  const tmpfilesCalls = path.join(root, 'tmpfiles-calls');
   for (const dir of [bin, systemd, path.join(repo, 'scripts', 'systemd')]) mkdirSync(dir, { recursive: true });
   const units = ['free-sleep-rollback.service', 'free-sleep-revert.service'];
   if (!opts.withoutHealthCheck) {
@@ -50,6 +53,8 @@ function sandbox(opts: {
     );
   }
   writeFileSync(path.join(bin, 'visudo'), `#!/bin/sh\nexit ${opts.visudoFails ? 1 : 0}\n`);
+  writeFileSync(path.join(bin, 'systemd-tmpfiles'), `#!/bin/sh\necho "$*" >> "${tmpfilesCalls}"\n`);
+  chmodSync(path.join(bin, 'systemd-tmpfiles'), 0o755);
   chmodSync(path.join(bin, 'systemctl'), 0o755);
   chmodSync(path.join(bin, 'visudo'), 0o755);
   if (opts.existingSudoers !== undefined) writeFileSync(sudoers, opts.existingSudoers);
@@ -62,10 +67,12 @@ function sandbox(opts: {
       NIGHTSTAND_SYSTEMD_DIR: systemd,
       NIGHTSTAND_RECOVERY_DIR: path.join(root, 'recovery'),
       NIGHTSTAND_SUDOERS_FILE: sudoers,
+      NIGHTSTAND_TMPFILES_DIR: tmpfiles,
+      NIGHTSTAND_OPERATION_LOCK: lock,
     },
   });
   const read = (file: string) => readFileSync(file, 'utf8');
-  return { run, read, systemd, sudoers, calls };
+  return { run, read, systemd, sudoers, calls, tmpfiles, lock, tmpfilesCalls };
 }
 
 // Every command the server runs through sudo, read from its source.
@@ -89,6 +96,17 @@ function serverSudoCommands(): string[] {
 describe('setup_services.sh', () => {
   it('parses and carries the exec bit', () => {
     assert.doesNotThrow(() => execFileSync('bash', ['-n', SCRIPT]));
+  });
+
+  it('provisions a root-owned readable operation lock at boot and applies the rule now', () => {
+    const box = sandbox();
+    for (let run = 0; run < 2; run++) {
+      const result = box.run();
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const rule = path.join(box.tmpfiles, 'free-sleep-operation.conf');
+      assert.equal(box.read(rule), `f ${box.lock} 0644 root root -\n`);
+      assert.ok(box.read(box.tmpfilesCalls).split('\n').includes(`--create ${rule}`));
+    }
   });
 
   it('installs the update, rollback, and revert units without starting them', () => {

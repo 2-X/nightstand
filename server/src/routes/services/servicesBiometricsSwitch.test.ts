@@ -30,6 +30,7 @@ mock.module(new URL('../../jobs/biometrics.js', import.meta.url).href, {
     shouldEnableBiometrics: (body: { biometrics?: { enabled?: boolean } }) => body.biometrics?.enabled === true,
     triggerBiometricsDisable: run('disable'),
     triggerBiometricsEnable: run('enable'),
+    reconcileBiometrics: async () => {},
   },
 });
 const { default: router } = await import('./services.js');

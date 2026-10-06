@@ -46,6 +46,7 @@ mock.module(new URL('../../jobs/biometrics.js', import.meta.url).href, { namedEx
   shouldDisableBiometrics: (body: { biometrics?: { enabled?: boolean } }) => body.biometrics?.enabled === false,
   triggerBiometricsEnable: trigger,
   shouldEnableBiometrics: (body: { biometrics?: { enabled?: boolean } }) => body.biometrics?.enabled === true,
+  reconcileBiometrics: async () => {},
 } });
 const handoffs: string[] = [];
 let handoffFails = false;

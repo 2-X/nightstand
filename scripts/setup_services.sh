@@ -17,6 +17,7 @@ REPO_DIR="${1:-/home/dac/free-sleep}"
 USERNAME=dac
 SYSTEMD_DIR="${NIGHTSTAND_SYSTEMD_DIR:-/etc/systemd/system}"
 SUDOERS_FILE="${NIGHTSTAND_SUDOERS_FILE:-/etc/sudoers.d/$USERNAME}"
+TMPFILES_DIR="${NIGHTSTAND_TMPFILES_DIR:-/etc/tmpfiles.d}"
 STATUS=0
 RECOVERY_DIR="${NIGHTSTAND_RECOVERY_DIR:-/home/dac/free-sleep-recovery}"
 
@@ -70,6 +71,17 @@ elif [ "${2:-}" = --recovery-only ]; then
 fi
 if [ "${2:-}" = --recovery-only ]; then
   exit "$STATUS"
+fi
+
+# Create the same readable lock after every boot, keeping any held inode.
+OPERATION_LOCK="${NIGHTSTAND_OPERATION_LOCK:-/run/lock/free-sleep-operation.lock}"
+if [ -z "${NIGHTSTAND_OPERATION_LOCK:-}" ] && [ ! -d /run/lock ]; then
+  OPERATION_LOCK=/tmp/free-sleep-operation.lock
+fi
+if mkdir -p "$TMPFILES_DIR" && printf 'f %s 0644 root root -\n' "$OPERATION_LOCK" > "$TMPFILES_DIR/free-sleep-operation.conf"; then
+  systemd-tmpfiles --create "$TMPFILES_DIR/free-sleep-operation.conf" || warn "could not provision the operation lock"
+else
+  warn "could not install the operation lock tmpfiles rule"
 fi
 
 # Units exec these directly on older installs, and a missing exec bit fails a

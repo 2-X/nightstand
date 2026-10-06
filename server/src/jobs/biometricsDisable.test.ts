@@ -1,9 +1,11 @@
 import { it, mock } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 
 const starts: string[] = [];
 let finishStart: (() => void) | undefined;
 mock.module('child_process', { namedExports: {
+  spawn,
   execFile: (command: string, args: string[], _options: unknown, callback: (error: Error | null, stdout: string) => void) => {
     if (command === '/bin/systemctl') callback(null, args.includes('--property=ActiveState') ? 'inactive' : 'loaded');
     else if (args.includes('-l')) callback(null, '');
