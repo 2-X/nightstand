@@ -8,3 +8,8 @@ it.each(cases)('$name', fixture => {
   expect(start.format()).toBe(fixture.start);
   expect(end.format()).toBe(fixture.end);
 });
+
+it('sets the off time on the following date after the spring-forward change', () => {
+  const { end } = nightBounds(moment.tz('2027-03-14', 'America/Los_Angeles'), { on: '21:00', off: '02:30' });
+  expect(end.format()).toBe('2027-03-15T02:30:00-07:00');
+});
