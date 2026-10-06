@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync,
 } from 'node:fs';
@@ -523,12 +523,18 @@ curl() {
 }
 ${setup}
 ${sections}
-echo continued`], { env: envWith({ FIXTURE: dir, TMPDIR: path.join(dir, 'tmp') }), encoding: 'utf8', timeout: 20000 });
+echo continued`], {
+    env: envWith({ FIXTURE: dir, TMPDIR: path.join(dir, 'tmp'), NIGHTSTAND_OPERATION_LOCK: path.join(dir, 'lock') }),
+    encoding: 'utf8', timeout: 20000,
+  });
   const read = (name: string) => (existsSync(path.join(dir, name)) ? readFileSync(path.join(dir, name), 'utf8') : '');
   const output = {
     ...result, live: read('free-sleep/version'), previous: read('free-sleep-prev/version'),
     failed: read('free-sleep-failed/version'), services: read('services'),
     serverState: read('state-free-sleep').trim(), tmpLeft: readdirSync(path.join(dir, 'tmp')),
+    lockReleased: spawnSync('python3', ['-c',
+      'import fcntl, sys; handle=open(sys.argv[1], "a"); fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)',
+      path.join(dir, 'lock')]).status === 0,
   };
   rmSync(dir, { recursive: true, force: true });
   return output;
@@ -660,4 +666,55 @@ describe('install.sh keeps the previous install until the new one is healthy', (
     assert.equal(result.live, 'new');
     assert.doesNotMatch(result.stdout, /health attempt/);
   });
+});
+
+describe('install.sh operation lock', () => {
+  it('refuses a held lock before downloading or changing files', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'install-lock-'));
+    const holder = spawn('python3', ['-u', '-c',
+      'import fcntl, sys; handle=open(sys.argv[1], "a"); fcntl.flock(handle, fcntl.LOCK_EX); print("ready"); sys.stdin.readline()',
+      path.join(dir, 'lock')]);
+    const exited = new Promise<void>(resolve => holder.once('exit', () => resolve()));
+    try {
+      await new Promise<void>((resolve, reject) => {
+        holder.once('error', reject);
+        holder.stdout.once('data', () => resolve());
+        holder.once('exit', () => reject(new Error('lock holder exited before the test')));
+      });
+      const result = spawnSync('bash', ['-c', `
+curl() { echo download > "$FIXTURE/download"; exit 99; }
+${src}`], { encoding: 'utf8', cwd: dir, env: envWith({ FIXTURE: dir, NIGHTSTAND_OPERATION_LOCK: path.join(dir, 'lock') }) });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout, /already running/);
+      assert.ok(!existsSync(path.join(dir, 'download')));
+      assert.deepEqual(readdirSync(dir), ['lock']);
+    } finally {
+      holder.stdin.end('done\n');
+      await exited;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  for (const failure of [false, true]) {
+    it(`holds the lock through health checking and releases it after ${failure ? 'restore' : 'success'}`, () => {
+      const lockSection = between('# Share admission', '# Variables');
+      const result = reinstall({
+        setup: `${lockSection}\nexport LOCK_PATH="$OPERATION_LOCK"`,
+        interrupt: `python3 - "$LOCK_PATH" <<'PY'
+import fcntl, sys
+with open(sys.argv[1], 'a') as handle:
+ try:
+  fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+ except BlockingIOError:
+  sys.exit(0)
+sys.exit(1)
+PY
+[ $? -eq 0 ] || exit 99`,
+        answers: !failure,
+      });
+      assert.equal(result.status, failure ? 1 : 0, result.stdout + result.stderr);
+      assert.equal(result.live, failure ? 'old' : 'new');
+      assert.equal(result.lockReleased, true);
+    });
+  }
 });
