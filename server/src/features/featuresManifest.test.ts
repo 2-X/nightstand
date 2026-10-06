@@ -82,6 +82,28 @@ describe('FEATURES_MANIFEST', () => {
     }
   });
 
+  it('lists boot update recovery as always-on safety with files that exist', () => {
+    const entry = FEATURES_MANIFEST.find((candidate) => candidate.id === 'update-recovery');
+    assert.ok(entry, 'update-recovery has no featuresManifest entry');
+    assert.equal(entry.category, 'safety');
+    assert.equal(entry.version, '3.6.0');
+    assert.equal(entry.flag, null);
+    assert.equal(entry.default, true);
+    for (const file of [...entry.touchpoints, ...entry.tests]) {
+      assert.ok(existsSync(path.join(repoRoot, file)), `${file} does not exist`);
+    }
+  });
+
+  it('points update, biometrics and alarm tap entries at files that exist', () => {
+    for (const id of ['agent', 'biometrics', 'tap-alarm']) {
+      const entry = FEATURES_MANIFEST.find((candidate) => candidate.id === id);
+      assert.ok(entry, `${id} has no featuresManifest entry`);
+      for (const file of [...entry.touchpoints, ...entry.tests]) {
+        assert.ok(existsSync(path.join(repoRoot, file)), `${file} does not exist`);
+      }
+    }
+  });
+
   it('lists rhythms as an optional feature whose files exist', () => {
     const entry = FEATURES_MANIFEST.find((candidate) => candidate.id === 'rhythms');
     assert.ok(entry, 'rhythms has no featuresManifest entry');

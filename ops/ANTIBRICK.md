@@ -95,7 +95,7 @@ installs each helper and unit by flushing a temporary file, renaming it and
 flushing its directory.
 
 After a power loss, `free-sleep-recover-update.timer` schedules one recovery
-attempt 45 seconds after boot. Its service runs after `multi-user.target`,
+attempt 45 seconds after boot. (Tested with simulated failures, not yet on a Pod.) Its service runs after `multi-user.target`,
 so recovery does not hold up boot completion. Systemd limits the attempt to
 60 seconds, with at most 5 more seconds to kill remaining processes. It does
 not retry during that boot. A timeout keeps the marker for manual recovery.

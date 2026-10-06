@@ -55,7 +55,8 @@ against throwaway folders, with commands such as `systemctl` and `iptables`
 replaced by fakes that record what they were asked to do. They simulate the
 failures the scripts must survive: an update killed partway through, a slow
 restart, a full disk, a bad download, an interrupted swap of the old and new
-versions, and a service that won't stop. The usual check is that the Pod is
+versions, boot recovery with an update marker, competing operations taking
+one lock, and a service that won't stop. The usual check is that the Pod is
 left with one working version and its services running. Shellcheck also runs
 over every script and fails CI on any error.
 
@@ -148,6 +149,12 @@ or marked unconfirmed in the changelog.
   demo, but the server code that talks to a base has no tests of its own.
 - Update, rollback, reset and the watchdogs are tested only with simulated
   failures until the hardware session above has run.
+- Boot recovery after a power loss during an update has been checked only
+  with simulated failures on a computer, not on a Pod.
+- I have not yet confirmed on a Pod 5 whether the firmware's `dismissAlarm`
+  counter reports an alarm stopped by a tap. Tests check that a later value
+  above the highest seen for the same alarm clears its ringing record and
+  pending snooze without sending a command.
 - The scripts are tested on copies on a computer, with the Pod's commands
   replaced, not on a Pod's own system image.
 - The firewall script is checked for the rules it writes, not with real

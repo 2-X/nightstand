@@ -102,8 +102,12 @@ left as they are.
 ### What happens if an install fails?
 
 Updates and fork switches keep backups and try to restore the previous
-version when startup fails. If the app still loads, you can go back a
-version in Settings > Software. If not, recovery needs SSH
+version when startup fails. After a power loss during an update swap,
+Nightstand makes one recovery attempt 45 seconds after boot, keeping a
+healthy live install or trying to restore the marked previous version
+([details and limits](ops/ANTIBRICK.md#what-is-backed-up-and-checked)). If the app still
+loads, you can go back a version in Settings > Software. If automatic
+recovery fails and the app does not load, recovery needs SSH
 ([step 18](INSTALLATION.md#18-add-an-ssh-config)) or the serial cable. A
 failed first install has no earlier version to fall back to, so it needs
 SSH or the cable too. On a Pod 3 or Pod 4 a

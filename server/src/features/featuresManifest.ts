@@ -29,17 +29,54 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
   {
     id: 'agent',
     title: 'Updates and rollback',
-    description: 'In-app updates, rollback, switching to upstream free-sleep, and the Settings > Software & updates page.',
+    description: 'In-app updates, rollback, switching to upstream free-sleep, and the Settings > Software page. '
+      + 'Install and reset share the operation lock with updates, rollbacks and switches; install holds it '
+      + 'through its health check and any restore. A systemd tmpfiles rule provisions the lock after boot.',
     category: 'platform',
-    version: '3.0.0',
+    version: '3.6.0',
     flag: null,
     default: true,
-    touchpoints: ['scripts/update.sh', 'scripts/rollback_pod.sh', 'app/src/pages/SettingsPage/VersionsPage'],
+    touchpoints: [
+      'scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/switch-to-upstream.sh', 'scripts/install.sh',
+      'scripts/reset.sh', 'scripts/setup_services.sh', 'server/src/jobs/operationLock.ts',
+      'app/src/pages/SettingsPage/VersionsPage',
+    ],
     depends_on: [],
     reversible: false,
-    tests: ['server/src/updaterScripts.test.ts', 'server/src/rollbackScript.test.ts'],
+    tests: [
+      'server/src/updaterScripts.test.ts', 'server/src/rollbackScript.test.ts', 'server/src/installScript.test.ts',
+      'server/src/resetScript.test.ts', 'server/src/operationSafety.test.ts', 'server/src/setupServicesScript.test.ts',
+      'scripts/tests/test_operation_portability.py',
+    ],
     upstream_offer: false,
     rationale: 'Always on, not individually removable: it is what makes everything else installable and reversible.',
+  },
+  {
+    id: 'update-recovery',
+    title: 'Recover an interrupted update at boot',
+    description: 'An update marks its swap before moving the live tree. A timer starts one recovery attempt '
+      + '45 seconds after boot when the marker remains: keep a healthy live install or try to restore the previous tree. '
+      + 'The marker clears only after a health check passes. A timeout or failed restore keeps it for manual '
+      + 'recovery. Database and settings backups are not restored. Not yet checked on a Pod.',
+    category: 'safety',
+    version: '3.6.0',
+    flag: null,
+    default: true,
+    touchpoints: [
+      'scripts/update.sh', 'scripts/recover_update.sh', 'scripts/restore_helpers.sh', 'scripts/setup_services.sh',
+      'scripts/systemd/free-sleep-recover-update.service', 'scripts/systemd/free-sleep-recover-update.timer',
+      'scripts/rollback_pod.sh', 'scripts/switch-to-upstream.sh',
+    ],
+    depends_on: ['agent'],
+    reversible: true,
+    tests: [
+      'server/src/updateRecoveryScript.test.ts', 'server/src/setupServicesScript.test.ts',
+      'server/src/updaterBehavior.test.ts', 'server/src/updateResult.test.ts',
+    ],
+    upstream_offer: false,
+    rationale: 'Always on: a power loss cannot run the updater exit trap, so a marked swap needs a recovery '
+      + 'attempt at boot. It acts only with a swap marker. Switching to upstream removes the recovery units '
+      + 'and helpers after any pending recovery is settled.',
   },
   {
     id: 'no-telemetry',
@@ -107,20 +144,24 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
   {
     id: 'biometrics',
     title: 'Biometrics',
-    description: 'Heart rate, HRV, breathing rate, and presence detection from the piezo stream, plus fixes within that subsystem.',
+    description: 'Heart rate, HRV, breathing rate, and presence detection from the piezo stream. At startup '
+      + 'and after the setting is saved, reconcile the stream service with the Biometrics switch: enable '
+      + 'and start when on, stop and disable when off. Retry while another operation or update recovery is pending.',
     category: 'biometrics',
-    version: '3.0.0',
+    version: '3.6.0',
     flag: 'services.biometrics.enabled',
     default: false,
     touchpoints: [
       'server/src/db/servicesSchema.ts', 'server/src/jobs/biometrics.ts', 'server/src/routes/services/services.ts',
+      'server/src/jobs/biometricsSync.ts', 'server/src/jobs/operationLock.ts', 'server/src/server.ts',
       'scripts/setup_services.sh', 'app/src/pages/SettingsPage/FeaturesSection',
     ],
     depends_on: ['agent'],
     reversible: true,
     tests: [
       'server/src/db/services.test.ts', 'server/src/jobs/biometrics.test.ts', 'server/src/jobs/privilegedJobs.test.ts',
-      'server/src/jobs/biometricsSwitchOrder.test.ts',
+      'server/src/jobs/biometricsSwitchOrder.test.ts', 'server/src/jobs/biometricsReconcile.test.ts',
+      'server/src/jobs/biometricsSync.test.ts',
       'server/src/routes/services/servicesBiometricsSwitch.test.ts', 'server/src/setupServicesScript.test.ts',
     ],
     upstream_offer: false,
@@ -398,9 +439,9 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     id: 'health-restart',
     title: 'Restart a server that stops answering',
     description: 'A one-minute timer restarts the server after three failed status checks in a row, '
-      + 'except while an update, rollback or switch is running or the server has just started.',
+      + 'except while an install, reset, update, rollback or switch holds the operation lock or the server has just started.',
     category: 'safety',
-    version: 'n/a',
+    version: '3.6.0',
     flag: null,
     default: true,
     touchpoints: [
@@ -734,23 +775,29 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
   {
     id: 'tap-alarm',
     title: 'Alarm taps',
-    description: 'Accepts the alarm tap action upstream uses. It has no effect yet: on a Pod 5 the firmware '
-      + 'handles a tap during an alarm itself (a double or triple tap stops it) and does not report it.',
+    description: 'Accepts the alarm tap action upstream uses, which has no effect yet. On a Pod 5 the firmware '
+      + 'handles a double or triple tap during an alarm and does not pass it through the tap counters. '
+      + 'A later dismissAlarm value above the highest seen for the same active alarm clears the side\'s ringing '
+      + 'record and pending snooze without sending a command. Whether the firmware reports this on a Pod 5 '
+      + 'is not yet confirmed.',
     category: 'platform',
-    version: 'n/a',
+    version: '3.6.0',
     flag: null,
     default: true,
     touchpoints: [
       'server/src/8sleep/tapAlarm.ts', 'server/src/8sleep/frankenMonitor.ts', 'server/src/jobs/activeAlarms.ts',
-      'server/src/jobs/alarmScheduler.ts',
+      'server/src/jobs/alarmScheduler.ts', 'server/src/8sleep/firmwareAlarmDismiss.ts',
+      'server/src/8sleep/loadDeviceStatus.ts', 'server/src/8sleep/frankenServer.ts',
     ],
     depends_on: ['agent'],
     reversible: true,
     tests: [
       'server/src/8sleep/tapAlarm.test.ts', 'server/src/8sleep/alarmDismiss.test.ts', 'server/src/8sleep/frankenMonitor.test.ts',
+      'server/src/8sleep/firmwareAlarmDismiss.test.ts', 'server/src/8sleep/frankenAlarmDismiss.test.ts',
+      'server/src/8sleep/loadDeviceStatus.test.ts',
     ],
     upstream_offer: false,
-    rationale: 'Always on: it carries out a tap setting that was already accepted and only logged. '
-      + 'A tap set to anything else behaves as before, and older versions keep the setting.',
+    rationale: 'Always on: accepts an existing tap setting and reads firmware dismissals so the server can '
+      + 'clear a stale ringing record. A tap set to anything else behaves as before, and older versions keep the setting.',
   },
 ];

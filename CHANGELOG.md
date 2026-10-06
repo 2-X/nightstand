@@ -65,6 +65,17 @@ Themes, a plainer Sleep page, safer updates and recovery, and support for Pod fi
   back after a failure or interruption unless the services won't stop.
   A reinstall whose database migration fails now stops with an error instead
   of starting. Tested on a computer, not yet on a Pod.
+- The installer now holds the same operation lock as updates, rollbacks and
+  switches through its health check and any restore, so a rollback cannot
+  replace the install while the installer is still checking it.
+- After a power loss during an update swap, a timer now starts one recovery
+  attempt 45 seconds after boot. If the live install is missing or fails its
+  health check, it tries to restore the marked previous version. A timeout
+  or failed restore keeps the marker for manual recovery. Tested on a
+  computer, not yet on a Pod.
+- Reset and install now take the operation lock before changing anything,
+  so they refuse while another operation holds it and the server can tell
+  they are running. A systemd tmpfiles rule creates the lock after each boot.
 - Nightstand now keeps a copy of the Pod's original SSH, firewall and time
   sync settings in /persistent/nightstand-stock/ the first time it changes
   them. On a Pod installed earlier, each copy is taken the next time
@@ -93,8 +104,8 @@ Themes, a plainer Sleep page, safer updates and recovery, and support for Pod fi
   A reinstall follows the channel already saved. Installing a release older
   than the installer itself is refused with a message saying what to do.
 - Nightstand now restarts its server if it is running but
-  stops answering for three minutes, except while an update, rollback or
-  switch is in progress.
+  stops answering for three minutes, except while an install, reset, update,
+  rollback or switch is in progress.
 - Installs and updates now turn on the hardware watchdog on
   the Pod 5, so a Pod whose system freezes restarts itself within about 30
   seconds instead of staying down until it is unplugged. Other models are
@@ -123,8 +134,14 @@ Themes, a plainer Sleep page, safer updates and recovery, and support for Pod fi
 - A tap set to the alarm action, the shape upstream free-sleep uses, is
   accepted but has no effect yet. On a Pod 5 the firmware handles a tap
   while an alarm rings: a double or triple tap stops the alarm, whatever the
-  tap settings say, and the tap is not passed on to Nightstand. Nightstand
-  then treats the alarm as ringing until its set duration ends.
+  tap settings say, and the tap is not passed on to Nightstand through the
+  tap counters.
+- Nightstand now reads the firmware's per-side `dismissAlarm` counter. After
+  taking a baseline for a ringing alarm, a later value above the highest
+  seen for that alarm clears that side's ringing record and pending snooze,
+  without sending a command to the Pod. I have not yet confirmed on a Pod 5
+  whether the firmware reports the dismissal this way. Adapted from
+  [upstream free-sleep's dismissal reading](https://github.com/throwaway31265/free-sleep/commit/2f630d9cf72e3e5583cf8a4b50da604f050f70be).
 
 ### Newer firmware and fixes from upstream
 
@@ -167,6 +184,11 @@ Themes, a plainer Sleep page, safer updates and recovery, and support for Pod fi
 - Turning the Biometrics switch on now starts sleep
   tracking instead of only saving the setting, and restarts, resets,
   installs and switching forks now respect the switch.
+- At startup and after the Biometrics setting is saved, Nightstand now
+  starts and enables the stream service when Biometrics is on, and stops
+  and disables it when off. This fixes a restored setting leaving the
+  service disabled at the next reboot; reconciliation waits while another
+  operation or update recovery is pending.
 
 ### Smaller fixes
 

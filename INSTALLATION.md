@@ -267,7 +267,8 @@ prompt to come back while it tries the watchdog (below).
 The installer downloads the newest Nightstand release, which may be a beta,
 checks it against its published checksum when one exists, installs it, and
 sets Nightstand to start on boot. Nightstand is also restarted if it stops
-answering for 3 minutes, except during an update, rollback or fork switch.
+answering for 3 minutes, except during an install, reset, update, rollback
+or fork switch.
 The checksum catches a corrupted download.
 On a first install the check comes from the same download, so it can't catch
 a swapped one. An update from 3.5.1 or earlier to 3.6.0 is not checked,
@@ -281,7 +282,14 @@ rollback copy and checks the new server up to 30 times, waiting 3 seconds
 before each request with a 5-second timeout (roughly 4 minutes plus overhead
 in the worst case). Until that check passes, a failure or interruption
 puts the previous install back unless Nightstand or the stream won't stop,
-in which case manual recovery is needed.
+in which case manual recovery is needed. The installer holds the operation
+lock through this check and any restore, and refuses to run while another
+install, reset, update, rollback or fork switch holds it.
+
+After a power loss during an update swap, Nightstand makes one recovery
+attempt 45 seconds after boot. It keeps a healthy live install or tries to
+restore the marked previous version. A timeout or failed restore needs
+manual recovery ([details and limits](ops/ANTIBRICK.md#what-is-backed-up-and-checked)). This is tested with simulated failures, not yet on a Pod.
 Nightstand keeps free-sleep's folder and service names, so you'll see
 `free-sleep` in paths and commands.
 
