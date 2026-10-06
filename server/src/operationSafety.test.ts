@@ -54,6 +54,85 @@ it('real flock refuses all operations while another owns the shared lock', { ski
   }
 });
 
+for (const name of ['install.sh', 'reset.sh']) {
+  it(`${name} refuses admission while stream reconciliation owns the lock`, async () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'operation-admission-'));
+    const lock = path.join(folder, 'operation.lock');
+    const source = script(name);
+    const start = source.indexOf('# Share admission');
+    const end = source.indexOf(name === 'reset.sh' ? 'SOCK_PATH=""' : '# Variables', start);
+    assert.ok(start >= 0 && end > start);
+    const admission = source.slice(start, end);
+    const run = () => spawnSync('bash', ['-c', admission + '\necho admitted'], {
+      encoding: 'utf8', env: { ...process.env, NIGHTSTAND_OPERATION_LOCK: lock },
+    });
+    const holder = spawn('python3', ['-c',
+      'import fcntl, sys; handle=open(sys.argv[1], "a+"); fcntl.flock(handle, fcntl.LOCK_EX);'
+      + ' print("ready", flush=True); sys.stdin.read()', lock]);
+    const closed = new Promise<void>(resolve => holder.once('close', () => resolve()));
+    try {
+      await new Promise<void>((resolve, reject) => {
+        holder.once('error', reject);
+        holder.once('exit', () => reject(new Error('lock holder exited')));
+        holder.stdout.once('data', () => resolve());
+      });
+      const denied = run();
+      assert.equal(denied.status, 1, denied.stdout + denied.stderr);
+      assert.match(denied.stdout, /already running/);
+      assert.doesNotMatch(denied.stdout, /admitted/);
+      holder.stdin.end();
+      await closed;
+      const accepted = run();
+      assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+      assert.match(accepted.stdout, /admitted/);
+    } finally {
+      holder.stdin.end();
+      await closed;
+      rmSync(folder, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const name of ['install.sh', 'reset.sh']) {
+  it(`${name} preserves inherited ownership across an exec handoff without a gap`, () => {
+    const folder = mkdtempSync(path.join(tmpdir(), 'operation-handoff-'));
+    const lock = path.join(folder, 'operation.lock');
+    try {
+      writeFileSync(lock, '');
+      const source = script(name);
+      const start = source.indexOf('# Share admission');
+      const end = source.indexOf(name === 'reset.sh' ? 'SOCK_PATH=""' : '# Variables', start);
+      assert.ok(start >= 0 && end > start);
+      const handoff = path.join(folder, 'handoff.sh');
+      writeFileSync(handoff, `
+flock() {
+  python3 -c 'import fcntl, sys; fcntl.flock(open(sys.argv[1], "r"), fcntl.LOCK_EX | fcntl.LOCK_NB)' "$NIGHTSTAND_OPERATION_LOCK" \
+    && { echo 'gap: independent contender acquired lock'; return 1; }
+  python3 -c 'import fcntl; fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)'
+}
+${source.slice(start, end)}
+python3 -c 'import fcntl, sys
+try: fcntl.flock(open(sys.argv[1], "r"), fcntl.LOCK_EX | fcntl.LOCK_NB)
+except BlockingIOError: sys.exit(0)
+sys.exit("contender entered during the handoff")' "$NIGHTSTAND_OPERATION_LOCK"
+`);
+      const result = spawnSync('bash', ['-c', `
+exec 9<"$NIGHTSTAND_OPERATION_LOCK"
+python3 -c 'import fcntl; fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)' || exit 1
+export NIGHTSTAND_OPERATION_OWNER=$$
+exec bash "$1"
+`, 'handoff', handoff], {
+        encoding: 'utf8', env: { ...process.env, NIGHTSTAND_OPERATION_LOCK: lock },
+      });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.doesNotMatch(result.stdout, /gap:/);
+      const contender = spawnSync('python3', ['-c',
+        'import fcntl, sys; fcntl.flock(open(sys.argv[1], "r"), fcntl.LOCK_EX | fcntl.LOCK_NB)', lock]);
+      assert.equal(contender.status, 0, 'the descriptor is released when the script exits');
+    } finally { rmSync(folder, { recursive: true, force: true }); }
+  });
+}
+
 for (const name of ['update.sh', 'switch-to-upstream.sh']) {
   it(`${name} snapshots committed WAL rows separately from rotated code backups`, () => {
     const source = script(name);

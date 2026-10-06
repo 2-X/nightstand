@@ -19,7 +19,8 @@ def source(name):
 
 class PortabilityTests(unittest.TestCase):
     def test_python_lock_and_missing_run_lock_directory(self):
-        for name, native, missing in itertools.product(['update.sh', 'rollback_pod.sh', 'switch-to-upstream.sh'], [False, True], [False, True]):
+        scripts = ['update.sh', 'rollback_pod.sh', 'switch-to-upstream.sh', 'install.sh', 'reset.sh']
+        for name, native, missing in itertools.product(scripts, [False, True], [False, True]):
             if native and not shutil.which('flock'):
                 continue
             with self.subTest(script=name, native=native, missing=missing), tempfile.TemporaryDirectory() as tmp:
@@ -31,7 +32,12 @@ class PortabilityTests(unittest.TestCase):
                     (bindir / 'flock').symlink_to(shutil.which('flock'))
                 if not missing:
                     (root / 'missing').mkdir()
-                body = source(name).split('# Keep the descriptor across updater exec handoffs; all three operations share it.')[1].split('\nfi', 1)[0] + '\nfi\n'
+                text = source(name)
+                if name in ('install.sh', 'reset.sh'):
+                    body = text.split('# Share admission', 1)[1].split('\n\n', 1)[0]
+                    body = '# Share admission' + body + '\n'
+                else:
+                    body = text.split('# Keep the descriptor across updater exec handoffs; all three operations share it.')[1].split('\nfi', 1)[0] + '\nfi\n'
                 body = body.replace('/run/lock', str(root / 'missing')).replace('/tmp/free-sleep-operation.lock', str(root / 'fallback.lock'))
                 env = {k: v for k, v in os.environ.items() if not k.startswith('NIGHTSTAND_OPERATION_')}
                 env['PATH'] = str(bindir)
@@ -41,7 +47,7 @@ class PortabilityTests(unittest.TestCase):
                     self.assertEqual(holder.stdout.readline().strip(), 'ready', holder.stderr.read() if holder.poll() is not None else '')
                     denied = subprocess.run(['/bin/bash', '-c', command], env=env, text=True, capture_output=True)
                     self.assertNotEqual(denied.returncode, 0)
-                    self.assertIn('another update', denied.stderr)
+                    self.assertIn('already running', denied.stdout + denied.stderr)
                 finally:
                     holder.communicate('\n', timeout=5)
                 self.assertEqual(subprocess.run(['/bin/bash', '-c', command], env=env, capture_output=True).returncode, 0)

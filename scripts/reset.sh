@@ -22,6 +22,23 @@ if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
   exit 0
 fi
 
+# Share admission with updates and stream reconciliation through service restarts.
+if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
+  OPERATION_LOCK="${NIGHTSTAND_OPERATION_LOCK:-/run/lock/free-sleep-operation.lock}"
+  if [ -z "${NIGHTSTAND_OPERATION_LOCK:-}" ] && [ ! -d /run/lock ]; then
+    OPERATION_LOCK=/tmp/free-sleep-operation.lock
+  fi
+  if [ -e "$OPERATION_LOCK" ]; then exec 9<"$OPERATION_LOCK"; else exec 9>>"$OPERATION_LOCK"; fi \
+    || { echo "Cannot open the operation lock"; exit 1; }
+  if command -v flock >/dev/null 2>&1; then
+    flock -n 9 || { echo "Another update, rollback, switch, install or reset is already running"; exit 1; }
+  else
+    python3 -c 'import fcntl; fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)' 2>/dev/null \
+      || { echo "Another operation is already running (or lock unavailable)"; exit 1; }
+  fi
+  export NIGHTSTAND_OPERATION_OWNER=$$
+fi
+
 SOCK_PATH=""
 [ -f "$SOCK_FILE" ] && SOCK_PATH=$(cat "$SOCK_FILE")
 # The watchdog's trial file is kept too, byte for byte, so a failed trial or

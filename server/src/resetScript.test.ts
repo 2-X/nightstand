@@ -67,7 +67,8 @@ exec /bin/rm "$@"`);
     .replaceAll('/persistent', persistent)
     .replaceAll('/home/dac', path.join(dir, 'home'));
   const result = spawnSync('bash', ['-c', script], {
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}` }, input: `${answer}\n`, encoding: 'utf8', timeout: 10_000,
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, NIGHTSTAND_OPERATION_LOCK: path.join(dir, 'operation.lock') },
+    input: `${answer}\n`, encoding: 'utf8', timeout: 10_000,
   });
   const log = existsSync(calls) ? readFileSync(calls, 'utf8').trim().split('\n') : [];
   const read = (name: string) => (existsSync(path.join(data, name)) ? readFileSync(path.join(data, name), 'utf8') : null);
