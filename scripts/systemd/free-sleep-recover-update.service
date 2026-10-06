@@ -1,0 +1,13 @@
+[Unit]
+Description=Nightstand interrupted update recovery
+After=multi-user.target free-sleep.service
+ConditionPathExists=/persistent/free-sleep-data/update-swap.json
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /home/dac/free-sleep-recovery/recover_update.sh
+User=root
+Group=root
+TimeoutStartSec=60
+TimeoutStopSec=5
+KillMode=control-group

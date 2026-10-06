@@ -82,6 +82,40 @@ watchdog setting. When a change adds or changes one, install it by hand once
   schema. The saved database is a separate recovery option, not part of an
   automatic code rollback.
 
+The installer takes the same operation lock as update, rollback and the
+switch to upstream. It refuses a busy lock before downloading or changing
+files, and holds it through the health check and any restore.
+
+Before an update moves the live tree, it installs a recovery helper outside
+the application trees and writes `/persistent/free-sleep-data/update-swap.json`.
+The marker stays until the new version or the restored version passes its
+health check, including a restore made by the updater's exit trap. While it
+is armed, service setup leaves the recovery files unchanged. Otherwise setup
+installs each helper and unit by flushing a temporary file, renaming it and
+flushing its directory.
+
+After a power loss, `free-sleep-recover-update.timer` schedules one recovery
+attempt 45 seconds after boot. Its service runs after `multi-user.target`,
+so recovery does not hold up boot completion. Systemd limits the attempt to
+60 seconds, with at most 5 more seconds to kill remaining processes. It does
+not retry during that boot. A timeout keeps the marker for manual recovery.
+
+A responding new tree clears the marker only when its version, temperature
+reading and server service pass the check and `/api/serverStatus` reports a
+healthy database with no unapplied migrations. Missing, unfinished or failed
+database checks cause recovery to restore the marked previous tree. If the
+live tree is missing or fails the check, recovery uses rollback's shared
+helpers to stop both database writers, return shared dependencies when the
+lockfiles match, apply the restored firewall and restart the services. It
+clears the marker only after the restored original tree passes its health
+check. It never acts without the marker or restores database or settings
+backups. An unreadable marker, a missing previous tree or a writer that will
+not stop requires manual recovery; the marker and available trees are kept.
+
+The switch to upstream refuses while an update marker exists. A successful
+switch removes the recovery timer, service, external helpers and marker,
+along with Nightstand's other retired services.
+
 Keep working SSH access before changing services or firewall rules. Read
 root scripts end to end, especially SSH configuration, firewall INPUT rules,
 systemd units and sudoers entries. The installer, updater and deployment

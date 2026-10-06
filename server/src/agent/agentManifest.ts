@@ -111,6 +111,10 @@ export const AGENT_MANIFEST: AgentEntry[] = [
   { path: 'scripts/update.sh', mode: 'copy', why: 'download, back up, swap, health check, auto rollback' },
   { path: 'scripts/update_service.sh', mode: 'copy', why: 'systemd entry point for the updater' },
   { path: 'scripts/setup_services.sh', mode: 'add', why: 'installs the updater, rollback and revert units and their sudoers rules' },
+  { path: 'scripts/restore_helpers.sh', mode: 'add', why: 'shared writer, dependency, firewall and restart steps for restores' },
+  { path: 'scripts/recover_update.sh', mode: 'add', why: 'settles marked update swaps after an interruption' },
+  { path: 'scripts/systemd/free-sleep-recover-update.service', mode: 'add', why: 'bounds one recovery attempt after boot' },
+  { path: 'scripts/systemd/free-sleep-recover-update.timer', mode: 'add', why: 'schedules recovery without holding boot completion' },
   { path: 'scripts/rollback_pod.sh', mode: 'add', why: 'swaps the live and previous trees offline' },
   { path: 'scripts/close_update_window.sh', mode: 'add', why: 'closes the download window after the update or revert unit stops' },
   // No snapshot exists to restore. Upstream ships no tags, so this downloads

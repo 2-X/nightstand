@@ -15,7 +15,8 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 const SCRIPT = path.join(repoRoot, 'scripts/setup_services.sh');
 
 function sandbox(opts: {
-  existingSudoers?: string; visudoFails?: boolean; withoutHealthCheck?: boolean; withoutNetworkWatchdog?: boolean; watchdog?: 'ok';
+  existingSudoers?: string; visudoFails?: boolean; withoutHealthCheck?: boolean;
+  withoutNetworkWatchdog?: boolean; withRecovery?: boolean; watchdog?: 'ok';
 } = {}) {
   const root = mkdtempSync(path.join(tmpdir(), 'nightstand-services-'));
   const bin = path.join(root, 'bin');
@@ -32,6 +33,11 @@ function sandbox(opts: {
   if (!opts.withoutNetworkWatchdog) {
     units.push('free-sleep-network-watchdog.service', 'free-sleep-network-watchdog.timer');
     copyFileSync(path.join(repoRoot, 'scripts/network_watchdog.sh'), path.join(repo, 'scripts/network_watchdog.sh'));
+  }
+  if (opts.withRecovery) {
+    units.push('free-sleep-recover-update.service', 'free-sleep-recover-update.timer');
+    copyFileSync(path.join(repoRoot, 'scripts/restore_helpers.sh'), path.join(repo, 'scripts/restore_helpers.sh'));
+    copyFileSync(path.join(repoRoot, 'scripts/recover_update.sh'), path.join(repo, 'scripts/recover_update.sh'));
   }
   for (const unit of units) {
     copyFileSync(path.join(repoRoot, 'scripts/systemd', unit), path.join(repo, 'scripts/systemd', unit));
@@ -54,6 +60,7 @@ function sandbox(opts: {
       ...process.env,
       PATH: `${bin}:${process.env.PATH}`,
       NIGHTSTAND_SYSTEMD_DIR: systemd,
+      NIGHTSTAND_RECOVERY_DIR: path.join(root, 'recovery'),
       NIGHTSTAND_SUDOERS_FILE: sudoers,
     },
   });
@@ -151,6 +158,21 @@ describe('setup_services.sh', () => {
     const result = box.run();
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.doesNotMatch(box.read(box.calls), /^watchdog /m);
+  });
+
+  it('installs an enabled boot recovery unit whose helper survives a missing live tree', () => {
+    const box = sandbox({ withRecovery: true });
+    const result = box.run();
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const unit = box.read(path.join(box.systemd, 'free-sleep-recover-update.service'));
+    const helper = /^ExecStart=\/bin\/bash (.+)$/m.exec(unit)?.[1];
+    assert.ok(helper);
+    assert.equal(box.read(helper), readFileSync(path.join(repoRoot, 'scripts/recover_update.sh'), 'utf8'));
+    assert.match(unit, /^Type=oneshot$/m);
+    assert.match(unit, /^After=.*free-sleep\.service/m);
+    assert.match(unit, /^ConditionPathExists=\/persistent\/free-sleep-data\/update-swap\.json$/m);
+    assert.match(box.read(box.calls), /^enable free-sleep-recover-update\.timer$/m);
+    assert.doesNotMatch(box.read(box.calls), /(?:start|--now) free-sleep-recover-update/);
   });
 
   it('grants a sudoers rule for every command the server runs through sudo', () => {

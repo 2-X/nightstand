@@ -4,13 +4,13 @@
 # Shared by install.sh, update.sh, and the fork-switch and agent installers
 # so every install path sets up the same controls. Idempotent.
 #
-# Usage: setup_services.sh [repo_dir]   (run as root, default /home/dac/free-sleep)
+# Usage: setup_services.sh [repo_dir] [--recovery-only]   (run as root, default /home/dac/free-sleep)
 # Exits non-zero if any piece could not be installed; callers treat that as a
 # warning, since a pod without these still controls the bed.
 #
 # The rollback and revert units are on-demand oneshots. This only installs
 # them; starting either one runs the action. The health and network watchdog
-# timers are the units this starts.
+# timers are the units this starts. The boot recovery timer is enabled without starting it.
 set -u
 
 REPO_DIR="${1:-/home/dac/free-sleep}"
@@ -18,8 +18,59 @@ USERNAME=dac
 SYSTEMD_DIR="${NIGHTSTAND_SYSTEMD_DIR:-/etc/systemd/system}"
 SUDOERS_FILE="${NIGHTSTAND_SUDOERS_FILE:-/etc/sudoers.d/$USERNAME}"
 STATUS=0
+RECOVERY_DIR="${NIGHTSTAND_RECOVERY_DIR:-/home/dac/free-sleep-recovery}"
 
 warn() { echo "WARNING: $*"; STATUS=1; }
+
+SWAP_MARKER="${NIGHTSTAND_SWAP_MARKER:-/persistent/free-sleep-data/update-swap.json}"
+
+# Armed recovery files remain unchanged until the swap is settled.
+if [ -f "$SWAP_MARKER" ]; then
+  for file in "$RECOVERY_DIR/recover_update.sh" "$RECOVERY_DIR/restore_helpers.sh" \
+    "$SYSTEMD_DIR/free-sleep-recover-update.service" "$SYSTEMD_DIR/free-sleep-recover-update.timer"; do
+    [ -s "$file" ] || warn "armed recovery file is missing: $file"
+  done
+elif [ -f "$REPO_DIR/scripts/recover_update.sh" ]; then
+  if python3 - "$REPO_DIR" "$RECOVERY_DIR" "$SYSTEMD_DIR" <<'PYRECOVERY'
+import os, sys, tempfile
+repo, recovery, systemd = sys.argv[1:]
+os.makedirs(recovery, exist_ok=True)
+files = [("recover_update.sh", recovery, 0o755), ("restore_helpers.sh", recovery, 0o644),
+         ("systemd/free-sleep-recover-update.service", systemd, 0o644),
+         ("systemd/free-sleep-recover-update.timer", systemd, 0o644)]
+for source, directory, mode in files:
+    with open(repo + "/scripts/" + source) as handle:
+        content = handle.read().replace("/home/dac/free-sleep-recovery", recovery)
+    descriptor, temporary = tempfile.mkstemp(dir=directory, prefix=".recovery-")
+    try:
+        with os.fdopen(descriptor, "w") as handle:
+            os.fchmod(handle.fileno(), mode)
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, directory + "/" + os.path.basename(source))
+        descriptor = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+PYRECOVERY
+  then
+    systemctl disable free-sleep-recover-update.service >/dev/null 2>&1 || true
+    systemctl daemon-reload || warn "could not reload the recovery unit"
+    systemctl enable free-sleep-recover-update.timer || warn "could not enable boot recovery"
+  else
+    warn "could not install boot recovery"
+  fi
+elif [ "${2:-}" = --recovery-only ]; then
+  warn "the updater has no recovery script"
+fi
+if [ "${2:-}" = --recovery-only ]; then
+  exit "$STATUS"
+fi
 
 # Units exec these directly on older installs, and a missing exec bit fails a
 # unit with 203/EXEC before it can log anything.

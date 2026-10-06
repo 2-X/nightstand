@@ -181,6 +181,7 @@ function driver(file: string, body: string) {
   const traps = between(src, 'trap cleanup EXIT', '\n\n').trim();
   return `set -uo pipefail
 LIVE="$F/live"; PREV="$F/prev"; STAGE="$F/stage"; ZIP="$F/download.zip"; BK="$F/backup"
+SWAP_MARKER="$F/swap-marker"
 say() { echo "$*"; }
 restore_switch_data() { :; }
 snapshot() {

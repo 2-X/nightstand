@@ -46,6 +46,9 @@ BACKUPS=/persistent/free-sleep-backups
 DATABASE_BACKUPS=/persistent/free-sleep-database-backups
 SQLITE_SAFETY="$(dirname "${BASH_SOURCE[0]}")/sqlite-safety.py"
 PRUNE_SNAPSHOTS="$(dirname "${BASH_SOURCE[0]}")/prune_db_snapshots.sh"
+SWAP_MARKER=/persistent/free-sleep-data/update-swap.json
+RECOVERY_HELPER=/home/dac/free-sleep-recovery/recover_update.sh
+RECOVERY_SOURCE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KEEP_BACKUPS=5
 NPM=/home/dac/.volta/bin/npm
 NPX=/home/dac/.volta/bin/npx
@@ -224,8 +227,21 @@ finish_interrupted_swap() {
   if [ "${STREAM_WAS_ACTIVE:-}" = active ] && ! systemctl is-active free-sleep-stream >/dev/null 2>&1; then
     systemctl start free-sleep-stream
   fi
+  if [ -f "$SWAP_MARKER" ]; then
+    bash "$RECOVERY_HELPER" --settle-restored \
+      || say "The restore could not be verified; update swap marker kept"
+  fi
 }
-cleanup() { local status=$?; trap '' HUP INT TERM; close_wan; finish_interrupted_swap; rm -rf "$STAGE" "$STAGE.unzip" "$STAGE.health" "$STAGE.migrate.log" "$ZIP"; record_result "$status"; }
+cleanup() {
+  local status=$?
+  trap '' HUP INT TERM
+  close_wan
+  finish_interrupted_swap
+  # A marked swap may still need dependencies from the stage at boot.
+  [ -f "$SWAP_MARKER" ] || rm -rf "$STAGE"
+  rm -rf "$STAGE.unzip" "$STAGE.health" "$STAGE.migrate.log" "$ZIP"
+  record_result "$status"
+}
 
 fail() { say "FATAL: $*"; [ -n "${RESULT_REASON:-}" ] || RESULT_REASON="$*"; exit 1; }
 
@@ -343,6 +359,7 @@ trap cleanup EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
+[ ! -f "$SWAP_MARKER" ] || fail "an earlier update swap still needs recovery; live install untouched"
 
 # Tests can ask for more room than this needs, to see the refusal without
 # filling a partition. The amounts only add to the need, and anything but a
@@ -599,6 +616,8 @@ ls -1dt "$BACKUPS"/*/ | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -rf
 
 # --- atomic swap ---------------------------------------------------------------
 recheck_in_use
+bash "$RECOVERY_SOURCE/scripts/setup_services.sh" "$RECOVERY_SOURCE" --recovery-only \
+  || fail "could not install boot recovery; live install untouched"
 say "Installing v$STAGED_VERSION (service stops now)"
 # The running server hands back what the next version may not continue. A
 # target that has the same route continues it itself. One without the alarm
@@ -623,6 +642,10 @@ if ! stop_writer free-sleep-stream || ! stop_writer free-sleep || ! stop_late_st
   RESULT_PHASE=preflight
   fail "could not stop the running services; live install untouched"
 fi
+bash "$RECOVERY_HELPER" --arm "$STREAM_WAS_ACTIVE" \
+  || fail "could not write the update swap marker; live install untouched"
+# Flush the installed recovery helper, unit and marker before moving trees.
+sync
 rm -rf "$PREV"
 mv "$LIVE" "$PREV" || {
   RESULT_PHASE=restored
@@ -672,9 +695,9 @@ elif ! sudo -u dac bash -c "cd '$LIVE/server' && '$NPX' dotenv -e .env.pod -- np
     say "prisma migrate attempt $attempt failed"
     if grep -q P3009 "$STAGE.migrate.log"; then
       [ "$RESOLVED_FAILED" = no ] || break
-      RECOVERY_HELPER="$LIVE/scripts/sqlite-safety.py"
-      [ -f "$RECOVERY_HELPER" ] || RECOVERY_HELPER="$PREV/scripts/sqlite-safety.py"
-      FAILED_NAMES=$(python3 "$RECOVERY_HELPER" recoverable-migrations \
+      MIGRATION_HELPER="$LIVE/scripts/sqlite-safety.py"
+      [ -f "$MIGRATION_HELPER" ] || MIGRATION_HELPER="$PREV/scripts/sqlite-safety.py"
+      FAILED_NAMES=$(python3 "$MIGRATION_HELPER" recoverable-migrations \
         /persistent/free-sleep-data/free-sleep.db "$LIVE/server/prisma/migrations") || {
         say "Failed migration needs manual recovery. Do not reset the database; preserve the backup and inspect the migration log."
         break
@@ -808,12 +831,14 @@ if [ "$HEALTHY" = yes ]; then
     fi
     if fw4 -C OUTPUT -j DROP; then
       if [ "$EXPECT_RESET" = no ] || fw4 -C OUTPUT -p tcp --dport 1337 -j REJECT --reject-with tcp-reset; then
+        bash "$RECOVERY_HELPER" --clear || fail "could not clear the update swap marker"
         say "SUCCESS: pod is serving v$STAGED_VERSION. Previous version kept at $PREV; backup at $BK"
         arm_watchdog
         exit 0
       fi
       if [ "$FIREWALL_ATTEMPT" = 2 ]; then
         say "WARNING: port 1337 reset rule is unavailable; internet access remains blocked by OUTPUT DROP"
+        bash "$RECOVERY_HELPER" --clear || fail "could not clear the update swap marker"
         say "SUCCESS: pod is serving v$STAGED_VERSION. Previous version kept at $PREV; backup at $BK"
         arm_watchdog
         exit 0
@@ -886,6 +911,7 @@ fi
 RESTORE_TREE=
 sh "$LIVE/scripts/block_internet_access.sh" || say "WARNING: restored firewall could not be applied"
 if restored_version_answers; then
+  bash "$RECOVERY_HELPER" --clear || fail "could not clear the update swap marker"
   fail "update failed but rollback OK (pod back on v$CUR_VERSION). Failed tree kept at $FAILED; see journalctl -u free-sleep"
 else
   RESULT_PHASE=swapped

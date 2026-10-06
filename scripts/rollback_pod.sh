@@ -48,6 +48,8 @@ record_result() {
 
 fail() { say "FATAL: $*"; [ -n "${RESULT_REASON:-}" ] || RESULT_REASON="$*"; exit 1; }
 
+source "$(dirname "${BASH_SOURCE[0]}")/restore_helpers.sh" || fail "cannot load restore helpers"
+
 # Keep the descriptor across updater exec handoffs; all three operations share it.
 if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
   OPERATION_LOCK="${NIGHTSTAND_OPERATION_LOCK:-/run/lock/free-sleep-operation.lock}"
@@ -117,35 +119,17 @@ fix_shared_node_modules() {
   local source="${1:-$PREV}"
   if [ -d "$source/server/node_modules" ] && [ ! -d "$LIVE/server/node_modules" ] \
     && cmp -s "$LIVE/server/package-lock.json" "$source/server/package-lock.json"; then
-    mv "$source/server/node_modules" "$LIVE/server/node_modules"
-    chown -R dac:dac "$LIVE/server/node_modules"
+    restore_dependencies "$source"
   fi
 }
 
 restart_services() {
-  if [ "${ARCHIVE_WAS_ACTIVE:-inactive}" = active ] && \
-    [ -f "$LIVE/scripts/archive-raw.sh" ]; then
-    systemctl start free-sleep-archive-raw.timer >/dev/null 2>&1 || true
-  fi
-  if [ -f "$LIVE/scripts/block_internet_access.sh" ]; then
-    sh "$LIVE/scripts/block_internet_access.sh" || say "WARNING: restored firewall could not be applied"
-  fi
-  systemctl start free-sleep
-  if [ "$STREAM_WAS_ACTIVE" = active ]; then
-    systemctl restart free-sleep-stream 2>/dev/null || true
-  fi
+  restore_restart_services best-effort sh "$LIVE/scripts/block_internet_access.sh"
 }
 
-# Stops a service that writes the data and confirms it is not running. Kept
-# identical in the update, rollback, switch, reset and install scripts.
-# systemd refuses to stop a unit that is not installed or does not load, even
-# one that is not running, so the unit's state decides, not the stop.
+# Stops a service that writes the data and confirms it is not running.
 stop_writer() {
-  systemctl stop "$1" 2>/dev/null
-  case "$(systemctl is-active "$1" 2>/dev/null)" in
-    inactive|failed|unknown) return 0 ;;
-  esac
-  return 1
+  restore_stop_writer "$@"
 }
 # Until the server has stopped, its Biometrics switch can start the stream
 # again, so the stream is checked once more after the server stops. A stream

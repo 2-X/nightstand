@@ -260,7 +260,7 @@ echo "$(free_mb '${dir}') $(size_mb '${dir}') $(size_mb '${dir}/missing')"`], { 
       const src = read(`scripts/${name}`);
       const stop = name === 'update.sh' ? 'if [ "$HANDOFF" = 1 ]; then' : '# --- download + stage';
       const script = `${PRELUDE}LIVE='${live}'; PRUNE_SNAPSHOTS='${prune}'; DATABASE_BACKUPS='${dir}'
-TARGET_FILE='${target}'; HANDOFF=''
+TARGET_FILE='${target}'; HANDOFF=''; SWAP_MARKER='${dir}/swap-marker'
 ${helpers(src)}${between(src, "trap 'exit 143' TERM\n", stop)}
 echo PASSED`;
       const bad = run(script, pod3, { NIGHTSTAND_TEST_EXTRA_PERSISTENT_MB: '1e9' });

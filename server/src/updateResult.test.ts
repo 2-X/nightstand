@@ -42,6 +42,7 @@ function runScript(src: string, name: string, disk: Disk, setup?: (home: string)
   setup?.(podHome);
   const scriptDir = path.join(dir, 'scripts');
   mkdirSync(scriptDir);
+  copyFileSync(path.join(repoRoot, 'scripts/restore_helpers.sh'), path.join(scriptDir, 'restore_helpers.sh'));
   copyFileSync(path.join(repoRoot, 'scripts/write_result.py'), path.join(scriptDir, 'write_result.py'));
   const file = path.join(scriptDir, name);
   writeFileSync(file, src
@@ -122,10 +123,24 @@ describe('how each script records its ending', () => {
       const src = read(file);
       assert.match(src, /^fail\(\) \{ say "FATAL: \$\*"; \[ -n "\$\{RESULT_REASON:-\}" \] \|\| RESULT_REASON="\$\*"; exit 1; \}$/m, file);
     }
-    // An interrupted swap is put right before the staged tree is removed.
-    const cleanup = /^cleanup\(\) \{ local status=\$\?;.*finish_interrupted_swap; rm -rf "\$STAGE".*record_result "\$status"; \}$/m;
-    assert.match(read('scripts/update.sh'), cleanup);
-    assert.match(read('scripts/switch-to-upstream.sh'), cleanup);
+    for (const file of ['scripts/update.sh', 'scripts/switch-to-upstream.sh']) {
+      const src = read(file);
+      const start = src.indexOf('cleanup() {');
+      const cleanup = src.slice(start, src.indexOf('\n\nfail()', start));
+      const dir = mkdtempSync(path.join(root, 'cleanup-'));
+      try {
+        const result = spawnSync('bash', ['-c', `set -uo pipefail
+STAGE="$FIXTURE/stage"; ZIP="$FIXTURE/zip"; SWAP_MARKER="$FIXTURE/swap-marker"
+close_wan() { :; }
+finish_interrupted_swap() { echo interrupted >> "$FIXTURE/calls"; }
+record_result() { echo "recorded $1" >> "$FIXTURE/calls"; }
+${cleanup}
+trap cleanup EXIT
+exit 7`], { encoding: 'utf8', env: { ...process.env, FIXTURE: dir } });
+        assert.equal(result.status, 7, result.stdout + result.stderr);
+        assert.equal(readFileSync(path.join(dir, 'calls'), 'utf8'), 'interrupted\nrecorded 7\n');
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    }
     assert.match(read('scripts/rollback_pod.sh'),
       /^trap 'status=\$\?; trap "" HUP INT TERM; finish_interrupted_swap; record_result "\$status"' EXIT$/m);
   });
@@ -441,6 +456,8 @@ fail() { say "FATAL: $*"; [ -n "\${RESULT_REASON:-}" ] || RESULT_REASON="$*"; ex
 trap 'record_result $?' EXIT
 CUR_VERSION=3.5.1; EXPECTED_VERSION=3.6.0; STAGED_VERSION=1.0.0; TARGET_VERSION=3.6.0
 LIVE=live; PREV=prev; STAGE=stage; BK=bk; IS_DOWNGRADE=no; STREAM_WAS_ACTIVE=no
+RECOVERY_SOURCE=source; RECOVERY_HELPER=helper
+bash() { :; }; sync() { :; }; recheck_in_use() { :; }
 RESULT_PHASE=swapping
 systemctl() { :; }; stop_writer() { :; }; stop_late_stream() { :; }; rm() { :; }; curl() { :; }; restore_switch_data_or_fail() { :; }
 mv() { [ "$1" = ${failMove === 'live' ? 'live' : 'stage'} ] && return 1; return 0; }

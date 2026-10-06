@@ -1,0 +1,579 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
+const repo = path.resolve('..');
+const source = () => readFileSync(path.join(repo, 'scripts/recover_update.sh'), 'utf8');
+
+function fixture() {
+  const root = mkdtempSync(path.join(tmpdir(), 'update-recovery-'));
+  const bin = path.join(root, 'bin');
+  mkdirSync(bin);
+  // Extracted blocks can omit say(), exposing macOS speech synthesis.
+  writeFileSync(path.join(bin, 'say'), '#!/bin/sh\nprintf "%s\\n" "$*"\n');
+  chmodSync(path.join(bin, 'say'), 0o755);
+  const live = path.join(root, 'free-sleep');
+  const prev = path.join(root, 'free-sleep-prev');
+  const failed = path.join(root, 'free-sleep-failed');
+  const stage = path.join(root, 'free-sleep-staging');
+  const marker = path.join(root, 'persistent/free-sleep-data/update-swap.json');
+  const calls = path.join(root, 'calls');
+  mkdirSync(path.dirname(marker), { recursive: true });
+  function tree(dir: string, version: string, modules = false, lock = 'same') {
+    mkdirSync(path.join(dir, 'server/src'), { recursive: true });
+    mkdirSync(path.join(dir, 'scripts'), { recursive: true });
+    writeFileSync(path.join(dir, 'server/src/serverInfo.json'), JSON.stringify({ version }));
+    writeFileSync(path.join(dir, 'server/package-lock.json'), lock);
+    writeFileSync(path.join(dir, 'scripts/block_internet_access.sh'), `echo firewall >> '${calls}'\n`);
+    if (modules) {
+      mkdirSync(path.join(dir, 'server/node_modules'));
+      writeFileSync(path.join(dir, 'server/node_modules/keep'), 'dependencies');
+    }
+  }
+  tree(live, '3.6.0', true);
+  const helper = path.join(root, 'restore_helpers.sh');
+  writeFileSync(helper, readFileSync(path.join(repo, 'scripts/restore_helpers.sh')));
+  const script = source().replaceAll('/home/dac/', `${root}/`).replaceAll('/persistent/', `${root}/persistent/`);
+  const recoveryFile = path.join(root, 'recover_update.sh');
+  writeFileSync(recoveryFile, script);
+  type Options = { healthy?: boolean; stuck?: boolean; locked?: boolean;
+    lockSeconds?: number; lockBackend?: 'flock' | 'python';
+    database?: 'healthy' | 'failed' | 'not_started' | 'missing' | 'malformed' };
+  const run = (args: string[] = [], options: Options = {}, snippet?: string) => {
+    const database = options.database === 'malformed' ? '{' : JSON.stringify(
+      options.database === 'missing' ? {} : { database: { status: options.database ?? 'healthy' } },
+    );
+    return spawnSync('bash', ['-c', `
+set -uo pipefail
+systemctl() {
+  echo "$*" >> '${calls}'
+  case "$1" in
+    is-active) if [ -f '${root}/stopped' ]; then echo inactive; return 3; else echo active; fi;;
+    stop) ${options.stuck ? 'return 1' : `touch '${root}/stopped'` };;
+    start|restart) rm -f '${root}/stopped';;
+  esac
+}
+curl() {
+  echo curl >> '${calls}'
+  local out=/dev/null url=
+  while [ $# -gt 0 ]; do [ "$1" != -o ] || out=$2; url=$1; shift; done
+  if [ "$url" = http://127.0.0.1:3000/api/serverStatus ]; then
+    printf '%s' '${database}' > "$out"
+    printf 200
+    return
+  fi
+  if ${options.healthy ? 'true' : `[ -f '${live}/restored' ] && [ -d '${live}/server/node_modules' ]`}; then
+    python3 - '${live}' "$out" <<'PYHEALTH'
+import json, sys
+version=json.load(open(sys.argv[1]+'/server/src/serverInfo.json'))['version']
+json.dump({'freeSleep': {'version': version}, 'left': {'currentTemperatureF': 80}}, open(sys.argv[2], 'w'))
+PYHEALTH
+    printf 200
+  else
+    printf 000
+  fi
+}
+sleep() { ${options.lockSeconds !== undefined ? 'command sleep "$@"' : options.locked ? 'SECONDS=$((SECONDS + $1))' : ':'}; }
+sync() { :; }
+chown() { :; }
+flock() { ${options.locked ? 'return 1' : "python3 -c 'import fcntl; fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)'"}; }
+${options.lockBackend === 'python' ? `command() { if [ "$*" = '-v flock' ]; then return 1; fi; builtin command "$@"; }` : ''}
+${options.lockSeconds !== undefined ? `
+python3 - '${root}/locked' 8>>'${root}/lock' <<'PYLOCK' &
+import fcntl, sys, time
+fcntl.flock(8, fcntl.LOCK_EX)
+open(sys.argv[1], "w").close()
+time.sleep(${options.lockSeconds})
+PYLOCK
+holder=$!
+trap 'kill "$holder" 2>/dev/null || true; wait "$holder" 2>/dev/null || true' EXIT
+while [ ! -f '${root}/locked' ]; do command sleep 0.01; done
+` : ''}
+export -f systemctl curl sleep sync chown
+${snippet ?? `source '${recoveryFile}' "$@"`}`, 'recovery', ...args], {
+      encoding: 'utf8', timeout: options.lockSeconds !== undefined ? 45000 : 20000,
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, NIGHTSTAND_OPERATION_LOCK: path.join(root, 'lock') },
+    });
+  };
+  const arm = () => {
+    const result = run(['--arm', 'active']);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.ok(existsSync(marker));
+  };
+  const prepare = (newLive = true, sharedModules = false) => {
+    arm();
+    renameSync(live, prev);
+    writeFileSync(path.join(prev, 'restored'), 'yes');
+    if (newLive) tree(live, '3.7.0', !sharedModules);
+    if (sharedModules) renameSync(path.join(prev, 'server/node_modules'), path.join(live, 'server/node_modules'));
+  };
+  const version = (dir: string) => (JSON.parse(
+    readFileSync(path.join(dir, 'server/src/serverInfo.json'), 'utf8'),
+  ) as { version: string }).version;
+  return { root, recoveryFile, live, prev, failed, stage, marker, calls, run, tree, arm, prepare, version,
+    dispose: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+describe('interrupted update recovery', () => {
+  it('does nothing without a marker, even with a missing live tree', () => {
+    const box = fixture();
+    try {
+      renameSync(box.live, box.prev);
+      const result = box.run();
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.ok(!existsSync(box.live));
+      assert.ok(!existsSync(box.calls));
+    } finally { box.dispose(); }
+  });
+
+  it('arms a durable marker and clears it when explicitly settled', () => {
+    const box = fixture();
+    try {
+      box.arm();
+      assert.equal(box.run(['--clear']).status, 0);
+      assert.ok(!existsSync(box.marker));
+    } finally { box.dispose(); }
+  });
+
+  it('keeps healthy live code and clears the marker without stopping writers', () => {
+    const box = fixture();
+    try {
+      box.prepare();
+      const result = box.run([], { healthy: true });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(box.version(box.live), '3.7.0');
+      assert.equal(box.version(box.prev), '3.6.0');
+      assert.ok(!existsSync(box.marker));
+      assert.doesNotMatch(readFileSync(box.calls, 'utf8'), /^stop /m);
+    } finally { box.dispose(); }
+  });
+
+  for (const database of ['failed', 'not_started', 'missing', 'malformed'] as const) {
+    it(`restores a responding new tree when database evidence is ${database}`, () => {
+      const box = fixture();
+      try {
+        box.prepare();
+        const result = box.run([], { healthy: true, database });
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.equal(box.version(box.live), '3.6.0');
+        assert.equal(box.version(box.failed), '3.7.0');
+        assert.ok(!existsSync(box.marker));
+      } finally { box.dispose(); }
+    });
+  }
+
+  for (const missing of [true, false]) {
+    it(`restores the previous tree when live is ${missing ? 'missing' : 'unhealthy'}`, () => {
+      const box = fixture();
+      try {
+        box.prepare(!missing);
+        const result = box.run();
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.equal(box.version(box.live), '3.6.0');
+        assert.ok(!existsSync(box.marker));
+        assert.ok(existsSync(path.join(box.live, 'server/node_modules/keep')));
+        if (!missing) assert.equal(box.version(box.failed), '3.7.0');
+        const calls = readFileSync(box.calls, 'utf8');
+        assert.match(calls, /stop free-sleep\n/);
+        assert.match(calls, /stop free-sleep-stream\n/);
+        assert.match(calls, /firewall\n/);
+        assert.match(calls, /start free-sleep\n/);
+        assert.match(calls, /restart free-sleep-stream\n/);
+      } finally { box.dispose(); }
+    });
+  }
+
+  it('returns shared dependencies to the restored tree only when lockfiles match', () => {
+    for (const same of [true, false]) {
+      const box = fixture();
+      try {
+        box.prepare(true, true);
+        if (!same) writeFileSync(path.join(box.live, 'server/package-lock.json'), 'different');
+        box.run();
+        assert.equal(existsSync(path.join(box.live, 'server/node_modules/keep')), same);
+        assert.equal(existsSync(path.join(box.failed, 'server/node_modules/keep')), !same);
+      } finally { box.dispose(); }
+    }
+  });
+
+  it('finishes returning dependencies if boot recovery was interrupted after restoring code', () => {
+    const box = fixture();
+    try {
+      box.prepare(true, true);
+      renameSync(box.live, box.failed);
+      renameSync(box.prev, box.live);
+      const result = box.run();
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.ok(existsSync(path.join(box.live, 'server/node_modules/keep')));
+      assert.equal(box.version(box.live), '3.6.0');
+      assert.ok(!existsSync(box.marker));
+    } finally { box.dispose(); }
+  });
+
+  it('retains the marker when the restored tree does not answer', () => {
+    const box = fixture();
+    try {
+      box.prepare();
+      rmSync(path.join(box.prev, 'restored'));
+      const result = box.run();
+      assert.notEqual(result.status, 0);
+      assert.equal(box.version(box.live), '3.6.0');
+      assert.equal(box.version(box.failed), '3.7.0');
+      assert.ok(existsSync(box.marker));
+    } finally { box.dispose(); }
+  });
+
+  it('refuses a malformed marker without moving trees or checking services', () => {
+    const box = fixture();
+    try {
+      writeFileSync(box.marker, '{');
+      const result = box.run();
+      assert.notEqual(result.status, 0);
+      assert.equal(box.version(box.live), '3.6.0');
+      assert.ok(existsSync(box.marker));
+      assert.ok(!existsSync(box.calls));
+    } finally { box.dispose(); }
+  });
+
+  it('keeps the marker and both trees when a writer refuses to stop', () => {
+    const box = fixture();
+    try {
+      box.prepare();
+      const result = box.run([], { stuck: true });
+      assert.notEqual(result.status, 0);
+      assert.equal(box.version(box.live), '3.7.0');
+      assert.equal(box.version(box.prev), '3.6.0');
+      assert.ok(existsSync(box.marker));
+    } finally { box.dispose(); }
+  });
+
+  it('refuses recovery while another operation holds the lock', () => {
+    const box = fixture();
+    try {
+      box.prepare();
+      const result = box.run([], { locked: true });
+      assert.notEqual(result.status, 0);
+      assert.equal(box.version(box.live), '3.7.0');
+      assert.ok(existsSync(box.marker));
+      assert.ok(!existsSync(box.calls));
+    } finally { box.dispose(); }
+  });
+
+  for (const lockBackend of ['flock', 'python'] as const) {
+    it(`recovers after a three second lock hold using ${lockBackend}`, () => {
+      const box = fixture();
+      try {
+        box.prepare();
+        const result = box.run([], { lockSeconds: 3, lockBackend });
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.equal(box.version(box.live), '3.6.0');
+        assert.ok(!existsSync(box.marker));
+        assert.match(readFileSync(box.calls, 'utf8'), /start free-sleep\n/);
+      } finally { box.dispose(); }
+    });
+
+    it(`stops after thirty seconds of lock contention using ${lockBackend}`, () => {
+      const box = fixture();
+      try {
+        box.prepare();
+        const started = Date.now();
+        const result = box.run([], { lockSeconds: 35, lockBackend });
+        const elapsed = Date.now() - started;
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.match(result.stdout, lockBackend === 'flock'
+          ? /Recovery stopped: another install, update, rollback or switch is already running/
+          : /Recovery stopped: another operation is running \(or lock unavailable\)/);
+        assert.ok(elapsed >= 29_000 && elapsed < 35_000, `lock wait took ${elapsed} ms`);
+        assert.equal(box.version(box.live), '3.7.0');
+        assert.equal(box.version(box.prev), '3.6.0');
+        assert.ok(existsSync(box.marker));
+        assert.ok(!existsSync(box.calls));
+      } finally { box.dispose(); }
+    });
+  }
+
+  it('does not restore a stale rollback slot before the live tree moved', () => {
+    const box = fixture();
+    try {
+      box.tree(box.prev, '3.5.0');
+      box.arm();
+      const result = box.run();
+      assert.notEqual(result.status, 0);
+      assert.equal(box.version(box.live), '3.6.0');
+      assert.equal(box.version(box.prev), '3.5.0');
+      assert.ok(existsSync(box.marker));
+    } finally { box.dispose(); }
+  });
+});
+
+describe('update.sh swap marker lifecycle', () => {
+  it('refuses a pending marker before replacing staging files', () => {
+    const box = fixture();
+    try {
+      box.arm();
+      box.tree(box.stage, '3.7.0', true);
+      const update = readFileSync(path.join(repo, 'scripts/update.sh'), 'utf8')
+        .replaceAll('/home/dac/', `${box.root}/`).replaceAll('/persistent/', `${box.root}/persistent/`);
+      const result = spawnSync('bash', ['-c', `
+iptables() { :; }
+curl() { echo 'unexpected download'; exit 99; }
+${update}`], {
+        encoding: 'utf8', env: { ...process.env, NIGHTSTAND_OPERATION_LOCK: path.join(box.root, 'lock') },
+      });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout, /earlier update swap still needs recovery/);
+      assert.doesNotMatch(result.stdout, /unexpected download/);
+      assert.equal(box.version(box.stage), '3.7.0');
+      assert.ok(existsSync(path.join(box.stage, 'server/node_modules/keep')));
+      assert.ok(existsSync(box.marker));
+    } finally { box.dispose(); }
+  });
+
+  for (const healthy of [true, false]) {
+    it(`keeps the marker through health checking and clears it after ${healthy ? 'success' : 'restore'}`, () => {
+      const box = fixture();
+      try {
+        box.tree(box.stage, '3.7.0');
+        writeFileSync(path.join(box.live, 'restored'), 'yes');
+        const systemd = path.join(box.root, 'systemd');
+        const recovery = path.join(box.root, 'recovery');
+        mkdirSync(systemd);
+        for (const tree of [box.live, box.stage]) {
+          mkdirSync(path.join(tree, 'scripts/systemd'));
+          writeFileSync(path.join(tree, 'scripts/recover_update.sh'), source()
+            .replaceAll('/home/dac/', `${box.root}/`).replaceAll('/persistent/', `${box.root}/persistent/`));
+          for (const file of ['setup_services.sh', 'restore_helpers.sh',
+            'systemd/free-sleep-recover-update.service', 'systemd/free-sleep-recover-update.timer']) {
+            writeFileSync(path.join(tree, 'scripts', file), readFileSync(path.join(repo, 'scripts', file), 'utf8'));
+          }
+        }
+        const update = readFileSync(path.join(repo, 'scripts/update.sh'), 'utf8');
+        const helpers = update.slice(update.indexOf('stop_writer()'), update.indexOf('# Set from the moment'));
+        const swap = update.slice(update.indexOf('# --- atomic swap')).replaceAll('/persistent/', `${box.root}/persistent/`)
+          .replaceAll('/etc/systemd/system/', `${systemd}/`);
+        const result = spawnSync('bash', ['-c', `
+set -uo pipefail
+LIVE="$FIXTURE/free-sleep"; PREV="$FIXTURE/free-sleep-prev"; STAGE="$FIXTURE/free-sleep-staging"; FAILED="$FIXTURE/free-sleep-failed"
+SWAP_MARKER="$FIXTURE/persistent/free-sleep-data/update-swap.json"
+RECOVERY_HELPER="$FIXTURE/recovery/recover_update.sh"; RECOVERY_SOURCE="$LIVE"
+CUR_VERSION=3.6.0; STAGED_VERSION=3.7.0; IS_DOWNGRADE=no; LOCK_SAME=yes; BK=backup
+RESULT_REASON=; RESTORE_TREE=; SWAP_NEW=; NPX=npx
+say() { echo "$*"; }; fail() { echo "$*"; exit 1; }; recheck_in_use() { :; }
+systemctl() {
+  case "$1" in
+    is-active) if [ -f "$FIXTURE/stopped" ]; then echo inactive; return 3; else echo active; fi;;
+    stop) touch "$FIXTURE/stopped";;
+    start|restart) rm -f "$FIXTURE/stopped";;
+  esac
+}
+sudo() { :; }; chown() { :; }; sleep() { :; }; sync() { :; }; fw4() { return 0; }
+curl() {
+  [ -f "$SWAP_MARKER" ] || { echo 'health checked without marker' >&2; exit 99; }
+  echo health-with-marker >> "$FIXTURE/calls"
+  local out=/dev/null
+  while [ $# -gt 0 ]; do [ "$1" != -o ] || out=$2; shift; done
+  if ${healthy ? 'true' : '[ -f "$LIVE/restored" ]'}; then
+    python3 - "$LIVE" "$out" <<'PY'
+import json, sys
+version=json.load(open(sys.argv[1]+'/server/src/serverInfo.json'))['version']
+json.dump({'freeSleep': {'version': version}, 'left': {'currentTemperatureF': 80}}, open(sys.argv[2], 'w'))
+PY
+    printf 200
+  else printf 000; fi
+}
+export -f systemctl sync
+${helpers}
+${swap}`, 'update'], {
+          encoding: 'utf8', timeout: 20000,
+          env: { ...process.env, FIXTURE: box.root, NIGHTSTAND_SYSTEMD_DIR: systemd,
+            NIGHTSTAND_SUDOERS_FILE: path.join(box.root, 'sudoers'), NIGHTSTAND_RECOVERY_DIR: recovery },
+        });
+        assert.equal(result.status, healthy ? 0 : 1, result.stdout + result.stderr);
+        assert.equal(box.version(box.live), healthy ? '3.7.0' : '3.6.0');
+        assert.ok(!existsSync(box.marker));
+        assert.match(readFileSync(box.calls, 'utf8'), /health-with-marker/);
+        assert.doesNotMatch(result.stderr, /health checked without marker/);
+      } finally { box.dispose(); }
+    });
+  }
+
+  it('writes the marker before the swap can lose its live directory', () => {
+    const update = readFileSync(path.join(repo, 'scripts/update.sh'), 'utf8');
+    const swap = update.slice(update.indexOf('# --- atomic swap'), update.indexOf('RESULT_PHASE=swapped'));
+    const box = fixture();
+    try {
+      box.tree(box.stage, '3.7.0');
+      const helper = path.join(box.root, 'helper.sh');
+      writeFileSync(helper, source().replaceAll('/home/dac/', `${box.root}/`).replaceAll('/persistent/', `${box.root}/persistent/`));
+      const result = spawnSync('bash', ['-c', `
+set -uo pipefail
+LIVE="$FIXTURE/free-sleep"; PREV="$FIXTURE/free-sleep-prev"; STAGE="$FIXTURE/free-sleep-staging"
+SWAP_MARKER="$FIXTURE/persistent/free-sleep-data/update-swap.json"
+RECOVERY_SOURCE="$FIXTURE/source"; RECOVERY_HELPER="$FIXTURE/helper.sh"
+CUR_VERSION=3.6.0; STAGED_VERSION=3.7.0; IS_DOWNGRADE=no
+say() { :; }; fail() { echo "$*"; exit 1; }; recheck_in_use() { :; }
+systemctl() { echo inactive; }; stop_writer() { :; }; stop_late_stream() { :; }; sync() { :; }
+bash() { if [ "$1" = "$RECOVERY_HELPER" ]; then command bash "$@"; else return 0; fi; }
+rm() {
+  if [ "$*" = "-rf $PREV" ]; then [ -f "$SWAP_MARKER" ] || exit 99; fi
+  command rm "$@"
+}
+mv() {
+  [ -f "$SWAP_MARKER" ] || exit 99
+  command mv "$@"
+  exit 137
+}
+${swap}`], { encoding: 'utf8', env: { ...process.env, FIXTURE: box.root } });
+      assert.equal(result.status, 137, result.stdout + result.stderr);
+      assert.ok(!existsSync(box.live));
+      assert.equal(box.version(box.prev), '3.6.0');
+      assert.ok(existsSync(box.marker));
+      const recovered = box.run([], { healthy: true });
+      assert.equal(recovered.status, 0, recovered.stdout + recovered.stderr);
+      assert.equal(box.version(box.live), '3.6.0');
+      assert.ok(!existsSync(box.marker));
+    } finally { box.dispose(); }
+  });
+});
+
+describe('boot recovery bounds', () => {
+  it('runs once after boot without ordering its completion into a boot target', () => {
+    const unit = readFileSync(path.join(repo, 'scripts/systemd/free-sleep-recover-update.service'), 'utf8');
+    const timer = readFileSync(path.join(repo, 'scripts/systemd/free-sleep-recover-update.timer'), 'utf8');
+    assert.doesNotMatch(unit, /WantedBy=/);
+    assert.match(unit, /^After=.*multi-user.target/m);
+    assert.match(unit, /^TimeoutStartSec=60$/m);
+    assert.match(unit, /^TimeoutStopSec=5$/m);
+    assert.match(timer, /^OnBootSec=45s$/m);
+    assert.doesNotMatch(timer, /OnUnitActiveSec|OnCalendar|Persistent=true/);
+    assert.doesNotMatch(unit, /^Restart=/m);
+  });
+});
+
+describe('recovery settlement', () => {
+  for (const healthy of [true, false]) {
+    it(`the updater trap ${healthy ? 'settles a healthy restore' : 'keeps an uncertain restore armed'}`, () => {
+      const box = fixture();
+      try {
+        box.prepare();
+        if (!healthy) rmSync(path.join(box.prev, 'restored'));
+        const update = readFileSync(path.join(repo, 'scripts/update.sh'), 'utf8');
+        const helpers = update.slice(update.indexOf('stop_writer()'), update.indexOf('cleanup() {'));
+        const result = box.run([], { healthy }, `
+LIVE='${box.live}'; PREV='${box.prev}'; STAGE='${box.stage}'; FAILED='${box.failed}'
+SWAP_MARKER='${box.marker}'; RECOVERY_HELPER='${box.recoveryFile}'
+${helpers}
+CUR_VERSION=3.6.0; RESTORE_TREE=$PREV; SWAP_NEW=$STAGE; RESULT_PHASE=swapped; STREAM_WAS_ACTIVE=active
+export NIGHTSTAND_OPERATION_OWNER=$$
+trap 'finish_interrupted_swap' EXIT
+trap 'exit 143' TERM
+kill -TERM $$`);
+        assert.equal(result.status, 143, result.stdout + result.stderr);
+        assert.equal(box.version(box.live), '3.6.0');
+        assert.equal(existsSync(box.marker), !healthy);
+      } finally { box.dispose(); }
+    });
+  }
+
+  it('the upstream switch refuses a marker before downloads or staging changes', () => {
+    const box = fixture();
+    try {
+      box.arm();
+      const upstream = readFileSync(path.join(repo, 'scripts/switch-to-upstream.sh'), 'utf8')
+        .replaceAll('/home/dac/', `${box.root}/`).replaceAll('/persistent/', `${box.root}/persistent/`);
+      const result = box.run([], {}, `iptables() { :; }; curl() { echo unexpected-download; exit 99; }; ${upstream}`);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout, /earlier update swap still needs recovery/);
+      assert.doesNotMatch(result.stdout, /unexpected-download/);
+      assert.ok(existsSync(box.marker));
+    } finally { box.dispose(); }
+  });
+
+  it('a successful upstream switch retires all recovery artifacts', () => {
+    const box = fixture();
+    try {
+      const units = path.join(box.root, 'systemd');
+      const recovery = path.join(box.root, 'recovery');
+      mkdirSync(units); mkdirSync(recovery);
+      for (const file of ['free-sleep-recover-update.service', 'free-sleep-recover-update.timer']) {
+        writeFileSync(path.join(units, file), 'installed');
+      }
+      for (const file of ['recover_update.sh', 'restore_helpers.sh']) writeFileSync(path.join(recovery, file), 'installed');
+      box.arm();
+      const upstream = readFileSync(path.join(repo, 'scripts/switch-to-upstream.sh'), 'utf8');
+      const begin = upstream.indexOf('if [ "$HEALTHY" = yes ]; then');
+      const block = upstream.slice(begin, upstream.indexOf('# --- automatic rollback', begin))
+        .replaceAll('/etc/systemd/system/', `${units}/`).replaceAll('/home/dac/free-sleep-recovery', recovery)
+        .replaceAll('/persistent/', `${box.root}/persistent/`);
+      const result = box.run([], {}, `HEALTHY=yes; LIVE='${box.live}'; PREV='${box.prev}'; STAGED_VERSION=upstream; BK=backup; ${block}`);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.ok(!existsSync(box.marker));
+      for (const file of ['free-sleep-recover-update.service', 'free-sleep-recover-update.timer']) {
+        assert.ok(!existsSync(path.join(units, file)));
+      }
+      assert.ok(!existsSync(recovery));
+    } finally { box.dispose(); }
+  });
+
+  it('service setup leaves the armed recovery files untouched', () => {
+    const box = fixture();
+    try {
+      const systemd = path.join(box.root, 'systemd');
+      const recovery = path.join(box.root, 'recovery');
+      mkdirSync(systemd); mkdirSync(recovery);
+      for (const file of ['free-sleep-recover-update.service', 'free-sleep-recover-update.timer']) {
+        writeFileSync(path.join(systemd, file), 'complete original unit');
+      }
+      for (const file of ['recover_update.sh', 'restore_helpers.sh']) writeFileSync(path.join(recovery, file), 'complete original helper');
+      box.arm();
+      const result = spawnSync('bash', [path.join(repo, 'scripts/setup_services.sh'), repo, '--recovery-only'], {
+        encoding: 'utf8', env: { ...process.env, NIGHTSTAND_SYSTEMD_DIR: systemd,
+          NIGHTSTAND_RECOVERY_DIR: recovery, NIGHTSTAND_SWAP_MARKER: box.marker },
+      });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      for (const file of ['free-sleep-recover-update.service', 'free-sleep-recover-update.timer']) {
+        assert.equal(readFileSync(path.join(systemd, file), 'utf8'), 'complete original unit');
+      }
+      for (const file of ['recover_update.sh', 'restore_helpers.sh']) {
+        assert.equal(readFileSync(path.join(recovery, file), 'utf8'), 'complete original helper');
+      }
+    } finally { box.dispose(); }
+  });
+});
+
+describe('durable recovery installation', () => {
+  it('keeps the complete installed unit when replacement is interrupted before rename', () => {
+    const box = fixture();
+    try {
+      const systemd = path.join(box.root, 'systemd');
+      const recovery = path.join(box.root, 'recovery');
+      mkdirSync(systemd); mkdirSync(recovery);
+      const unit = path.join(systemd, 'free-sleep-recover-update.service');
+      writeFileSync(unit, 'complete previous unit');
+      const result = spawnSync('bash', ['-c', `
+python3() {
+  command python3 -c '
+import os, sys
+sys.argv = sys.argv[1:]
+replace = os.replace
+def interrupted(source, destination):
+    if destination.endswith(".service"):
+        sys.exit(77)
+    replace(source, destination)
+os.replace = interrupted
+exec(sys.stdin.read())' "$@"
+}
+systemctl() { :; }
+export -f python3 systemctl
+command bash "$1" "$2" --recovery-only`, 'setup', path.join(repo, 'scripts/setup_services.sh'), repo], {
+        encoding: 'utf8', env: { ...process.env, NIGHTSTAND_SYSTEMD_DIR: systemd,
+          NIGHTSTAND_RECOVERY_DIR: recovery, NIGHTSTAND_SWAP_MARKER: box.marker },
+      });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.equal(readFileSync(unit, 'utf8'), 'complete previous unit');
+    } finally { box.dispose(); }
+  });
+});

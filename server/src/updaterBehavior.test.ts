@@ -28,11 +28,18 @@ function run(script: string, setup = '') {
     .replaceAll('/persistent/', `${dir}/persistent/`);
   const result = spawnSync('bash', ['-c', `set -uo pipefail
 LIVE="$FIXTURE/live"; PREV="$FIXTURE/prev"; FAILED="$FIXTURE/failed"; TMP="$FIXTURE/tmp"; STAGE="$FIXTURE/stage"
+RECOVERY_SOURCE="$FIXTURE/recovery-source"; RECOVERY_HELPER="$FIXTURE/recovery-helper"
+SWAP_MARKER="$FIXTURE/swap-marker"
 BK=backup; CUR_VERSION=3.0.0; TARGET_VERSION=3.1.0; MOVED_MODULES=no; STREAM_WAS_ACTIVE=active
 NPM=npm; NPX=npx; SSH_PORT=22; DRY_RUN=yes
 say() { echo "$*"; }
 fail() { echo "$*"; exit 1; }
 sleep() { :; }
+sync() { :; }
+bash() {
+  case "$1" in "$RECOVERY_SOURCE/scripts/setup_services.sh"|"$RECOVERY_HELPER") return 0;; esac
+  command bash "$@"
+}
 chown() { :; }
 nice() { shift 2; "$@"; }
 ionice() { shift 4; "$@"; }
@@ -44,6 +51,7 @@ restore_and_report() { echo restored > "$FIXTURE/restored"; }
 fix_shared_node_modules() { :; }
 restore_switch_data() { :; }
 restore_switch_data_or_fail() { restore_switch_data || fail "$*"; }
+${readFileSync(path.join(root, 'scripts/restore_helpers.sh'), 'utf8')}
 ${section('scripts/rollback_pod.sh', 'restart_services() {', '# --- preflight')}
 ${setup}
 ${fixtureScript}`], { env, encoding: 'utf8', input: 'y\n', timeout: 5000 });
@@ -781,7 +789,9 @@ read -r server stream <<< "${states}"; echo "$server" > "$FIXTURE/state-free-sle
 });
 
 it('the writer stop is the same in every script that stops the writers', () => {
-  const stopWriter = (file: string) => section(file, '# Stops a service that writes the data', '\n}\n');
+  const stopWriter = (file: string) => file === 'scripts/rollback_pod.sh'
+    ? section('scripts/restore_helpers.sh', 'restore_stop_writer() {', '\n}\n').replace('restore_stop_writer()', 'stop_writer()')
+    : section(file, 'stop_writer() {', '\n}\n');
   const lateStream = (file: string) => section(file, '# Until the server has stopped, its Biometrics', '\n}\n');
   const [firstLate, ...restLate] = ['scripts/update.sh', 'scripts/rollback_pod.sh', 'scripts/switch-to-upstream.sh',
     'scripts/reset.sh'].map(lateStream);

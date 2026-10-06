@@ -292,6 +292,7 @@ trap cleanup EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
+[ ! -f /persistent/free-sleep-data/update-swap.json ] || fail "an earlier update swap still needs recovery; live install untouched"
 
 # Bed-in-use helpers, kept identical in update.sh, rollback_pod.sh and
 # switch-to-upstream.sh. The app writes REQUEST_FILE as it starts one of them.
@@ -597,6 +598,11 @@ if [ "$HEALTHY" = yes ]; then
     /etc/systemd/system/free-sleep-archive-raw.service /etc/systemd/system/free-sleep-archive-raw.timer \
     /etc/systemd/system/free-sleep-health.service /etc/systemd/system/free-sleep-health.timer \
     /etc/systemd/system/free-sleep-network-watchdog.service /etc/systemd/system/free-sleep-network-watchdog.timer
+  systemctl disable --now free-sleep-recover-update.timer free-sleep-recover-update.service >/dev/null 2>&1 || true
+  rm -f /etc/systemd/system/free-sleep-recover-update.service /etc/systemd/system/free-sleep-recover-update.timer
+  rm -rf /home/dac/free-sleep-recovery
+  rm -f /persistent/free-sleep-data/update-swap.json
+  sync
   # Upstream free-sleep never installs these. They take effect at the next service start.
   rm -f /etc/systemd/system/free-sleep.service.d/10-nightstand-limits.conf \
     /etc/systemd/system/free-sleep.service.d/20-nightstand-restart.conf \

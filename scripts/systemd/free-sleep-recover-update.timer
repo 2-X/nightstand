@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightstand interrupted update recovery after boot
+
+[Timer]
+OnBootSec=45s
+AccuracySec=1s
+Unit=free-sleep-recover-update.service
+
+[Install]
+WantedBy=timers.target
