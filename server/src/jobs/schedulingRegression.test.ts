@@ -40,6 +40,7 @@ const { default: settings } = await import('../db/settings.js');
 const { default: schedules } = await import('../db/schedules.js');
 const { default: memory } = await import('../db/memoryDB.js');
 const { default: services } = await import('../db/services.js');
+const { default: logger } = await import('../logger.js');
 let { executeAlarm, scheduleAlarm, scheduleAlarmOverride } = await import('./alarmScheduler.js');
 let schedulerInstance = 0;
 const { scheduleTemperatures } = await import('./temperatureScheduler.js');
@@ -561,4 +562,31 @@ test('a scheduled alarm counts its lateness from when it was due', async t => {
   await invokeAt('left-monday-07:00-0-alarm', new Date(due));
   assert.equal(commands.length, 1);
   assert.equal((commands[0][2] as { notAfter: number }).notAfter, due + 3 * 60_000);
+});
+
+for (const side of ['left', 'right'] as const) {
+  test(`weekly power jobs log the side and schedule day for ${side}`, async t => {
+    const info = t.mock.method(logger, 'info', () => logger);
+    schedulePowerOn(settings.data, side, 'monday', night.power);
+    await invokeAt(`${side}-monday-21:00-power-on`, new Date('2026-09-28T21:00:00Z'));
+    schedulePowerOff(settings.data, side, 'monday', night.power);
+    await invokeAt(`${side}-monday-09:00-power-off`, new Date('2026-09-29T09:00:00Z'));
+    const messages = info.mock.calls.map(call => call.arguments[0]);
+    assert.deepEqual(messages, [
+      `Executing weekly power-on for ${side} (monday)`,
+      `Executing weekly power-off for ${side} (monday)`,
+    ]);
+  });
+}
+
+test('paused weekly jobs do not log power execution', async t => {
+  const info = t.mock.method(logger, 'info', () => logger);
+  settings.data.left.scheduleOverrides.pause = { active: true, expiresAt: '2026-09-29T10:00:00Z' };
+  await settings.write();
+  schedulePowerOn(settings.data, 'left', 'monday', night.power);
+  schedulePowerOff(settings.data, 'left', 'monday', night.power);
+  await invokeAt('left-monday-21:00-power-on', new Date('2026-09-28T21:00:00Z'));
+  await invokeAt('left-monday-09:00-power-off', new Date('2026-09-29T09:00:00Z'));
+  assert.ok(info.mock.calls.every(call => !String(call.arguments[0]).startsWith('Executing weekly power-')));
+  assert.deepEqual(updates, []);
 });

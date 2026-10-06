@@ -59,6 +59,7 @@ export const weeklyPowerOnJob = (side: Side, day: DayOfWeek, power: DailySchedul
       // stops, instead of 12 hours after the power-on.
       const firedAt = fireDate ?? new Date();
       const onUntil = weeklyFirmwareEnd(side, nextScheduledOff(firedAt, power.off, timeZone));
+      logger.info(`Executing weekly power-on for ${side} (${day})`);
       await updateDeviceStatus({
         [side]: overridden
           ? { isOn: true }
@@ -172,6 +173,7 @@ export const schedulePowerOff = (settingsData: Settings, side: Side, day: DayOfW
         logJob('Skipping power off, the next session already started', side, day, dayOfWeekIndex, time);
         return;
       }
+      logger.info(`Executing weekly power-off for ${side} (${day})`);
       await updateDeviceStatus({
         [side]: {
           isOn: false,
