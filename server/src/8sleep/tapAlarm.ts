@@ -17,7 +17,7 @@ async function stopAlarm(side: Side) {
   await memoryDB.write();
 }
 
-// The Pod's status has no alarm field, so "sounding" is this server's record
+// The Pod's status has no ringing flag, so "sounding" is this server's record
 // of the alarm it started: set once the Pod accepts the alarm command and
 // cleared when its duration runs out or it is dismissed. It also holds the
 // settings that alarm started with. A server restart forgets it.

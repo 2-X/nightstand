@@ -8,6 +8,7 @@ import { UnixSocketServer } from './unixSocketServer.js';
 import logger from '../logger.js';
 import { DeviceStatus } from '../routes/deviceStatus/deviceStatusSchema.js';
 import { loadDeviceStatus } from './loadDeviceStatus.js';
+import { FirmwareAlarmDismiss } from './firmwareAlarmDismiss.js';
 import config from '../config.js';
 import { wait } from './promises.js';
 import { promiseWithTimeout } from './timeoutPromise.js';
@@ -66,6 +67,7 @@ let connectGeneration = 0;
 export class Franken {
   private static readonly responseDelayMs = 10;
   private readonly lifetime = new AbortController();
+  private readonly firmwareAlarmDismiss = new FirmwareAlarmDismiss();
 
   public constructor(
     private readonly socket: Socket,
@@ -74,6 +76,7 @@ export class Franken {
   ) {
     socket.once('close', () => {
       this.lifetime.abort(new FrankenConnectionClosedError());
+      this.firmwareAlarmDismiss.reset();
       // A dropped socket aborts reads before their timeout can trigger recovery.
       // Retire only this active connection; late events must not close a newer one.
       if (franken === this) {
@@ -186,11 +189,13 @@ export class Franken {
     const command: FrankenCommand = 'DEVICE_STATUS';
     const commandNumber = frankenCommands[command];
     const response = await this.sendMessage(commandNumber);
-    return await loadDeviceStatus(response, getGestures);
+    this.lifetime.signal.throwIfAborted();
+    return await loadDeviceStatus(response, getGestures, this.firmwareAlarmDismiss);
   }
 
   public close() {
     this.lifetime.abort(new FrankenConnectionClosedError());
+    this.firmwareAlarmDismiss.reset();
     const socket = this.socket;
     if (!socket.destroyed) socket.destroy();
   }

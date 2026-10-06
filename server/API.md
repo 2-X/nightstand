@@ -235,10 +235,19 @@ generic message; the details go to the server log.
   - `{ "type": "base_control", "behavior": "toggle_preset" }`, which moves
     an adjustable base between its `relax` and `flat` presets
   - `{ "type": "alarm", "behavior": "snooze" | "dismiss", "snoozeDuration": 60 to 600, "inactiveAlarmBehavior": "power" | "none" }`,
-    the shape upstream free-sleep uses. It is accepted and stored but has
-    no effect yet: on a Pod 5 the firmware handles a tap while an alarm
-    rings (a double or triple tap stops it) and does not pass it on to this
-    server.
+    the shape upstream free-sleep uses. On the tested Pod 5 the firmware
+    handles a double or triple tap while an alarm rings and stops it without
+    changing the tap counters, so the configured action cannot snooze it.
+    The firmware `dismissAlarm` field has numeric values that upstream
+    free-sleep treats as dismissal timestamps. The server takes each alarm's
+    baseline from its first valid status after starting. The first valid
+    sample after reconnecting can only raise that alarm's high-water mark.
+    Decreases, restored historical values, missing, malformed and unchanged
+    values do nothing. Only a later value strictly above the highest seen
+    for that alarm across all connections clears its ringing record and
+    pending snooze. It sends no command in response. Timestamp units and
+    behavior on the tested Pod 5 remain
+    unverified and still need a capture.
 - `features` are feature flags. `sleepScore` turns the sleep score and sleep
   stage routes on and off; the app no longer shows either.
   `nightstandTheme` is no longer read and stays so stored settings keep

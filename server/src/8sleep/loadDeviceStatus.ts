@@ -10,8 +10,9 @@ import serverInfo from '../serverInfo.json' with { type: 'json' };
 import servicesDB from '../db/services.js';
 import { WIFI_SIGNAL_STRENGTH } from './wifiSignalStrength.js';
 import { GestureSchema } from '../db/settingsSchema.js';
+import { FirmwareAlarmDismiss } from './firmwareAlarmDismiss.js';
 
-
+const firmwareAlarmDismiss = new FirmwareAlarmDismiss();
 
 type Gesture = {
   l: number;
@@ -31,6 +32,7 @@ const RawDeviceData = z.object({
   doubleTap: z.string().optional(),
   tripleTap: z.string().optional(),
   quadTap: z.string().optional(),
+  dismissAlarm: z.string().optional(),
 });
 
 type RawDeviceDataType = z.infer<typeof RawDeviceData>;
@@ -155,8 +157,11 @@ const detectHubVersion = async (): Promise<Version> => {
 const HUB_VERSION = await detectHubVersion();
 
 // The default naming convention was ugly... This remaps the keys to human-readable names
-export async function loadDeviceStatus(response: string, getGestures: boolean): Promise<DeviceStatus> {
+export async function loadDeviceStatus(
+  response: string, getGestures: boolean, dismissalObserver = firmwareAlarmDismiss,
+): Promise<DeviceStatus> {
   const rawDeviceData = parseRawDeviceData(response);
+  await dismissalObserver.observe(rawDeviceData.dismissAlarm);
   const leftSideSecondsRemaining = Number(rawDeviceData.heatTimeL);
   const rightSideSecondsRemaining = Number(rawDeviceData.heatTimeR);
   await memoryDB.read();

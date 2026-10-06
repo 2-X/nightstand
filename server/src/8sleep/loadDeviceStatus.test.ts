@@ -87,4 +87,23 @@ describe('loadDeviceStatus', () => {
   it('rejects a reply missing a field', () => {
     assert.throws(() => mod.parseRawDeviceData('tgHeatLevelR = 0\n'));
   });
+
+  it('syncs a firmware dismissal into the returned ringing state even without gestures', async () => {
+    const { activeAlarms, forgetActiveAlarm } = await import('../jobs/activeAlarms.js');
+    const { default: memoryDB } = await import('../db/memoryDB.js');
+    activeAlarms.set('left', { vibrationIntensity: 40, duration: 120, vibrationPattern: 'double' });
+    memoryDB.data.left.isAlarmVibrating = true;
+    await memoryDB.write();
+    try {
+      const baseline = await mod.loadDeviceStatus(reply({ dismissAlarm: '{"l":100,"r":0}' }), false);
+      assert.equal(baseline.left.isAlarmVibrating, true);
+      const dismissed = await mod.loadDeviceStatus(reply({ dismissAlarm: '{"l":101,"r":0}' }), false);
+      assert.equal(dismissed.left.isAlarmVibrating, false);
+      assert.equal(activeAlarms.has('left'), false);
+    } finally {
+      forgetActiveAlarm('left');
+      memoryDB.data.left.isAlarmVibrating = false;
+      await memoryDB.write();
+    }
+  });
 });

@@ -120,3 +120,75 @@ test('an alarm that does not start leaves the snooze in place', async t => {
   assert.equal(await executeAlarm({ ...alarm, force: false }), 0);
   assert.equal(hasSnooze('left'), true);
 });
+
+test('firmware dismissal sends no command and invalidates the ringing timer', async t => {
+  const timers: Array<() => Promise<void>> = [];
+  t.mock.method(globalThis, 'setTimeout', ((callback: () => Promise<void>) => {
+    timers.push(callback);
+    return {} as NodeJS.Timeout;
+  }) as unknown as typeof setTimeout);
+  const { loadDeviceStatus } = await import('./loadDeviceStatus.js');
+  const { activeAlarms } = await import('../jobs/activeAlarms.js');
+  const reply = (dismissAlarm: string) => Object.entries({
+    tgHeatLevelL: '0', tgHeatLevelR: '0', heatTimeL: '3600', heatTimeR: '3600',
+    heatLevelL: '0', heatLevelR: '0', sensorLabel: '20500-0001-J01-0000',
+    waterLevel: 'true', priming: 'false', settings: cbor.encode({ gl: 20, gr: 20, lb: 50 }).toString('hex'),
+    dismissAlarm,
+  }).map(([key, value]) => `${key} = ${value}`).join('\n');
+  await loadDeviceStatus(reply('{"l":100,"r":100}'), true);
+  await executeAlarm(alarm);
+  await executeAlarm({ ...alarm, side: 'right' });
+  await loadDeviceStatus(reply('{"l":100,"r":100}'), true);
+  calls.length = 0;
+  const dismissed = await loadDeviceStatus(reply('{"l":101,"r":100}'), true);
+  assert.deepEqual(calls, [], 'a firmware dismissal must not send a hardware command');
+  assert.equal(activeAlarms.has('left'), false);
+  assert.equal(dismissed.left.isAlarmVibrating, false);
+  assert.equal(dismissed.right.isAlarmVibrating, true);
+  await executeAlarm(alarm);
+  await timers[0]();
+  assert.equal(memoryDB.data.left.isAlarmVibrating, true);
+  await timers[1]();
+  await timers[2]();
+  assert.equal(memoryDB.data.left.isAlarmVibrating, false);
+});
+
+for (const timing of ['before acceptance', 'after acceptance'] as const) {
+  test(`an old dismissal observed ${timing} does not clear a replacement alarm`, async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const { loadDeviceStatus } = await import('./loadDeviceStatus.js');
+    const { FirmwareAlarmDismiss } = await import('./firmwareAlarmDismiss.js');
+    const observer = new FirmwareAlarmDismiss();
+    const { activeAlarms, forgetActiveAlarm } = await import('../jobs/activeAlarms.js');
+    t.after(() => forgetActiveAlarm('left'));
+    const reply = (value: number) => Object.entries({
+      tgHeatLevelL: '0', tgHeatLevelR: '0', heatTimeL: '3600', heatTimeR: '3600',
+      heatLevelL: '0', heatLevelR: '0', sensorLabel: '20500-0001-J01-0000',
+      waterLevel: 'true', priming: 'false', settings: cbor.encode({ gl: 20, gr: 20, lb: 50 }).toString('hex'),
+      dismissAlarm: `{"l":${value},"r":100}`,
+    }).map(([key, value]) => `${key} = ${value}`).join('\n');
+    const readStatus = (value: number) => loadDeviceStatus(reply(value), false, observer);
+    await executeAlarm(alarm);
+    await readStatus(100);
+    t.mock.method(franken, 'getDeviceStatus', async () => readStatus(100));
+    let accept!: () => void;
+    let sent!: () => void;
+    const sending = new Promise<void>(resolve => { sent = resolve; });
+    t.mock.method(franken, 'callFunction', async () => {
+      sent();
+      await new Promise<void>(resolve => { accept = resolve; });
+    });
+    const replacing = executeAlarm({ ...alarm, vibrationIntensity: 30 });
+    await sending;
+    if (timing === 'before acceptance') await readStatus(101);
+    accept();
+    await replacing;
+    const replacement = activeAlarms.get('left');
+    assert.equal(replacement?.vibrationIntensity, 30);
+    const baseline = await readStatus(101);
+    assert.equal(activeAlarms.get('left'), replacement);
+    assert.equal(baseline.left.isAlarmVibrating, true);
+    await readStatus(102);
+    assert.equal(activeAlarms.has('left'), false);
+  });
+}
