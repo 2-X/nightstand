@@ -2,7 +2,6 @@ import type { ThemeId } from './ids';
 
 // Names and descriptions shown by the theme picker.
 export const THEME_NAMES: Record<ThemeId, string> = {
-  nightstand: 'nightstand',
   lamp: 'lamp',
   classic: 'free-sleep classic',
   glass: 'jmew',

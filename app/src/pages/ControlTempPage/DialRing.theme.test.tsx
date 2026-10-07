@@ -6,7 +6,7 @@ afterEach(() => {
   vi.resetModules();
 });
 
-describe.each(['nightstand', 'classic', 'glass'] as const)('in the %s look', id => {
+describe.each(['classic', 'glass'] as const)('in the %s look', id => {
   it('marks now with the neutral marker and never paints the accent', async () => {
     document.documentElement.dataset.theme = id;
     vi.resetModules();

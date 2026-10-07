@@ -180,8 +180,8 @@ it to the internet. For access away from home, see
   week that assigns one to each day, and single-date changes
 - Sleep data (see [Biometrics](#biometrics)): time in bed (measured); heart
   rate and, with New sleep tracking, breathing rate (estimates)
-- Four themes under Settings > Bed and sides > Theme, saved on each device:
-  nightstand (the default), lamp, free-sleep classic and jmew. The last two
+- Three themes under Settings > Bed and sides > Theme, saved on each device:
+  lamp (the default), free-sleep classic and jmew. The last two
   follow the original free-sleep app by throwaway31265 and jmew's fork of it
 
 Presence auto-off is on by default but needs Biometrics, which is off by

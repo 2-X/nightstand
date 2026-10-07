@@ -6,5 +6,5 @@ import Section from './Section';
 it('gives section titles a level-two heading larger than body text', () => {
   renderWithProviders(<Section title="Priming">Body</Section>);
   const heading = screen.getByRole('heading', { level: 2, name: 'Priming' });
-  expect(heading).toHaveStyle({ fontSize: '1.125rem', fontWeight: 500 });
+  expect(heading).toHaveStyle({ fontSize: '1.125rem', fontWeight: 600 });
 });

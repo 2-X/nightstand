@@ -1,8 +1,10 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, expectTypeOf, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { DEFAULT_THEME_ID, THEME_IDS, THEME_STORAGE_KEY } from '@design/themes/ids';
 import { THEME_NAMES, THEME_PICKER_COPY } from '@design/themes/copy';
+import { themeBootScript } from '@design/themeBoot';
+import { activeThemeId, readStoredThemeId, saveThemeId } from '@design/themePreference';
 import ThemePicker from './ThemePicker';
 
 const other = THEME_IDS.find(id => id !== DEFAULT_THEME_ID)!;
@@ -16,6 +18,35 @@ it('offers every look as a radio in one labelled group, with the current one cho
   expect(within(group).getAllByRole('radio').map(radio => radio.getAttribute('value'))).toEqual([...THEME_IDS]);
   for (const id of THEME_IDS) expect(within(group).getByRole('radio', { name: THEME_NAMES[id] })).toBeInTheDocument();
   expect(within(group).getByRole('radio', { name: THEME_NAMES[DEFAULT_THEME_ID] })).toBeChecked();
+});
+
+it('boots lamp for a removed stored id and offers only the three supported looks to save', async () => {
+  localStorage.setItem(THEME_STORAGE_KEY, 'nightstand');
+  const root = document.documentElement;
+  const previousTheme = root.getAttribute('data-theme');
+  const previousStyle = root.getAttribute('style');
+  try {
+    new Function(themeBootScript())();
+    expect(root.dataset.theme).toBe('lamp');
+    expect(readStoredThemeId()).toBe('lamp');
+    expect(activeThemeId()).toBe('lamp');
+    expectTypeOf(saveThemeId).parameter(0).toEqualTypeOf<'lamp' | 'classic' | 'glass'>();
+    const reload = vi.fn();
+    const { user } = renderWithProviders(<ThemePicker reload={ reload }/>);
+    const group = screen.getByRole('radiogroup', { name: THEME_PICKER_COPY.label });
+    expect(within(group).getAllByRole('radio').map(radio => radio.getAttribute('value')))
+      .toEqual(['lamp', 'classic', 'glass']);
+    expect(within(group).getByRole('radio', { name: 'lamp' })).toBeChecked();
+    await user.click(within(group).getByRole('radio', { name: 'free-sleep classic' }));
+    await user.click(screen.getByRole('button', { name: THEME_PICKER_COPY.apply }));
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('classic');
+    expect(reload).toHaveBeenCalledOnce();
+  } finally {
+    if (previousTheme === null) root.removeAttribute('data-theme');
+    else root.setAttribute('data-theme', previousTheme);
+    if (previousStyle === null) root.removeAttribute('style');
+    else root.setAttribute('style', previousStyle);
+  }
 });
 
 it('gives every choice a row at least 44 px tall', () => {

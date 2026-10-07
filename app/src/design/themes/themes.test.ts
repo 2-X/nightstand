@@ -62,7 +62,8 @@ function drawnPairs(p: ThemePalette): Pair[] {
 
 it('registers every id once, in picker order, with a valid default', () => {
   // Stored on devices, so the ids and their order are pinned here.
-  expect(THEME_IDS).toEqual(['nightstand', 'lamp', 'classic', 'glass']);
+  expect(THEME_IDS).toEqual(['lamp', 'classic', 'glass']);
+  expect(DEFAULT_THEME_ID).toBe('lamp');
   expect(Object.keys(THEMES).sort()).toEqual([...THEME_IDS].sort());
   expect(isThemeId(DEFAULT_THEME_ID)).toBe(true);
   expect(isThemeId('neon')).toBe(false);

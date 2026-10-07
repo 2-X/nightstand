@@ -14,7 +14,7 @@ notes link the CI run for its tag, with the exact results.
 | Server | node:test | 2,200 tests | Scheduling, Rhythms and Smart Schedule, alarms and missed alarms, the firmware's own off timers, the connection to the Pod's hardware, the API, the database and its migrations, and the shell scripts (below) | Node 24 |
 | App | Vitest | 1,700 tests | Screens and flows against the same mock data as the demo | Node 24, jsdom |
 | Biometrics | pytest | 800 tests | Presence, sleep records, calibration and the vitals estimators, with fixed inputs and pinned results | Python 3.9 and 3.10 |
-| Browser | Playwright | 570 tests, plus 48 screenshot comparisons | The demo build at phone, tablet and laptop sizes | Chromium; WebKit for a subset |
+| Browser | Playwright | 570 tests, plus 40 screenshot comparisons (24 theme, 16 layout) | The demo build at phone, tablet and laptop sizes | Chromium; WebKit for a subset |
 | Scripts | node:test, Python unittest, shellcheck | included in the server count, plus 31 Python tests | Install, update, rollback, fork switch, reset, firewall, watchdog and health-check scripts, run against throwaway copies with the Pod's commands replaced | bash, Python 3 |
 
 Python runs on 3.9 and 3.10 because those are the versions Pods use: 3.9 on a
@@ -33,11 +33,11 @@ time fails there. The layout sweeps and WebKit use America/Los_Angeles.
   the Pod not answering, loading) at seven screen sizes, from a 320 pixel phone to a 1280 pixel laptop. Each keeps its
   controls where the "on" state has them, never scrolls sideways, and keeps
   every control at least 44 pixels each way.
-- **Each look.** For each of the four looks in Settings > Bed and sides >
+- **Each look.** For each of the three looks in Settings > Bed and sides >
   Theme: Bed, Schedule, Sleep and Settings at phone and desktop width fit the
   screen and keep 44 pixel targets, Bed fits a 320 pixel phone, the research
-  sheet fits, and fonts load from the app's own address. A further 32
-  screenshot comparisons (four looks, four screens, two sizes) run only on
+  sheet fits, and fonts load from the app's own address. A further 24
+  screenshot comparisons (three looks, four screens, two sizes) run only on
   Linux, in the same Playwright image CI uses, because fonts render slightly
   differently elsewhere.
 - **Privacy.** While it opens the demo's screens and dialogs, a test fails if

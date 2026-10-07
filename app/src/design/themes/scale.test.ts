@@ -3,7 +3,7 @@ import { THEMES } from '.';
 import { scaleColor } from './scale';
 
 const continuous = THEMES.lamp.palette.scale;
-const stepped = THEMES.nightstand.palette.scale;
+const stepped = THEMES.classic.palette.scale;
 
 it('returns lowercase hex from either kind of scale', () => {
   for (const scale of [continuous, stepped]) {

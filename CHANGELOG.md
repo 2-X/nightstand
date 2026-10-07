@@ -18,9 +18,9 @@ Themes, a plainer Sleep page, safer updates and recovery, and support for Pod fi
   without turning the side on in between, also checked on my Pod 5.
 
 - Settings > Bed and sides has a new Theme setting with
-  four themes, saved on each device: nightstand (the default, the 3.3.2
-  look with higher contrast), lamp (the look of 3.4.0 to 3.5.1), free-sleep
-  classic and jmew. Thanks to [throwaway31265](https://github.com/throwaway31265/free-sleep)
+  three themes, saved on each device. Lamp, the look of 3.4.0 to 3.5.1,
+  stays the default. The other looks are free-sleep classic and jmew.
+  Thanks to [throwaway31265](https://github.com/throwaway31265/free-sleep)
   and [jmew](https://github.com/jmew/free-sleep) for the designs these are
   based on.
 - The Sleep page now leads with time in bed and no

@@ -6,7 +6,7 @@ import MissingNightCard from './MissingNightCard';
 it('gives a missing-night section the same heading hierarchy as a recorded night', () => {
   renderWithProviders(<MissingNightCard state="empty" canAnalyze={ false } onAnalyze={ () => {} }/>);
   expect(screen.getByRole('heading', { level: 2, name: 'Nothing recorded' }))
-    .toHaveStyle({ fontSize: '1.125rem', fontWeight: 500 });
+    .toHaveStyle({ fontSize: '1.125rem', fontWeight: 600 });
 });
 
 it('describes the analysis timing of the running schedule for a pending night', () => {
