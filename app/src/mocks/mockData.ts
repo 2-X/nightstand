@@ -710,7 +710,10 @@ export const isPrimingAt = (at: Date, status: DeviceStatus = deviceStatus): bool
 };
 
 export const updateDeviceStatus = (partial: Partial<DeviceStatus>) => {
-  deviceStatus = mergeDeep(clone(deviceStatus), partial) as DeviceStatus;
+  // As on the Pod, isPriming false is ignored: no verified command stops a prime.
+  const { isPriming, ...rest } = partial;
+  const applied = isPriming === false ? rest : partial;
+  deviceStatus = mergeDeep(clone(deviceStatus), applied) as DeviceStatus;
   return deviceStatus;
 };
 

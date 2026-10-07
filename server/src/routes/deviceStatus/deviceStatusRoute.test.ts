@@ -90,6 +90,11 @@ describe('POST /deviceStatus', () => {
     assert.deepEqual(manualChanges, ['left', 'right']);
   });
 
+  it('ignores isPriming false without sending an unverified cancellation command', async () => {
+    assert.equal(await post({ isPriming: false }), 204);
+    assert.deepEqual(sent, []);
+  });
+
   it('forwards a bounded duration unchanged', async () => {
     assert.equal(await post({ left: { secondsRemaining: 43200 } }), 204);
     assert.deepEqual(sent, [['LEFT_TEMP_DURATION', '43200']]);

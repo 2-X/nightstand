@@ -133,8 +133,8 @@ generic message; the details go to the server log.
   both.
 - `isAlarmVibrating: false` stops a ringing alarm: the server sends a
   one-second replacement alarm and then clears the armed alarm.
-- `isPriming: true` starts a prime. `isPriming: false` sends `STOP_PRIME`,
-  which did not stop an active prime when tried on a Pod 5.
+- `isPriming: true` starts a prime. `isPriming: false` is accepted and
+  ignored. No verified command stops an active prime.
 - A manual `targetTemperatureF` change pauses that side's temperature
   schedule for 12 hours when its next scheduled change is within 3 hours
   (`scheduleOverrides.temperatureSchedules` in `/api/settings`). On a Smart
@@ -650,8 +650,9 @@ instead of the weekly schedule.
 - `command` is one of `HELLO`, `SET_TEMP`, `SET_ALARM`, `ALARM_LEFT`,
   `ALARM_RIGHT`, `SET_SETTINGS`, `LEFT_TEMP_DURATION`,
   `RIGHT_TEMP_DURATION`, `TEMP_LEVEL_LEFT`, `TEMP_LEVEL_RIGHT`, `PRIME`,
-  `DEVICE_STATUS`, `ALARM_CLEAR` or `STOP_PRIME`; any other value returns
-  `400`.
+  `DEVICE_STATUS` or `ALARM_CLEAR`; any other value returns `400`.
+  Command 17, known elsewhere as `STOP_PRIME` or `ALARM_SOLO`, is excluded
+  because its meaning is disputed and unverified.
 - For `TEMP_LEVEL_LEFT` and `TEMP_LEVEL_RIGHT`, `arg` must be a plain whole
   number from -100 to 100; for `LEFT_TEMP_DURATION` and
   `RIGHT_TEMP_DURATION`, a plain whole number of seconds from 0 to 43200.

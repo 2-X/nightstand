@@ -46,7 +46,7 @@ newline-delimited response.
 | 14 | `DEVICE_STATUS` | none | ✅ | Returns the full status blob: see [DEVICE_STATUS response fields](#device_status-response-fields) below. |
 | 15 | n/a | n/a | ❓ | Unused/unknown. Not referenced by free-sleep, jmew, or 8rp. |
 | 16 | `ALARM_CLEAR` | none | ✅ | Free-sleep uses this to stop an active alarm vibration. Other projects send a side argument, and a Pod 3 report says it does not stop a running alarm, see [other Pod generations](#other-pod-generations). |
-| 17 | `STOP_PRIME` | none (arg ignored) | ❌ | Documented by 8rp as stopping an active prime. Tested directly against this pod: sent both immediately and again once priming was confirmed active, `isPriming` stayed `true` for 5+ minutes with no visible effect. May need a different argument or apply only in another context/Pod generation. A "Cancel priming" button built on this was reverted: don't re-add without a positive test. |
+| 17 | `STOP_PRIME` / `ALARM_SOLO` (disputed) | unverified | 📖 unverified, ❌ cancellation on tested Pod 5 | [8rp](https://github.com/Schluggi/8rp/blob/main/docs/commands.md) names it `STOP_PRIME`. [Upstream free-sleep's commented command table](https://github.com/throwaway31265/free-sleep/blob/e5172139874a274d1ced12c8da052ab2cbaa286d/server/src/8sleep/deviceApi.ts#L23) and [seanpasino/free-sleep](https://github.com/seanpasino/free-sleep/commit/50580edff3) name it `ALARM_SOLO`, a whole-bed alarm. Neither meaning is verified in Nightstand. Sent before and after priming was confirmed active on the tested Pod 5, it left `isPriming` true for 5+ minutes with no visible effect. Nightstand does not expose command 17 through its API; do not add a cancellation action without a positive hardware test. |
 
 <a id="priming-cancellation"></a>
 

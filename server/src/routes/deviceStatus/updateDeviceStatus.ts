@@ -114,7 +114,6 @@ export const updateDeviceStatus = async (deviceStatus: DeepPartial<DeviceStatus>
 
   try {
     if (deviceStatus.isPriming === true) await executeFunction('PRIME', 'empty', options);
-    else if (deviceStatus.isPriming === false) await executeFunction('STOP_PRIME', 'empty', options);
     if (deviceStatus?.left) await updateSide('left', deviceStatus.left, options, onUntil);
     if (deviceStatus?.right) await updateSide('right', deviceStatus.right, options, onUntil);
     if (deviceStatus?.settings) await updateSettings(deviceStatus.settings, options);
