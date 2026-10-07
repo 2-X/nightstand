@@ -341,3 +341,33 @@ test('"When I get up" saves, and Bed says when it turns off at the latest', asyn
   const box = (await caption.boundingBox())!;
   expect(box.height).toBeLessThan(2.6 * parseFloat(await caption.evaluate(node => getComputedStyle(node).lineHeight)));
 });
+
+test('a manual rhythm converted to Smart Schedule holds its line to wake with warm-up off', async ({ page }) => {
+  await page.route('**/*', route => ['localhost', '127.0.0.1'].includes(new URL(route.request().url()).hostname)
+    ? route.continue() : route.abort());
+  await open(page, '/schedules');
+  await page.getByRole('button', { name: 'Edit Weekend' }).click();
+  await expect(page.getByRole('button', { name: 'Set by hand', pressed: true })).toBeVisible();
+  await page.getByRole('switch', { name: 'Enable alarm 1', exact: true }).uncheck();
+  await page.getByLabel('Turn on at', { exact: true }).fill('20:00');
+  await page.getByLabel('Wake at', { exact: true }).fill('08:00');
+  await page.getByRole('button', { name: 'Smart Schedule', exact: true }).click();
+  await page.getByRole('switch', { name: 'Warm-up before wake', exact: true }).uncheck();
+  await page.getByRole('combobox', { name: /^Turn off/ }).click();
+  await page.getByRole('option', { name: 'At wake time', exact: true }).click();
+  const chart = page.getByRole('figure', { name: /^Smart Schedule preview: .* at wake-up$/ });
+  await expect(chart).toBeVisible();
+  const wake = chart.locator('.MuiChartsAxis-tickLabel').filter({ hasText: /^Wake$/ });
+  await expect(wake).toBeVisible();
+  const line = chart.locator('.MuiLineElement-root');
+  await expect(line).toHaveCount(1);
+  await expect.poll(async () => line.evaluate(path => {
+    const svgPath = path as SVGPathElement;
+    const last = svgPath.getPointAtLength(svgPath.getTotalLength());
+    const tick = Array.from(path.closest('svg')!.querySelectorAll('.MuiChartsAxis-tickLabel'))
+      .find(node => node.textContent === 'Wake')!;
+    const transform = tick.parentElement!.getAttribute('transform')!;
+    const x = Number(transform.match(/translate\(([-\d.]+)/)![1]);
+    return Math.abs(last.x - x);
+  })).toBeLessThan(1);
+});

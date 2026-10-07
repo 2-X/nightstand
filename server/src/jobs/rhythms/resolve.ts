@@ -3,7 +3,7 @@ import { AlarmSchedule, DailySchedule, DayOfWeek, Schedules, Side } from '../../
 import { RhythmsDB, SmartSchedule } from '../../db/rhythmsSchema.js';
 import { wakeFromNight } from '../../db/rhythmWake.js';
 import { SCHEDULE_DAYS } from '../../db/scheduleKeys.js';
-import { addDays, rhythmNightBounds, wallClock } from '../../db/rhythmTimes.js';
+import { addDays, rhythmSleepBounds, wallClock } from '../../db/rhythmTimes.js';
 import { compareTimes, isValidTime } from '../utils.js';
 import { normalizeNight } from './night.js';
 import type { SmartCurveInfo } from '../../db/smartCurve.js';
@@ -53,7 +53,8 @@ function resolveNight(side: Side, date: string, source: NightSource, timeZone: s
   const night = normalizeNight(source.night);
   const { power } = night;
   if (!power.enabled || !isValidTime(power.on) || !isValidTime(power.off)) return null;
-  const { start, end } = rhythmNightBounds(date, power, timeZone);
+  const wakeTime = source.wake !== undefined && isValidTime(source.wake) ? source.wake : wakeFromNight(night);
+  const { start, end, wake } = rhythmSleepBounds(date, power, wakeTime, timeZone);
   // A short night starting in a spring-forward gap can lose its whole length.
   // The legacy engine skips that power on and leaves the side off.
   if (end <= start) return null;
@@ -68,10 +69,6 @@ function resolveNight(side: Side, date: string, source: NightSource, timeZone: s
   });
   events.push({ kind: 'power-off', at: end });
   events.sort((a, b) => a.at.getTime() - b.at.getTime() || KIND_ORDER[a.kind] - KIND_ORDER[b.kind]);
-  const wakeTime = source.wake !== undefined && isValidTime(source.wake) ? source.wake : wakeFromNight(night);
-  // Waking at the turn off means the end, even when off equals on.
-  const wakeAt = wakeTime === power.off ? end.getTime() : wallClock(dateForTime(date, wakeTime, power.on), wakeTime, timeZone).getTime();
-  const wake = new Date(Math.min(Math.max(wakeAt, start.getTime()), end.getTime()));
   const sleep: ResolvedSleep = { side, date, rhythmId: source.rhythmId, start, end, wake, night, mode: source.mode, events };
   if (source.mode === 'smart' && source.smart) sleep.smart = { ...source.smart };
   return sleep;

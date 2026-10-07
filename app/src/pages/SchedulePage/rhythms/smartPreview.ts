@@ -1,49 +1,50 @@
 import moment from 'moment-timezone';
 import type { DailySchedule } from '@api/schedulesSchema';
 import type { SmartSchedule } from '@api/rhythmsSchema';
-import { buildCurve, warmsBeforeBedtime, type CurvePoint } from '@api/smartCurve';
+import { rhythmSleepBounds } from '@api/rhythmTimes';
+import { buildCurve, levelAt, warmsBeforeBedtime, type CurvePoint } from '@api/smartCurve';
 
 export const COOL_DOWN_MAX_DELAY_MS = 2 * 60 * 60 * 1000;
 
 // Place a night's clock times on the date its sleep starts, in the Pod timezone. The wake time is the rhythm's own.
 export function nightAnchors(night: DailySchedule, wake: string, date: string, timeZone: string) {
-  const at = (time: string) => {
-    const value = moment.tz(`${date} ${time}`, 'YYYY-MM-DD HH:mm', timeZone);
-    if (time < night.power.on) value.add(1, 'day');
-    return value;
-  };
-  const bedtime = at(night.power.on);
-  const powerOff = at(night.power.off);
-  if (night.power.off === night.power.on) powerOff.add(1, 'day');
-  // Waking at the turn off means the end, even when off equals on.
-  const wakeAt = wake === night.power.off ? powerOff.clone() : moment.min(at(wake), powerOff);
-  return { bedtime: bedtime.toDate(), wake: wakeAt.toDate(), powerOff: powerOff.toDate() };
+  const { start: bedtime, end: powerOff, scheduledWake, wake: wakeAt } = rhythmSleepBounds(date, night.power, wake, timeZone);
+  return { bedtime, wake: wakeAt, powerOff, scheduledWake };
 }
 
 export function previewCurves({ night, wake, smart, date, timeZone, trackingOn }: {
   night: DailySchedule; wake: string; smart: SmartSchedule; date: string; timeZone: string; trackingOn: boolean;
-}): { anchors: ReturnType<typeof nightAnchors>; points: CurvePoint[]; band?: { from: Date; to: Date } } {
+}) {
   const anchors = nightAnchors(night, wake, date, timeZone);
   const input = { smart, bedtime: anchors.bedtime, coolStart: anchors.bedtime, wake: anchors.wake, powerOff: anchors.powerOff, timeZone };
-  const points = buildCurve(input);
-  if (!trackingOn) return { anchors, points };
+  const points = anchors.powerOff > anchors.bedtime ? buildCurve(input) : [];
+  // Display endpoints never become temperature commands.
+  const series = points.map(({ at, level }) => ({ at, level }));
+  const endLevel = levelAt(points, anchors.powerOff);
+  if (endLevel !== null) series.push({ at: anchors.powerOff, level: endLevel });
+  const domain = {
+    from: new Date(Math.min((series[0]?.at ?? anchors.bedtime).getTime(), anchors.scheduledWake.getTime())),
+    to: new Date(Math.max(anchors.scheduledWake.getTime(), anchors.powerOff.getTime())),
+  };
+  const markers = { bedtime: anchors.bedtime, wake: anchors.scheduledWake };
+  const model = { anchors, points, series, domain, markers };
+  if (!trackingOn) return { ...model, band: undefined };
   const latestStart = new Date(Math.min(anchors.bedtime.getTime() + COOL_DOWN_MAX_DELAY_MS, anchors.wake.getTime()));
   const late = buildCurve({ ...input, coolStart: latestStart });
   const from = points.find(point => point.phase === 'cooldown')?.at ?? anchors.bedtime;
   const to = late.find(point => point.phase === 'hold')?.at ?? latestStart;
-  return { anchors, points, band: to > from ? { from, to } : undefined };
+  return { ...model, band: to > from ? { from, to } : undefined };
 }
 
 // "+1 at bedtime, -3 overnight, +1 at wake-up": the levels the preview chart does not label.
-export function curveSummary(points: CurvePoint[], label: (level: number) => string): string {
-  const at = (phase: CurvePoint['phase']) => points.find(point => point.phase === phase)?.level;
-  const bedtime = at('bedtime');
-  const wake = at('wake');
-  if (bedtime === undefined) return '';
+export function curveSummary(points: CurvePoint[], label: (level: number) => string, anchors: ReturnType<typeof nightAnchors>): string {
+  const bedtime = levelAt(points, anchors.bedtime);
+  const wake = levelAt(points, anchors.wake);
+  if (bedtime === null) return '';
   const asleep = points.filter(point => point.phase === 'cooldown' || point.phase === 'hold').map(point => point.level);
   const overnight = asleep.length ? Math.min(...asleep) : bedtime;
   const parts = [`${label(bedtime)} at bedtime`, `${label(overnight)} overnight`];
-  if (wake !== undefined) parts.push(`${label(wake)} at wake-up`);
+  if (wake !== null) parts.push(`${label(wake)} at wake-up`);
   return parts.join(', ');
 }
 

@@ -51,7 +51,7 @@ export default function SmartCurveChart({ night, wake, smart, date, timeZone, fo
   const display = (level: number) => fahrenheitToDisplay(levelToFahrenheit(level), format);
   const min = display(Math.max(-10, bounds.min - 1));
   const max = display(Math.min(10, bounds.max + 1));
-  const points: Point[] = preview.points.map(point => ({
+  const points: Point[] = preview.series.map(point => ({
     x: point.at,
     y: Math.min(max, Math.max(min, display(point.level))),
     temperature: levelToFahrenheit(point.level),
@@ -59,8 +59,8 @@ export default function SmartCurveChart({ night, wake, smart, date, timeZone, fo
   }));
   if (points.length < 2) return null;
   const axisColor = theme.palette.text.secondary;
-  const summary = curveSummary(preview.points, level => formatTemperature(levelToFahrenheit(level), format));
-  const { bedtime, wake: wakeAt } = preview.anchors;
+  const summary = curveSummary(preview.points, level => formatTemperature(levelToFahrenheit(level), format), preview.anchors);
+  const { bedtime, wake: wakeAt } = preview.markers;
   return <Paper variant="outlined" role="figure" aria-label={ `Smart Schedule preview: ${summary}` } sx={ { width: '100%', p: 2 } }>
     <Box aria-hidden>
       <LineChart
@@ -68,8 +68,8 @@ export default function SmartCurveChart({ night, wake, smart, date, timeZone, fo
         xAxis={ [{
           scaleType: 'time',
           data: points.map(point => point.x),
-          min: points[0].x,
-          max: new Date(points[points.length - 1].x.getTime() + CHART_END_PADDING_MS),
+          min: preview.domain.from,
+          max: new Date(preview.domain.to.getTime() + CHART_END_PADDING_MS),
           tickInterval: [bedtime, wakeAt],
           tickLabelStyle: { fill: axisColor },
           valueFormatter: (value, context) => context.location === 'tick'
