@@ -22,4 +22,10 @@ for file in $(git ls-files server/dist | grep '\.js$'); do
     status=1
   fi
 done
+for file in $(git ls-files server/public server/dist | grep '\.map$'); do
+  if ! git ls-files --error-unmatch -- "${file%.map}" >/dev/null 2>&1; then
+    echo "orphan: $file"
+    status=1
+  fi
+done
 exit $status

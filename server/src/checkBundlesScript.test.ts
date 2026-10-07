@@ -25,9 +25,11 @@ describe('check-bundles.sh', () => {
     const dir = fixture({
       'server/public/index.js': 'import("./SleepPage-abc.js")',
       'server/public/SleepPage-abc.js': '',
+      'server/public/SleepPage-abc.js.map': '',
       'server/public/mockServiceWorker.js': '',
       'server/src/db/prisma.ts': '',
       'server/dist/db/prisma.js': '',
+      'server/dist/db/prisma.js.map': '',
     });
     const run = spawnSync('bash', [SCRIPT, dir], { encoding: 'utf8' });
     assert.equal(run.status, 0, run.stdout);
@@ -46,5 +48,20 @@ describe('check-bundles.sh', () => {
     assert.match(run.stdout, /orphan: server\/public\/SleepPage-old\.js/);
     assert.match(run.stdout, /orphan: server\/dist\/db\/loadMovementRecords\.js/);
     assert.doesNotMatch(run.stdout, /SleepPage-new/);
+  });
+
+  it('reports maps whose matching files are not tracked', () => {
+    const dir = fixture({
+      'server/public/index.js': '',
+      'server/public/SleepPage-old.js.map': '',
+      'server/dist/db/loadMovementRecords.js.map': '',
+    });
+    writeFileSync(path.join(dir, 'server/dist/db/loadMovementRecords.js'), '');
+    const run = spawnSync('bash', [SCRIPT, dir], { encoding: 'utf8' });
+    assert.equal(run.status, 1);
+    assert.deepEqual(run.stdout.trim().split('\n'), [
+      'orphan: server/dist/db/loadMovementRecords.js.map',
+      'orphan: server/public/SleepPage-old.js.map',
+    ]);
   });
 });
