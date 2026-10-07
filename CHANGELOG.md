@@ -12,7 +12,10 @@ Themes, a plainer Sleep page, safer updates and recovery, and support for Pod fi
 
 ### What changes in the app
 
-- A side whose schedule was paused turns on when the pause ends if its night is in progress.
+- A side whose schedule was paused turns on when the pause ends if its night
+  is in progress. Checked on my Pod 5 with Rhythms and a weekly schedule,
+  including ending a pause early. Change pause saves a new end in one write
+  without turning the side on in between, also checked on my Pod 5.
 
 - Settings > Bed and sides has a new Theme setting with
   four themes, saved on each device: nightstand (the default, the 3.3.2
@@ -64,18 +67,29 @@ Themes, a plainer Sleep page, safer updates and recovery, and support for Pod fi
   keeps the previous version ready until the new one answers, and puts it
   back after a failure or interruption unless the services won't stop.
   A reinstall whose database migration fails now stops with an error instead
-  of starting. Tested on a computer, not yet on a Pod.
+  of starting. Update, downgrade and rollback ran on my Pod 5. The failure
+  paths above are covered by automated tests, not all by hardware checks;
+  the fork switch has not been run on a Pod.
 - The installer now holds the same operation lock as updates, rollbacks and
   switches through its health check and any restore, so a rollback cannot
-  replace the install while the installer is still checking it.
+  replace the install while the installer is still checking it. On my Pod 5,
+  the installer refused before downloading or changing anything while a
+  test process held the lock.
 - After a power loss during an update swap, a timer now starts one recovery
   attempt 45 seconds after boot. If the live install is missing or fails its
   health check, it tries to restore the marked previous version. A timeout
-  or failed restore keeps the marker for manual recovery. Tested on a
-  computer, not yet on a Pod.
+  or failed restore keeps the marker for manual recovery. On my Pod 5, a
+  reboot with no marker did nothing, a hand-set marker cleared after the
+  health check, and a power cut shortly after the server stopped left the
+  previous install healthy. Recovery ran once about 40 seconds after power
+  returned and cleared the marker. The cut landed before the tree move; a
+  cut during the move itself is covered only by automated tests. The
+  interrupted update recorded no result, so the app's last result stayed
+  at the previous run.
 - Reset and install now take the operation lock before changing anything,
   so they refuse while another operation holds it and the server can tell
-  they are running. A systemd tmpfiles rule creates the lock after each boot.
+  they are running. A systemd tmpfiles rule creates the lock after each boot,
+  checked on my Pod 5.
 - Nightstand now keeps a copy of the Pod's original SSH, firewall and time
   sync settings in /persistent/nightstand-stock/ the first time it changes
   them. On a Pod installed earlier, each copy is taken the next time
@@ -111,9 +125,9 @@ Themes, a plainer Sleep page, safer updates and recovery, and support for Pod fi
   seconds instead of staying down until it is unplugged. Other models are
   left as they are for now. It also stays off where a watchdog is already
   set up some other way, and switching to upstream turns it off again (on
-  some Pods, at the next restart). Checked by hand on one Pod 5; the
-  automatic setup is checked on hardware before this release is marked
-  stable.
+  some Pods, at the next restart). I checked setup, removal, persistence
+  across a reboot and recovery from a deliberate freeze on my Pod 5. Setup
+  was run by hand; an update left a pre-existing watchdog setting alone.
 - If you turned the hardware watchdog off with
   setup_watchdog.sh --remove, installs and updates now leave it off. Run
   setup_watchdog.sh again to turn it back on.
@@ -123,14 +137,17 @@ Themes, a plainer Sleep page, safer updates and recovery, and support for Pod fi
   have failed for 20 minutes; a router that is away while scans still work
   never counts. It restarts at most 3 times a day and never during an
   update or install. Whether a restart brings Wi-Fi back is not yet
-  confirmed, and this has not yet run on a Pod.
+  confirmed; Wi-Fi recovery has not been exercised on a Pod.
 - If Nightstand stops, a side turned on by the weekly
   schedule now turns itself off a few minutes after its scheduled off time,
   instead of 12 hours after it came on, including when a pause skips that
-  off. Not yet checked on a Pod.
+  off. With the server stopped on my Pod 5, a weekly night and a Rhythms
+  night turned the side off about 5 minutes after the scheduled off time;
+  "When I get up" turned it off about 15 minutes after the scheduled off time.
 - The app now says when an alarm did not ring, or may not
   have rung, and why. The message stays at the top of every page until you
-  dismiss it or a week passes.
+  dismiss it or a week passes. Checked on my Pod 5 with the server stopped
+  across a one-time alarm: after restart, Nightstand reported it as missed.
 - A tap set to the alarm action, the shape upstream free-sleep uses, is
   accepted but has no effect yet. On a Pod 5 the firmware handles a tap
   while an alarm rings: a double or triple tap stops the alarm, whatever the
@@ -139,8 +156,9 @@ Themes, a plainer Sleep page, safer updates and recovery, and support for Pod fi
 - Nightstand now reads the firmware's per-side `dismissAlarm` counter. After
   taking a baseline for a ringing alarm, a later value above the highest
   seen for that alarm clears that side's ringing record and pending snooze,
-  without sending a command to the Pod. I have not yet confirmed on a Pod 5
-  whether the firmware reports the dismissal this way. Adapted from
+  without sending a command to the Pod. Confirmed on my Pod 5: a double tap
+  stopped a Nightstand alarm in firmware, the counter rose, and Nightstand
+  cleared its ringing state and logged the dismissal. Adapted from
   [upstream free-sleep's dismissal reading](https://github.com/throwaway31265/free-sleep/commit/2f630d9cf72e3e5583cf8a4b50da604f050f70be).
 
 ### Newer firmware and fixes from upstream
@@ -188,7 +206,8 @@ Themes, a plainer Sleep page, safer updates and recovery, and support for Pod fi
   starts and enables the stream service when Biometrics is on, and stops
   and disables it when off. This fixes a restored setting leaving the
   service disabled at the next reboot; reconciliation waits while another
-  operation or update recovery is pending.
+  operation or update recovery is pending. Checked on my Pod 5, including
+  after a server restart and reboot.
 
 ### Smaller fixes
 

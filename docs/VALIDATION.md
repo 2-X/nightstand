@@ -179,10 +179,11 @@ Nightstand stops. A pause moves that timer to the latest off time.
 
 These rules are covered by automated tests ([TESTING.md](TESTING.md)). I
 haven't checked whether the curve changes anyone's sleep, I haven't measured
-how long the cover takes to reach a new temperature, and "When I get up" is
-still to be checked on my Pod. The studies listed in the app used other beds
-and didn't test this curve. Both features rely on presence, which in a
-shared bed can mistake the other sleeper for you.
+how long the cover takes to reach a new temperature. I checked "When I get up"
+on my Pod 5: the side stayed on while I was in bed and turned off after I got
+up, and its firmware timer turned it off with the server stopped. The studies
+listed in the app used other beds and didn't test this curve. Both features
+rely on presence, which in a shared bed can mistake the other sleeper for you.
 
 ## Limits
 

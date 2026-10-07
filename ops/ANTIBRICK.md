@@ -95,7 +95,7 @@ installs each helper and unit by flushing a temporary file, renaming it and
 flushing its directory.
 
 After a power loss, `free-sleep-recover-update.timer` schedules one recovery
-attempt 45 seconds after boot. (Tested with simulated failures, not yet on a Pod.) Its service runs after `multi-user.target`,
+attempt 45 seconds after boot. Its service runs after `multi-user.target`,
 so recovery does not hold up boot completion. Systemd limits the attempt to
 60 seconds, with at most 5 more seconds to kill remaining processes. It does
 not retry during that boot. A timeout keeps the marker for manual recovery.
@@ -111,6 +111,14 @@ clears the marker only after the restored original tree passes its health
 check. It never acts without the marker or restores database or settings
 backups. An unreadable marker, a missing previous tree or a writer that will
 not stop requires manual recovery; the marker and available trees are kept.
+
+On my Pod 5, a reboot with no marker left recovery idle, and a hand-set
+marker cleared after the health check. After a power cut a few seconds
+after the server stopped for an update, the Pod came back healthy on the
+previous install. Recovery ran once, about 40 seconds after power returned,
+and cleared the marker. The cut landed before the tree move; a cut during
+the move itself is covered only by automated tests. The interrupted update
+recorded no result, so the app's last result stayed at the previous run.
 
 The switch to upstream refuses while an update marker exists. A successful
 switch removes the recovery timer, service, external helpers and marker,
@@ -305,7 +313,8 @@ auto-off switch.
   `bash /home/dac/free-sleep/scripts/setup_watchdog.sh --remove` turns it
   off, and it stays off through updates and reinstalls until the script is
   run again without arguments. On some Pods it turns off only at the next
-  restart. Recovery from a real freeze has not been tested on a Pod.
+  restart. I checked setup, removal, persistence across a reboot and
+  recovery from a deliberate freeze on my Pod 5.
 - **Network watchdog.** `free-sleep-network-watchdog.timer` runs
   `scripts/network_watchdog.sh` every minute, only where the stock MT7663
   Wi-Fi driver is loaded. It restarts the Pod, with a normal reboot, when

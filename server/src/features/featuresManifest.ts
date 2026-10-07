@@ -57,7 +57,9 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     description: 'An update marks its swap before moving the live tree. A timer starts one recovery attempt '
       + '45 seconds after boot when the marker remains: keep a healthy live install or try to restore the previous tree. '
       + 'The marker clears only after a health check passes. A timeout or failed restore keeps it for manual '
-      + 'recovery. Database and settings backups are not restored. Not yet checked on a Pod.',
+      + 'recovery. Database and settings backups are not restored. Checked on one Pod 5 with no marker, a hand-set '
+      + 'marker and a power cut after the server stopped, before the tree move. A cut during the move is covered '
+      + 'only by automated tests. An interrupted update records no new result, so the last result stays at the previous run.',
     category: 'safety',
     version: '3.6.0',
     flag: null,
@@ -778,8 +780,8 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
     description: 'Accepts the alarm tap action upstream uses, which has no effect yet. On a Pod 5 the firmware '
       + 'handles a double or triple tap during an alarm and does not pass it through the tap counters. '
       + 'A later dismissAlarm value above the highest seen for the same active alarm clears the side\'s ringing '
-      + 'record and pending snooze without sending a command. Whether the firmware reports this on a Pod 5 '
-      + 'is not yet confirmed.',
+      + 'record and pending snooze without sending a command. Confirmed on one Pod 5: a double tap stopped '
+      + 'the alarm in firmware, dismissAlarm rose, and Nightstand cleared its ringing state and logged the dismissal.',
     category: 'platform',
     version: '3.6.0',
     flag: null,

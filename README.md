@@ -62,8 +62,8 @@ Nightstand comes with no warranty (see [License](#license)).
 ### What to expect
 
 - Few Pods run Nightstand, so a lack of problem reports means little.
-- The recovery features haven't yet run on a real Pod
-  ([details](#what-happens-if-an-install-fails)).
+- Update, rollback, reset and boot recovery checks have run on my Pod 5,
+  with gaps noted in the [testing guide](docs/TESTING.md#hardware-checks).
 - The web app has no login. Any device that can reach the Pod can control
   it, read its sleep data, and install, roll back or replace its software.
 - Eight Sleep's firmware still runs underneath and can upload raw sensor
@@ -114,10 +114,14 @@ SSH or the cable too. On a Pod 3 or Pod 4 a
 [firmware reset](INSTALLATION.md#going-back-to-the-eight-sleep-app) is the
 last resort.
 
-Automated tests simulate all of this (an update killed partway through, a
-slow restart, a full disk, a bad download), but none of it has been
-triggered on a real Pod. I'll run a daytime session on my Pod 5, both sides
-off, before I mark this release stable.
+Automated tests simulate interrupted updates, slow restarts, full disks and
+bad downloads. On my Pod 5, a bad checksum was refused, and update,
+downgrade, rollback and reset-and-restore checks passed. After a power cut
+a few seconds after the server stopped for an update, it came back healthy
+on the previous install and cleared the recovery marker. A cut during the
+tree move itself is covered only by automated tests. Some update requests
+used the API, as the Install button does. These checks cover one Pod 5,
+not every simulated failure above.
 
 ### Where can I get help?
 

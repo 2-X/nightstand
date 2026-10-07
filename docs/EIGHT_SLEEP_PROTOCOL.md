@@ -78,16 +78,16 @@ Response is newline-delimited `key = value` text, values as strings.
 | `priming` | `"true"`/`"false"`: whether a priming cycle is active | ✅ |
 | `settings` | Hex-encoded CBOR blob: `gl`/`gr` (gain), `lb` (LED brightness) | ✅ |
 | `doubleTap` / `tripleTap` / `quadTap` | JSON string `{l, r, s}`: unix timestamp (or `0`) of the last tap gesture per side/sensor. free-sleep uses `quadTap` to cycle the adjustable-base preset. | ✅ |
-| `dismissAlarm` | JSON object keyed by `l` and `r`, with numeric values that upstream free-sleep treats as dismissal timestamps. Nightstand baselines each alarm on its first valid status after starting. The first valid sample after reconnecting can only raise that alarm's high-water mark. Decreases and restored historical values do not dismiss it. Missing or malformed values and the unmapped `s` channel are ignored. Only a later value strictly above the highest seen for that alarm across all connections clears it, without sending a command. | 📖 [upstream monitor](https://github.com/throwaway31265/free-sleep/blob/a35972d839a68a1a7a78c57085edf7a5a4be314d/server/src/8sleep/frankenMonitor.ts#L350). Timestamp units and behavior on our Pod 5 are not independently verified. |
+| `dismissAlarm` | JSON object keyed by `l` and `r`, with numeric values that upstream free-sleep treats as dismissal timestamps. Nightstand baselines each alarm on its first valid status after starting. The first valid sample after reconnecting can only raise that alarm's high-water mark. Decreases and restored historical values do not dismiss it. Missing or malformed values and the unmapped `s` channel are ignored. Only a later value strictly above the highest seen for that alarm across all connections clears it, without sending a command. | ✅ On my Pod 5, the value rose after a double tap stopped a Nightstand alarm, and Nightstand cleared its ringing state and logged the dismissal. Timestamp units remain unverified. Reading adapted from the [upstream monitor](https://github.com/throwaway31265/free-sleep/blob/a35972d839a68a1a7a78c57085edf7a5a4be314d/server/src/8sleep/frankenMonitor.ts#L350). |
 
 On the tested Pod 5, a double or triple tap during an alarm stops it in the
 firmware, regardless of the tap settings. The gesture is not reported to
 Nightstand through the tap counters, so the alarm tap action cannot snooze
 it. Nightstand clears its ringing record when that side's `dismissAlarm`
 value increases beyond the highest value seen for that alarm across all
-connections. This field still needs a before and after capture on
-the tested Pod 5 to confirm it reports the observed gesture. There is no
-verified firmware ringing flag in the status fields used here.
+connections. I confirmed this on my Pod 5 with a double tap during a
+Nightstand alarm. There is no verified firmware ringing flag in the status
+fields used here.
 
 ## RAW biometrics stream record types
 

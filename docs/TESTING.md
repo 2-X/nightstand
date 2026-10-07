@@ -97,38 +97,48 @@ off Linux. None of these commands contacts a Pod.
 
 ## Hardware checks
 
-CI can't test hardware. Each row here is a check on a real Pod.
+CI can't test hardware. These tables record hardware checks and their limits.
 
 | When | Pod | Version | What was checked | Result |
 | --- | --- | --- | --- | --- |
 | Since July 2026 | Pod 5 | each release | Nightly use by me, with two sleepers | in use |
 | September 2026 | Pod 3 (SD card) | 3.3.1, 3.3.2, 3.5.1 | Fixes from one owner's reports in [issue #1](https://github.com/LTimothy/nightstand/issues/1) | only 3.3.1 confirmed by that owner |
 
-### Planned on my Pod 5, not yet run
+### Checks on my Pod 5
 
-I plan one daytime session on my own Pod 5 before I mark this release
-stable, with both sides off and nobody in bed. A full backup goes to my
-computer first, and I practise restoring it before anything changes. The
-checks then run from least to most risky, and the first unexpected result
-ends the session and puts the Pod back as it was.
+I ran these checks on my Pod 5. I backed up the application and database to
+my computer and rehearsed the restore before changing anything. These
+results cover one Pod 5 only.
 
-| Check | What should happen | Result |
+| Check | What happened | Remaining gap |
 | --- | --- | --- |
-| Each side on and off | The bed follows the app | not yet run |
-| Update, roll back, update again, all from the app | Each ends on the right version with settings and schedules intact | not yet run |
-| Update or roll back while a side is on | The server and the app ask first and do nothing until confirmed | not yet run |
-| Too little free space on either partition | The update, and the switch to upstream, stop before changing anything, and the app shows why | not yet run |
-| Nightstand crashes | It is running again within seconds | not yet run |
-| Nightstand hangs | The health check restarts it within a few minutes | not yet run |
-| An alarm is due while Nightstand is stopped | The app reports the missed alarm and why | not yet run |
-| Nightstand stops during a scheduled sleep | The Pod turns the side off by itself, for a Rhythms sleep and for a weekly schedule | not yet run |
-| "When I get up" | Kept on while someone is in bed; with Nightstand stopped, off within about 15 minutes | not yet run |
-| `fs-reset` | Nightstand still reaches the bed afterwards; the data is then put back | not yet run |
-| Hardware watchdog | It turns on, off and on again, survives a restart, and resets a deliberately frozen Pod | not yet run |
-| Switch to upstream free-sleep and back | A separate, later session, only if I decide the risk is worth it | not planned yet |
+| Each side on and off | Both sides followed the controls, including the final check. | Controls with an empty database were not run. |
+| Update, downgrade, rollback and roll forward | Each completed on the intended install with settings and schedules intact. A wrong checksum was refused. | Install in the release list was partly covered: the downgrade used the app, while some update requests used the API, as the button does. An update from 3.5.1 cannot check a release checksum. |
+| Rollback while a side is on | The server refused without confirmation, and the app showed the warning and cancelled without starting. | This did not exercise every update and switch warning. |
+| Free-space refusals | With the required space raised for the check, updates refused on either partition and the switch to upstream refused on the data partition. | The disks were not filled. The fork switch itself was not run. |
+| Server crash and hang | A killed server restarted within 15 seconds. The health check restarted a hung server. | One Pod 5. |
+| Health check during an update or a deliberate stop | It left the server alone. | One Pod 5. |
+| One-time alarm while the server was stopped | After restart, Nightstand reported the alarm as missed because it had not been running. | Other missed-alarm reasons have automated tests. |
+| Firmware off timers with the server stopped | A Rhythms night and a weekly night turned the side off about 5 minutes after the scheduled off time. "When I get up" turned it off about 15 minutes after the scheduled off time. | The 12-hour timer for a side turned on by hand was not observed. |
+| "When I get up" with someone in bed | The side stayed on while I was in bed and turned off after I got up. | One Pod 5. |
+| Pause resume | Ending a pause during the night resumed the side under Rhythms and the weekly schedule. Ending a weekly pause early also resumed it. | Pause expiry outside the night has automated tests only. |
+| Change pause | Changing the end saved once, with no power-on in between. | One Pod 5. |
+| Alarm taps and dismissal reading | The firmware handled double and triple taps during an alarm without changing the gesture counters, so the configured alarm tap action had no effect. In a later check, a double tap stopped a Nightstand alarm, its `dismissAlarm` counter rose, and Nightstand cleared its ringing state and logged the dismissal. | Timestamp units remain unverified. This did not check the app's separate Dismiss command. |
+| Boot recovery after an interrupted update | A reboot with no marker did nothing. A hand-set marker cleared after the health check. After a power cut a few seconds after the server stopped for an update, the previous install came back healthy; recovery ran once about 40 seconds after power returned and cleared the marker. | The cut landed before the tree move. A cut during the move itself is covered only by automated tests. The interrupted update recorded no result, so the app's last result stayed at the previous run. |
+| Installer operation lock | The installer refused before downloading or changing anything while a test process held the operation lock. | The holder simulated a competing operation. |
+| Operation lock after reboot | Boot recreated the lock file with the expected owner and permissions. | One Pod 5. |
+| Biometrics service | The stream service followed the Biometrics setting, including after a server restart and reboot. | One Pod 5. |
+| Weekly power logging | Power-on was logged by name for a weekly night. | Power-off logging has automated tests only. |
+| `fs-reset` and data restore | Nightstand restarted with empty settings and Biometrics off, and read temperatures from the bed. I restored the data and checked the controls afterwards. | Controls on the empty database were not run. The stream's autostart needed enabling by hand after that restore; the later service reconciliation check passed. |
+| Hardware watchdog | I checked setup, removal, persistence across a reboot and recovery from a deliberate freeze. The frozen Pod reset after about 34 seconds. | Setup ran by hand using the fallback for a kernel without watchdog sysfs. An update preserved a pre-existing watchdog setting; automatic arming from an off state was not checked. |
+| Overnight health after the checks | The schedules and services were healthy the next morning, with no missed alarms. | One Pod 5. |
+| Network watchdog Wi-Fi recovery | Not exercised. | Whether a restart restores Wi-Fi remains unconfirmed. |
+| Switch to upstream free-sleep and back | Not run. | The fork switch and migration tool still have only simulated runs for the full switch. |
 
-Results, with the date and the firmware version, replace the last column
-after the session. Anything skipped will say so here.
+The update checks used a local HTTPS test proxy serving the release
+candidate and older releases. They checked the update logic, not the public
+GitHub download path, redirects or caching. The proxy and its test
+configuration were removed afterwards.
 
 ### Not tested on hardware by me
 
@@ -147,24 +157,17 @@ or marked unconfirmed in the changelog.
   tests here and, sometimes, by an owner.
 - I have no adjustable base. The app's base screen is tested against the
   demo, but the server code that talks to a base has no tests of its own.
-- Update, rollback, reset and the watchdogs are tested only with simulated
-  failures until the hardware session above has run.
-- Boot recovery after a power loss during an update has been checked only
-  with simulated failures on a computer, not on a Pod.
-- I have not yet confirmed on a Pod 5 whether the firmware's `dismissAlarm`
-  counter reports an alarm stopped by a tap. Tests check that a later value
-  above the highest seen for the same alarm clears its ringing record and
-  pending snooze without sending a command.
-- The scripts are tested on copies on a computer, with the Pod's commands
-  replaced, not on a Pod's own system image.
+- The [hardware checks](#checks-on-my-pod-5) cover one Pod 5 and the cases
+  listed. The remaining script failure paths are checked on copies on a
+  computer, with the Pod's commands replaced.
 - The firewall script is checked for the rules it writes, not with real
   network traffic.
 - Browser tests run in Chromium, and a phone-size subset plus the layout
   check also run in WebKit (Safari's engine). Firefox isn't tested, and the
   browser tests use the demo's mock data, not a live Pod.
 - Whether a network watchdog restart brings the Pod's Wi-Fi back isn't
-  confirmed, and the fix that stops a ringing alarm when it is dismissed
-  hasn't been confirmed on hardware.
+  confirmed. The app's separate Dismiss command for a ringing alarm has
+  not been confirmed by these hardware checks.
 - The Biometrics tests check that the code does what it was designed to do
   with fixed inputs. Whether its numbers are right is a separate question,
   covered in [VALIDATION.md](VALIDATION.md). The newer vitals estimators'

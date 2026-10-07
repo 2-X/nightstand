@@ -245,9 +245,10 @@ generic message; the details go to the server log.
     Decreases, restored historical values, missing, malformed and unchanged
     values do nothing. Only a later value strictly above the highest seen
     for that alarm across all connections clears its ringing record and
-    pending snooze. It sends no command in response. Timestamp units and
-    behavior on the tested Pod 5 remain
-    unverified and still need a capture.
+    pending snooze. It sends no command in response. On my Pod 5, a double
+    tap stopped a Nightstand alarm in firmware, the `dismissAlarm` value
+    rose, and Nightstand cleared its ringing state and logged the dismissal.
+    Timestamp units remain unverified.
 - `features` are feature flags. `sleepScore` turns the sleep score and sleep
   stage routes on and off; the app no longer shows either.
   `nightstandTheme` is no longer read and stays so stored settings keep

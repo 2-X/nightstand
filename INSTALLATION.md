@@ -289,7 +289,11 @@ install, reset, update, rollback or fork switch holds it.
 After a power loss during an update swap, Nightstand makes one recovery
 attempt 45 seconds after boot. It keeps a healthy live install or tries to
 restore the marked previous version. A timeout or failed restore needs
-manual recovery ([details and limits](ops/ANTIBRICK.md#what-is-backed-up-and-checked)). This is tested with simulated failures, not yet on a Pod.
+manual recovery ([details and limits](ops/ANTIBRICK.md#what-is-backed-up-and-checked)).
+On my Pod 5, a reboot with no marker did nothing, a hand-set marker cleared
+after the health check, and a power cut shortly after the server stopped
+for an update left the previous install healthy and the marker cleared.
+A cut during the tree move itself is covered only by automated tests.
 Nightstand keeps free-sleep's folder and service names, so you'll see
 `free-sleep` in paths and commands.
 
@@ -305,8 +309,9 @@ On a Pod 5 the installer then sets the hardware watchdog to restart the Pod
 after about 30 seconds if its system freezes. It tries the setting for about
 a minute first. If the trial fails, the watchdog stays off and later updates
 don't try again. A failure the script can't catch restarts the Pod once.
-Other models are left as they are for now. Recovery from a real freeze
-hasn't been tested on a Pod.
+Other models are left as they are for now. I checked setup, removal,
+persistence across a reboot and recovery from a deliberate freeze on my
+Pod 5.
 
 With the watchdog on, and where the Pod uses the stock MT7663 Wi-Fi driver
 (my Pod 5 does), a timer also checks the network every minute. If that
