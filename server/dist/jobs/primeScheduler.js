@@ -25,8 +25,8 @@ const scheduleRebootJob = (onHour, onMinute, timeZone) => {
             }
             logger.info(`Executing scheduled reboot job`);
             await reboot();
-            serverStatus.status.alarmSchedule.status = 'healthy';
-            serverStatus.status.alarmSchedule.message = '';
+            serverStatus.status.rebootSchedule.status = 'healthy';
+            serverStatus.status.rebootSchedule.message = '';
         }
         catch (error) {
             if (error instanceof PrivilegedCommandError) {
@@ -36,9 +36,9 @@ const scheduleRebootJob = (onHour, onMinute, timeZone) => {
                     logger.info(`Skipping daily reboot: ${error.message}`);
                 return;
             }
-            serverStatus.status.alarmSchedule.status = 'failed';
+            serverStatus.status.rebootSchedule.status = 'failed';
             const message = error instanceof Error ? error.message : String(error);
-            serverStatus.status.alarmSchedule.message = message;
+            serverStatus.status.rebootSchedule.message = message;
             logger.error(error);
         }
     });

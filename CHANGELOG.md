@@ -6,7 +6,9 @@ is a hard fork; for the history of the projects it descends from, see
 [jmew/free-sleep](https://github.com/jmew/free-sleep) and
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
 
-## [Unreleased]
+## [3.6.1] - 2026-10-07
+
+Keeps tap temperature changes within range, reports the daily reboot under its own status, stops sending an unverified command, and credits three contributors.
 
 ### Fixes
 
@@ -41,6 +43,8 @@ here now:
   ([driver](https://github.com/Geczy/free-sleep/commit/5fb11a1a9138c3301e332b642e4986ccb739b696),
   [angle maps](https://github.com/Geczy/free-sleep/commit/44b2352948bc186ce9ee17b8d79696623c8801fe)).
   jmew's fork later carried this code, including the base presets.
+
+Checked on: automated tests only (server, app and end-to-end, in CI on the release commit); these fixes were not run on a Pod before release.
 
 ## [3.6.0] - 2026-10-07
 

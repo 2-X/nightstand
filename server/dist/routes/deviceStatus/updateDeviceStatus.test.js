@@ -12,10 +12,7 @@ const dataFolder = mkdtempSync(path.join(tmpdir(), 'free-sleep-updateDeviceStatu
 mkdirSync(path.join(dataFolder, 'lowdb'));
 process.env.DATA_FOLDER = `${dataFolder}/`;
 process.env.ENV = 'local';
-// Regression test for a truthiness bug: `if (targetTemperatureF)` silently
-// dropped an explicit `0` (a valid Fahrenheit target), since `0` is falsy.
-// executeFunction talks to the Franken hardware socket, so it's mocked here
-// rather than exercised for real.
+// Keep firmware commands local to the test.
 const executeFunctionMock = mock.fn(async (...args) => { void args; });
 mock.module('../../8sleep/deviceApi.js', {
     namedExports: { executeFunction: executeFunctionMock },
@@ -32,14 +29,24 @@ describe('updateDeviceStatus', () => {
             assert.deepEqual(executeFunctionMock.mock.calls.map(call => call.arguments.slice(0, 2)), [['LEFT_TEMP_DURATION', '43200']]);
         });
     }
-    it('applies an explicit targetTemperatureF of 0 instead of silently dropping it', async () => {
+    it('clamps an explicit targetTemperatureF of 0 to the minimum', async () => {
         executeFunctionMock.mock.resetCalls();
         await updateDeviceStatus({ left: { targetTemperatureF: 0 } });
         const levelCall = executeFunctionMock.mock.calls.find((call) => call.arguments[0] === 'TEMP_LEVEL_LEFT');
         assert.ok(levelCall, 'expected TEMP_LEVEL_LEFT to be sent for an explicit 0 target');
-        // (0 - 82.5) / 27.5 * 100, rounded
-        assert.equal(levelCall.arguments[1], '-300');
+        assert.equal(levelCall.arguments[1], '-100');
     });
+    for (const side of ['left', 'right']) {
+        for (const [target, level] of [[54, '-100'], [55, '-100'], [110, '100'], [111, '100']]) {
+            it(`bounds an internal ${side} target of ${target} F`, async () => {
+                executeFunctionMock.mock.resetCalls();
+                await updateDeviceStatus({ [side]: { targetTemperatureF: target } });
+                assert.deepEqual(executeFunctionMock.mock.calls.map(call => call.arguments.slice(0, 2)), [
+                    [side === 'left' ? 'TEMP_LEVEL_LEFT' : 'TEMP_LEVEL_RIGHT', level],
+                ]);
+            });
+        }
+    }
     it('still applies a normal positive targetTemperatureF', async () => {
         executeFunctionMock.mock.resetCalls();
         await updateDeviceStatus({ right: { targetTemperatureF: 82.5 } });

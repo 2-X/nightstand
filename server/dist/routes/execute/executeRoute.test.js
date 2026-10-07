@@ -1,10 +1,18 @@
 import assert from 'node:assert/strict';
 import { after, beforeEach, describe, it, mock } from 'node:test';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import express from 'express';
+const folder = mkdtempSync(path.join(tmpdir(), 'nightstand-execute-route-'));
+mkdirSync(path.join(folder, 'lowdb'));
+process.env.DATA_FOLDER = `${folder}/`;
+process.env.ENV = 'local';
+const { frankenCommands } = await import('../../8sleep/deviceApi.js');
 const sent = [];
 mock.module(new URL('../../8sleep/deviceApi.js', import.meta.url).href, {
     namedExports: {
-        frankenCommands: { PRIME: '13', SET_TEMP: '1', TEMP_LEVEL_LEFT: '11' },
+        frankenCommands,
         executeFunction: async (command, arg) => { sent.push([command, arg]); },
     },
 });
@@ -16,6 +24,7 @@ await new Promise(resolve => server.once('listening', resolve));
 const url = `http://127.0.0.1:${server.address().port}/execute`;
 after(async () => {
     await new Promise(resolve => server.close(() => resolve()));
+    rmSync(folder, { recursive: true, force: true });
 });
 const post = async (body) => {
     const response = await fetch(url, {
@@ -32,6 +41,14 @@ describe('POST /execute', () => {
         assert.deepEqual(response.body, { message: 'Invalid command' });
         assert.deepEqual(sent, []);
     });
+    for (const command of ['STOP_PRIME', 'ALARM_SOLO', '17']) {
+        it(`refuses disputed command ${command} without sending it`, async () => {
+            const response = await post({ command, arg: 'empty' });
+            assert.equal(response.status, 400);
+            assert.deepEqual(response.body, { message: 'Invalid command' });
+            assert.deepEqual(sent, []);
+        });
+    }
     it('answers an out of range arg with a JSON message', async () => {
         const response = await post({ command: 'TEMP_LEVEL_LEFT', arg: '1e2' });
         assert.equal(response.status, 400);

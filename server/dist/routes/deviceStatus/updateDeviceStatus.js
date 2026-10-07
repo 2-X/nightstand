@@ -1,6 +1,6 @@
 import _ from 'lodash';
 import cbor from 'cbor';
-import { MAX_ON_DURATION_SECONDS } from './deviceStatusSchema.js';
+import { MAX_ON_DURATION_SECONDS, MIN_TEMPERATURE_F, MAX_TEMPERATURE_F } from './deviceStatusSchema.js';
 import { executeFunction } from '../../8sleep/deviceApi.js';
 import { dismissAlarm } from '../../8sleep/dismissAlarm.js';
 import { FrankenSupersededError } from '../../8sleep/frankenErrors.js';
@@ -68,7 +68,8 @@ const updateSide = async (side, sideStatus, options, onUntil) => {
         }
     }
     if (targetTemperatureF !== undefined) {
-        const level = calculateLevelFromF(targetTemperatureF);
+        const boundedTemperatureF = Math.max(MIN_TEMPERATURE_F, Math.min(MAX_TEMPERATURE_F, targetTemperatureF));
+        const level = calculateLevelFromF(boundedTemperatureF);
         if (updateLeft)
             await executeFunction('TEMP_LEVEL_LEFT', level, stateOptions);
         if (updateRight)
@@ -105,8 +106,6 @@ export const updateDeviceStatus = async (deviceStatus, updateOptions = {}) => {
     try {
         if (deviceStatus.isPriming === true)
             await executeFunction('PRIME', 'empty', options);
-        else if (deviceStatus.isPriming === false)
-            await executeFunction('STOP_PRIME', 'empty', options);
         if (deviceStatus?.left)
             await updateSide('left', deviceStatus.left, options, onUntil);
         if (deviceStatus?.right)
