@@ -2,7 +2,7 @@ import _ from 'lodash';
 import { DeepPartial } from 'ts-essentials';
 import cbor from 'cbor';
 
-import { DeviceStatus, MAX_ON_DURATION_SECONDS, SideStatus } from './deviceStatusSchema.js';
+import { DeviceStatus, MAX_ON_DURATION_SECONDS, MIN_TEMPERATURE_F, MAX_TEMPERATURE_F, SideStatus } from './deviceStatusSchema.js';
 import { executeFunction } from '../../8sleep/deviceApi.js';
 import { dismissAlarm } from '../../8sleep/dismissAlarm.js';
 import { FrankenSupersededError } from '../../8sleep/frankenErrors.js';
@@ -75,7 +75,8 @@ const updateSide = async (side: 'left' | 'right', sideStatus: DeepPartial<SideSt
   }
 
   if (targetTemperatureF !== undefined) {
-    const level = calculateLevelFromF(targetTemperatureF);
+    const boundedTemperatureF = Math.max(MIN_TEMPERATURE_F, Math.min(MAX_TEMPERATURE_F, targetTemperatureF));
+    const level = calculateLevelFromF(boundedTemperatureF);
     if (updateLeft) await executeFunction('TEMP_LEVEL_LEFT', level, stateOptions);
     if (updateRight) await executeFunction('TEMP_LEVEL_RIGHT', level, stateOptions);
   }

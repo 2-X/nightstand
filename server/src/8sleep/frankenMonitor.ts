@@ -4,7 +4,7 @@ import settingsDB from '../db/settings.js';
 import memoryDB from '../db/memoryDB.js';
 import { connectFranken, FrankenCommandTimeoutError } from './frankenServer.js';
 import { wait } from './promises.js';
-import { DeviceStatus } from '../routes/deviceStatus/deviceStatusSchema.js';
+import { DeviceStatus, MIN_TEMPERATURE_F, MAX_TEMPERATURE_F } from '../routes/deviceStatus/deviceStatusSchema.js';
 import { Side } from '../db/schedulesSchema.js';
 import { Gesture, GestureSchema } from '../db/settingsSchema.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
@@ -88,6 +88,7 @@ export class FrankenMonitor {
       } else {
         newTemperatureTargetF = currentTemperatureTarget + (-1 * change);
       }
+      newTemperatureTargetF = Math.max(MIN_TEMPERATURE_F, Math.min(MAX_TEMPERATURE_F, newTemperatureTargetF));
       logger.debug(`Processing gesture temperature change for ${side}. ${currentTemperatureTarget} -> ${newTemperatureTargetF}`);
       await updateDeviceStatus({ [side]: { targetTemperatureF: newTemperatureTargetF } } as DeepPartial<DeviceStatus>, { background: true });
       // Tap counts as a manual change for schedule-override purposes.
@@ -166,7 +167,7 @@ export class FrankenMonitor {
         // would act on the bed with nobody touching it.
         if (typeof current !== 'number') continue;
         this.lastTaps[side][gesture] = current;
-        if (previous !== undefined && previous !== current) {
+        if (previous !== undefined && current > previous) {
           // Deliberately detached: a base move takes seconds over BLE and this
           // loop doubles as the tap-detection cadence, so awaiting here would
           // delay the next gesture. Detached means the surrounding try cannot

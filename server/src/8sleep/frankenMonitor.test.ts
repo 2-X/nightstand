@@ -14,10 +14,12 @@ process.env.ENV = 'local';
 
 let updateRejectsWith: Error | null = null;
 let updateCalls = 0;
+let updatedStatus: Partial<DeviceStatus> | undefined;
 
 mock.module(new URL('../routes/deviceStatus/updateDeviceStatus.js', import.meta.url).href, {
   namedExports: {
-    updateDeviceStatus: async () => {
+    updateDeviceStatus: async (status: Partial<DeviceStatus>) => {
+      updatedStatus = status;
       updateCalls += 1;
       if (updateRejectsWith) throw updateRejectsWith;
     },
@@ -125,6 +127,7 @@ describe('FrankenMonitor gesture handling', () => {
   beforeEach(async () => {
     updateRejectsWith = null;
     updateCalls = 0;
+    updatedStatus = undefined;
     serverStatus.status.frankenMonitor.status = 'healthy';
     serverStatus.status.frankenMonitor.message = '';
 
@@ -133,7 +136,7 @@ describe('FrankenMonitor gesture handling', () => {
     await settingsDB.write();
   });
 
-  it('applies a temperature tap when the tap counter changes', async () => {
+  it('applies a temperature tap when the tap counter increases', async () => {
     const seen = await runGestureTick(
       deviceStatus({ doubleTap: 1, tripleTap: 0, quadTap: 0 }),
       deviceStatus({ doubleTap: 2, tripleTap: 0, quadTap: 0 }),
@@ -141,6 +144,36 @@ describe('FrankenMonitor gesture handling', () => {
 
     assert.equal(updateCalls, 1, 'expected the tap to reach updateDeviceStatus');
     assert.deepEqual(seen, []);
+  });
+
+  for (const [change, target, expected] of [
+    ['increment', 55, 65], ['increment', 110, 110],
+    ['decrement', 55, 55], ['decrement', 110, 100],
+  ] as const) {
+    it(`keeps a ${change} tap at ${target} F within the temperature range`, async () => {
+      settingsDB.data.left.taps.doubleTap = { type: 'temperature', change, amount: 10 };
+      await settingsDB.write();
+      const previous = deviceStatus({ doubleTap: 1, tripleTap: 0, quadTap: 0 });
+      previous.left.targetTemperatureF = target;
+      await runGestureTick(previous, deviceStatus({ doubleTap: 2, tripleTap: 0, quadTap: 0 }));
+
+      assert.equal(updatedStatus?.left?.targetTemperatureF, expected);
+    });
+  }
+
+  it('treats a decreasing counter as a reset and sees the next increase', async () => {
+    await runGestureTicks([
+      deviceStatus({ doubleTap: 5, tripleTap: 0, quadTap: 0 }),
+      deviceStatus({ doubleTap: 1, tripleTap: 0, quadTap: 0 }),
+    ]);
+    assert.equal(updateCalls, 0);
+
+    await runGestureTicks([
+      deviceStatus({ doubleTap: 5, tripleTap: 0, quadTap: 0 }),
+      deviceStatus({ doubleTap: 1, tripleTap: 0, quadTap: 0 }),
+      deviceStatus({ doubleTap: 2, tripleTap: 0, quadTap: 0 }),
+    ]);
+    assert.equal(updateCalls, 1);
   });
 
   it('ignores a tick where no tap counter moved', async () => {
