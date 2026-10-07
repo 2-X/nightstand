@@ -101,3 +101,18 @@ it('keeps only lines about later clock times while the server has not said what 
   expect(line('2026-09-28', '23:30', { ...unknown, hold: { level: 1, until: at('2026-09-29', '00:10') } })).toBeUndefined();
   expect(line('2026-09-29', '06:00', { ...unknown, base: { level: 0, since: at('2026-09-29', '05:50') } })).toBeUndefined();
 });
+
+it('ends the phase line at power off even when there is no wake command', () => {
+  const alarm = { time: '08:00', enabled: false, vibrationIntensity: 30, vibrationPattern: 'double' as const,
+    duration: 10, alarmTemperature: 83 };
+  const sleep: ResolvedSleepResponse = {
+    side: 'right', date: '2026-09-28', rhythmId: 'night', mode: 'smart',
+    start: at('2026-09-28', '19:30').toISOString(), end: at('2026-09-29', '08:00').toISOString(),
+    wake: at('2026-09-29', '08:00').toISOString(),
+    night: { power: { on: '20:00', off: '08:00', onTemperature: 76, enabled: true }, temperatures: {}, alarm, alarms: [] },
+    smart: { baseLevel: 0, intensity: 'standard', warmStart: true, warmUp: false, upEarly: false }, events: [],
+  };
+  const options = { timeZone: TZ, format: 'level' as const, waiting: false, runtime: 'live' as const };
+  expect(smartLineForSleep(sleep, { ...options, now: at('2026-09-29', '07:59') })).toBe('Holding \u22122 until 8:00 AM');
+  expect(smartLineForSleep(sleep, { ...options, now: at('2026-09-29', '08:00') })).toBeUndefined();
+});

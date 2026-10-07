@@ -80,6 +80,7 @@ export function smartLineForSleep(
   const bedtime = sleep.smartCurve ? new Date(sleep.smartCurve.bedtime)
     : moment.tz(`${sleep.date} ${sleep.night.power.on}`, 'YYYY-MM-DD HH:mm', options.timeZone).toDate();
   const powerOff = new Date(sleep.end);
+  if (options.now.getTime() >= powerOff.getTime()) return undefined;
   // The rhythm's own wake time, with or without an alarm.
   const wake = new Date(sleep.smartCurve?.wake ?? sleep.wake ?? sleep.end);
   const points = buildCurve({
