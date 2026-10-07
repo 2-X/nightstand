@@ -1,11 +1,25 @@
 import { afterEach, expect, it } from 'vitest';
 import type { Schedules } from '@api/schedulesSchema';
 import { getDeviceStatus, getSchedules, updateDeviceStatus, updateSchedules } from './mockData';
-import { createDemoRhythms, disableMockRhythms, mockLive, resetMockRhythms, scheduledSecondsRemaining } from './rhythmsMock';
+import { createDemoRhythms, disableMockRhythms, mockLive, resetMockRhythms, resolveMockSleeps, scheduledSecondsRemaining } from './rhythmsMock';
 
 const TUESDAY_MORNING = new Date('2026-09-29T17:00:00Z');
 const MONDAY_NOON = new Date('2026-09-28T19:00:00Z');
 const actions = (now: Date, body = {}) => disableMockRhythms(body, now).sides.map(item => item.action);
+
+it('keeps a spring-gap wake at bedtime, as the resolver does', () => {
+  const db = createDemoRhythms(MONDAY_NOON);
+  const rhythm = db.left.rhythms.workday;
+  rhythm.night.power = { ...rhythm.night.power, on: '02:50', off: '04:00' };
+  rhythm.wake = '03:20';
+  rhythm.smart.warmUp = false;
+  const sleep = resolveMockSleeps(db, 'left', 'America/Los_Angeles', new Date('2026-03-08T08:00:00Z'),
+    new Date('2026-03-08T12:00:00Z')).find(item => item.date === '2026-03-08')!;
+  expect(sleep.wake).toBe('2026-03-08T10:50:00.000Z');
+  expect(sleep.smartCurve?.wake).toBe(sleep.smartCurve?.bedtime);
+  const times = sleep.smartCurve!.points.map(point => Date.parse(point.at));
+  expect(times).toEqual([...times].sort((first, second) => first - second));
+});
 
 afterEach(() => resetMockRhythms());
 
@@ -63,4 +77,14 @@ it('serves a live "When I get up" sleep with its latest off, and nothing for oth
   } finally {
     resetMockRhythms();
   }
+});
+
+it('keeps the next-day wake clock after spring forward, as the resolver does', () => {
+  const db = createDemoRhythms(MONDAY_NOON);
+  const rhythm = db.left.rhythms.workday;
+  rhythm.night.power = { ...rhythm.night.power, on: '20:00', off: '03:00' };
+  rhythm.wake = '02:15';
+  const sleeps = resolveMockSleeps(db, 'left', 'America/Los_Angeles', new Date('2026-03-09T03:00:00Z'),
+    new Date('2026-03-09T11:00:00Z'));
+  expect(sleeps.find(sleep => sleep.date === '2026-03-08')?.wake).toBe('2026-03-09T09:15:00.000Z');
 });

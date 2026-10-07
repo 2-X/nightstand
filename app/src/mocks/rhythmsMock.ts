@@ -5,6 +5,7 @@ import type { HandoffReport, ResolvedSleepResponse, RhythmsLive, RhythmsResponse
 import type { RhythmsUpdate } from '@api/rhythms';
 import { conversionName } from '@api/rhythmDays';
 import { wakeFromNight } from '@api/rhythmWake';
+import { addDays, rhythmSleepBounds, wallClock } from '@api/rhythmTimes';
 import { buildCurve, isDaySleep, phaseAt } from '@api/smartCurve';
 import { latestOff } from '@api/smartOff';
 import { levelToFahrenheit } from '@lib/temperatureConversions';
@@ -87,15 +88,11 @@ export function resolveMockSleeps(db: RhythmsDB, side: Side, timeZone: string, f
     const chosen = id ? db[side].rhythms[id] : undefined;
     if (!chosen?.night.power.enabled) continue;
     const { power } = chosen.night;
-    const at = (time: string) => {
-      const value = moment.tz(`${date} ${time}`, 'YYYY-MM-DD HH:mm', timeZone);
-      if (time < power.on) value.add(1, 'day');
-      return value;
-    };
-    const start = at(power.on);
-    const end = at(power.off);
-    if (power.off === power.on) end.add(1, 'day');
-    if (!end.isAfter(from) || start.isAfter(to)) continue;
+    const at = (time: string) => moment.tz(wallClock(time < power.on ? addDays(date, 1) : date, time, timeZone), timeZone);
+    const bounds = rhythmSleepBounds(date, power, chosen.wake, timeZone);
+    const start = moment.tz(bounds.start, timeZone);
+    const end = moment.tz(bounds.end, timeZone);
+    if (!end.isAfter(start) || !end.isAfter(from) || start.isAfter(to)) continue;
     const alarms = (chosen.night.alarms.length ? chosen.night.alarms : [chosen.night.alarm])
       .map((item, index) => ({ alarm: item, index, when: at(item.time) }))
       .filter(({ alarm: item, when }) => item.enabled && !when.isBefore(start) && !when.isAfter(end));
@@ -105,7 +102,7 @@ export function resolveMockSleeps(db: RhythmsDB, side: Side, timeZone: string, f
     let temperatures: Array<{ when: moment.Moment; temperatureF: number }>;
     let smartCurve: ResolvedSleepResponse['smartCurve'];
     // Like the Pod: the rhythm's own wake time, held inside the sleep.
-    const wakeAt = chosen.wake === power.off ? end.clone() : moment.min(at(chosen.wake), end);
+    const wakeAt = moment.tz(bounds.wake, timeZone);
     if (chosen.temperatureMode === 'smart') {
       const points = buildCurve({
         smart: chosen.smart, bedtime: start.toDate(), coolStart: start.toDate(), wake: wakeAt.toDate(), powerOff: end.toDate(), timeZone,
