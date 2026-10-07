@@ -72,7 +72,7 @@ describe('RevertToStockRow says what the switch installs', () => {
     expect(await screen.findByText(UNCHECKED_UPSTREAM_NOTE)).toBeInTheDocument();
   });
 
-  it('names the date of the checked upstream commit once one is recorded', async () => {
+  it('names the date of the pinned upstream commit and the hardware testing limit', async () => {
     server.use(http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json', () => HttpResponse.json({
       channels: ['stable', 'beta'],
       releases: [],
@@ -81,7 +81,7 @@ describe('RevertToStockRow says what the switch installs', () => {
     const { user } = renderWithProviders(<RevertToStockRow runningVersion="3.0.0"/>);
     await user.click(screen.getByText('Switch to upstream free-sleep'));
     expect(await screen.findByText(
-      'Installs upstream free-sleep as of 2026-10-09, the version this switch was last checked with.',
+      'Installs the upstream free-sleep version this release pins, dated 2026-10-09. The full switch has not been tested on hardware.',
     )).toBeInTheDocument();
     expect(screen.queryByText(UNCHECKED_UPSTREAM_NOTE)).not.toBeInTheDocument();
   });

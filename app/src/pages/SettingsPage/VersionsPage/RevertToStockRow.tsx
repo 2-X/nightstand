@@ -62,12 +62,13 @@ export default function RevertToStockRow({ runningVersion }: Props) {
           { phase === 'idle' && (
             <DialogContentText component="div">
               <Typography variant="body2" sx={ { mb: 2 } }>
-                Replace the app with the current upstream free-sleep build. Settings and sleep data remain on the Pod.
+                Replace the app with upstream free-sleep. Settings and sleep data remain on the Pod.
                 Schedules and alarms pause during restart.
               </Typography>
               <Typography variant="body2" sx={ { mb: 2 } }>
                 { checked
-                  ? `Installs upstream free-sleep as of ${checked.date}, the version this switch was last checked with.`
+                  ? `Installs the upstream free-sleep version this release pins, dated ${checked.date}.`
+                    + ' The full switch has not been tested on hardware.'
                   : 'Installs upstream free-sleep\'s newest code, which this switch has not been checked with.' }
               </Typography>
               <Typography variant="body2" sx={ { mb: 2 } }>

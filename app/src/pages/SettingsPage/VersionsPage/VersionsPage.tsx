@@ -240,7 +240,7 @@ export default function VersionsPage() {
 
             <Box>
               <Typography variant="caption" color="text.secondary" sx={ { display: 'block', mb: 1 } }>
-          Replace Nightstand with the current upstream free-sleep build.
+          Replace Nightstand with the upstream free-sleep version this release pins.
               </Typography>
               <RevertToStockRow runningVersion={ running }/>
             </Box>

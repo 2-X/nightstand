@@ -159,8 +159,10 @@ hours.
 
 To upstream free-sleep: Settings > Software has "Switch to upstream
 free-sleep". It installs the original throwaway31265/free-sleep, not jmew's or
-another fork. Until a tested upstream version is recorded, it installs
-upstream free-sleep's newest code, which I haven't tested this switch with. To come back, run the migration tool again (there's no button). Read
+another fork. It installs the upstream free-sleep version this release pins
+in `releases.json`, rather than the newest upstream code. I haven't run the
+full switch on hardware. To come back, run the migration tool again (there's
+no button). Read
 [Switching to upstream](#switching-to-upstream) first.
 
 To Eight Sleep's software: see
