@@ -6,6 +6,42 @@ is a hard fork; for the history of the projects it descends from, see
 [jmew/free-sleep](https://github.com/jmew/free-sleep) and
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
 
+## [Unreleased]
+
+### Fixes
+
+- Tap temperature changes now stay between 55 and 110 F, and a tap counter
+  that resets no longer triggers an action. Internal temperature updates
+  use the same limits. Ideas from jmakes/free-sleep
+  ([temperature limits](https://github.com/jmakes/free-sleep/commit/093475e13bcbe39ed1cff86545e0847f8a73217d),
+  [counter resets](https://github.com/jmakes/free-sleep/commit/6e79e401ad3cebccbdcd9927294ce9ce14fc64c3)).
+- The daily reboot job now reports its result under reboot status instead
+  of alarm status. Adapted from
+  [benri/free-sleep](https://github.com/benri/free-sleep/commit/266810eb27487f8db69090254c885397d5e51e12).
+- The API no longer sends command 17 as `STOP_PRIME`. Its meaning is
+  disputed: 8rp calls it prime cancellation, while
+  [seanpasino/free-sleep](https://github.com/seanpasino/free-sleep/commit/50580edff3)
+  uses it for a whole-bed alarm. Neither meaning is verified in Nightstand.
+
+### Credits
+
+These contributions have been in Nightstand since 3.0.0 and are credited
+here now:
+
+- SFenton's fork supplied
+  [multiple alarms per night](https://github.com/SFenton/free-sleep/commit/1b509162035a4ad49a9baea5e3b3c105cdeaf1a4)
+  and the
+  [five-minute recurring alarm limit](https://github.com/SFenton/free-sleep/commit/957b4c813d6a56deb14870d02d9f73cfd1789a4c).
+- Felix Sommer's Beat2er fork supplied
+  [`sensorTemps`](https://github.com/Beat2er/free-sleep/commit/2afc20f6ea639f7b58d0c885b8269315e56d3366),
+  the ambient, heatsink and left/right sensor readings from the biometrics
+  stream exposed through the device status API.
+- Matt Gates (@Geczy) originally wrote the adjustable base BLE driver in
+  Geczy/free-sleep in July 2025
+  ([driver](https://github.com/Geczy/free-sleep/commit/5fb11a1a9138c3301e332b642e4986ccb739b696),
+  [angle maps](https://github.com/Geczy/free-sleep/commit/44b2352948bc186ce9ee17b8d79696623c8801fe)).
+  jmew's fork later carried this code, including the base presets.
+
 ## [3.6.0] - 2026-10-07
 
 Adds themes, safer updates, saved copies of the original system settings, and time in bed instead of estimated sleep.

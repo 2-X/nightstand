@@ -333,6 +333,11 @@ which builds on the original
 upstream built the installer, server, app and biometrics pipeline, and
 jmew's fork added presence detection, sleep stages, one-time alarms,
 adjustable base control and live screen updates.
+Matt Gates ([@Geczy](https://github.com/Geczy/free-sleep)) originally wrote
+the adjustable base control that jmew's fork carried.
+Multiple alarms per night came from
+[SFenton's fork](https://github.com/SFenton/free-sleep), and `sensorTemps`
+came from Felix Sommer's [Beat2er fork](https://github.com/Beat2er/free-sleep).
 [@bobobo1618](https://github.com/bobobo1618) worked out how the Pod is
 controlled through `dac.sock`. Other contributions are credited in the
 [changelog](CHANGELOG.md).
