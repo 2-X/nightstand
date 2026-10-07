@@ -174,7 +174,7 @@ it('refuses a prepare-to-stop body it does not know', async () => {
 it('accepts prepare-to-stop only from the Pod itself', async () => {
   const { isLoopbackAddress } = await import('./update.js');
   for (const address of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) assert.equal(isLoopbackAddress(address), true, address);
-  for (const address of [undefined, '192.168.5.20', '::ffff:192.168.5.20', 'fe80::1']) {
+  for (const address of [undefined, '192.168.1.20', '::ffff:192.168.1.20', 'fe80::1']) {
     assert.equal(isLoopbackAddress(address), false, String(address));
   }
 });
