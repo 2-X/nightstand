@@ -115,6 +115,22 @@ done
 fw4() { iptables $IPT_W "$@"; }
 # shellcheck disable=SC2086
 fw6() { ip6tables $IPT_W "$@"; }
+# Clear an emergency policy only after both families have terminal blocks.
+restore_output_policy() {
+  if { fw4 -C OUTPUT -j REJECT 2>/dev/null || fw4 -C OUTPUT -j DROP 2>/dev/null; } &&
+     { fw6 -C OUTPUT -j REJECT 2>/dev/null || fw6 -C OUTPUT -j DROP 2>/dev/null; }; then
+    local policy_failed=no
+    fw4 -P OUTPUT ACCEPT || { echo "WARNING: could not restore IPv4 OUTPUT policy"; policy_failed=yes; }
+    fw6 -P OUTPUT ACCEPT || { echo "WARNING: could not restore IPv6 OUTPUT policy"; policy_failed=yes; }
+    # Download windows change live policies only.
+    if [ "${1:-}" = save ] && [ "$WAN_OPEN" = no ] && [ "$policy_failed" = no ]; then
+      if ! iptables-save > /etc/iptables/iptables.rules ||
+         ! ip6tables-save > /etc/iptables/ip6tables.rules; then
+        say "WARNING: could not save recovered firewall rules"
+      fi
+    fi
+  fi
+}
 # Removes the given rules only while one of them is the first rule in OUTPUT,
 # where the window puts them, so the same rule further down (Tailscale's
 # HTTPS allow) is left alone. Rules are compared with whitespace and the
@@ -147,6 +163,7 @@ open_wan() {
   done
   # shellcheck disable=SC2086
   fw6 -I OUTPUT 1 $WAN_RULE6 2>/dev/null || true
+  restore_output_policy
 }
 close_wan() {
   [ "$WAN_OPEN" = yes ] || return 0
@@ -155,6 +172,7 @@ close_wan() {
   strip_top fw6 "$WAN_RULE6" >/dev/null
   sh "$LIVE/scripts/block_internet_access.sh" >/dev/null 2>&1 \
     || sh "$PREV/scripts/block_internet_access.sh" >/dev/null 2>&1 || true
+  restore_output_policy
   WAN_OPEN=no
 }
 # A stalled step must not hold the window open. Busybox builds that only
@@ -842,7 +860,9 @@ if [ "$HEALTHY" = yes ]; then
       ! grep -q -- '--dport 1337.*--reject-with tcp-reset' "$LIVE/scripts/block_internet_access.sh"; then
       EXPECT_RESET=no
     fi
-    if fw4 -C OUTPUT -j DROP; then
+    # Older releases end OUTPUT with DROP.
+    if { fw4 -C OUTPUT -j REJECT || fw4 -C OUTPUT -j DROP; } &&
+       { fw6 -C OUTPUT -j REJECT || fw6 -C OUTPUT -j DROP; }; then
       if [ "$EXPECT_RESET" = no ] || fw4 -C OUTPUT -p tcp --dport 1337 -j REJECT --reject-with tcp-reset; then
         bash "$RECOVERY_HELPER" --clear || fail "could not clear the update swap marker"
         say "SUCCESS: pod is serving v$STAGED_VERSION. Previous version kept at $PREV; backup at $BK"
@@ -850,7 +870,7 @@ if [ "$HEALTHY" = yes ]; then
         exit 0
       fi
       if [ "$FIREWALL_ATTEMPT" = 2 ]; then
-        say "WARNING: port 1337 reset rule is unavailable; internet access remains blocked by OUTPUT DROP"
+        say "WARNING: port 1337 reset rule is unavailable; internet access remains blocked by the final OUTPUT rule"
         bash "$RECOVERY_HELPER" --clear || fail "could not clear the update swap marker"
         say "SUCCESS: pod is serving v$STAGED_VERSION. Previous version kept at $PREV; backup at $BK"
         arm_watchdog
@@ -923,6 +943,7 @@ if [ "$STREAM_WAS_ACTIVE" = active ]; then
 fi
 RESTORE_TREE=
 sh "$LIVE/scripts/block_internet_access.sh" || say "WARNING: restored firewall could not be applied"
+restore_output_policy save
 if restored_version_answers; then
   bash "$RECOVERY_HELPER" --clear || fail "could not clear the update swap marker"
   fail "update failed but rollback OK (pod back on v$CUR_VERSION). Failed tree kept at $FAILED; see journalctl -u free-sleep"

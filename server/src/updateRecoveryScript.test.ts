@@ -483,7 +483,7 @@ systemctl() {
     start|restart) rm -f "$FIXTURE/stopped";;
   esac
 }
-sudo() { :; }; chown() { :; }; sleep() { :; }; sync() { :; }; fw4() { return 0; }
+sudo() { :; }; chown() { :; }; sleep() { :; }; sync() { :; }; fw4() { return 0; }; fw6() { return 0; }
 curl() {
   [ -f "$SWAP_MARKER" ] || { echo 'health checked without marker' >&2; exit 99; }
   echo health-with-marker >> "$FIXTURE/calls"

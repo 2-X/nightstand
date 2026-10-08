@@ -83,6 +83,27 @@ class PortabilityTests(unittest.TestCase):
             self.assertNotIn('disable', result.stdout)
             self.assertNotIn('TARGET_FORK', text)
 
+    def test_firewall_requires_terminal_rules_for_both_families(self):
+        text = source('update.sh')
+        start = text.index('if [ "$HEALTHY" = yes ]; then', text.index('# A pod serving HTTP'))
+        body = text[start:text.index('# --- automatic rollback', start)]
+        for missing in ['4', '6', '4 6']:
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as tmp:
+                (Path(tmp) / 'scripts').mkdir()
+                (Path(tmp) / 'scripts/block_internet_access.sh').write_text('--dport 1337 --reject-with tcp-reset\n')
+                setup = r'''
+HEALTHY=yes; LIVE="$1"; STAGED_VERSION=test; PREV=previous; BK=backup
+say() { echo "$*"; }
+sh() { echo apply >> "$LIVE/calls"; }
+fw4() { echo "4 $*" >> "$LIVE/checks"; [[ " $MISSING " != *" 4 "* ]]; }
+fw6() { echo "6 $*" >> "$LIVE/checks"; [[ " $MISSING " != *" 6 "* ]]; }
+'''
+                result = subprocess.run(['/bin/bash', '-c', setup + body + '\necho rollback', 'fixture', tmp],
+                                        text=True, capture_output=True, env={**os.environ, 'MISSING': missing})
+                self.assertIn('rollback\n', result.stdout)
+                self.assertNotIn('SUCCESS:', result.stdout)
+                self.assertEqual((Path(tmp) / 'calls').read_text().splitlines(), ['apply', 'apply'])
+
     def test_firewall_checks_and_retries_end_state(self):
         text = source('update.sh')
         start = text.index('if [ "$HEALTHY" = yes ]; then', text.index('# A pod serving HTTP'))
@@ -95,8 +116,9 @@ class PortabilityTests(unittest.TestCase):
 HEALTHY=yes; LIVE="$1"; STAGED_VERSION=test; PREV=previous; BK=backup; calls=0
 say() { echo "$*"; }
 sh() { calls=$((calls+1)); echo apply >> "$LIVE/calls"; return 0; }
-iptables() { echo "$*" >> "$LIVE/checks"; if [ "$RESET_MISSING" = yes ] && [[ "$*" == *1337* ]]; then return 1; fi; [ "$calls" -ge "$2_SUCCESS" ]; }
+iptables() { echo "$*" >> "$LIVE/checks"; if [ "$RESET_MISSING" = yes ] && [[ "$*" == *1337* ]]; then return 1; fi; if [ "$IS_DOWNGRADE" = yes ] && [[ "$*" == *"-C OUTPUT -j REJECT" ]]; then return 1; fi; [ "$calls" -ge "$2_SUCCESS" ]; }
 fw4() { iptables -w 5 "$@"; }
+fw6() { echo "ip6tables $*" >> "$LIVE/checks"; iptables -w 5 "$@"; }
 '''.replace('"$2_SUCCESS"', str(succeeds_at)).replace('return 0;', 'return ' + str(script_status) + ';')
                 setup += '\nRESET_MISSING=' + ('yes' if reset_missing else 'no') + '\n'
                 setup += '\nIS_DOWNGRADE=' + ('yes' if old else 'no') + '\n'
@@ -104,7 +126,12 @@ fw4() { iptables -w 5 "$@"; }
                 self.assertEqual(len((Path(tmp) / 'calls').read_text().splitlines()), expected)
                 self.assertEqual('rollback\n' in result.stdout, succeeds_at == 99)
                 checks = (Path(tmp) / 'checks').read_text()
-                self.assertIn('-w 5 -C OUTPUT -j DROP', checks)
+                if succeeds_at != 99:
+                    self.assertIn('ip6tables -C OUTPUT -j', checks)
+                if old:
+                    self.assertIn('-w 5 -C OUTPUT -j DROP', checks)
+                else:
+                    self.assertIn('-w 5 -C OUTPUT -j REJECT', checks)
                 if reset_missing:
                     self.assertIn('WARNING:', result.stdout)
                     self.assertIn('1337', result.stdout)

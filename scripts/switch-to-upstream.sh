@@ -114,6 +114,14 @@ done
 fw4() { iptables $IPT_W "$@"; }
 # shellcheck disable=SC2086
 fw6() { ip6tables $IPT_W "$@"; }
+# Clear an emergency policy only after both families have terminal blocks.
+restore_output_policy() {
+  if { fw4 -C OUTPUT -j REJECT 2>/dev/null || fw4 -C OUTPUT -j DROP 2>/dev/null; } &&
+     { fw6 -C OUTPUT -j REJECT 2>/dev/null || fw6 -C OUTPUT -j DROP 2>/dev/null; }; then
+    fw4 -P OUTPUT ACCEPT || echo "WARNING: could not restore IPv4 OUTPUT policy"
+    fw6 -P OUTPUT ACCEPT || echo "WARNING: could not restore IPv6 OUTPUT policy"
+  fi
+}
 # Removes the given rules only while one of them is the first rule in OUTPUT,
 # where the window puts them, so the same rule further down (Tailscale's
 # HTTPS allow) is left alone. Rules are compared with whitespace and the
@@ -146,6 +154,7 @@ open_wan() {
   done
   # shellcheck disable=SC2086
   fw6 -I OUTPUT 1 $WAN_RULE6 2>/dev/null || true
+  restore_output_policy
 }
 close_wan() {
   [ "$WAN_OPEN" = yes ] || return 0
@@ -154,6 +163,7 @@ close_wan() {
   strip_top fw6 "$WAN_RULE6" >/dev/null
   sh "$LIVE/scripts/block_internet_access.sh" >/dev/null 2>&1 \
     || sh "$PREV/scripts/block_internet_access.sh" >/dev/null 2>&1 || true
+  restore_output_policy
   WAN_OPEN=no
 }
 # A stalled step must not hold the window open. Busybox builds that only
