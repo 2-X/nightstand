@@ -27,6 +27,43 @@ type ManifestEntry = {
 
 export const FEATURES_MANIFEST: ManifestEntry[] = [
   {
+    id: 'cooling-warning', title: 'Cooling warning',
+    description: 'Warns when measured water keeps warming during sustained cooling demand. Does not send device commands.',
+    category: 'safety', version: '3.7.0', flag: 'coolingWarning', default: false,
+    touchpoints: ['biometrics/firmware_telemetry.py', 'server/src/firmware/coolingWarning.ts', 'app/src/components/CoolingNotice.tsx'],
+    depends_on: ['biometrics'], reversible: true,
+    tests: ['server/src/firmware/coolingWarning.test.ts', 'app/src/components/CoolingNotice.test.tsx'],
+    upstream_offer: true,
+    rationale: 'An optional observation. Threshold ideas from podd were reimplemented independently.',
+  },
+  {
+    id: 'tap-diagnostics', title: 'Tap diagnostics',
+    description: 'Records button and tap candidates on System status, with a JSON export. Does not dispatch actions.',
+    category: 'ui', version: '3.7.0', flag: 'tapDiagnostics', default: false,
+    touchpoints: ['biometrics/firmware_taps.py', 'server/src/firmware', 'app/src/pages/StatusPage/TapDiagnostics.tsx'],
+    depends_on: ['biometrics'], reversible: true,
+    tests: ['biometrics/__tests__/test_firmware_taps.py', 'server/src/firmware/firmwareTelemetry.test.ts'],
+    upstream_offer: true, rationale: 'Diagnostic candidates need labelled captures before they can drive bed actions.',
+  },
+  {
+    id: 'firmware-health', title: 'Firmware health',
+    description: 'Shows selected firmware health messages and new sensor-loss counters on System status. Needs Biometrics.',
+    category: 'biometrics', version: '3.7.0', flag: 'firmwareHealth', default: false,
+    touchpoints: ['biometrics/firmware_health.py', 'server/src/firmware/healthFeed.ts', 'app/src/pages/StatusPage/FirmwarePanel.tsx'],
+    depends_on: ['biometrics'], reversible: true,
+    tests: ['biometrics/__tests__/test_firmware_health.py', 'server/src/firmware/firmwareTelemetry.test.ts'],
+    upstream_offer: true, rationale: 'Optional diagnostics. Log severity alone is not evidence of a fault.',
+  },
+  {
+    id: 'firmware-target-readout', title: 'Firmware target',
+    description: 'Shows the thermostat target reported by firmware, separately from the legacy temperature controls.',
+    category: 'ui', version: '3.7.0', flag: 'firmwareTargetReadout', default: false,
+    touchpoints: ['biometrics/firmware_telemetry.py', 'server/src/firmware', 'app/src/pages/StatusPage/FirmwarePanel.tsx'],
+    depends_on: ['biometrics'], reversible: true,
+    tests: ['server/src/firmware/firmwareTelemetry.test.ts', 'app/src/pages/StatusPage/FirmwarePanel.test.tsx'],
+    upstream_offer: true, rationale: 'Optional readout. Stored temperatures and outgoing commands keep their existing convention.',
+  },
+  {
     id: 'agent',
     title: 'Updates and rollback',
     description: 'In-app updates, rollback, switching to upstream free-sleep, and the Settings > Software page. '

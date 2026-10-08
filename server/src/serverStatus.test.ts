@@ -6,6 +6,11 @@ let checkingMigrations: (() => void) | undefined;
 mock.module(new URL('./db/services.js', import.meta.url).href, {
   defaultExport: { read: async () => {} },
 });
+mock.module(new URL('./db/settings.js', import.meta.url).href, {
+  defaultExport: { read: async () => {}, data: { features: {
+    firmwareTargetReadout: false, firmwareHealth: false, tapDiagnostics: false, coolingWarning: false,
+  } } },
+});
 mock.module(new URL('./db/unappliedMigrations.js', import.meta.url).href, {
   namedExports: {
     listLocalMigrations: () => ['needed'],

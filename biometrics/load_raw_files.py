@@ -21,7 +21,7 @@ from presence.sensors import FORMATS, read_cap, unknown_cap_type
 logger = get_logger()
 
 
-def _read_raw_record(f):
+def _read_raw_record(f, with_sequence=False):
     """
     Manually parse one outer {seq, data} CBOR record using f.read().
 
@@ -34,7 +34,8 @@ def _read_raw_record(f):
     This function parses the outer {seq: uint, data: bytes} wrapper
     byte-by-byte with f.read(), keeping f.tell() accurate after each record.
 
-    Returns the raw inner data bytes, or None for empty placeholder records
+    With with_sequence=True, returns the envelope map, including seq.
+    Otherwise returns the raw inner data bytes, or None for empty placeholder records
     (the Pod firmware writes data=b'' records as sequence-number markers).
     Raises EOFError at end of file or on a record cut short, ValueError on malformed data.
     """
@@ -60,19 +61,13 @@ def _read_raw_record(f):
         raise EOFError
     val = hdr[0]
     if val <= 0x17:
-        pass  # tiny uint, value lives in the additional-info bits
-    elif val == 0x18:
-        if len(f.read(1)) < 1:
+        sequence = val
+    elif val in (0x18, 0x19, 0x1a, 0x1b):
+        size = {0x18: 1, 0x19: 2, 0x1a: 4, 0x1b: 8}[val]
+        encoded = f.read(size)
+        if len(encoded) < size:
             raise EOFError
-    elif val == 0x19:
-        if len(f.read(2)) < 2:
-            raise EOFError
-    elif val == 0x1a:
-        if len(f.read(4)) < 4:
-            raise EOFError
-    elif val == 0x1b:
-        if len(f.read(8)) < 8:
-            raise EOFError
+        sequence = int.from_bytes(encoded, 'big')
     else:
         raise ValueError('Unexpected seq encoding: 0x%02x' % val)
     key = f.read(5)
@@ -108,7 +103,7 @@ def _read_raw_record(f):
         raise EOFError
     if not data:
         return None  # empty placeholder record, caller should skip
-    return data
+    return {'seq': sequence, 'data': data} if with_sequence else data
 
 
 def get_current_files(folder_path: str):

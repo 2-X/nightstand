@@ -58,6 +58,8 @@ from stream_processor import LatestCap, StreamProcessor
 from load_raw_files import load_piezo_row, _read_raw_record
 from service_health import update_health, update_sensor_temps, update_pump_health
 from pump_speed import PumpSpeed
+from raw_decoder import decode_row
+from firmware_telemetry import firmware_delivery
 
 # Bound pending work when processing falls behind.
 piezo_record_queue = queue.Queue(maxsize=120)
@@ -127,13 +129,7 @@ def _mark_sequence_processed(sequence):
 
 
 def _decode_raw_row(row):
-    if not isinstance(row, dict):
-        return None
-
-    if row.get('data'):
-        return cbor2.loads(row['data'])
-
-    return row
+    return decode_row(row)
 
 
 def _queue_decoded_piezo_record(decoded_data) -> bool:
@@ -150,7 +146,9 @@ def _queue_decoded_piezo_record(decoded_data) -> bool:
     if datetime.now() - record_time > RECENT_RECORD_WINDOW:
         return False
 
-    sequence = decoded_data.get('seq')
+    metadata = decoded_data.get('_firmware')
+    sequence = ((metadata['sequence'], metadata['index']) if metadata and metadata['sequence'] is not None
+                else decoded_data.get('seq'))
     if sequence in processed_sequences:
         return False
 
@@ -304,14 +302,15 @@ def _put_latest(record):
         piezo_record_queue.put_nowait(record)
 
 
-def _ingest_live_record(record) -> bool:
+def _ingest_live_record(record, source='RAW') -> bool:
     """Hand a record on; True when it is a fresh sensor record."""
     global _last_sensor_record
     if not isinstance(record, dict):
         return False
+    firmware_delivery.ingest(record, source)
     kind = record.get('type')
     timestamp = record.get('ts')
-    fresh = (kind in ('piezo-dual', 'capSense', 'capSense2', 'frzTemp', 'frzHealth', 'bedTemp', 'bedTemp2')
+    fresh = (kind in ('piezo-dual', 'capSense', 'capSense2', 'frzTemp', 'frzHealth', 'frzTherm', 'bedTemp', 'bedTemp2')
              and _is_number(timestamp) and math.isfinite(timestamp)
              and abs(time.time() - timestamp) <= RECENT_RECORD_WINDOW.total_seconds())
     if fresh:
@@ -396,14 +395,13 @@ class LatestRawFileHandler(FileSystemEventHandler):
                 # _read_raw_record in load_raw_files.py). last_pos advances
                 # past every parsed record, including skipped ones, so they
                 # aren't re-parsed on the next follow pass.
-                data_bytes = _read_raw_record(self.latest_file_obj)
+                data_bytes = _read_raw_record(self.latest_file_obj, with_sequence=True)
                 if data_bytes is None:
                     self.last_pos = self.latest_file_obj.tell()
                     continue  # empty placeholder record
 
-                decoded_data = cbor2.loads(data_bytes)
-
-                _ingest_live_record(decoded_data)
+                for decoded_data in _decode_raw_row(data_bytes):
+                    _ingest_live_record(decoded_data)
 
                 # Update last read position
                 self.last_pos = self.latest_file_obj.tell()
@@ -633,12 +631,9 @@ async def _nats_session(processing_thread, raw_files=None):
                     _last_stream_message_at = time.monotonic()
                 try:
                     row = cbor2.loads(message.data)
-                    record = _decode_raw_row(row)
-                    if (isinstance(record, dict) and record.get('type') == 'piezo-dual'
-                            and isinstance(row, dict) and 'seq' in row):
-                        record.setdefault('seq', row['seq'])
-                    if _ingest_live_record(record):
-                        last_nats_record = time.monotonic()
+                    for record in _decode_raw_row(row):
+                        if _ingest_live_record(record, 'NATS'):
+                            last_nats_record = time.monotonic()
                 except Exception as error:
                     logger.warning(f'Error decoding NATS raw message, skipping: {error}')
     finally:

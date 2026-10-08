@@ -205,3 +205,18 @@ it.each([null, ''])('reports invalid settings instead of leaving features loadin
   expect(await screen.findByRole('alert')).toHaveTextContent('Could not load features.');
   expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
 });
+
+it.each([
+  ['Firmware target', 'firmwareTargetReadout'], ['Firmware health', 'firmwareHealth'],
+  ['Tap diagnostics', 'tapDiagnostics'], ['Cooling warning', 'coolingWarning'],
+])('starts %s off and posts only its feature flag', async (label, flag) => {
+  let posted: unknown;
+  server.use(http.post('*/api/settings', async ({ request }) => {
+    posted = await request.json(); return HttpResponse.json({});
+  }));
+  const { user } = renderWithProviders(<FeaturesSection />);
+  const toggle = await screen.findByRole('switch', { name: label });
+  expect(toggle).not.toBeChecked();
+  await user.click(toggle);
+  await waitFor(() => expect(posted).toEqual({ features: { [flag]: true } }));
+});

@@ -28,6 +28,26 @@ const { FrankenSupersededError } = await import('../../8sleep/frankenErrors.js')
 const { keptSleeps, rememberKeptAlarms } = await import('../../jobs/rhythms/keptAlarms.js');
 
 describe('updateDeviceStatus', () => {
+  it('preserves all canonical and off-grid temperature writes with firmware readout on and off', async () => {
+    const targets = [55, 58, 61, 63, 66, 69, 72, 74, 77, 80, 83, 85, 88, 91, 94, 96, 99, 102, 105, 107, 110, 82.5, 79.3];
+    const expected = [-100, -89, -78, -71, -60, -49, -38, -31, -20, -9, 2, 9, 20, 31, 42, 49, 60, 71, 82, 89, 100, 0, -12];
+    try {
+      for (const enabled of [false, true]) {
+        settingsDB.data.features.firmwareTargetReadout = enabled;
+        await settingsDB.write();
+        for (const [index, target] of targets.entries()) {
+          executeFunctionMock.mock.resetCalls();
+          await updateDeviceStatus({ left: { targetTemperatureF: target }, right: { targetTemperatureF: target } });
+          assert.deepEqual(executeFunctionMock.mock.calls.map(call => call.arguments.slice(0, 2)), [
+            ['TEMP_LEVEL_LEFT', String(expected[index])], ['TEMP_LEVEL_RIGHT', String(expected[index])],
+          ]);
+        }
+      }
+    } finally {
+      settingsDB.data.features.firmwareTargetReadout = false;
+      await settingsDB.write();
+    }
+  });
   for (const payload of [{ isOn: true }, { isOn: true, secondsRemaining: 0 }]) {
     it(`keeps the manual power-on default for ${JSON.stringify(payload)}`, async () => {
       executeFunctionMock.mock.resetCalls();

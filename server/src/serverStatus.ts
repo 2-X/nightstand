@@ -1,3 +1,5 @@
+import settingsDB from './db/settings.js';
+import { firmwareHealthSummary } from './firmware/firmwareRuntime.js';
 import { ServerStatus as ServerStatusType } from './routes/serverStatus/serverStatusSchema.js';
 import { isSystemDateValid } from './jobs/isSystemDateValid.js';
 import servicesDB from './db/services.js';
@@ -198,6 +200,10 @@ class ServerStatus {
     await this.updateDB();
     await this.updateServices();
     this.updateSystemDate();
+    await settingsDB.read();
+    const firmwareHealth = firmwareHealthSummary(settingsDB.data.features, servicesDB.data.biometrics.enabled);
+    if (firmwareHealth) this.status.firmwareHealth = firmwareHealth;
+    else delete this.status.firmwareHealth;
     return this.status;
   }
 }

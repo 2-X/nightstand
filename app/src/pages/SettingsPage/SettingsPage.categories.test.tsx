@@ -37,7 +37,8 @@ it('keeps software actions on Software without repeating its link on Device', as
 it('keeps optional toggles together and bed maintenance with the sides', async () => {
   const { unmount } = renderWithProviders(<SettingsPage/>, { initialRoute: '/settings/features' });
   for (const label of ['Biometrics', 'Presence auto-off', 'New sleep tracking (beta)',
-    'Level temperature display', 'One-time alarm', 'Rhythms']) {
+    'Level temperature display', 'One-time alarm', 'Rhythms', 'Firmware target',
+    'Firmware health', 'Tap diagnostics', 'Cooling warning']) {
     expect(await screen.findByRole('switch', { name: label })).toBeInTheDocument();
   }
   expect(screen.queryByRole('switch', { name: 'Sleep score' })).not.toBeInTheDocument();
@@ -63,7 +64,7 @@ it('counts new sleep tracking once it is on', async () => {
   const settings = getSettings();
   server.use(http.get('*/settings', () => HttpResponse.json({ ...settings, features: { ...settings.features, biometricsV2: true } })));
   renderWithProviders(<SettingsPage/>, { initialRoute: '/settings' });
-  expect(await screen.findByText('5 of 6 on')).toBeVisible();
+  expect(await screen.findByText('5 of 10 on')).toBeVisible();
 });
 
 it('does not claim the Pod is running before all core services are ready', async () => {
@@ -80,7 +81,29 @@ it('does not count dependent feature switches while biometrics is off', async ()
   const services = getServices();
   server.use(http.get('*/services', () => HttpResponse.json({ ...services, biometrics: { ...services.biometrics, enabled: false } })));
   renderWithProviders(<SettingsPage/>, { initialRoute: '/settings' });
-  expect(await screen.findByText('2 of 6 on')).toBeVisible();
+  expect(await screen.findByText('2 of 10 on')).toBeVisible();
+});
+
+it.each(['firmwareTargetReadout', 'firmwareHealth', 'tapDiagnostics', 'coolingWarning'] as const)(
+  'counts %s when monitoring is available', async flag => {
+    const settings = getSettings();
+    server.use(http.get('*/settings', () => HttpResponse.json({ ...settings, features: { ...settings.features, [flag]: true } })));
+    renderWithProviders(<SettingsPage/>, { initialRoute: '/settings' });
+    expect(await screen.findByText('5 of 10 on')).toBeVisible();
+  },
+);
+
+it('excludes firmware monitoring switches from the enabled count when Biometrics is off', async () => {
+  const settings = getSettings();
+  const services = getServices();
+  server.use(
+    http.get('*/settings', () => HttpResponse.json({ ...settings, features: { ...settings.features,
+      firmwareTargetReadout: true, firmwareHealth: true, tapDiagnostics: true, coolingWarning: true,
+    } })),
+    http.get('*/services', () => HttpResponse.json({ ...services, biometrics: { ...services.biometrics, enabled: false } })),
+  );
+  renderWithProviders(<SettingsPage/>, { initialRoute: '/settings' });
+  expect(await screen.findByText('2 of 10 on')).toBeVisible();
 });
 
 

@@ -159,6 +159,34 @@ export default function FeaturesSection() {
         />
       </Box>
       <FeatureToggleRow
+        label="Cooling warning"
+        disabled={ isUpdating || features?.coolingWarning === undefined }
+        checked={ features?.coolingWarning ?? false }
+        onChange={ next => updateFeature({ coolingWarning: next }) }
+        description="Warns when measured water keeps warming during cooling demand. Needs Biometrics. Does not change bed operation."
+      />
+      <FeatureToggleRow
+        label="Tap diagnostics"
+        disabled={ isUpdating || features?.tapDiagnostics === undefined }
+        checked={ features?.tapDiagnostics ?? false }
+        onChange={ next => updateFeature({ tapDiagnostics: next }) }
+        description="Records button and tap candidates on System status, with export. Needs Biometrics. Does not trigger actions."
+      />
+      <FeatureToggleRow
+        label="Firmware health"
+        disabled={ isUpdating || features?.firmwareHealth === undefined }
+        checked={ features?.firmwareHealth ?? false }
+        onChange={ next => updateFeature({ firmwareHealth: next }) }
+        description="Shows selected firmware health messages on System status. Needs Biometrics."
+      />
+      <FeatureToggleRow
+        label="Firmware target"
+        disabled={ isUpdating || features?.firmwareTargetReadout === undefined }
+        checked={ features?.firmwareTargetReadout ?? false }
+        onChange={ next => updateFeature({ firmwareTargetReadout: next }) }
+        description="Shows the target reported by firmware on System status. Needs Biometrics."
+      />
+      <FeatureToggleRow
         label="Level temperature display"
         disabled={ isUpdating || features?.levelTemps === undefined }
         checked={ features?.levelTemps ?? false }

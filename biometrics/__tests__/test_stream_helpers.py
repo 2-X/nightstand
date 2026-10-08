@@ -66,15 +66,19 @@ class TestDecodeRawRow(StreamHelpersTestCase):
     def test_unwraps_nested_data(self):
         inner = {'type': 'piezo-dual', 'ts': 1.0}
         row = {'seq': 1, 'data': cbor2.dumps(inner)}
-        self.assertEqual(stream._decode_raw_row(row), inner)
+        decoded = list(stream._decode_raw_row(row))
+        self.assertEqual(len(decoded), 1)
+        self.assertEqual(decoded[0]['type'], inner['type'])
+        self.assertEqual(decoded[0]['ts'], inner['ts'])
+        self.assertEqual(decoded[0]['_firmware']['sequence'], 1)
 
     def test_passes_through_direct_records(self):
         row = {'type': 'piezo-dual', 'ts': 1.0}
-        self.assertEqual(stream._decode_raw_row(row), row)
+        self.assertEqual(list(stream._decode_raw_row(row))[0]['type'], row['type'])
 
     def test_rejects_non_dict(self):
-        self.assertIsNone(stream._decode_raw_row([1, 2]))
-        self.assertIsNone(stream._decode_raw_row(None))
+        self.assertEqual(list(stream._decode_raw_row([1, 2])), [])
+        self.assertEqual(list(stream._decode_raw_row(None)), [])
 
 
 class TestQueueDecodedPiezoRecord(StreamHelpersTestCase):
@@ -582,17 +586,28 @@ class TestPumpSpeedFeed(StreamHelpersTestCase):
         handler.latest_file_obj.close()
         return handler
 
+    def assert_health_frame(self, frame, sequence):
+        self.health.assert_called_once()
+        decoded = self.health.call_args.args[0]
+        self.assertEqual({key: value for key, value in decoded.items() if key not in ('_firmware', 'seq')}, frame)
+        self.assertEqual(decoded['seq'], sequence)
+        receipt = decoded['_firmware']['receivedAt']
+        self.assertIsInstance(receipt, (int, float))
+        self.assertGreaterEqual(receipt, frame['ts'])
+        self.assertLessEqual(receipt, time.time())
+        self.assertEqual(decoded['_firmware'], {'sequence': sequence, 'index': 0, 'receivedAt': receipt})
+
     def test_the_file_watcher_feeds_both(self):
         frame = pump_frame()
         self.follow(frame)
         self.assertTrue(self.pump.fed)
         self.assertEqual(self.pump.speed_during(frame['ts'], frame['ts'] + 1), 'fast')
-        self.health.assert_called_once_with(frame)
+        self.assert_health_frame(frame, 0)
 
     def test_a_frame_the_pump_speed_cannot_read_still_reaches_pump_health(self):
         broken = {'type': 'frzHealth', 'ts': time.time(), 'left': ['not', 'a', 'side']}
         handler = self.follow(broken, recent_piezo(seq=9))
-        self.health.assert_called_once_with(broken)
+        self.assert_health_frame(broken, 0)
         self.assertFalse(self.pump.fed)
         # The reader moved past both records.
         self.assertEqual(handler.last_pos, os.path.getsize(handler.latest_file))
@@ -615,7 +630,7 @@ class TestPumpSpeedFeed(StreamHelpersTestCase):
             with self.assertRaises(asyncio.CancelledError):
                 asyncio.run(stream._nats_session(unittest.mock.Mock()))
         self.assertEqual(self.pump.speed_during(frame['ts'], frame['ts'] + 1), 'fast')
-        self.health.assert_called_once_with(frame)
+        self.assert_health_frame(frame, 1)
         message.ack.assert_not_called()
 
 

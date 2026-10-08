@@ -54,6 +54,7 @@ export type ServerStatus = {
   pumpHealthLeft?: StatusInfo;
   pumpHealthRight?: StatusInfo;
   rhythmsSchedule?: StatusInfo;
+  firmwareHealth?: StatusInfo;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-type-alias

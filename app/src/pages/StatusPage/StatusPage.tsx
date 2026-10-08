@@ -6,6 +6,7 @@ import { useStatusSummary } from './useStatusSummary';
 import { StatusInfo } from '@api/serverStatusSchema.ts';
 import { SubpageShell } from '../DataPage/Header.tsx';
 import GroupCard from './GroupCard.tsx';
+import FirmwarePanel from './FirmwarePanel.tsx';
 import {
   GROUP_LABELS, STATUS_META, StatusGroup, waitingCoreKeys, statusName, statusImpact,
 } from './statusMeta.ts';
@@ -70,6 +71,7 @@ export default function StatusPage() {
           )) }
         </>
       ) }
+      <FirmwarePanel />
     </SubpageShell>
   );
 }
