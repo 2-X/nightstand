@@ -30,7 +30,14 @@ beforeEach(() => {
     http.get('*/settings', () => HttpResponse.json({ ...getSettings(), timeZone: 'America/Los_Angeles' })),
     http.get('*/metrics/sleep', ({ request }) => {
       const url = new URL(request.url); requests.push(url);
-      return HttpResponse.json(url.searchParams.get('side') === 'right' ? [] : records);
+      const startTime = url.searchParams.get('startTime');
+      const endTime = url.searchParams.get('endTime');
+      const now = moment.now();
+      const start = startTime ? Date.parse(startTime) : endTime ? -Infinity : now - 90 * 86400_000;
+      const end = endTime ? Date.parse(endTime) : startTime ? Infinity : now;
+      return HttpResponse.json(url.searchParams.get('side') === 'right' ? [] : records.filter(item =>
+        Date.parse(item.left_bed_at) >= start && Date.parse(item.entered_bed_at) <= end,
+      ));
     }),
     http.get('*/metrics/sleep-stages', () => HttpResponse.json({
       active: true, epochs: [], totalSeconds: 0, totals: { awake: 0, light: 0, rem: 0, deep: 0 },
@@ -41,6 +48,24 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); moment.tz.setDefault(); });
 
 describe('Sleep selection and period', () => {
+  it('requests an explicit Pod-local range when browsing beyond the default history', async () => {
+    const { user } = renderWithProviders(<SleepPage />);
+    await screen.findByText('8h');
+    records = [record(4, '2026-06-16', 6)];
+    for (let week = 0; week < 14; week++) {
+      await user.click(screen.getByRole('button', { name: 'Previous week' }));
+    }
+    expect(await screen.findByText('6h')).toBeInTheDocument();
+    await waitFor(() => expect(requests.some(url =>
+      url.searchParams.get('startTime') === '2026-06-15T07:00:00.000Z'
+      && url.searchParams.get('endTime') === '2026-06-22T07:00:00.000Z',
+    )).toBe(true));
+    await waitFor(() => expect(requests.some(url =>
+      url.searchParams.get('side') === 'right'
+      && url.searchParams.get('startTime') === '2026-06-16T07:00:00.000Z',
+    )).toBe(true));
+  });
+
   it('clears the previous side record when the new side has no recordings', async () => {
     renderWithProviders(<SleepPage />);
     await screen.findByText('8h');
@@ -131,9 +156,24 @@ describe('Sleep selection and period', () => {
 it('shows the latest prior-week recording below the selected pending Monday', async () => {
   vi.mocked(moment.now).mockReturnValue(Date.parse('2026-09-28T18:00:00Z'));
   records = [record(5, '2026-09-27', 7)];
-  renderWithProviders(<SleepPage />);
+  const { user } = renderWithProviders(<SleepPage />);
   expect(await screen.findByText('7h')).toBeInTheDocument();
   expect(screen.getByText('Sep 28 - Oct 4')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: /Monday, September 28/ }));
+  await waitFor(() => expect(requests.some(url =>
+    url.searchParams.get('startTime') === '2026-09-28T07:00:00.000Z',
+  )).toBe(true));
+  expect(await screen.findByText('Not ready yet')).toBeInTheDocument();
+  expect(screen.getByText('Most recent recording')).toBeInTheDocument();
+  expect(screen.getByText('7h')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Previous week' }));
+  expect(await screen.findByText('Sep 21 - Sep 27')).toBeInTheDocument();
+  expect(await screen.findByText('7h')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Next week' }));
+  expect(await screen.findByText('Not ready yet')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Monday, September 28/ })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByText('Most recent recording')).toBeInTheDocument();
+  expect(screen.getByText('7h')).toBeInTheDocument();
 });
 it('uses unique accordion region ids', async () => {
   const { container } = renderWithProviders(<SleepPage />, { initialRoute: '/sleep?metric=heart_rate' });

@@ -124,18 +124,27 @@ function SleepContext({ side, timeZone, biometricsV2 }: { side: Side; timeZone: 
   const [weekDate, setWeekDate] = useState<string>();
   const [chosenDate, setChosenDate] = useState<string>();
   const [view, setView] = useState('night');
-  const { data, isPending, isError, refetch } = useSleepRecords({ side });
+  const { data: recentData, isError: recentError } = useSleepRecords({ side });
+  const requestedWeek = weekDate ? moment.tz(weekDate, timeZone).startOf('day') : undefined;
+  const { data, isPending, isError, refetch } = useSleepRecords({
+    side,
+    ...(requestedWeek ? {
+      startTime: requestedWeek.toISOString(),
+      endTime: requestedWeek.clone().add(7, 'days').toISOString(),
+    } : {}),
+  });
   const now = moment.tz(timeZone);
   const sideRecords = isError ? [] : withoutFutureRecords(data?.filter(record => record.side === side) ?? [], now.valueOf());
-  const latestRecord = [...sideRecords].sort((left, right) => Date.parse(right.left_bed_at) - Date.parse(left.left_bed_at))[0];
-  const newest = latestRecord && recordForNight(sideRecords, moment.tz(latestRecord.left_bed_at, timeZone).format('YYYY-MM-DD'), timeZone);
+  const recentRecords = recentError ? [] : withoutFutureRecords(recentData?.filter(record => record.side === side) ?? [], now.valueOf());
+  const latestRecord = [...recentRecords].sort((left, right) => Date.parse(right.left_bed_at) - Date.parse(left.left_bed_at))[0];
+  const newest = latestRecord && recordForNight(recentRecords, moment.tz(latestRecord.left_bed_at, timeZone).format('YYYY-MM-DD'), timeZone);
   const { data: services, isError: servicesError, refetch: refetchServices } = useServices();
   const { state: rhythmsState } = useRhythmsState();
   const job = services?.biometrics?.jobs?.[side === 'left' ? 'analyzeSleepLeft' : 'analyzeSleepRight'];
   const analysis = useAnalyzeSleep();
   const today = now.clone();
   const todayDate = today.format('YYYY-MM-DD');
-  const latestMissing = !recordForNight(sideRecords, todayDate, timeZone);
+  const latestMissing = !recordForNight(recentRecords, todayDate, timeZone);
   const jobIsToday = !!job?.timestamp && moment.tz(job.timestamp, timeZone).isSame(today, 'day');
   const analysisTime = today.clone().startOf('day').hour(SLEEP_ANALYSIS_HOUR).minute(SLEEP_ANALYSIS_MINUTE);
   const currentState: MissingNightState = services?.biometrics?.enabled === false ? 'off'
@@ -184,6 +193,7 @@ function SleepContext({ side, timeZone, biometricsV2 }: { side: Side; timeZone: 
       ) }
       <SleepSideControl
         selectedDate={ displayed ? moment.tz(displayed.left_bed_at, timeZone).format('YYYY-MM-DD') : selectedDate }
+        displayedRecord={ displayed }
         timeZone={ timeZone }/>
       <Box sx={ { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }>
         <IconButton aria-label="Previous week" onClick={ () => changeWeek(-1) }><NavigateBeforeIcon/></IconButton>
