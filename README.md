@@ -337,7 +337,12 @@ upstream built the installer, server, app and biometrics pipeline, and
 jmew's fork added presence detection, sleep stages, one-time alarms,
 adjustable base control and live screen updates.
 Matt Gates ([@Geczy](https://github.com/Geczy/free-sleep)) originally wrote
-the adjustable base control that jmew's fork carried.
+the adjustable base control that jmew's fork carried
+([driver](https://github.com/Geczy/free-sleep/commit/74d6439c0fffbd634e3b84ec054cb52d741eddab),
+[angle maps](https://github.com/Geczy/free-sleep/commit/fccb7916fbf3f8f1e0da4324de57bdf1a1fe12a4)).
+These are the main-branch copies of the patches credited in 3.6.1. His
+[preset integration](https://github.com/Geczy/free-sleep/commit/c17cb0866489889b2230f698e99eb74184c15623)
+also includes the HTTP route, app API client and four-tap base action.
 Multiple alarms per night came from
 [SFenton's fork](https://github.com/SFenton/free-sleep), and `sensorTemps`
 came from Felix Sommer's [Beat2er fork](https://github.com/Beat2er/free-sleep).

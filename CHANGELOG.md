@@ -49,6 +49,16 @@ is a hard fork; for the history of the projects it descends from, see
   Rhythms to fall back to the weekly schedule; the integration guide
   explains how to avoid that.
 
+### Docs
+
+- Expanded the protocol notes with Pod 5 RAW observations, alarm and recovery
+  reports, mixed hardware and unconfirmed generation thresholds.
+
+### Credits
+
+- Refined @Geczy's base-control credit with main-branch driver and angle-map
+  links and the HTTP route, app API client and four-tap action.
+
 ## [3.6.1] - 2026-10-07
 
 Keeps tap temperature changes within range, reports the daily reboot under its own status, stops sending an unverified command, and credits three contributors.
