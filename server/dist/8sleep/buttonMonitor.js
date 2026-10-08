@@ -39,6 +39,11 @@ const HAPTIC_CLEAR_MS = 1_000;
 // Long enough to cover a burst of presses + the franken round-trip, short
 // enough that app/schedule changes take back over quickly.
 const PENDING_TARGET_TTL_MS = 10_000;
+// Oldest press we still act on. Frank batches log records for up to ~60 s per
+// chunk and flushes the chunk whole, so a press can already be 15-25 s old the
+// first moment it is readable (NAS archive, Oct 2026: 3 of 93 presses exceeded
+// 15 s). 30 s keeps those while still refusing anything replayed from history.
+const MAX_PRESS_AGE_MS = 30_000;
 // Fast ASCII pre-filter: does this small record contain a button log tag?
 // Avoids a full CBOR decode for unrelated short log lines.
 const TAG_TCA = Buffer.from('[tca8418');
@@ -281,7 +286,7 @@ export class ButtonMonitor {
                 continue;
             if (typeof rec.ts !== 'number' || !Number.isFinite(rec.ts) ||
                 rec.ts * 1000 < this.startedAt || rec.ts * 1000 > Date.now() + 1000 ||
-                Date.now() - rec.ts * 1000 > 15000)
+                Date.now() - rec.ts * 1000 > MAX_PRESS_AGE_MS)
                 continue;
             events.push(...this.machine.push(rec.msg));
         }

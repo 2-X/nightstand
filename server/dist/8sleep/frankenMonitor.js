@@ -11,7 +11,7 @@ import { trimixBase } from './trimixBaseControl.js';
 import { BASE_PRESETS } from './basePresets.js';
 import eventBus from '../events/eventBus.js';
 import { recordEvent } from '../db/collector.js';
-import { getFreshOptimisticTarget, confirmTarget } from './optimisticTargets.js';
+import { getFreshOptimisticTarget, confirmTarget, setOptimisticTarget } from './optimisticTargets.js';
 // Pod 4+ only: gestures and the 2s cadence are the only path. The Pod 3
 // 60s slow-poll branch was removed alongside the WebSocket initiative.
 //
@@ -57,15 +57,20 @@ export class FrankenMonitor {
             eventBus.emit('service-health', { frankenMonitor: serverStatus.status.frankenMonitor });
         }
     }
-    async processGesture(side, gesture) {
+    // `polledTargetF` is the target from the snapshot that carried this gesture.
+    // A fresh optimistic target (a cover-button press or an earlier gesture in
+    // the same tick) wins over it, so back-to-back gestures stack instead of all
+    // being computed from the same stale value.
+    async processGesture(side, gesture, polledTargetF) {
         const behavior = settingsDB.data[side].taps[gesture];
         logger.debug(`[processGesture] side: ${side}, gesture: ${gesture}, type: ${behavior.type}`);
         if (behavior.type === 'temperature') {
-            const currentTemperatureTarget = this.deviceStatus[side].targetTemperatureF;
+            const currentTemperatureTarget = getFreshOptimisticTarget(side) ?? polledTargetF;
             const deltaF = behavior.change === 'increment' ? behavior.amount : -behavior.amount;
             // Shared with the Pod 5 cover-button path so both physical controls apply
             // identical temperature semantics (see applyTemperatureChange.ts).
-            await applyTemperatureDelta(side, currentTemperatureTarget, deltaF);
+            const newTargetF = await applyTemperatureDelta(side, currentTemperatureTarget, deltaF);
+            setOptimisticTarget(side, newTargetF);
             return;
         }
         else if (behavior.type === 'base_control') {
@@ -120,23 +125,43 @@ export class FrankenMonitor {
     }
     processGesturesForSide(nextDeviceStatus, side) {
         try {
+            const changed = [];
             for (const gesture of GestureSchema.options) {
                 if (nextDeviceStatus[side].taps?.[gesture] !== this?.deviceStatus?.[side].taps?.[gesture]) {
                     // Fire-and-forget journal write; recordEvent only enqueues in memory
                     // and never throws, so it adds no latency to the tap-detection path.
                     recordEvent('tap_gesture', { side, payload: { side, kind: gesture }, source: '8sleep/frankenMonitor' });
-                    // Deliberately detached: a base move takes seconds over BLE and this
-                    // loop doubles as the tap-detection cadence, so awaiting here would
-                    // delay the next gesture. Detached means the surrounding try cannot
-                    // see a rejection, and an unhandled one takes the whole server down
-                    // (the process-level handler shuts it down), so catch it here.
-                    void this.processGesture(side, gesture).catch(error => {
+                    changed.push(gesture);
+                }
+            }
+            if (changed.length === 0)
+                return;
+            const polledTargetF = nextDeviceStatus[side].targetTemperatureF;
+            // Deliberately detached from the poll loop: a base move takes seconds
+            // over BLE and this loop doubles as the tap-detection cadence, so
+            // awaiting here would delay the next gesture. Detached means the
+            // surrounding try cannot see a rejection, and an unhandled one takes the
+            // whole server down (the process-level handler shuts it down), so each
+            // gesture is caught here.
+            //
+            // Within one tick the gestures run one after another, not in parallel:
+            // the newer host firmware reports a cover long-press as a tap gesture,
+            // and two of them landing in the same 2 s snapshot used to be applied
+            // against the same base (observed live: -24 -> -16 and -24 -> -24
+            // written back to back instead of stacking). Each gesture now sees the
+            // target the previous one just wrote.
+            void (async () => {
+                for (const gesture of changed) {
+                    try {
+                        await this.processGesture(side, gesture, polledTargetF);
+                    }
+                    catch (error) {
                         const message = error instanceof Error ? error.message : String(error);
                         logger.error(`Failed to process ${gesture} on the ${side} side: ${message}`);
                         this.markStatus('failed', message);
-                    });
+                    }
                 }
-            }
+            })();
         }
         catch (error) {
             logger.error(error);

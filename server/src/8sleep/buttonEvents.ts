@@ -8,11 +8,21 @@
 //   [buttons] top button held for 320ms (abort)      -> long-hold, suppress click
 //   [buttons] middle button held for 176ms (abort)
 //   [buttons] middle button held for 160ms           -> completed hold (no abort)
+//   [buttons] long press top: 500ms                  -> firmware long-press (newer host firmware)
 //
 // Raw press/release lines can repeat while a button is held; we debounce to one
 // event per press edge. A press+release pair collapses to a single `click`. A
 // `[buttons] ... (abort)` for a button currently held suppresses that click. A
 // `[buttons] ... held for Nms` WITHOUT (abort) emits a `hold`.
+//
+// Newer host firmware (verified against the NAS RAW archive, Oct 2026) changed
+// the order: `held for Nms (abort)` now arrives AFTER the release, so it no
+// longer affects anything, and a real long press is announced while the button
+// is still down as `[buttons] long press <button>: 500ms`. That firmware then
+// handles the long press itself (`[TTC] temperature up/down gesture` plus its
+// own haptic pulse, surfaced to us through the DEVICE_STATUS tap counters), so
+// the trailing release must NOT also be delivered as a click or the same press
+// is applied twice. We treat the long-press line exactly like a completed hold.
 
 export type ButtonSide = 'left' | 'right';
 export type ButtonName = 'top' | 'middle' | 'bottom';
@@ -36,6 +46,7 @@ const CODE_TO_BUTTON: Record<number, ButtonName> = {
 
 const PRESS_RE = /\[tca8418([RL])\]\s+gpi\s+(press|release)\s+(\d+)/i;
 const HELD_RE = /\[buttons\]\s+(top|middle|bottom)\s+button\s+held\s+for\s+(\d+)ms\s*(\(abort\))?/i;
+const LONG_PRESS_RE = /\[buttons\]\s+long\s+press\s+(top|middle|bottom):\s*(\d+)ms/i;
 
 // Map key encoding side+button. Kept as a plain string (a template-literal
 // type alias trips the repo's no-type-alias rule).
@@ -65,6 +76,9 @@ export class ButtonEventMachine {
 
     const held = HELD_RE.exec(msg);
     if (held) return this.onHeldLine(held);
+
+    const longPress = LONG_PRESS_RE.exec(msg);
+    if (longPress) return this.onLongPressLine(longPress);
 
     return [];
   }
@@ -126,6 +140,19 @@ export class ButtonEventMachine {
       return [{ side, button, kind: 'hold' }];
     }
     return [];
+  }
+
+  // Firmware-announced long press (button still down). The firmware owns this
+  // gesture; emit a `hold` for the journal and make sure the release that
+  // follows is swallowed instead of becoming a click.
+  private onLongPressLine(m: RegExpExecArray): ButtonEvent[] {
+    const button = m[1].toLowerCase() as ButtonName;
+    const side = this.findDownSide(button);
+    if (!side) return []; // no tracked press (already released or missed)
+    const key = ButtonEventMachine.key(side, button);
+    const state = this.pending.get(key);
+    if (state) state.suppressed = true;
+    return [{ side, button, kind: 'hold' }];
   }
 
   private findDownSide(button: ButtonName): ButtonSide | null {

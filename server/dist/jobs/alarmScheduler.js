@@ -39,12 +39,17 @@ export const executeAlarm = async ({ vibrationIntensity, duration, vibrationPatt
                 return;
             }
         }
-        // Exit if side is off
+        // A powered-off side no longer suppresses the alarm. The vibration motor
+        // is independent of the water loop, and on this bed the temperature
+        // schedule switches a side off before its alarm time (right side off at
+        // 09:00, alarm 10:00), which silently skipped the alarm on every weekday
+        // in September/October 2026 except the two mornings the side happened to
+        // still be on (NAS RAW archive: ALARM_RIGHT only on Sep 14 and Sep 28).
+        // Away mode above remains the "not sleeping here" signal.
         const franken = await connectFranken();
         const resp = await franken.getDeviceStatus();
-        if (!resp[side].isOn && !force) {
-            logger.debug('Not executing alarm, side is off!');
-            return;
+        if (!resp[side].isOn) {
+            logger.info(`Alarm for ${side}: side is off, firing anyway (vibration does not need the pump)`);
         }
         // Best-effort arm of the pod vibrator before we fire. Idempotent; silent
         // no-op on local dev. Never blocks or aborts the alarm - if arming fails
@@ -160,13 +165,11 @@ export function scheduleDeadlineRefires(args) {
                         // A newer alarm superseded this one; let it own re-firing.
                         return;
                     }
-                    // Away/off checks: don't buzz a powered-off or away side.
+                    // Away check only: a powered-off side still gets its re-fires (see
+                    // executeAlarm), so a schedule that turns the side off before the
+                    // alarm cannot silence the deadline loop either.
                     await settingsDB.read();
                     if (settingsDB.data[side].awayMode)
-                        return;
-                    const franken = await connectFranken();
-                    const status = await franken.getDeviceStatus();
-                    if (!status[side].isOn)
                         return;
                     const payload = {
                         pl: vibrationIntensity,

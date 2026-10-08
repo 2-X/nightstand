@@ -60,6 +60,40 @@ describe('ButtonEventMachine', () => {
     assert.deepEqual(m.push('[tca8418L] gpi release 98'), []);
   });
 
+  // Newer host firmware grammar, taken verbatim from the NAS RAW archive
+  // (Oct 6 2026, 07:51 ET). A long press is announced while the button is
+  // still down and the firmware applies it itself; the release must not
+  // become a second application.
+  it('swallows the release after a firmware long-press line (new grammar)', () => {
+    const m = new ButtonEventMachine();
+    assert.deepEqual(m.push('[tca8418R] gpi press 97'), []);
+    assert.deepEqual(m.push('[buttons] top button clicked'), []);
+    assert.deepEqual(m.push('[buttons] long press top: 500ms'), [
+      { side: 'right', button: 'top', kind: 'hold' },
+    ]);
+    assert.deepEqual(m.push('[buttons] sent button event s0x01 i0x80 c0x01'), []);
+    assert.deepEqual(m.push('[tca8418R] gpi release 97'), []);
+    assert.deepEqual(m.push('[buttons] top button released'), []);
+  });
+
+  it('still emits a click for a short press whose (abort) line trails the release', () => {
+    const m = new ButtonEventMachine();
+    m.push('[tca8418L] gpi press 99');
+    m.push('[buttons] bottom button clicked');
+    assert.deepEqual(m.push('[tca8418L] gpi release 99'), [
+      { side: 'left', button: 'bottom', kind: 'click' },
+    ]);
+    assert.deepEqual(m.push('[buttons] bottom button released'), []);
+    // Arrives after the release on the new firmware; must be a no-op, not a
+    // retroactive suppression and not a second event.
+    assert.deepEqual(m.push('[buttons] bottom button held for 256ms (abort)'), []);
+  });
+
+  it('ignores a long-press line with no tracked press', () => {
+    const m = new ButtonEventMachine();
+    assert.deepEqual(m.push('[buttons] long press bottom: 500ms'), []);
+  });
+
   it('ignores unknown GPI codes and unrelated lines', () => {
     const m = new ButtonEventMachine();
     assert.deepEqual(m.push('[tca8418R] gpi press 42'), []);

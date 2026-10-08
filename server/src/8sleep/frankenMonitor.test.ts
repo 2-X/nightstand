@@ -14,11 +14,14 @@ process.env.ENV = 'local';
 
 let updateRejectsWith: Error | null = null;
 let updateCalls = 0;
+let writtenTargets: number[] = [];
 
 mock.module(new URL('../routes/deviceStatus/updateDeviceStatus.js', import.meta.url).href, {
   namedExports: {
-    updateDeviceStatus: async () => {
+    updateDeviceStatus: async (patch: { left?: { targetTemperatureF?: number }; right?: { targetTemperatureF?: number } }) => {
       updateCalls += 1;
+      const target = patch?.left?.targetTemperatureF ?? patch?.right?.targetTemperatureF;
+      if (typeof target === 'number') writtenTargets.push(target);
       if (updateRejectsWith) throw updateRejectsWith;
     },
   },
@@ -40,11 +43,13 @@ mock.module(new URL('./trimixBaseControl.js', import.meta.url).href, {
 let FrankenMonitor: typeof import('./frankenMonitor.js')['FrankenMonitor'];
 let settingsDB: typeof import('../db/settings.js')['default'];
 let serverStatus: typeof import('../serverStatus.js')['default'];
+let optimisticTargets: typeof import('./optimisticTargets.js');
 
 before(async () => {
   ({ FrankenMonitor } = await import('./frankenMonitor.js'));
   ({ default: settingsDB } = await import('../db/settings.js'));
   ({ default: serverStatus } = await import('../serverStatus.js'));
+  optimisticTargets = await import('./optimisticTargets.js');
 });
 
 const side = (taps: SideStatus['taps']): SideStatus => ({
@@ -79,6 +84,16 @@ async function settle() {
   }
 }
 
+// Wait (bounded) for a detached gesture chain to finish its writes; sequential
+// gestures do real settings/schedule file reads between writes, so a fixed
+// yield count is not enough under a loaded full-suite run.
+async function waitForWrites(count: number) {
+  const deadline = Date.now() + 5_000;
+  while (writtenTargets.length < count && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 // Drives the private gesture path directly. The public entry point is the
 // 2s poll loop, which would need a live Franken socket to reach this code.
 type GestureInternals = {
@@ -106,6 +121,8 @@ describe('FrankenMonitor gesture handling', () => {
   beforeEach(async () => {
     updateRejectsWith = null;
     updateCalls = 0;
+    writtenTargets = [];
+    optimisticTargets.clearAll();
     serverStatus.status.frankenMonitor.status = 'healthy';
     serverStatus.status.frankenMonitor.message = '';
 
@@ -122,6 +139,37 @@ describe('FrankenMonitor gesture handling', () => {
 
     assert.equal(updateCalls, 1, 'expected the tap to reach updateDeviceStatus');
     assert.deepEqual(seen, []);
+  });
+
+  // Newer host firmware reports cover long-presses as tap gestures. Two of
+  // them in one 2 s snapshot used to be computed from the same base (live:
+  // -24 -> -16 and -24 -> -24 written back to back). They must stack.
+  it('stacks two gestures from one tick instead of applying both to the same base', async () => {
+    settingsDB.data.left.taps.tripleTap = { type: 'temperature', change: 'increment', amount: 1 };
+    await settingsDB.write();
+    const seen = await runGestureTick(
+      deviceStatus({ doubleTap: 1, tripleTap: 1, quadTap: 0 }),
+      deviceStatus({ doubleTap: 2, tripleTap: 2, quadTap: 0 }),
+    );
+    assert.deepEqual(seen, []);
+    await waitForWrites(2);
+    // base 82: doubleTap -2 -> 80, then tripleTap +1 from 80 -> 81.
+    assert.deepEqual(writtenTargets, [80, 81]);
+    // The optimistic target is set after the write's manual-override
+    // bookkeeping resolves, so give the chain a moment to finish.
+    await settle();
+    assert.equal(optimisticTargets.getFreshOptimisticTarget('left'), 81);
+  });
+
+  it('bases a gesture on a fresh optimistic target from a cover-button press', async () => {
+    optimisticTargets.setOptimisticTarget('left', 70);
+    const seen = await runGestureTick(
+      deviceStatus({ doubleTap: 1, tripleTap: 0, quadTap: 0 }),
+      deviceStatus({ doubleTap: 2, tripleTap: 0, quadTap: 0 }),
+    );
+    assert.deepEqual(seen, []);
+    await waitForWrites(1);
+    assert.deepEqual(writtenTargets, [68]);
   });
 
   it('ignores a tick where no tap counter moved', async () => {
