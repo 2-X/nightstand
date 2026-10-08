@@ -70,6 +70,19 @@ write_status() {
     "$1" "$2" "$3" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATUS_FILE" 2>/dev/null || true
 }
 
+# Share admission with updates, rollback and the forward switch.
+if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
+  OPERATION_LOCK="${NIGHTSTAND_OPERATION_LOCK:-/run/lock/free-sleep-operation.lock}"
+  if [ -z "${NIGHTSTAND_OPERATION_LOCK:-}" ] && [ ! -d /run/lock ]; then
+    OPERATION_LOCK=/tmp/free-sleep-operation.lock
+  fi
+  if [ -e "$OPERATION_LOCK" ]; then exec 9<"$OPERATION_LOCK"; else exec 9>>"$OPERATION_LOCK"; fi \
+    || exit 1
+  python3 -c 'import fcntl; fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)' \
+    || { write_status preflight refused "another maintenance operation holds the lock"; exit 1; }
+  export NIGHTSTAND_OPERATION_OWNER="$$"
+fi
+
 # --- lock: refuse concurrent runs, refuse if any fork's updater is active ----
 if [ -e "$LOCK_FILE" ]; then
   say "FATAL: $LOCK_FILE exists, a migration is already in progress or a previous run left it behind."
@@ -270,6 +283,28 @@ if [ -f "$DATABASE" ]; then
   rm -rf "$DB_PREFLIGHT"
   DB_PREFLIGHT=""
   say "Database snapshot retained at $DATABASE_BACKUP"
+fi
+
+# A transactional return preserves the current upstream calibration and updater.
+if [ -f "$STAGE/scripts/switch_installation.py" ]; then
+  RETURN_COMPANION=$(python3 -B "$STAGE/scripts/switch_installation.py" return-companion)
+  COMPANION_STATUS=$?
+  if [ "$COMPANION_STATUS" -eq 0 ]; then
+    write_status swap in_progress "returning with retained companion state"
+    NIGHTSTAND_MIGRATION_CLEANUP="$REMOVE_FOREIGN" python3 -B "$STAGE/scripts/switch_installation.py" return --stage "$STAGE" --retained "$RETURN_COMPANION"
+    RETURN_STATUS=$?
+    if [ "$RETURN_STATUS" -eq 0 ]; then
+      write_status install success "returned to Nightstand with companion state; upstream retained for rollback"
+      exit 0
+    fi
+    if [ "$RETURN_STATUS" -eq 3 ]; then
+      write_status install restored "return failed; current upstream installation restored"
+    else
+      write_status install restore_failed "return stopped; inspect the retained transaction journal"
+    fi
+    exit 1
+  fi
+  [ "$COMPANION_STATUS" -eq 2 ] || fail "retained companion state is unreadable; refusing return"
 fi
 
 # ==============================================================================

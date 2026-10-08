@@ -57,6 +57,7 @@ class Configuration:
         paths += [self.systemd / 'free-sleep.service.d/10-nightstand-limits.conf',
                   self.systemd / 'free-sleep.service.d/20-nightstand-restart.conf',
                   self.systemd / 'free-sleep-stream.service.d/10-nightstand-limits.conf']
+        paths += [self.systemd / 'free-sleep.service', self.systemd / 'free-sleep-stream.service']
         return paths
 
 
@@ -146,6 +147,13 @@ def apply(store, transaction, config, direction):
                            NIGHTSTAND_SWITCH_RECOVERY_DIR=str(config.root / 'home/dac/free-sleep-switch-recovery'),
                            NIGHTSTAND_TRANSACTION_ROOT=str(store.root))
         execute(['bash', str(config.live / 'scripts/setup_services.sh'), str(config.live)], env=environment)
+        for unit in ('free-sleep-archive-raw.service', 'free-sleep-archive-raw.timer'):
+            source = config.live / 'scripts/systemd' / unit
+            if source.is_file():
+                write(config.systemd / unit, source.read_bytes())
+        limits = config.live / 'scripts/setup_resource_limits.sh'
+        if limits.is_file():
+            execute(['bash', str(limits)], env=environment)
     else:
         for name, mode in (('update_service.sh', 0o755), ('sqlite_maintenance.py', 0o644)):
             write(config.maintenance / name, (config.live / 'scripts' / name).read_bytes(), mode)
@@ -202,10 +210,7 @@ def firewall_rules(content):
             if line.strip() and not line.lstrip().startswith('#')]
 
 
-def restore(store, transaction, config, release_services=True):
-    journal, captured = record(store, transaction, config)
-    if journal['phase'] != 'recovering':
-        raise ValueError('Configuration restoration requires offline recovery')
+def restore_firewall(store, transaction, captured):
     rules = []
     for index, item in enumerate(captured['firewall']):
         path = store.directory(transaction) / (('iptables-save', 'ip6tables-save')[index] + '.rules')
@@ -217,6 +222,17 @@ def restore(store, transaction, config, release_services=True):
         rules.append(content.decode())
     if len(rules) != 2:
         raise ValueError('Missing saved firewall families')
+    for command, content in zip(('iptables-restore', 'ip6tables-restore'), rules):
+        execute([command], input=content)
+    for command, content in zip(('iptables-save', 'ip6tables-save'), rules):
+        if firewall_rules(execute([command])) != firewall_rules(content):
+            raise ValueError('Live firewall restoration did not match saved rules')
+
+
+def restore(store, transaction, config, release_services=True):
+    journal, captured = record(store, transaction, config)
+    if journal['phase'] != 'recovering':
+        raise ValueError('Configuration restoration requires offline recovery')
     for unit in FORK_UNITS:
         status = execute(['systemctl', 'show', '--property=LoadState', '--value', unit]).strip()
         if status != 'not-found':
@@ -225,11 +241,7 @@ def restore(store, transaction, config, release_services=True):
             if not captured['states'][unit]['enabled']:
                 execute(['systemctl', 'disable', unit])
     store.restore_snapshots(transaction)
-    for command, content in zip(('iptables-restore', 'ip6tables-restore'), rules):
-        execute([command], input=content)
-    for command, content in zip(('iptables-save', 'ip6tables-save'), rules):
-        if firewall_rules(execute([command])) != firewall_rules(content):
-            raise ValueError('Live firewall restoration did not match saved rules')
+    restore_firewall(store, transaction, captured)
     execute(['systemctl', 'daemon-reload'])
     execute(['systemctl', 'try-restart', 'systemd-timesyncd.service'])
     for unit, state in captured['states'].items():

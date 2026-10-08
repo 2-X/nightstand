@@ -9,6 +9,24 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 
 class MigrationRecovery(unittest.TestCase):
+    def test_migration_admission_refuses_the_shared_operation_lock(self):
+        import fcntl
+        source = (ROOT / 'scripts/migrate/pod-installer.sh').read_text()
+        block = source[source.index('# Share admission'):source.index('# --- lock:')]
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'operation.lock'
+            with path.open('w') as holder:
+                fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                environment = dict(os.environ, NIGHTSTAND_OPERATION_LOCK=str(path))
+                environment.pop('NIGHTSTAND_OPERATION_OWNER', None)
+                result = subprocess.run(['bash', '-c', 'set -uo pipefail\nwrite_status() { echo "$*"; }\n' + block],
+                    env=environment, capture_output=True, text=True, timeout=5)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('another maintenance operation holds the lock', result.stdout)
+            result = subprocess.run(['bash', '-c', 'set -uo pipefail\nwrite_status() { echo "$*"; }\n' + block],
+                env=environment, capture_output=True, text=True, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_interrupted_artifact_completion_keeps_migration_locked(self):
         self.check_interrupted_completion(legacy_lock_removed=False)
 

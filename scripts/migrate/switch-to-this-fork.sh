@@ -612,7 +612,8 @@ scp_to_pod "$SSH_PORT" "$IPTABLES_SNAPSHOT_LOCAL" "/home/dac/free-sleep-migrate-
 ssh_cmd "$SSH_PORT" "
   rm -f /persistent/free-sleep-data/migration-status.json
   if command -v systemd-run >/dev/null 2>&1; then
-    systemd-run --unit=free-sleep-migrate --collect bash /home/dac/migrate/pod-installer.sh $REMOVE_FOREIGN
+    systemd-run --unit=free-sleep-migrate --collect --property=KillMode=control-group \
+      --property=ExecStopPost='/bin/systemctl restart --no-block free-sleep-recover-switch.service' bash /home/dac/migrate/pod-installer.sh \"$REMOVE_FOREIGN\"
   else
     command -v setsid >/dev/null || exit 1
     nohup setsid bash /home/dac/migrate/pod-installer.sh $REMOVE_FOREIGN >/home/dac/migrate/installer.out 2>&1 & disown

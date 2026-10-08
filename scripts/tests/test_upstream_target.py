@@ -78,6 +78,7 @@ class SwitchScriptContractTests(unittest.TestCase):
             shell = '''set -uo pipefail
 SWITCH_RELEASES_URL=fixture
 UPSTREAM_ZIP_URL=main
+LIVE=/missing-switch-fixture
 say() { echo "$*"; }
 fail() { echo "$*" >&2; exit 1; }
 curl() { cat "$MANIFEST_FIXTURE"; }
@@ -101,7 +102,7 @@ curl() { cat "$MANIFEST_FIXTURE"; }
             self.assertNotEqual(result.returncode, 0, result.stdout)
             self.assertIn('live install untouched', result.stderr)
 
-    def test_v2_refuses_until_the_transactional_runner_is_available(self):
+    def test_v2_refuses_when_the_transactional_runner_is_missing(self):
         result = self.run_preflight(FIXTURES[1]['manifest'], dict(source='app', target=FIXTURES[1]['expected']))
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn('transactional switch runner', result.stderr)

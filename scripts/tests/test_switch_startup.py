@@ -50,6 +50,14 @@ class SwitchStartupTests(unittest.TestCase):
     def check(self, unit='free-sleep.service'):
         return recover_switch.check_startup(self.store, unit, self.lock_path)
 
+    def test_boot_recovery_defers_to_the_active_locked_operation_during_validation(self):
+        with patch.object(recover_switch, 'controller', side_effect=self.controller):
+            self.assertTrue(recover_switch.operation_active(self.store, self.lock_path))
+            fcntl.flock(self.lock, fcntl.LOCK_UN)
+            self.assertFalse(recover_switch.operation_active(self.store, self.lock_path))
+        with patch.object(recover_switch, 'controller', return_value='different invocation'):
+            self.assertFalse(recover_switch.operation_active(self.store, self.lock_path))
+
     def test_only_explicit_validation_writers_start_under_the_live_recorded_operation(self):
         with patch.object(recover_switch, 'controller', side_effect=self.controller):
             self.check()
@@ -168,7 +176,7 @@ class InstalledStartupGateTests(unittest.TestCase):
             'free-sleep.service', 'free-sleep-stream.service', 'free-sleep-archive-raw.service',
             'free-sleep-health.service', 'free-sleep-network-watchdog.service',
             'free-sleep-recover-update.service', 'free-sleep-update.service',
-            'free-sleep-rollback.service', 'free-sleep-revert.service',
+            'free-sleep-rollback.service', 'free-sleep-revert.service', 'free-sleep-migrate.service',
         })
         marker = self.root / 'helper-invoked'
         (self.recovery / 'recover_switch.sh').write_text(
@@ -191,7 +199,7 @@ class InstalledStartupGateTests(unittest.TestCase):
         unit = (self.systemd / 'free-sleep-recover-switch.service').read_text()
         self.assertIn('ConditionPathExistsGlob=' + str(self.transactions) + '/*/journal.json\n', unit)
         self.assertIn('Before=free-sleep.service free-sleep-stream.service free-sleep-update.service '
-                      'free-sleep-rollback.service free-sleep-revert.service\n', unit)
+                      'free-sleep-rollback.service free-sleep-revert.service free-sleep-migrate.service\n', unit)
         for name in self.commands:
             gate = (self.systemd / (name + '.d') / 'nightstand-switch-recovery.conf').read_text()
             self.assertIn('Wants=free-sleep-recover-switch.service\n', gate)

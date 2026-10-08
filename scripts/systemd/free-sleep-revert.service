@@ -8,6 +8,8 @@ Type=oneshot
 ExecStart=/bin/bash -c 'test -f /home/dac/free-sleep/scripts/switch-to-upstream.sh && exec /bin/bash /home/dac/free-sleep/scripts/switch-to-upstream.sh; exec /bin/bash /home/dac/free-sleep/scripts/revert-to-stock.sh'
 # Closes the download window even when the updater was killed outright.
 ExecStopPost=-/bin/bash /home/dac/free-sleep/scripts/close_update_window.sh
+# Recovery runs outside this operation and both replaceable trees.
+ExecStopPost=-/bin/systemctl restart --no-block free-sleep-recover-switch.service
 User=root
 Group=root
 KillMode=process

@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import switch_transaction as storage
+import recover_switch
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = {'fork': 'nightstand', 'commit': 'a' * 40, 'version': '3.6.1',
@@ -284,12 +285,14 @@ class TransactionTests(unittest.TestCase):
             self.assertEqual(self.file.read_bytes(), b'original\n')
             self.assertFalse(list((self.store.root / 'roundtrip').glob('.pending-*')))
 
-    def test_partial_arming_blocks_pruning_and_preserves_source(self):
+    def test_partial_arming_allows_startup_and_pruning_and_preserves_source(self):
         with patch.object(storage.os, 'fsync', side_effect=OSError(errno.ENOSPC, 'full disk')):
             with self.assertRaises(OSError):
                 self.store.create('interrupted', SOURCE, TARGET)
-        with self.assertRaises(ValueError):
-            self.store.protected_backups()
+        self.store.advance('roundtrip', 'recovering')
+        self.store.advance('roundtrip', 'recovered')
+        self.assertEqual(self.store.protected_backups(), set())
+        recover_switch.check_startup(self.store, 'free-sleep.service', self.base / 'no-lock')
         self.assertEqual(self.file.read_bytes(), b'original\n')
 
     def test_restore_can_repeat_after_each_failed_file_publication(self):
@@ -432,7 +435,7 @@ store.snapshot('roundtrip', 'settings', Path(sys.argv[3]))
                             self.store.restore_snapshots('roundtrip')
                         self.assertEqual(self.file.read_bytes(), b'original\n')
 
-    def test_kill_during_arming_keeps_complete_journal_or_blocks_pruning(self):
+    def test_kill_during_arming_keeps_complete_journal_or_allows_pruning(self):
         for method, boundaries in [('mkdir', 1), ('fsync', 5), ('replace', 1)]:
             for boundary in range(1, boundaries + 1):
                 for after in [False, True]:
@@ -464,8 +467,7 @@ storage.TransactionStore(Path(sys.argv[2])).create(sys.argv[3], json.loads(sys.a
                             self.assertEqual(self.store.load(transaction)['source'], SOURCE)
                             self.assertEqual(self.store.load(transaction)['phase'], 'armed')
                         elif directory.exists():
-                            with self.assertRaises(ValueError):
-                                self.store.protected_backups()
+                            self.assertEqual(self.store.protected_backups(), set())
                         self.assertEqual(self.file.read_bytes(), b'original\n')
 
     def test_symlink_and_absence_restore_repeat_after_failed_publications(self):
@@ -516,6 +518,10 @@ storage.TransactionStore(Path(sys.argv[2])).create(sys.argv[3], json.loads(sys.a
         self.store.add_backup('roundtrip', backups / names[1])
         for phase in ['writers-stopped', 'snapshots-ready', 'installing', 'validating', 'committed', 'cleaned']:
             self.store.advance('roundtrip', phase)
+        unpublished = self.store.root / 'unpublished'
+        unpublished.mkdir()
+        (unpublished / '.pending-journal').write_bytes(b'incomplete journal')
+        recover_switch.check_startup(self.store, 'free-sleep.service', self.base / 'no-lock')
         bin_dir = self.base / 'bin'
         bin_dir.mkdir()
         fake_df = bin_dir / 'df'

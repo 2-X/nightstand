@@ -49,6 +49,13 @@ def absolute_path(value):
     return Path(value)
 
 
+def is_published(directory):
+    if directory.is_symlink() or not directory.is_dir():
+        raise ValueError('Unexpected entry in transaction root')
+    # No live mutation is allowed before the initial journal is published.
+    return os.path.lexists(str(directory / 'journal.json'))
+
+
 def fsync_directory(path):
     descriptor = os.open(str(path), os.O_RDONLY | os.O_DIRECTORY)
     try:
@@ -322,8 +329,8 @@ class TransactionStore:
             raise ValueError('Invalid transaction root')
         protected = set()
         for directory in self.root.iterdir():
-            if not directory.is_dir() or directory.is_symlink():
-                raise ValueError('Unexpected entry in transaction root')
+            if not is_published(directory):
+                continue
             journal = self.load(directory.name)
             protected.update(journal['backups'])
         return protected

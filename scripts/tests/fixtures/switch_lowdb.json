@@ -1,0 +1,17 @@
+{
+  "settingsDB.json": {
+    "temperatureFormat": "level"
+  },
+  "schedulesDB.json": {
+    "left": {},
+    "right": {}
+  },
+  "servicesDB.json": {
+    "biometrics": {
+      "enabled": false
+    }
+  },
+  "rhythmsDB.json": {
+    "saved": "rhythms"
+  }
+}

@@ -55,6 +55,20 @@ class UpstreamEnvironmentTests(unittest.TestCase):
             return self.module.prepare(self.stage, self.env_root, 'switch', self.original,
                                        'python3', self.module.current_user(), 1)
 
+    def test_nightstand_return_prepares_pinned_packages_without_touching_upstream(self):
+        before = self.hashes()
+        (self.stage / 'scripts/python').mkdir(parents=True)
+        (self.stage / 'scripts/python/requirements.txt').write_bytes((ROOT / 'scripts/python/requirements.txt').read_bytes())
+        with patch.object(self.module, 'execute', side_effect=self.fake_execute):
+            destination = self.module.prepare(self.stage, self.env_root, 'return', self.original,
+                                              'python3', self.module.current_user(), 1, direction='nightstand')
+        self.assertEqual(self.hashes(), before)
+        self.assertEqual(destination, self.env_root / 'nightstand-return')
+        install = next(command for command, _ in self.calls if 'install' in command)
+        self.assertIn(str(self.stage / 'scripts/python/requirements.txt'), install)
+        validate = next(command for command, _ in self.calls if any('validate_upstream_imports' in value for value in command))
+        self.assertEqual(validate[-1], 'nightstand')
+
     def test_success_keeps_permanent_executable_paths_and_records_resolution(self):
         before = self.hashes()
         destination = self.prepare()

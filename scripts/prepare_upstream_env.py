@@ -117,23 +117,31 @@ def flush_environment(destination):
             os.close(descriptor)
 
 
-def prepare(stage, env_root, transaction, original, python, user, timeout):
+def prepare(stage, env_root, transaction, original, python, user, timeout, direction='upstream'):
     stage, env_root, original = (Path(path).absolute() for path in (stage, env_root, original))
     if re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,127}', transaction) is None:
         raise ValueError('Invalid environment transaction identifier')
     if not stage.is_dir() or stage.is_symlink():
         raise ValueError('Missing staged upstream tree')
-    destination = env_root / ('upstream-' + transaction)
+    if direction not in ('upstream', 'nightstand'):
+        raise ValueError('Unknown environment direction')
+    destination = env_root / (direction + '-' + transaction)
     if env_root.resolve() != env_root or os.path.lexists(str(destination)):
         raise ValueError('Environment path must be permanent, new, and free of symlink parents')
     for protected in (original, original.resolve(), stage.resolve()):
         if destination == protected or protected in destination.parents or destination in protected.parents:
             raise ValueError('Prepared environment overlaps the original environment or staged tree')
-    requirements = stage / 'biometrics/requirements.txt'
-    lines = {line.strip().lower() for line in requirements.read_text().splitlines()
-             if line.strip() and not line.lstrip().startswith('#')}
-    if requirements.is_symlink() or lines != REQUIREMENTS:
-        raise ValueError('Unreviewed upstream Python requirements')
+    requirements = stage / ('biometrics/requirements.txt' if direction == 'upstream' else 'scripts/python/requirements.txt')
+    if direction == 'nightstand':
+        constraints = HERE / 'python/requirements.txt'
+        if requirements.is_symlink() or requirements.read_bytes() != constraints.read_bytes():
+            raise ValueError('Unreviewed Nightstand Python requirements')
+    else:
+        constraints = HERE / 'python/upstream-constraints.txt'
+        lines = {line.strip().lower() for line in requirements.read_text().splitlines()
+                 if line.strip() and not line.lstrip().startswith('#')}
+        if requirements.is_symlink() or lines != REQUIREMENTS:
+            raise ValueError('Unreviewed upstream Python requirements')
     clean_env = {key: value for key, value in os.environ.items()
                  if not key.startswith(('PIP_', 'PYTHON'))}
     clean_env.update(PYTHONDONTWRITEBYTECODE='1', PYTHONNOUSERSITE='1',
@@ -144,7 +152,6 @@ def prepare(stage, env_root, transaction, original, python, user, timeout):
         raise ValueError('Upstream environment constraints support Python 3.9 and 3.10 only')
     execute([python, '-I', '-c', 'import venv, ensurepip; print(ensurepip.version())'],
             user=user, timeout=30, env=clean_env)
-    constraints = HERE / 'python/upstream-constraints.txt'
     required = space_required(original, stage)
     if shutil.disk_usage(existing_parent(env_root))[2] < required:
         raise ValueError('Insufficient space for retained and upstream environments, cache, and scratch: '
@@ -162,7 +169,10 @@ def prepare(stage, env_root, transaction, original, python, user, timeout):
              '--constraint', str(constraints), '-r', str(requirements)],
             user=user, timeout=timeout, env=clean_env, cwd=str(scratch))
     execute([interpreter, '-I', '-m', 'pip', 'check'], user=user, timeout=30, env=clean_env)
-    execute([interpreter, '-I', '-B', str(HERE / 'validate_upstream_imports.py'), str(stage), str(scratch)],
+    validation = [interpreter, '-I', '-B', str(HERE / 'validate_upstream_imports.py'), str(stage), str(scratch)]
+    if direction == 'nightstand':
+        validation.append(direction)
+    execute(validation,
             user=user, timeout=60, env=clean_env, cwd=str(stage / 'biometrics'))
     resolved = execute([interpreter, '-I', '-m', 'pip', 'freeze', '--all'],
                        user=user, timeout=30, env=clean_env)

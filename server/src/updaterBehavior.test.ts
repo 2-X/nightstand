@@ -1054,3 +1054,21 @@ curl() { printf '%s' '{"freeSleep":{"version":"3.2.0"},"left":{"currentTemperatu
     assert.equal(result.status, status, `${requirement}: ${result.stdout}${result.stderr}`);
   }
 });
+
+it('refuses cross-fork rollback without companion state before executing a transaction', () => {
+  const helper = section('scripts/restore_helpers.sh', 'restore_cross_fork_rollback() {');
+  for (const available of [false, true]) {
+    const result = run(helper + '\nrestore_cross_fork_rollback\n', `
+mkdir -p "$LIVE/scripts"
+touch "$LIVE/scripts/switch_installation.py"
+python3() {
+  printf '%s\\n' "$*" >> "$FIXTURE/marker"
+  if [ "$3" = companion ]; then return ${available ? 0 : 1}; fi
+  [ "$3" = rollback ]
+}
+`);
+    assert.equal(result.status, available ? 0 : 1, result.stderr);
+    assert.equal(result.marker.includes('rollback --stage'), available);
+    assert.match(result.marker, /companion --stage/);
+  }
+});

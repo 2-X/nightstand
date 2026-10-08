@@ -983,7 +983,7 @@ function dependencies(file: string, c: NodeCase) {
     ? `${between(src, '# --- dependencies', '  # Only to a copy that carries the marker')}\nfi`
     : between(src, '# --- dependencies', '# --- backup');
   const result = spawnSync('bash', ['-c', `set -uo pipefail
-LIVE="$F/live"; STAGE="$F/stage"; NPM=npm; HANDOFF=0; MODULES_MB=0; SPACE_MARGIN_MB=0
+LIVE="$F/live"; STAGE="$F/stage"; NPM=npm; HANDOFF=0; MODULES_MB=0; SPACE_MARGIN_MB=0; TRANSACTIONAL_SWITCH=no
 say() { echo "$*"; }
 fail() { echo "FATAL: $*"; exit 1; }
 free_mb() { echo 999999; }

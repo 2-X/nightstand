@@ -32,6 +32,12 @@ if python3 -B "$HELPER" --root "$TRANSACTIONS" check 2>/dev/null; then
   exit 0
 fi
 
+# Controlled starts can pull in this unit through Wants after a journal is
+# armed. The writer gates still enforce the separate validation permission.
+if python3 -B "$HELPER" --root "$TRANSACTIONS" operation-active --operation-lock "$OPERATION_LOCK" 2>/dev/null; then
+  exit 0
+fi
+
 # Descendants can retain the operation lock after their parent was killed.
 python3 -B "$HELPER" --root "$TRANSACTIONS" stop-operations
 if [ -e "$OPERATION_LOCK" ]; then

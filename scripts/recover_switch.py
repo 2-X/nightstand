@@ -19,13 +19,14 @@ import re
 import subprocess
 import time
 
-from switch_transaction import TransactionStore, absolute_path, fsync_directory
-from switch_services import Configuration, restore as restore_configuration, restore_enablement
+from switch_transaction import TransactionStore, absolute_path, fsync_directory, digest, is_published
+from switch_services import (Configuration, CONFIG_UNITS as FORK_CONFIG_UNITS,
+                             restore as restore_configuration, restore_enablement)
 
 WRITERS = ('free-sleep.service', 'free-sleep-stream.service',
            'free-sleep-archive-raw.service', 'free-sleep-health.service',
            'free-sleep-network-watchdog.service', 'free-sleep-recover-update.service')
-OPERATIONS = ('free-sleep-update.service', 'free-sleep-rollback.service', 'free-sleep-revert.service')
+OPERATIONS = ('free-sleep-update.service', 'free-sleep-rollback.service', 'free-sleep-revert.service', 'free-sleep-migrate.service')
 SERVICES = WRITERS + ('free-sleep-archive-raw.timer', 'free-sleep-health.timer',
                      'free-sleep-network-watchdog.timer')
 TERMINAL = ('committed', 'cleaned', 'recovered')
@@ -43,8 +44,8 @@ def journals(store):
         raise ValueError('Invalid transaction root')
     result = []
     for entry in sorted(store.root.iterdir()):
-        if entry.is_symlink() or not entry.is_dir():
-            raise ValueError('Unexpected transaction entry')
+        if not is_published(entry):
+            continue
         result.append(store.load(entry.name))
     if sum(journal['phase'] not in TERMINAL for journal in result) > 1:
         raise ValueError('Multiple unfinished switches require manual recovery')
@@ -69,9 +70,12 @@ def recovery_record(journal):
             if (not isinstance(parents, dict) or not path.parent.is_dir()
                     or str(path.parent.resolve()) != str(absolute_path(parents.get(key)))):
                 raise ValueError('Recovery mapping parent changed')
-        for key in ('device', 'inode'):
-            if type(mapping.get(key)) is not int or mapping[key] < 0:
-                raise ValueError('Missing source filesystem identity')
+        if 'absent' in mapping and (mapping['kind'] != 'environment' or mapping['absent'] is not True):
+            raise ValueError('Invalid absent environment mapping')
+        if not mapping.get('absent'):
+            for key in ('device', 'inode'):
+                if type(mapping.get(key)) is not int or mapping[key] < 0:
+                    raise ValueError('Missing source filesystem identity')
         if mapping['kind'] == 'tree':
             trees += 1
             if mapping['live'] != journal['source']['treePath']:
@@ -124,6 +128,26 @@ def check_startup(store, unit, lock_path):
     raise ValueError('Validation operation no longer holds the maintenance lock')
 
 
+
+def operation_active(store, lock_path):
+    """Defer boot recovery while a recorded maintenance owner still holds the lock."""
+    pending = [journal for journal in journals(store) if journal['phase'] not in TERMINAL]
+    if not pending:
+        return False
+    operation = recovery_record(pending[0]).get('operation')
+    if (operation is None
+            or controller('show', '--property=InvocationID', '--value', operation['unit']) != operation['invocationId']
+            or controller('show', '--property=ActiveState', '--value', operation['unit']) not in ('active', 'activating')):
+        return False
+    with Path(lock_path).open('r') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        fcntl.flock(lock, fcntl.LOCK_UN)
+    return False
+
+
 def matching(path, mapping):
     try:
         status = path.lstat()
@@ -136,6 +160,10 @@ def restore_paths(journal, record):
     # Check every source before moving any path. Never overwrite retained evidence.
     for mapping in record['paths']:
         live, saved, failed = (Path(mapping[key]) for key in ('live', 'saved', 'failed'))
+        if mapping.get('absent'):
+            if os.path.lexists(str(saved)) or (os.path.lexists(str(live)) and os.path.lexists(str(failed))):
+                raise ValueError('Absent environment recovery paths are occupied')
+            continue
         source = live if matching(live, mapping) else saved
         if not matching(source, mapping):
             raise ValueError('Original installation is missing: ' + str(live))
@@ -149,6 +177,11 @@ def restore_paths(journal, record):
                 raise ValueError('Original tree version mismatch')
     for mapping in record['paths']:
         live, saved, failed = (Path(mapping[key]) for key in ('live', 'saved', 'failed'))
+        if mapping.get('absent'):
+            if os.path.lexists(str(live)):
+                os.rename(str(live), str(failed))
+                fsync_directory(live.parent)
+            continue
         if matching(live, mapping):
             continue
         if os.path.lexists(str(live)):
@@ -189,6 +222,101 @@ def stop_operations(store):
                         raise ValueError('Operation descendants did not stop')
 
 
+
+
+def migration_artifacts(store, journal, mode):
+    records = [item['details'] for item in journal['intents'] if item['name'] == 'migration-artifacts']
+    if not records:
+        return
+    script = store.directory(journal['id']) / 'migration-artifacts.sh'
+    if (len(records) != 1 or records[0].get('path') != str(script) or script.is_symlink()
+            or digest(script.read_bytes()) != records[0].get('sha256')):
+        raise ValueError('Invalid migration artifact recovery helper')
+    subprocess.run(['bash', str(script), mode], check=True, timeout=60)
+
+
+def restore_target_slot(journal, record):
+    slot = journal['metadata'].get('targetSlot')
+    if slot is None:
+        return
+    tree = next(item for item in record['paths'] if item['kind'] == 'tree')
+    path = absolute_path(slot['path'])
+    if path != Path(tree['live']).parent / 'free-sleep-prev':
+        raise ValueError('Invalid target rollback slot')
+    if matching(path, slot):
+        return
+    failed = Path(tree['failed'])
+    if not matching(failed, slot) or os.path.lexists(str(path)):
+        raise ValueError('Target rollback slot cannot be restored')
+    os.rename(str(failed), str(path))
+    fsync_directory(path.parent)
+
+
+def finish_committed(store, journal, run_controller=None):
+    """Resume idempotent cleanup without reverting a committed installation."""
+    run_controller = controller if run_controller is None else run_controller
+    if journal['phase'] != 'committed' or 'retainedSlot' not in journal['metadata']:
+        return
+    record = recovery_record(journal)
+    tree = next(item for item in record['paths'] if item['kind'] == 'tree')
+    slot = journal['metadata'].get('retainedSlot')
+    if slot:
+        live, saved = Path(tree['live']), Path(tree['saved'])
+        copies = [item['details'] for item in journal['intents'] if item['name'] == 'retained-slot-ready']
+        slot_identity = tree
+        if copies:
+            if len(copies) != 1 or copies[0]['path'] != str(live.parent / ('free-sleep-slot-' + journal['id'])):
+                raise ValueError('Invalid retained rollback copy')
+            saved = absolute_path(copies[0]['path'])
+            slot_identity = copies[0]
+        path, retired = absolute_path(slot['path']), absolute_path(slot['retired'])
+        if (path != live.parent / 'free-sleep-prev'
+                or retired != live.parent / ('free-sleep-prev-retained-' + journal['id'])):
+            raise ValueError('Invalid retained rollback slot')
+        if not matching(path, slot_identity):
+            if not matching(saved, slot_identity):
+                raise ValueError('Committed source tree is missing')
+            previous = slot.get('previous')
+            if os.path.lexists(str(path)):
+                if previous is None or not matching(path, previous) or os.path.lexists(str(retired)):
+                    raise ValueError('Rollback slot changed before cleanup')
+                os.rename(str(path), str(retired))
+                fsync_directory(path.parent)
+            elif previous is not None and not matching(retired, previous):
+                raise ValueError('Previous rollback slot is missing')
+            os.rename(str(saved), str(path))
+            fsync_directory(path.parent)
+    probes = [item['details'] for item in journal['intents'] if item['name'] == 'validation-probe']
+    if probes:
+        snapshot = journal['snapshots'].get('validation-stream-unit', {})
+        expected = Path(journal['metadata']['systemRoot']) / 'etc/systemd/system/free-sleep-stream.service.d/nightstand-validation.conf'
+        if (len(probes) != 1 or probes[0].get('path') != str(expected)
+                or snapshot.get('path') != str(expected) or snapshot.get('kind') != 'absent'):
+            raise ValueError('Invalid validation cleanup path')
+        from switch_transaction import validate_snapshot_parent
+        validate_snapshot_parent(expected, snapshot)
+        if os.path.lexists(str(expected)):
+            expected.unlink()
+            fsync_directory(expected.parent)
+        run_controller('daemon-reload')
+    releases = [item['details'] for item in journal['intents'] if item['name'] == 'release-services']
+    if releases:
+        if len(releases) != 1 or not isinstance(releases[0].get('states'), dict):
+            raise ValueError('Invalid committed service states')
+        for unit, state in releases[0]['states'].items():
+            if (unit not in SERVICES + FORK_CONFIG_UNITS or unit in OPERATIONS
+                    or any(type(state.get(key)) is not bool for key in ('active', 'enabled'))):
+                raise ValueError('Invalid committed service state')
+            if state.get('present') is False:
+                continue
+            restore_enablement(unit, state, runner=lambda command: run_controller(*command[1:]))
+            if state['active'] and unit not in ('free-sleep.service', 'free-sleep-stream.service',
+                                              'free-sleep-recover-switch.service'):
+                run_controller('start', '--no-block', unit)
+    migration_artifacts(store, journal, 'finish')
+    store.advance(journal['id'], 'cleaned')
+
+
 def restore(store, helper):
     pending = [journal for journal in journals(store) if journal['phase'] not in TERMINAL]
     for journal in pending:
@@ -207,6 +335,7 @@ def restore(store, helper):
         live = Path(tree['live'])
         if (live / 'server/package-lock.json').is_file() and not (live / 'server/node_modules').is_dir():
             raise ValueError('Restored installation has no matching Node dependencies')
+        restore_target_slot(journal, record)
         configurations = [item['details'] for item in journal['intents'] if item['name'] == 'system-configuration']
         restored_states = {}
         if configurations:
@@ -220,6 +349,7 @@ def restore(store, helper):
             raise ValueError('Missing saved system configuration for switch recovery')
         else:
             store.restore_snapshots(journal['id'])
+        migration_artifacts(store, journal, 'restore')
         controller('daemon-reload')
         for unit, state in record['services'].items():
             restored_states.setdefault(unit, {}).update(state)
@@ -236,26 +366,31 @@ def restore(store, helper):
         # Nonblocking starts wait for this oneshot to exit. Stopping writers
         # may have cancelled their initial boot jobs, so explicitly queue them.
         print('Restored the source installation offline: ' + journal['id'])
+    for journal in journals(store):
+        finish_committed(store, journal)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, required=True)
-    parser.add_argument('command', choices=('check', 'startup-check', 'stop-operations', 'restore', 'pending'))
+    parser.add_argument('command', choices=('check', 'startup-check', 'stop-operations', 'restore', 'pending', 'operation-active'))
     parser.add_argument('--helper', type=Path)
     parser.add_argument('--unit')
     parser.add_argument('--operation-lock', type=Path)
     args = parser.parse_args()
     try:
         store = TransactionStore(args.root)
-        if args.command == 'startup-check':
+        if args.command == 'operation-active':
+            if not operation_active(store, args.operation_lock):
+                parser.exit(1)
+        elif args.command == 'startup-check':
             check_startup(store, args.unit, args.operation_lock)
         elif args.command in ('check', 'pending'):
             pending = [journal for journal in journals(store) if journal['phase'] not in TERMINAL]
             if args.command == 'pending':
                 for journal in pending:
                     print(journal['id'])
-            elif pending:
+            elif pending or any(journal['phase'] == 'committed' and 'retainedSlot' in journal['metadata'] for journal in journals(store)):
                 raise ValueError('An unfinished switch blocks writer startup')
         elif args.command == 'stop-operations':
             stop_operations(store)

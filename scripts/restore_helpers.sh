@@ -52,3 +52,11 @@ restore_restart_services() {
     fi
   fi
 }
+
+# Cross-fork swaps require the retained installation's companion state.
+restore_cross_fork_rollback() {
+  local runner="$LIVE/scripts/switch_installation.py"
+  [ -f "$runner" ] || return 1
+  python3 -B "$runner" companion --stage "$PREV" >/dev/null || return 1
+  python3 -B "$runner" rollback --stage "$PREV" --recheck-in-use "${RECHECK_IN_USE:-no}"
+}

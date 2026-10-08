@@ -3,7 +3,7 @@ Description=Nightstand interrupted switch recovery
 RequiresMountsFor=/persistent /home/dac
 After=local-fs.target
 ConditionPathExistsGlob=/persistent/free-sleep-maintenance/nightstand-transactions/*/journal.json
-Before=free-sleep.service free-sleep-stream.service free-sleep-update.service free-sleep-rollback.service free-sleep-revert.service
+Before=free-sleep.service free-sleep-stream.service free-sleep-update.service free-sleep-rollback.service free-sleep-revert.service free-sleep-migrate.service
 
 [Service]
 Type=oneshot

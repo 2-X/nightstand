@@ -395,12 +395,15 @@ open_wan
 # releases.json names one. Upstream's main is installed only when the list was
 # read and records no such commit; an unreadable list or a malformed record
 # stops the switch, since the app may already have promised the checked one.
+TRANSACTIONAL_SWITCH=no
 SWITCH_MANIFEST=$(curl -fsSL --max-time 20 "$SWITCH_RELEASES_URL") || SWITCH_MANIFEST=""
 if [ -n "$CONFIRMED_TARGET" ]; then
   SWITCH_PIN=$(printf '%s' "$SWITCH_MANIFEST" | python3 -B "$UPSTREAM_TARGET_HELPER" - --confirmed-json "$CONFIRMED_TARGET") \
     || fail "the confirmed upstream target is no longer available; live install untouched"
   case "$SWITCH_PIN" in
-    v2\ *) fail "this target requires the transactional switch runner, which is not available in this release; live install untouched" ;;
+    v2\ *)
+      [ -f "$LIVE/scripts/switch_installation.py" ] || fail "the transactional switch runner is missing; live install untouched"
+      TRANSACTIONAL_SWITCH=yes ;;
   esac
 else
 SWITCH_PIN=$(printf '%s' "$SWITCH_MANIFEST" | python3 -c '
@@ -489,6 +492,24 @@ if [ "$(node_fetch_mb "$(node_pin "$STAGE")" "$(node_pin "$LIVE")")" != 0 ]; the
   run_limited 600 sudo -u dac bash -c "cd '$STAGE/server' && '$NPM' --version" >/dev/null \
     || fail "could not fetch Node $(node_pin "$STAGE"); live install untouched"
 fi
+# Confirmed V2 targets use the durable transaction before any legacy mutation.
+if [ "$TRANSACTIONAL_SWITCH" = yes ]; then
+  [ -n "$SWITCH_DIGEST" ] && [ "${SWITCH_ACTUAL:-}" = "$SWITCH_DIGEST" ] \
+    || fail "the confirmed V2 artifact could not be verified; live install untouched"
+  recheck_in_use
+  RESULT_PHASE=swapping
+  python3 -B "$LIVE/scripts/switch_installation.py" forward --stage "$STAGE" \
+    --target-json "$CONFIRMED_TARGET" --artifact-digest "$SWITCH_ACTUAL" --recheck-in-use "$RECHECK_IN_USE"
+  SWITCH_STATUS=$?
+  if [ "$SWITCH_STATUS" -eq 0 ]; then
+    RESULT_PHASE=swapped
+    say "SUCCESS: the upstream transaction committed; recovery records and companion state retained"
+    exit 0
+  fi
+  [ "$SWITCH_STATUS" -ne 3 ] || RESULT_PHASE=restored
+  fail "the upstream transaction did not complete; see the retained recovery journal"
+fi
+
 # Upstream imports this even when the existing services record says installed.
 if [ -x /home/dac/venv/bin/python ]; then
   # Upstream leaves this unpinned; keep our revert dependency reproducible.

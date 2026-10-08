@@ -28,6 +28,24 @@
 # Settings page recognizes it immediately.
 set -uo pipefail
 
+# Durable switch journals take precedence over the older migration markers.
+TRANSACTION_ROOT="${NIGHTSTAND_TRANSACTION_ROOT:-/persistent/free-sleep-maintenance/nightstand-transactions}"
+for journal in "$TRANSACTION_ROOT"/*/journal.json; do
+  if [ -e "$journal" ] || [ -L "$journal" ]; then
+    SWITCH_RECOVERY=/home/dac/free-sleep-switch-recovery/recover_switch.sh
+    [ -f "$SWITCH_RECOVERY" ] || { echo "Switch recovery helper is missing" >&2; exit 1; }
+    PENDING_SWITCH=$(python3 -B /home/dac/free-sleep-switch-recovery/recover_switch.py --root "$TRANSACTION_ROOT" pending) || exit 1
+    if [ "${NIGHTSTAND_OPERATION_OWNER:-}" = "$PPID" ]; then
+      source /home/dac/free-sleep-switch-recovery/restore_helpers.sh || exit 1
+      restore_switch_offline /home/dac/free-sleep-switch-recovery "$TRANSACTION_ROOT" || exit 1
+    else
+      bash "$SWITCH_RECOVERY" || exit 1
+    fi
+    [ -z "$PENDING_SWITCH" ] || exit 0
+    break
+  fi
+done
+
 LIVE=/home/dac/free-sleep
 PREV=/home/dac/free-sleep-prev
 # The installer stashes any pre-existing $PREV here so we can put the pod's own

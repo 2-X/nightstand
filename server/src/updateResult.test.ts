@@ -348,7 +348,10 @@ describe('where each script marks its progress', () => {
   });
 
   it('rollback_pod.sh marks the swap, and records restored only after a clean swap back', () => {
-    const src = read('scripts/rollback_pod.sh');
+    const script = read('scripts/rollback_pod.sh');
+    const start = script.indexOf('# --- swap ');
+    assert.ok(start >= 0, 'missing the legacy swap section');
+    const src = script.slice(start);
     assert.ok(src.indexOf('RESULT_PHASE=swapped') > src.indexOf('mv "$PREV" "$LIVE" || {'));
     assert.match(src, /RESULT_PHASE=swapping/);
     const back = src.slice(src.indexOf('# --- swap back on failure'));
@@ -426,7 +429,10 @@ wait $!
   });
 
   it('switch-to-upstream.sh marks the swap and its own rollback', () => {
-    const src = read('scripts/switch-to-upstream.sh');
+    const script = read('scripts/switch-to-upstream.sh');
+    const start = script.indexOf('# --- atomic swap');
+    assert.ok(start >= 0, 'missing the legacy swap section');
+    const src = script.slice(start);
     assert.ok(src.indexOf('RESULT_PHASE=swapped') > src.indexOf('mv "$STAGE" "$LIVE" || {'));
     const rollback = src.indexOf('# --- automatic rollback');
     assert.ok(src.indexOf('RESULT_PHASE=restored', rollback) > src.indexOf('mv "$PREV" "$LIVE" || {', rollback));
@@ -437,6 +443,95 @@ wait $!
     assert.ok(phases.indexOf('RESULT_PHASE=restored') < phases.indexOf('fail "swap failed moving live aside"'));
     const secondMove = phases.indexOf('mv "$STAGE" "$LIVE" || {');
     assert.ok(phases.indexOf('RESULT_PHASE=restored', secondMove) < phases.indexOf('fail "swap failed; fork restored"'));
+  });
+
+  // Run the shell transaction branches with the offline installer stubbed.
+  function transactionRecord(file: string, operation: string, from: string, to: string, transactionStatus: number, journal = true) {
+    const src = read(file);
+    const start = src.indexOf(from);
+    const end = src.indexOf(to, start);
+    assert.ok(start >= 0 && end > start, 'missing the transaction section');
+    const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-transaction-result-'));
+    try {
+      copyFileSync(path.join(repoRoot, 'scripts/write_result.py'), path.join(dir, 'write_result.py'));
+      mkdirSync(path.join(dir, 'live/scripts'), { recursive: true });
+      writeFileSync(path.join(dir, 'live/scripts/switch_installation.py'), '');
+      mkdirSync(path.join(dir, 'transactions/recorded'), { recursive: true });
+      if (journal) writeFileSync(path.join(dir, 'transactions/recorded/journal.json'), '{}');
+      writeFileSync(path.join(dir, 'harness.sh'), `set -uo pipefail
+NIGHTSTAND_TRANSACTION_ROOT="$FIXTURE/transactions"
+say() { echo "$*"; }
+RESULT_OPERATION=${operation}
+${resultBlock(src).replaceAll('/persistent/free-sleep-data', dir)}
+fail() { say "FATAL: $*"; [ -n "\${RESULT_REASON:-}" ] || RESULT_REASON="$*"; exit 1; }
+trap 'status=$?; printf "%s" "$RESULT_PHASE" > "$FIXTURE/phase"; record_result "$status"' EXIT
+CUR_VERSION=3.6.0; ${operation === 'rollback' ? 'TARGET_VERSION=3.5.1' : 'STAGED_VERSION=1.0.0'}
+LIVE="$FIXTURE/live"; PREV="$FIXTURE/prev"; STAGE="$FIXTURE/stage"
+TRANSACTIONAL_SWITCH=yes; SWITCH_DIGEST=verified; SWITCH_ACTUAL=verified; CONFIRMED_TARGET=target; RECHECK_IN_USE=no
+recheck_in_use() { :; }
+${read('scripts/restore_helpers.sh')}
+python3() {
+  case "\${2:-}" in *switch_installation.py) echo "\${3:-}" >> "$FIXTURE/helper-calls" ;; esac
+  case "\${3:-}" in
+    fork) [ "$5" != "$LIVE" ] || { echo nightstand; return 0; }; echo upstream; return 0 ;;
+    companion-recorded) echo yes; return 0 ;;
+    companion) return 0 ;;
+    forward|rollback)
+      printf '%s\\n' "$RESULT_PHASE" >> "$FIXTURE/transaction-phases"
+      return ${transactionStatus} ;;
+  esac
+  command python3 "$@"
+}
+${src.slice(start, end)}
+fail "transaction fell through to the legacy swap"
+`);
+      const result = spawnSync('bash', [path.join(dir, 'harness.sh')], {
+        encoding: 'utf8', timeout: 5_000, env: { ...process.env, FIXTURE: dir },
+      });
+      const readFixture = (name: string) => readFileSync(path.join(dir, name), 'utf8');
+      const optional = (name: string) => { try { return readFixture(name); } catch { return ''; } };
+      return {
+        status: result.status, out: result.stdout + result.stderr,
+        phases: optional('transaction-phases'), phase: readFixture('phase'), helperCalls: optional('helper-calls'),
+        record: JSON.parse(readFixture('update-result.json')) as Record<string, string>,
+      };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  const transactions = [
+    ['scripts/rollback_pod.sh', 'rollback', '# Cross-fork rollback requires', '# Other forks cannot run',
+      'cross-fork rollback requires complete companion state and a successful transaction'],
+    ['scripts/switch-to-upstream.sh', 'switch', '# Confirmed V2 targets use', '# Upstream imports this',
+      'the upstream transaction did not complete; see the retained recovery journal'],
+  ];
+  for (const [file, operation, from, to, reason] of transactions) {
+    for (const [status, phase, outcome, ending] of [
+      [0, 'swapped', 'success', 'commits'],
+      [3, 'restored', 'rolled-back', 'cleanly restores the source'],
+      [1, 'swapping', 'failed', 'fails without a clean restore'],
+      [143, 'swapping', 'failed', 'is interrupted'],
+    ] as const) {
+      it(`${operation}: the transaction records swapping until it ${ending}`, () => {
+        const result = transactionRecord(file, operation, from, to, status);
+        assert.equal(result.status, status === 0 ? 0 : 1, result.out);
+        assert.equal(result.phases, 'swapping\n', 'must mark swapping before the installer can move a tree');
+        assert.equal(result.phase, phase, 'only a committed transaction is swapped, only a clean restore is restored');
+        assert.equal(result.record.operation, operation);
+        assert.equal(result.record.outcome, outcome);
+        assert.equal(result.record.from, '3.6.0');
+        assert.equal(result.record.to, operation === 'rollback' ? '3.5.1' : '1.0.0');
+        if (status !== 0) assert.equal(result.record.message, reason);
+      });
+    }
+  }
+
+  it('rollback: never consults the switch helper without a published journal', () => {
+    const [, , from, to] = transactions[0];
+    const result = transactionRecord('scripts/rollback_pod.sh', 'rollback', from, to, 0, false);
+    assert.match(result.out, /transaction fell through to the legacy swap/);
+    assert.equal(result.helperCalls, '', 'ordinary rollback must not depend on the switch helper');
   });
 
   // Runs the swap section of a script with the moves stubbed, then returns what the exit trap recorded.

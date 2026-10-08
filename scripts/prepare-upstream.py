@@ -119,6 +119,7 @@ def prepare(folder):
             if os.geteuid() == 0:
                 os.chown(temporary, original.st_uid, original.st_gid)
             os.replace(temporary, path)
+            fsync_directory(path.parent)
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)

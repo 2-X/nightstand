@@ -15,7 +15,7 @@ import sys
 import threading
 
 
-def validate(stage, scratch):
+def validate(stage, scratch, direction='upstream'):
     stage, scratch = Path(stage).resolve(), Path(scratch).resolve()
     biometrics = stage / 'biometrics'
     if not biometrics.is_dir() or not scratch.is_dir():
@@ -46,7 +46,12 @@ def validate(stage, scratch):
     def deny_thread_start(*args, **kwargs):
         raise RuntimeError('Background worker during import validation')
     threading.Thread.start = deny_thread_start
-    for dependency in ('numpy', 'scipy', 'pandas', 'cbor2', 'watchdog', 'sentry_sdk', 'nats', 'nats.js.api'):
+    dependencies = ['numpy', 'scipy', 'pandas', 'cbor2', 'watchdog', 'nats', 'nats.js.api']
+    if direction == 'upstream':
+        dependencies.append('sentry_sdk')
+    elif direction != 'nightstand':
+        raise ValueError('Unknown import validation direction')
+    for dependency in dependencies:
         importlib.import_module(dependency)
     logger_module = importlib.import_module('get_logger')
     def build_logger(logger, name):
@@ -74,10 +79,10 @@ def validate(stage, scratch):
         path = Path(sys.modules[module].__file__).resolve()
         if biometrics not in path.parents:
             raise RuntimeError('Missing staged application import: ' + module)
-    print('Staged upstream application imports passed')
+    print('Staged ' + direction + ' application imports passed')
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
+    if len(sys.argv) not in (3, 4):
         sys.exit('Expected staged tree and scratch paths')
     validate(*sys.argv[1:])
