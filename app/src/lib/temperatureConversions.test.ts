@@ -7,6 +7,12 @@ it('round trips each supported level through the stored Fahrenheit value', () =>
   expect(formatTemperature(83, 'level')).toBe('0');
 });
 
+it('pins all canonical legacy Fahrenheit values independently of the firmware readout', () => {
+  expect(Array.from({ length: 21 }, (_, index) => levelToFahrenheit(index - 10))).toEqual([
+    55, 58, 61, 63, 66, 69, 72, 74, 77, 80, 83, 85, 88, 91, 94, 96, 99, 102, 105, 107, 110,
+  ]);
+});
+
 it('shows a true minus sign for negative levels on display text', () => {
   expect(displayTemperature(levelToFahrenheit(-3), 'level')).toBe('\u22123');
   expect(displayTemperature(levelToFahrenheit(-10), 'level')).toBe('\u221210');

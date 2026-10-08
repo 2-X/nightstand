@@ -40,13 +40,55 @@ newline-delimited response.
 | 8 | `SET_SETTINGS` | CBOR settings string | ✅ | Free-sleep uses this actively. Encodes `gl`/`gr` (gain left/right) and `lb` (LED brightness). |
 | 9 | `LEFT_TEMP_DURATION` (aka `TURN_ON_LEFT`) | integer seconds | ✅ | Free-sleep uses this to turn a side on/off: `0` = off, `43200` (12h) = on. |
 | 10 | `RIGHT_TEMP_DURATION` (aka `TURN_ON_RIGHT`) | integer seconds | ✅ | Same as 9, right side. |
-| 11 | `TEMP_LEVEL_LEFT` | integer level, -100..100 | ✅ | Free-sleep uses this actively. Level-to-°F: `82.5 + (level/100) * 27.5`. |
+| 11 | `TEMP_LEVEL_LEFT` | integer level, -100..100 | ✅ | Free-sleep uses this actively. Command transport verified. The app's legacy level-to-°F formula is not the firmware target scale (see below). |
 | 12 | `TEMP_LEVEL_RIGHT` | integer level, -100..100 | ✅ | Same as 11, right side. |
 | 13 | `PRIME` | none (arg ignored) | ✅ starts, ❌ can't stop | Starts a priming cycle. `isPriming` goes `true` ~10s after the command and clears on its own after ~11-12 minutes: a genuinely long operation, not a quick flush. No known way to stop one early (see [below](#priming-cancellation)). |
 | 14 | `DEVICE_STATUS` | none | ✅ | Returns the full status blob: see [DEVICE_STATUS response fields](#device_status-response-fields) below. |
 | 15 | n/a | n/a | ❓ | Unused/unknown. Not referenced by free-sleep, jmew, or 8rp. |
 | 16 | `ALARM_CLEAR` | none | ✅ | Free-sleep uses this to stop an active alarm vibration. Other projects send a side argument, and a Pod 3 report says it does not stop a running alarm, see [other Pod generations](#other-pod-generations). |
 | 17 | `STOP_PRIME` / `ALARM_SOLO` (disputed) | unverified | 📖 unverified, ❌ cancellation on tested Pod 5 | [8rp](https://github.com/Schluggi/8rp/blob/main/docs/commands.md) names it `STOP_PRIME`. [Upstream free-sleep's commented command table](https://github.com/throwaway31265/free-sleep/blob/e5172139874a274d1ced12c8da052ab2cbaa286d/server/src/8sleep/deviceApi.ts#L23) and [seanpasino/free-sleep](https://github.com/seanpasino/free-sleep/commit/50580edff3) name it `ALARM_SOLO`, a whole-bed alarm. Neither meaning is verified in Nightstand. Sent before and after priming was confirmed active on the tested Pod 5, it left `isPriming` true for 5+ minutes with no visible effect. Nightstand does not expose command 17 through its API; do not add a cancellation action without a positive hardware test. |
+
+### Temperature levels and reported targets
+
+Nightstand's `82.5 + (level/100) * 27.5` formula is a legacy display and
+command convention, not a verified firmware temperature scale. Saved
+Fahrenheit values and outgoing level commands keep that convention.
+`frzTherm.target` reports the thermostat target in Celsius, separately from
+measured water or mattress temperature.
+
+Offline Pod 5 RAW captures contain 33 target-setting log entries with these
+14 distinct pairs. These observations cover one Pod 5, not all generations
+or firmware versions.
+
+| Firmware level | Logged target °C | Occurrences |
+|---:|---:|---:|
+| -100 | 10.00 | 1 |
+| -71 | 18.48 | 1 |
+| -60 | 19.80 | 1 |
+| -49 | 21.12 | 3 |
+| -42 | 21.96 | 1 |
+| -38 | 22.44 | 2 |
+| -31 | 23.28 | 2 |
+| -27 | 23.76 | 2 |
+| -24 | 24.12 | 3 |
+| -20 | 24.60 | 1 |
+| -16 | 25.08 | 8 |
+| -9 | 25.92 | 2 |
+| 2 | 27.36 | 2 |
+| 27 | 31.86 | 4 |
+
+The eleven sampled levels from -71 through -9 fit `27 + 0.12 * level` °C;
+the two positive sampled levels fit `27 + 0.18 * level` °C. Interpolation,
+the breakpoint and the cold-end transition remain inferred. Levels -99
+through -72 and above 27 are undetermined. Do not extrapolate these fits
+into command conversions. At -100 the observed target is 50°F, while the
+legacy display shows 55°F. The worst observed difference is 5°F; the
+whole-range error is unknown.
+
+Telemetry corroborates targets through level 2, except that -60 reports
+19.790001°C rather than the logged 19.80°C. Its cause is unknown. All four
+level-27 logs occur during startup and subsequent thermostats are disabled,
+so 31.86°C is a logged conversion, not a confirmed active target.
 
 <a id="priming-cancellation"></a>
 
@@ -106,8 +148,10 @@ buffer truncates it. See `biometrics/load_raw_files.py` and
 | `bedTemp` (Pod 3, v1 integer centidegrees) / `bedTemp2` (Pod 4/5, float °C, `temps[]` array) | Bed-surface temperature sensors | `bedTemp` yes, `bedTemp2` intentionally not consumed yet (Pod 5 writes `bedTemp2`, kept for a future project) |
 | `frzTemp` | `{amb, hs, left, right}`: ambient, heatsink, and per-side hub sensor temps in centidegrees C | ✅ yes: feeds the Settings page sensor-temp display |
 | `frzHealth` | `{left, right, fan}`, each side `{tec: {current}, pump: {mode, rpm, water}, temps: {flowrate}}`: see [pump/thermal telemetry](#pumpthermal-telemetry-frzhealth) below | ✅ yes: pump-stall detection and pump-speed checks for the newer vitals estimators |
-| `frzTherm` | `{left, right}`, each either a number or `{target, power, valid, enabled}` | 📖 documented by sleepypod/core, not yet used or verified by us |
-| `log` | Firmware's own internal log lines | not consumed |
+| `frzTherm` | `{left, right}`, each `{target, power, valid, enabled}` in the observed Pod 5 captures; target is Celsius | ✅ decoded from offline Pod 5 RAW captures; optional target readout and cooling diagnostics |
+| `log` | `{type, ts, level, msg}`, firmware's internal messages | Optional allowlisted health feed and dismissal diagnostics; no raw text sent to clients |
+| `buttonEvent` | `{type, ts, left/right: {top/bottom: count}}` | Optional diagnostics; observed right-side top and bottom buttons on Pod 5 |
+| `tap-gesture` | `{type, ts, side, taps}` | Optional diagnostics only. 📖 [Reported by dallonby](https://github.com/throwaway31265/free-sleep/pull/30), not observed in our Pod 5 captures |
 
 ### Pump/thermal telemetry (`frzHealth`)
 
