@@ -55,6 +55,18 @@ NPX=/home/dac/.volta/bin/npx
 
 say() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
+# Report legacy firewall jobs without editing the root crontab.
+if [ -f "$LIVE/scripts/migrate/fork-artifacts.sh" ]; then
+  bash "$LIVE/scripts/migrate/fork-artifacts.sh" warn-cron || true
+elif command -v crontab >/dev/null 2>&1; then
+  # Older release trees do not carry the inspection helper.
+  LEGACY_CRON=$(crontab -u root -l 2>/dev/null | awk '
+    $0 !~ /^[[:space:]]*#/ && ($0 ~ /sync-time-with-internet[.]sh/ || $0 ~ /\/home\/dac\/free-sleep\/scripts\/unblock_internet_access[.]sh/) { print }
+  ' || true)
+  [ -z "$LEGACY_CRON" ] || echo "WARNING: root cron contains legacy jobs that open the firewall. Review them with crontab -u root -e. No cron entries were changed.
+$LEGACY_CRON"
+fi
+
 RESULT_OPERATION=update
 
 # How this run ended, for the app to show. The writer is read now because the
@@ -643,7 +655,7 @@ if ! stop_writer free-sleep-stream || ! stop_writer free-sleep || ! stop_late_st
   RESULT_PHASE=preflight
   fail "could not stop the running services; live install untouched"
 fi
-bash "$RECOVERY_HELPER" --arm "$STREAM_WAS_ACTIVE" \
+bash "$RECOVERY_HELPER" --arm "$STREAM_WAS_ACTIVE" "$STAGED_VERSION" \
   || fail "could not write the update swap marker; live install untouched"
 # Flush the installed recovery helper, unit and marker before moving trees.
 sync

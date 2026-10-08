@@ -410,8 +410,10 @@ cat "$LOG"; rm -f "$LOG"`], { encoding: 'utf8' });
     it('clears the swap marker on the completed revert path', () => {
       assertOrder(src, [
         'Swap marker present',
-        'rm -f "$SWAP_MARKER"',
+        'finish_artifact_restore "auto-restored" "$RESTORE_MESSAGE"',
       ], 'restore-original-fork.sh');
+      const finish = src.slice(src.indexOf('finish_artifact_restore() {'), src.indexOf('\ncleanup_nightstand_services() {'));
+      assertOrder(finish, ['record_restore_state artifacts-pending', 'rm -f "$SWAP_MARKER"', 'restore_legacy_artifacts'], 'artifact restore');
     });
 
     it('never rm -rf\'s /persistent/free-sleep-data or /persistent/free-sleep-backups', () => {

@@ -231,8 +231,11 @@ for (const file of ['scripts/update.sh', 'scripts/switch-to-upstream.sh']) {
   describe(`${file} internet window`, () => {
     const src = read(file);
 
-    it('never runs the full unblock', () => {
-      assert.doesNotMatch(src, /unblock_internet_access/);
+    it('never runs the full unblock anywhere in the script', () => {
+      // Exclude only the legacy cron matcher, which reports existing jobs.
+      const executable = src.split('\n').filter(line => !/^\s*#/.test(line)).join('\n')
+        .replaceAll('/\\/home\\/dac\\/free-sleep\\/scripts\\/unblock_internet_access[.]sh/', '');
+      assert.doesNotMatch(executable, /unblock_internet_access/);
     });
 
     it('puts a time limit on the dependency install', () => {

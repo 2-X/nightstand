@@ -487,6 +487,14 @@ I haven't run this exact command against a Pod.
 
 ## What installation changes on the Pod
 
+Install and update warn if root cron contains legacy jobs that open the
+firewall, without changing the crontab. The fork-switch tool asks before
+removing those jobs, their time sync script and the ambient-light service.
+It backs up removed files, stops unknown `free-sleep*` units before the database
+checkpoint and does not enable them afterward. It reports IPv6-disable settings
+without changing them. See [Coming from free-sleep](docs/COMING_FROM_FREE_SLEEP.md#what-changes)
+for consent and recovery details.
+
 Nightstand never replaces Eight Sleep's programs. It changes these system
 settings, and since 3.6.0 it saves them the first time it changes them,
 in /persistent/nightstand-stock/. Check `recorded.txt` before restoring:

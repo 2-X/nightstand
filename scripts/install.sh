@@ -143,6 +143,18 @@ if [ "$STAGED_VERSION" != "$VERSION" ]; then
   echo "staged tree reports v$STAGED_VERSION but releases.json lists v$VERSION; refusing a mislabeled release"
   exit 1
 fi
+# Report legacy firewall jobs without editing the root crontab.
+if [ -f "$SRC_DIR/scripts/migrate/fork-artifacts.sh" ]; then
+  bash "$SRC_DIR/scripts/migrate/fork-artifacts.sh" warn-cron || true
+elif command -v crontab >/dev/null 2>&1; then
+  # Older release trees do not carry the inspection helper.
+  LEGACY_CRON=$(crontab -u root -l 2>/dev/null | awk '
+    $0 !~ /^[[:space:]]*#/ && ($0 ~ /sync-time-with-internet[.]sh/ || $0 ~ /\/home\/dac\/free-sleep\/scripts\/unblock_internet_access[.]sh/) { print }
+  ' || true)
+  [ -z "$LEGACY_CRON" ] || echo "WARNING: root cron contains legacy jobs that open the firewall. Review them with crontab -u root -e. No cron entries were changed.
+$LEGACY_CRON"
+fi
+
 # Stop both database writers before replacing any files. Missing units are
 # normal on a first install; a failed stop for an existing unit is fatal.
 # Restart services on any refusal after stopping writers, including set -e exits.

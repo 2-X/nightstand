@@ -15,9 +15,10 @@
 #      minutes, with no laptop or user needed).
 #
 # Idempotent by design, safe to run whether the swap never happened, half
-# happened, or already happened: it acts only when the installer's swap marker
-# proves a swap actually began ($SWAP_MARKER exists), and every step tolerates
-# its target already being absent/undone. The marker, not the mere existence of
+# happened, or already happened: tree moves require the installer's swap marker
+# ($SWAP_MARKER exists). Restore state separates completed tree recovery from
+# pending artifact restoration. Every step tolerates its target already being
+# absent/undone. The marker, not the mere existence of
 # $PREV, is the signal, because the pod's own updater may keep an unrelated
 # rollback tree at $PREV from before we ever ran; keying off $PREV alone would
 # both mistake that stale tree for the install we swapped out and wrongly undo a
@@ -33,6 +34,7 @@ PREV=/home/dac/free-sleep-prev
 # rollback slot back exactly as we found it; $SWAP_MARKER is its swap-in-progress flag.
 PREEXISTING_PREV=/home/dac/free-sleep-prev-preexisting
 SWAP_MARKER=/home/dac/free-sleep-migrate-swapped
+RESTORE_STATE=/home/dac/free-sleep-migrate-restore-state
 ABORTED_QUARANTINE=/home/dac/free-sleep-migrate-aborted
 IPTABLES_SNAPSHOT=/home/dac/free-sleep-migrate-iptables-snapshot.rules
 STATUS_FILE=/persistent/free-sleep-data/migration-status.json
@@ -63,6 +65,41 @@ restore_iptables() {
     say "Restoring pre-migration iptables snapshot"
     iptables-restore < "$IPTABLES_SNAPSHOT" 2>/dev/null || say "WARNING: iptables-restore failed"
   fi
+}
+
+restore_legacy_artifacts() {
+  [ -f /home/dac/free-sleep-migrate-artifacts/pending ] || return 0
+  bash /home/dac/migrate/fork-artifacts.sh restore || {
+    say "WARNING: legacy artifact restore failed; keeping the sentinel for another attempt"
+    return 1
+  }
+}
+
+record_restore_state() {
+  if ! printf '%s\n' "$1" > "$RESTORE_STATE.tmp" || ! mv "$RESTORE_STATE.tmp" "$RESTORE_STATE"; then
+    say "FATAL: could not record restore progress; keeping the recovery markers"
+    write_status "restore_failed" "could not record restore progress"
+    exit 1
+  fi
+  sync
+}
+
+finish_artifact_restore() {
+  # Tree and service recovery is complete. A retry must only restore artifacts.
+  record_restore_state artifacts-pending
+  rm -f "$SWAP_MARKER" || exit 1
+  sync
+  if ! restore_legacy_artifacts; then
+    write_status "restore_failed" "original install recovered; legacy cron or unit files still need restoration"
+    exit 1
+  fi
+  # Retire restore progress before allowing another migration to start.
+  rm -f "$RESTORE_STATE" || exit 1
+  sync
+  disarm_sentinel
+  cleanup_temporary_files
+  write_status "$1" "$2"
+  say "Done."
 }
 
 cleanup_nightstand_services() {
@@ -121,6 +158,12 @@ if [ "${1:-}" = "--sentinel" ]; then
   }
 fi
 
+if [ "$(cat "$RESTORE_STATE" 2>/dev/null)" = artifacts-pending ]; then
+  say "Original install recovery completed; retrying legacy artifact restoration only."
+  finish_artifact_restore "auto-restored" "original fork recovered; legacy artifacts restored"
+  exit 0
+fi
+
 if [ ! -f "$SWAP_MARKER" ]; then
   say "No swap marker, the swap never began (or already completed successfully)."
   # If the installer set the pod's own rollback slot aside but died before the
@@ -130,16 +173,13 @@ if [ ! -f "$SWAP_MARKER" ]; then
     say "Restoring the pod's pre-existing rollback slot to $PREV"
     mv "$PREEXISTING_PREV" "$PREV" 2>/dev/null || say "WARNING: could not restore $PREV"
   fi
-  disarm_sentinel
   restore_iptables
   # pod-installer.sh may have already stopped their service before hitting a
   # failure that lands here (e.g. it failed to even move $LIVE aside);
   # restarting is a safe no-op if it's already running.
   systemctl start free-sleep >/dev/null 2>&1 || true
   start_stream_if_enabled
-  cleanup_temporary_files
-  write_status "no_op" "no swap in progress"
-  say "Nothing to move, their service has been (re)started just in case. Done."
+  finish_artifact_restore "no_op" "no swap in progress; legacy artifacts restored"
   exit 0
 fi
 
@@ -151,7 +191,7 @@ systemctl stop free-sleep-stream >/dev/null 2>&1 || true
 # $PREV holds their original tree only if the $LIVE->$PREV move completed. If we
 # died between the marker and that move, $LIVE still holds their tree untouched,
 # so don't quarantine it; just fall through to restoring their rollback slot.
-if [ -d "$PREV" ]; then
+if [ "$(cat "$RESTORE_STATE" 2>/dev/null)" != trees-restored ] && [ -d "$PREV" ]; then
   if [ -d "$LIVE" ]; then
     rm -rf "$ABORTED_QUARANTINE"
     mv "$LIVE" "$ABORTED_QUARANTINE" || {
@@ -169,6 +209,9 @@ if [ -d "$PREV" ]; then
     exit 1
   }
 fi
+
+# Record this before putting an older rollback slot back at PREV.
+record_restore_state trees-restored
 
 # Put the pod's own pre-existing rollback slot back exactly where it was, so
 # their updater's instant-rollback still works after we bow out. $PREV is now
@@ -191,13 +234,10 @@ sleep 8
 if curl -sf --max-time 5 "http://127.0.0.1:3000/api/deviceStatus" >/dev/null 2>&1 \
   || curl -sf --max-time 5 "http://127.0.0.1:3000/" >/dev/null 2>&1; then
   say "Their original install is back and responding."
-  write_status "auto-restored" "original fork restored and responding"
+  RESTORE_MESSAGE="original fork restored and responding"
 else
   say "Original tree restored but not yet responding, it may just be starting up. Check: systemctl status free-sleep"
-  write_status "auto-restored" "original fork restored; health not yet confirmed"
+  RESTORE_MESSAGE="original fork restored; health not yet confirmed"
 fi
 
-rm -f "$SWAP_MARKER"
-cleanup_temporary_files
-disarm_sentinel
-say "Done."
+finish_artifact_restore "auto-restored" "$RESTORE_MESSAGE"

@@ -30,6 +30,7 @@ PREV=/home/dac/free-sleep-prev
 # mere existence of $PREV, which could be the pod's own pre-existing slot.
 PREEXISTING_PREV=/home/dac/free-sleep-prev-preexisting
 SWAP_MARKER=/home/dac/free-sleep-migrate-swapped
+RESTORE_STATE=/home/dac/free-sleep-migrate-restore-state
 STAGE=/home/dac/free-sleep-migrate-staging
 ZIP=/home/dac/free-sleep-migrate.zip
 LOCK_FILE=/home/dac/free-sleep-migrate.lock
@@ -51,6 +52,12 @@ RELEASES_URL="https://raw.githubusercontent.com/LTimothy/nightstand/main/release
 # main only moves at a release, so its tip is always the newest release.
 MAIN_ZIP_URL="https://github.com/LTimothy/nightstand/archive/refs/heads/main.zip"
 
+# Recheck before staging. Standalone runs need the laptop's explicit cleanup consent.
+REMOVE_FOREIGN=${1:-no}
+ARTIFACT_HELPER="$REPO_DIR_SELF/migrate/fork-artifacts.sh"
+[ -f "$ARTIFACT_HELPER" ] || { echo "Refusing switch: fork artifact helper is missing"; exit 1; }
+bash "$ARTIFACT_HELPER" check "$REMOVE_FOREIGN" || exit 1
+
 mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
 exec > >(tee -a "$LOG_FILE") 2>&1
 
@@ -67,6 +74,11 @@ write_status() {
 if [ -e "$LOCK_FILE" ]; then
   say "FATAL: $LOCK_FILE exists, a migration is already in progress or a previous run left it behind."
   write_status "preflight" "refused" "lock file present; refusing to start a second migration"
+  exit 1
+fi
+if [ -e "$RESTORE_STATE" ]; then
+  say "FATAL: previous migration recovery is incomplete; run $RESTORE_SCRIPT_DEST before retrying."
+  write_status "preflight" "refused" "restore state present; refusing to start another migration"
   exit 1
 fi
 : > "$LOCK_FILE"
@@ -314,6 +326,8 @@ restore_and_report() {
 # ==============================================================================
 write_status "swap" "in_progress" "stopping original service"
 say "Stopping their service (their tree is untouched up to this point)"
+bash "$ARTIFACT_HELPER" clean "$REMOVE_FOREIGN" \
+  || { restore_and_report "legacy fork artifact cleanup failed before checkpoint"; exit 1; }
 systemctl stop free-sleep >/dev/null 2>&1 \
   || { restore_and_report "could not stop original server"; exit 1; }
 STREAM_WAS_ACTIVE=no
@@ -491,6 +505,8 @@ say "Applying this fork's WAN policy..."
 sh "$LIVE/scripts/block_internet_access.sh" >/dev/null 2>&1 \
   || say "WARNING: could not apply block_internet_access.sh, check manually"
 
+bash "$ARTIFACT_HELPER" finish \
+  || { restore_and_report "could not retire legacy artifact restore marker"; exit 1; }
 disarm_sentinel
 # Their original tree now lives at $PREV as this fork's instant-rollback slot;
 # their older pre-existing slot (if any) is intentionally retired, and the swap
