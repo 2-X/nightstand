@@ -517,6 +517,12 @@ fi
 echo ""
 sh /home/dac/free-sleep/scripts/add_shortcuts.sh
 
+# Optional on older releases, which do not ship this check.
+if [ -f "$REPO_DIR/scripts/check_image_credentials.sh" ]; then
+  bash "$REPO_DIR/scripts/check_image_credentials.sh" \
+    || echo "WARNING: the prebuilt-image credential check could not finish; see INSTALLATION.md"
+fi
+
 # --------------------------------------------------------------------------------
 # Finish
 echo "This is your dac.sock path (if it doesn't end in dac.sock, contact support):"
