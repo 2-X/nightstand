@@ -171,6 +171,9 @@ Once installed, the app is at `http://eight-pod.local:3000` (or
 it to the internet. For access away from home, see
 [remote access with Tailscale](docs/REMOTE_ACCESS.md).
 
+For Home Assistant, Homebridge and scripts, see
+[Integrations](docs/INTEGRATIONS.md) for setup notes and API differences.
+
 ## Features
 
 - Temperature in °F, °C or the Eight Sleep app's -10 to +10 scale, plus

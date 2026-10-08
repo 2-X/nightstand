@@ -3,6 +3,10 @@
 The server listens on port 3000 and serves a REST API under `/api/` and a
 WebSocket at `/ws/events`. Responses are JSON unless noted otherwise.
 
+For Home Assistant, Homebridge and scripts, see
+[Integrations](../docs/INTEGRATIONS.md), including the differences from
+upstream free-sleep and the Homebridge keepAlive setting.
+
 There is no login. A device that can reach the Pod, locally or over Tailscale,
 can control it and read its data. Use a trusted network, do not port-forward
 this API to the public internet, and restrict remote access.
@@ -381,8 +385,9 @@ generic message; the details go to the server log.
 `alarm` is kept as the older single-alarm field. Use `alarms` to store
 several alarms for the same side and day; when `alarms` is sent, Nightstand
 schedules every enabled item and copies the first into `alarm` for older
-clients. When only `alarm` is sent, `alarms` becomes that alarm if it is
-enabled, or empty.
+clients. When only `alarm` is sent, it replaces the first item in `alarms`
+and keeps all later items, even if the first is disabled. On an empty day
+it creates that first item. Use `alarms: []` to clear every alarm.
 
 ---
 
@@ -879,6 +884,9 @@ Sleep records are periods in bed found by the nightly analysis.
 - Returns the sleep records that overlap a range, oldest first.
 - Query parameters, all optional: `side` (`left` or `right`), `startTime`
   and `endTime` (ISO 8601). A malformed value returns `400`.
+- Without either date bound, the range is the last 90 days through now,
+  including records overlapping its start. An explicit `startTime` or
+  `endTime` keeps its supplied range without this limit.
 
 #### Response
 
@@ -1267,6 +1275,9 @@ the biometrics service; `/api/deviceStatus` converts them.
   `{ name, status, description, message, timestamp? }`, where `status` is
   one of `not_started`, `started`, `healthy`, `restarting`, `retrying`,
   `waiting_for_data` or `failed`.
+- The full response is cached for 15 seconds. Concurrent requests share
+  one refresh, including the database integrity check. Reading status
+  writes `servicesDB.json` only when stream health changes.
 - `biometricsInstallation` is always present. The `analyzeSleep*`,
   `biometricsCalibration*`, `biometricsStream` and `pumpHealth*` entries are
   present only while biometrics is on. `biometricsStream` reads `failed`

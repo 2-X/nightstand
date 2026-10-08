@@ -33,6 +33,21 @@ is a hard fork; for the history of the projects it descends from, see
   switch. Deleted detail cannot be restored. Pruning stops database growth
   by reusing pages, it does not shrink the file or run VACUUM. Based on an
   idea from [jmakes/free-sleep](https://github.com/jmakes/free-sleep/commit/8769af4161d73bbf8afdb1747b8b81358dc5eaa8).
+- Added integration guidance and local API contract tests for
+  [Mrtenz/hass-free-sleep](https://github.com/Mrtenz/hass-free-sleep/commit/ddf0c5e),
+  [DaSonOfPoseidon/free-sleep-ha](https://github.com/DaSonOfPoseidon/free-sleep-ha/commit/b390441),
+  [NylonDiamond/free-sleep-hacs](https://github.com/NylonDiamond/free-sleep-hacs/commit/d6328cc)
+  and [caseyWebb/homebridge-free-sleep](https://github.com/caseyWebb/homebridge-free-sleep/commit/8f92a83).
+  Status polls share a 15-second snapshot and write service health only
+  when it changes. Sleep reads default to 90 days; explicit ranges and
+  older-week browsing still work.
+- Documented how to disable Homebridge's keepAlive, which resets
+  Nightstand's firmware off timer to 12 hours. Based on
+  [caseyWebb's implementation](https://github.com/caseyWebb/homebridge-free-sleep/blob/8f92a83/src/pod/keepAlive.ts).
+- Legacy single-alarm schedule writes now edit only the first alarm and
+  preserve later alarms. Integration-driven weekly edits still cause
+  Rhythms to fall back to the weekly schedule; the integration guide
+  explains how to avoid that.
 
 ## [3.6.1] - 2026-10-07
 
