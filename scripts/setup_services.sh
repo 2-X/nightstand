@@ -70,9 +70,72 @@ PYRECOVERY
 elif [ "${2:-}" = --recovery-only ]; then
   warn "the updater has no recovery script"
 fi
+SWITCH_RECOVERY_DIR="${NIGHTSTAND_SWITCH_RECOVERY_DIR:-/home/dac/free-sleep-switch-recovery}"
+if [ -n "${NIGHTSTAND_RECOVERY_DIR:-}" ] && [ -z "${NIGHTSTAND_SWITCH_RECOVERY_DIR:-}" ]; then
+  SWITCH_RECOVERY_DIR="$RECOVERY_DIR-switch"
+fi
+TRANSACTION_ROOT="${NIGHTSTAND_TRANSACTION_ROOT:-/persistent/free-sleep-maintenance/nightstand-transactions}"
+if [ -f "$REPO_DIR/scripts/recover_switch.sh" ] && [ ! -f "$SWAP_MARKER" ]; then
+  if python3 - "$REPO_DIR" "$SWITCH_RECOVERY_DIR" "$SYSTEMD_DIR" "$TRANSACTION_ROOT" <<'PYSWITCHRECOVERY'
+import os, shlex, sys, time
+from pathlib import Path
+repo, recovery, systemd, root = sys.argv[1:]
+sys.path.insert(0, repo + '/scripts')
+from switch_transaction import publish, durable_directory, TransactionStore
+from recover_switch import journals, TERMINAL, WRITERS, OPERATIONS
+files = [(name, Path(recovery) / name, 0o755 if name.endswith('.sh') else 0o644)
+         for name in ('recover_switch.sh', 'recover_switch.py', 'switch_transaction.py', 'switch_services.py', 'restore_helpers.sh')]
+files.append(('systemd/free-sleep-recover-switch.service', Path(systemd) / 'free-sleep-recover-switch.service', 0o644))
+gates = [(Path(systemd) / (unit + '.d') / 'nightstand-switch-recovery.conf')
+         for unit in WRITERS + OPERATIONS]
+try:
+    armed = any(journal['phase'] not in TERMINAL for journal in journals(TransactionStore(root)))
+except ValueError:
+    # A corrupt or incomplete journal also pins the installed recovery code.
+    armed = True
+if armed:
+    for path in [item[1] for item in files] + gates:
+        if not path.is_file() or not path.stat().st_size:
+            sys.exit('Armed switch recovery file is missing: ' + str(path))
+else:
+    for source, destination, mode in files:
+        durable_directory(destination.parent)
+        content = ((Path(repo) / 'scripts' / source).read_text()
+                   .replace('/home/dac/free-sleep-switch-recovery', recovery)
+                   .replace('/persistent/free-sleep-maintenance/nightstand-transactions', root))
+        stamp = time.time_ns()
+        metadata = dict(uid=os.geteuid(), gid=os.getegid(), mode=mode, atimeNs=stamp, mtimeNs=stamp)
+        publish(destination, content.encode(), metadata)
+    for path in gates:
+        durable_directory(path.parent)
+        stamp = time.time_ns()
+        metadata = dict(uid=os.geteuid(), gid=os.getegid(), mode=0o644, atimeNs=stamp, mtimeNs=stamp)
+        unit = path.parent.name[:-2]
+        # A broken helper may block only a known transaction, never ordinary startup.
+        check = ('for journal in ' + shlex.quote(root) + '/*/journal.json; do '
+                 'if [ -e "$journal" ] || [ -L "$journal" ]; then exec /bin/bash '
+                 + shlex.quote(recovery + '/recover_switch.sh') + ' --startup-check ' + unit
+                 + '; fi; done; exit 0')
+        check = check.replace('$', '$$').replace('%', '%%')
+        argument = '"' + check.replace('\\', '\\\\').replace('"', '\\"') + '"'
+        content = ('[Unit]\nWants=free-sleep-recover-switch.service\nAfter=free-sleep-recover-switch.service\n'
+                   '[Service]\nExecStartPre=+/bin/bash -c ' + argument + '\n')
+        publish(path, content.encode(), metadata)
+PYSWITCHRECOVERY
+  then
+    systemctl daemon-reload || warn "could not reload switch recovery"
+    systemctl enable free-sleep-recover-switch.service || warn "could not enable switch recovery"
+  else
+    warn "could not install switch recovery and startup gates"
+  fi
+fi
 if [ "${2:-}" = --recovery-only ]; then
   exit "$STATUS"
 fi
+
+# Upstream's persistent guard overrides the updater restored below.
+rm -f "$SYSTEMD_DIR/free-sleep-update.service.d/sqlite-maintenance.conf" \
+  || warn "could not remove the upstream updater override"
 
 # Create the same readable lock after every boot, keeping any held inode.
 OPERATION_LOCK="${NIGHTSTAND_OPERATION_LOCK:-/run/lock/free-sleep-operation.lock}"

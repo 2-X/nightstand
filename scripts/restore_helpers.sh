@@ -9,6 +9,12 @@ restore_stop_writer() {
   return 1
 }
 
+# Switch recovery restores offline and queues starts without waiting for the
+# boot recovery unit itself to exit.
+restore_switch_offline() {
+  python3 -B "$1/recover_switch.py" --root "$2" restore --helper "$1/restore_helpers.sh"
+}
+
 restore_dependencies() {
   local source=$1
   if [ -d "$source/server/node_modules" ] && [ ! -d "$LIVE/server/node_modules" ] \

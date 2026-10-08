@@ -95,6 +95,21 @@ function serverSudoCommands(): string[] {
 }
 
 describe('setup_services.sh', () => {
+  it('removes the upstream updater override while preserving custom drop-ins', () => {
+    const box = sandbox();
+    const directory = path.join(box.systemd, 'free-sleep-update.service.d');
+    mkdirSync(directory, { recursive: true });
+    const upstream = path.join(directory, 'sqlite-maintenance.conf');
+    const custom = path.join(directory, 'custom.conf');
+    writeFileSync(upstream, '[Service]\nExecStart=\nExecStart=/persistent/free-sleep-maintenance/update_service.sh\n');
+    writeFileSync(custom, '[Service]\nEnvironment=CUSTOM=yes\n');
+    const result = box.run();
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(existsSync(upstream), false);
+    assert.equal(box.read(custom), '[Service]\nEnvironment=CUSTOM=yes\n');
+    assert.match(box.read(path.join(box.systemd, 'free-sleep-update.service')), /^ExecStart=\/bin\/bash .*update_service\.sh$/m);
+  });
+
   it('parses and carries the exec bit', () => {
     assert.doesNotThrow(() => execFileSync('bash', ['-n', SCRIPT]));
   });
