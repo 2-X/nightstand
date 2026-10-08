@@ -102,12 +102,12 @@ buffer truncates it. See `biometrics/load_raw_files.py` and
 | `type` | Contents | Consumed by free-sleep? |
 |---|---|---|
 | `piezo-dual` | Raw piezo sensor waveform, both sides | ✅ yes: core presence/vitals signal |
-| `capSense` (Pod 3, possibly some Pod 5) / `capSense2` (Pod 5 newer cover; Pod 4 not confirmed) | Capacitance sensor readings; Pod 5's `capSense2` shape is normalized to the legacy `capSense` fields (`out`/`cen`/`in`) | ✅ yes |
-| `bedTemp` (Pod 3, v1 integer centidegrees) / `bedTemp2` (Pod 4/5, float °C, `temps[]` array) | Bed-surface temperature sensors | `bedTemp` yes, `bedTemp2` intentionally not consumed yet (Pod 5 writes `bedTemp2`, kept for a future project) |
+| `capSense` (Pod 3, possibly some Pod 5, and a Pod 4 hub with a Pod 5 cover) / `capSense2` (Pod 5 newer cover; a Pod 4 cover not confirmed) | Capacitance sensor readings; Pod 5's `capSense2` shape is normalized to the legacy `capSense` fields (`out`/`cen`/`in`) | ✅ yes |
+| `bedTemp` (Pod 3, v1 integer centidegrees; also a Pod 4 hub with a Pod 5 cover) / `bedTemp2` (Pod 4/5, float °C, `temps[]` array) | Bed-surface temperature sensors | `bedTemp` yes, `bedTemp2` intentionally not consumed yet (Pod 5 writes `bedTemp2`, kept for a future project) |
 | `frzTemp` | `{amb, hs, left, right}`: ambient, heatsink, and per-side hub sensor temps in centidegrees C | ✅ yes: feeds the Settings page sensor-temp display |
-| `frzHealth` | `{left, right, fan}`, each side `{tec: {current}, pump: {mode, rpm, water}, temps: {flowrate}}`: see [pump/thermal telemetry](#pumpthermal-telemetry-frzhealth) below | ✅ yes: pump-stall detection and pump-speed checks for the newer vitals estimators |
+| `frzHealth` | `{left, right, fan}`, each side `{tec: {current}, pump: {mode, rpm, water}, temps: {flowrate}}`: see [pump/thermal telemetry](#pumpthermal-telemetry-frzhealth) below. Not written by every firmware: see [other Pod generations](#other-pod-generations) | ✅ yes: pump-stall detection and pump-speed checks for the newer vitals estimators |
 | `frzTherm` | `{left, right}`, each either a number or `{target, power, valid, enabled}` | 📖 documented by sleepypod/core, not yet used or verified by us |
-| `log` | Firmware's own internal log lines | not consumed |
+| `log` | Firmware's own internal log lines, including the cover button presses on a Pod 5 cover (see [other Pod generations](#other-pod-generations)) | not consumed |
 
 ### Pump/thermal telemetry (`frzHealth`)
 
@@ -177,7 +177,9 @@ far, but treat them as best-effort.
 ## Other Pod generations
 
 We test on a Pod 5. These notes come from Pod 3 and Pod 4 owners and from
-other projects, and none of them has been checked on our hardware.
+other projects, and none of them has been checked on our hardware. The
+entries marked "Pod 4 hub with a Pod 5 cover" come from one such bed,
+reported with the RAW records and firmware log lines they were read from.
 
 - 📖 **Alarm pattern.** Pod 3 firmware accepts only `double`: with `rise`
   it answers with an error code and does not vibrate
@@ -225,6 +227,44 @@ other projects, and none of them has been checked on our hardware.
   starts from sleepypod's `capSense` entry level of 300 counts
   ([sleepypod sleep detector](https://github.com/sleepypod/core/blob/main/docs/sleep-detector.md))
   and then learns each side's own level.
+- 📖 **A Pod 4 hub with a Pod 5 cover.** The two fit together and run
+  Nightstand. `DEVICE_STATUS` reports the cover as a Pod 5 through
+  `sensorLabel` and the hub as a Pod 4, so alarms go out as `double` and
+  the model-gated features treat the bed as unchecked. Its RAW files hold
+  `capSense` and `bedTemp` records, not `capSense2` or `bedTemp2`, on both
+  the host firmware from February 2025 and a newer host with Frozen 1.5.58.
+- 📖 **`frzHealth` depends on the host firmware.** The Pod 4 host firmware
+  from February 2025 writes `piezo-dual`, `capSense`, `bedTemp`, `frzTemp`
+  and `log` records and no `frzHealth` at all (a scan of three RAW files
+  found 2,896 `capSense`, 1,447 `piezo-dual`, 145 `bedTemp`, 145 `frzTemp`
+  and 55 `log` records, and the binary carries no `frzHealth` string). The
+  same hub wrote `frzHealth` about every 10 seconds once it ran a newer
+  host firmware with Frozen 1.5.58, with the pumps reading about 1,900 to
+  2,000 rpm while circulating and 0 when off, as on the Pod 5 above. On a
+  Pod without `frzHealth`, pump health stays `not_started` and the newer
+  vitals estimators report the pump speed as unknown.
+- 📖 **Cover buttons on a Pod 5 cover.** Each side has three buttons (plus,
+  logo, minus) on a TCA8418 keypad. The firmware logs every press and
+  release to the RAW `log` records as `[tca8418R] gpi press 97` and
+  `[tca8418R] gpi release 97` (`L` for the left side; codes 97, 98 and 99
+  are the plus, logo and minus buttons). A short click is logged as `[TTC]
+  ignoring N short clicks` and does nothing: it changes no tap counter and
+  no temperature. On the February 2025 Pod 4 host firmware a long press was
+  logged as `[buttons] top button held for 320ms (abort)` and also did
+  nothing. On the newer host firmware a press held for 500 ms is logged as
+  `[buttons] long press top: 500ms` before the release, then `[TTC]
+  temperature up gesture`, the firmware plays a short vibration of its
+  own, and the gesture reaches `DEVICE_STATUS` through the tap counters:
+  a long press on plus as `tripleTap`, a short click on the logo as
+  `quadTap`, and a long press on minus presumably as `doubleTap`. The
+  firmware changes no target itself; the step comes from Nightstand's tap
+  action, so with the default actions long presses step by the tap
+  amounts and the logo button tries to move an adjustable base, which
+  fails harmlessly when none is paired. Whether the Pod 5 cover's buttons behave the same on a Pod 5
+  hub has not been checked. The firmware batches about a minute of `log`
+  records into one RAW chunk, so a press can be 15 to 25 seconds old
+  before it is readable; in one archive 3 of 93 presses were older than 15
+  seconds.
 - 📖 **Files the firmware keeps in `/persistent`.** Pod 3 firmware reads
   `frozen.heartbeat` relative to its working directory; moving it made the
   firmware reload every 30 seconds and leak file descriptors
@@ -253,6 +293,8 @@ other projects, and none of them has been checked on our hardware.
   throwaway31265/free-sleep#54 and #55.
 - [jmakes/free-sleep](https://github.com/jmakes/free-sleep), Pod 4 alarm
   pattern behavior.
+- [2-X](https://github.com/2-X), the Pod 4 hub with a Pod 5 cover notes:
+  record formats, `frzHealth` by host firmware, and the cover buttons.
 - Hardware-generation detection heuristics: a Discord thread linked inline
   in `loadDeviceStatus.ts`.
 - [jmew/free-sleep](https://github.com/jmew/free-sleep/commit/3ffaa0d), the
