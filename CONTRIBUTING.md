@@ -295,9 +295,42 @@ older reader against a copy of the resulting database before release.
 - Not checked: {models not tested, features not exercised, browsers not run}.
 ```
 
-Settings > Software can switch a Pod to upstream free-sleep. Once that
-switch has been checked against a particular upstream commit, record it at
-the top level of `releases.json` as `upstreamSwitch`, with `commit`, `date`
-and `treeSha256` (the header of `scripts/release_digest.sh` shows how to
-compute it for another repository's commit). Without it the switch installs
-upstream's `main`.
+## Publishing an upstream switch target
+
+Publishing a target is a separate step, never part of an ordinary Nightstand
+release. I publish an `upstreamSwitchV2` record only after the
+[upstream switch gate](docs/TESTING.md#upstream-switch-publication-gate)
+passes, first in a Linux VM with real systemd, then in an explicitly
+authorized hardware round trip. Simulated tests alone do not pass the gate.
+
+After both stages pass:
+
+1. Retain the test record, including the Nightstand build, exact upstream
+   artifacts, Pod model, firmware, observed sensor format, results and limits.
+2. Add a top-level `upstreamSwitchV2` object to `releases.json` with `commit`
+   (the full 40-character tested upstream commit), `version` (the version in
+   that artifact's `server/src/serverInfo.json`), `treeSha256` (the tested
+   tree's SHA-256 digest) and `date` (the actual hardware validation date in
+   `YYYY-MM-DD` form). Do not use the release date or a planned test date.
+3. Compute the digest from that commit in the upstream repository, with
+   Nightstand's helper available locally:
+
+   ```bash
+   git -c core.autocrlf=false -c core.eol=lf -c core.attributesFile=/dev/null \
+     archive <tested-upstream-commit> |
+     python3 -B /path/to/nightstand/scripts/tree_digest.py --tar -
+   ```
+
+4. Check that the record identifies the artifact exercised by the gate and
+   that the Versions dialog shows that version, commit and validation date.
+   A different target needs its own gate before publication.
+
+Leave the legacy `upstreamSwitch` record unchanged. Older installed scripts
+read it and do not have the new transaction safeguards. Do not remove it or
+point it at 3.0.x. The new switch refuses an invalid V2 record instead of
+falling back to upstream's `main`.
+
+Until the gate passes, keep V2 unpublished. The Versions dialog explains
+that the legacy pin is the pre-3.0 commit `ca7dc543`, that the full switch
+has not been tested on hardware, and that support for switching to 3.0.x is
+being prepared.

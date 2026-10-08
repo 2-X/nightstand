@@ -82,14 +82,38 @@ describe('RevertToStockRow target confirmation', () => {
     const bodies = serveInUse('*/update/switch-to-upstream', []);
     const { user } = await openDialog();
     if (variant === 'legacy only') {
-      expect(screen.getByText(/pinned pre-3.0 commit ca7dc543/)).toBeInTheDocument();
-      expect(screen.getByText(/not been tested on hardware/)).toBeInTheDocument();
+      expect(screen.getByText(
+        `Switch to upstream installs the pinned pre-3.0 commit ${manifest.upstreamSwitch!.commit}, not upstream 3.0.3.`
+        + ' The full switch has not been tested on hardware. Support for switching to 3.0.x is being prepared.',
+      )).toBeInTheDocument();
     } else {
-      expect(screen.getByText(new RegExp(target.commit))).toBeInTheDocument();
+      expect(screen.getByText(
+        `Installs upstream free-sleep ${target.version}, commit ${target.commit}, validated ${target.date}.`,
+      )).toBeInTheDocument();
     }
     expect(screen.getByRole('button', { name: 'Switch to upstream free-sleep' })).toBeEnabled();
     await user.click(screen.getByRole('button', { name: 'Switch to upstream free-sleep' }));
     await waitFor(() => expect(bodies).toEqual([{ target: expected }]));
+  });
+
+  it.each(['legacy only', 'legacy plus V2'])('keeps conversion and recovery information for a %s manifest', async variant => {
+    const releases = variant === 'legacy only'
+      ? { channels: ['stable'], releases: [], upstreamSwitch: manifest.upstreamSwitch } : manifest;
+    server.use(http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json',
+      () => HttpResponse.json(releases)));
+    await openDialog();
+
+    const conversion = screen.getByText(/first enabled alarm per day, limits vibration to 180 seconds/);
+    expect(conversion).toHaveTextContent('does not run one-time alarms. Level temperatures become Fahrenheit');
+    expect(conversion).toHaveTextContent('base-control taps become alarm-dismiss actions. The original settings remain in the backup.');
+    expect(screen.getByText(/timestamped prerevert-to-stock directory/))
+      .toHaveTextContent('/persistent/free-sleep-backups/');
+    expect(screen.getByText(/timestamped prerevert-to-stock directory/))
+      .toHaveTextContent('/persistent/free-sleep-database-backups/');
+    expect(screen.getByText(/Returning to Nightstand requires the migration tool from a computer with SSH access/))
+      .toHaveTextContent('Recovery may require SSH.');
+    expect(screen.getByText(/Remote access through Tailscale ends at upstream's first update/))
+      .toHaveTextContent('arrange local or SSH access first.');
   });
 
   it.each(['unavailable', 'malformed'])('sends no switch request when the manifest is %s', async state => {
