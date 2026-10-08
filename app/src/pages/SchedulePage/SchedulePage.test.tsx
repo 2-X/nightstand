@@ -76,10 +76,12 @@ describe('SchedulePage alarm pattern', () => {
     expect(await screen.findByRole('button', { name: /^Vibrate: Builds up,/ })).toBeInTheDocument();
   });
 
-  it('shows Double pulse on a Pod that is not a Pod 5', async () => {
+  it.each([
+    ['Pod 4', 'Pod 5'], ['Pod 5', 'Pod 3'], ['Pod 5', 'Pod 4'], ['Pod 5', 'Version not found'],
+  ])('shows Double pulse for hub %s and cover %s', async (hubVersion, coverVersion) => {
     server.use(
       http.get('*/schedules', () => HttpResponse.json(risingSchedules())),
-      http.get('*/deviceStatus', () => HttpResponse.json({ ...getDeviceStatus(), hubVersion: 'Pod 4' })),
+      http.get('*/deviceStatus', () => HttpResponse.json({ ...getDeviceStatus(), hubVersion, coverVersion })),
     );
     renderWithProviders(<SchedulePage />, { initialRoute: '/schedules' });
     expect(await screen.findByRole('button', { name: /^Vibrate: Double pulse,/ })).toBeInTheDocument();

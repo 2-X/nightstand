@@ -3,7 +3,6 @@ import cbor from 'cbor';
 import moment from 'moment-timezone';
 
 import logger from '../logger.js';
-import memoryDB from '../db/memoryDB.js';
 import serverStatus from '../serverStatus.js';
 import schedulesDB from '../db/schedules.js';
 import settingsDB, { updateSettings } from '../db/settings.js';
@@ -21,7 +20,7 @@ import { describePause, isAlarmPaused } from './schedulePause.js';
 import { ALARM_LATE_LIMIT_MS, trackAlarm } from './alarmActivity.js';
 import { alarmPatternFor } from './alarmPattern.js';
 import { missedReasonForError, noteMissedAlarm, setAlarmSuppression } from './alarmLedger.js';
-import { activeAlarms, cancelSnooze } from './activeAlarms.js';
+import { recordActiveAlarm } from './activeAlarms.js';
 import { alarmOverrideSilences } from './alarmOverrideGate.js';
 
 
@@ -74,7 +73,7 @@ export const executeAlarm = async (
     const alarmPayload = {
       pl: vibrationIntensity,
       du: min10Duration,
-      pi: alarmPatternFor(resp.hubVersion, vibrationPattern),
+      pi: alarmPatternFor(resp.hubVersion, resp.coverVersion, vibrationPattern),
       tt: alarmTimeEpoch,
     };
 
@@ -96,25 +95,7 @@ export const executeAlarm = async (
     sending = true;
     await executeFunction(command, hexPayload, { ...options, notAfter });
     fired = true;
-    const activeAlarm = { vibrationIntensity, duration, vibrationPattern };
-    activeAlarms.set(side, activeAlarm);
-    // This alarm replaces any snooze waiting on the side; it can be snoozed in turn.
-    cancelSnooze(side);
-    await memoryDB.read();
-    memoryDB.data[side].isAlarmVibrating = true;
-    await memoryDB.write();
-
-    setTimeout(
-      async () => {
-        if (activeAlarms.get(side) !== activeAlarm) return;
-        await memoryDB.read();
-        if (activeAlarms.get(side) !== activeAlarm) return;
-        activeAlarms.delete(side);
-        memoryDB.data[side].isAlarmVibrating = false;
-        await memoryDB.write();
-      },
-      min10Duration * 1_000
-    );
+    await recordActiveAlarm(side, { vibrationIntensity, duration, vibrationPattern }, min10Duration);
     serverStatus.status.alarmSchedule.status = 'healthy';
     serverStatus.status.alarmSchedule.message = '';
     emitJobEvent({ jobName: `alarm-${side}`, status: 'ok' });
