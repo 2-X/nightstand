@@ -8,9 +8,9 @@
 //
 //   - harmless: extra fields from the other fork that we don't recognize,
 //     these are kept in storage and ignored by this version.
-//   - destructive: a field OUR schema also has, present with an
-//     incompatible shape, this is the one real cross-fork data risk, and
-//     is the only thing that fails this check.
+//   - destructive: stored values in a shape this fork cannot use,
+//     including single schedules where weekly schedules are expected.
+//     These fail the check before existing data can be lost.
 //
 // A field missing entirely is neither, `.deepPartial()` makes every field
 // optional, so a genuinely absent field just gets today's default the next
@@ -53,6 +53,34 @@ function classify(schema, loaded, label) {
   if (loaded.parseError) {
     console.log(`[${label}] existing file is not valid JSON: ${loaded.parseError}`);
     return [`${label}: file is not valid JSON`];
+  }
+  if (label === 'settings') {
+    const incompatible = ['left', 'right'].filter(side => ['awayStart', 'awayReturn'].some(key => {
+      const value = loaded.data?.[side]?.[key];
+      return value !== undefined && value !== null && value !== '';
+    }));
+    if (incompatible.length) {
+      const issues = incompatible.map(side => `${side}: dated away settings cannot be carried over. `
+        + 'This fork does not schedule away dates; away mode could keep skipping alarms indefinitely. '
+        + 'Clear awayStart and awayReturn in the current fork and choose manual away mode before switching.');
+      issues.forEach(message => console.log(`[${label}] POTENTIALLY DESTRUCTIVE: ${message}`));
+      return issues;
+    }
+  }
+  if (label === 'schedules') {
+    const dayKeys = Object.keys(storedSide.shape);
+    const incompatible = ['left', 'right'].filter(side => {
+      const value = loaded.data?.[side];
+      return value && typeof value === 'object' && !Array.isArray(value)
+        && !dayKeys.some(day => Object.hasOwn(value, day))
+        && ['temperatures', 'alarm', 'alarms', 'power'].some(key => Object.hasOwn(value, key));
+    });
+    if (incompatible.length) {
+      const issues = incompatible.map(side => `${side}: a single schedule cannot be read as a weekly schedule. `
+        + 'Alarms and power schedules would be disabled. Convert it to weekday schedules before switching forks.');
+      issues.forEach(message => console.log(`[${label}] POTENTIALLY DESTRUCTIVE: ${message}`));
+      return issues;
+    }
   }
   const result = schema.deepPartial().safeParse(loaded.data);
   if (result.success) {

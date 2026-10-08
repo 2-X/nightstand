@@ -1,0 +1,42 @@
+{
+  "left": {
+    "temperatures": {
+      "22:00": 78,
+      "02:00": 75
+    },
+    "alarm": {
+      "time": "07:00",
+      "enabled": true,
+      "duration": 30,
+      "vibrationIntensity": 100,
+      "vibrationPattern": "double",
+      "alarmTemperature": 82
+    },
+    "power": {
+      "on": "22:00",
+      "off": "07:30",
+      "onTemperature": 78,
+      "enabled": true
+    }
+  },
+  "right": {
+    "temperatures": {
+      "22:00": 78,
+      "02:00": 75
+    },
+    "alarm": {
+      "time": "07:00",
+      "enabled": true,
+      "duration": 30,
+      "vibrationIntensity": 100,
+      "vibrationPattern": "double",
+      "alarmTemperature": 82
+    },
+    "power": {
+      "on": "22:00",
+      "off": "07:30",
+      "onTemperature": 78,
+      "enabled": true
+    }
+  }
+}
