@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act } from 'react';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, fireEvent, cleanup } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { useControlTempStore } from './controlTempStore.tsx';
 import type { DeviceStatus } from '@api/deviceStatusSchema.ts';
+import { useAppStore } from '@state/appStore.tsx';
+import * as deviceStatusApi from '@api/deviceStatus.ts';
 import AlarmDismissal from './AlarmDismissal.tsx';
 
 function makeStatus(alarmVibrating: boolean): DeviceStatus {
@@ -29,45 +31,71 @@ function makeStatus(alarmVibrating: boolean): DeviceStatus {
   } as DeviceStatus;
 }
 
-// A second alarm on the same mounted page should prompt the dismissal dialog
-// again. The pod re-raises isAlarmVibrating for every alarm; the UI must react
-// each time, not just the first.
-describe('AlarmDismissal repeat alarm', () => {
-  beforeEach(() => {
-    useControlTempStore.setState({ deviceStatus: makeStatus(true), pendingEdits: 0 });
-  });
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.spyOn(deviceStatusApi, 'postDeviceStatus').mockResolvedValue({} as Awaited<ReturnType<typeof deviceStatusApi.postDeviceStatus>>);
+  useAppStore.setState({ side: 'left', isUpdating: false });
+  useControlTempStore.setState({ deviceStatus: makeStatus(true), pendingEdits: 0 });
+});
 
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+
+async function advanceDismissal() {
+  await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+}
+
+describe('AlarmDismissal repeat alarm', () => {
   it('re-opens the dismissal dialog when a new alarm fires after a prior dismissal', async () => {
     renderWithProviders(<AlarmDismissal refetch={ () => Promise.resolve() } />);
-
-    // First alarm: dialog is open.
-    const dismissBtn = await screen.findByRole('button', { name: /dismiss alarm/i });
-
-    // Dismiss it (POST succeeds via default handler).
-    await act(async () => {
-      dismissBtn.click();
-    });
-
-    // The dialog closes once the dismiss actually succeeds. Note isAlarmVibrating
-    // is STILL true here (the refetch mock does not clear it), so the only thing
-    // that can close the dialog is the component's internal `dismissed` flag.
-    await waitFor(
-      () => expect(screen.queryByRole('button', { name: /dismiss alarm/i })).not.toBeInTheDocument(),
-      { timeout: 3000 },
-    );
-
-    // The pod stops vibrating, then a brand-new alarm fires later the next night,
-    // on the same still-mounted page.
-    await act(async () => {
-      useControlTempStore.setState({ deviceStatus: makeStatus(false) });
-    });
-    await act(async () => {
-      useControlTempStore.setState({ deviceStatus: makeStatus(true) });
-    });
-
-    // The dialog must prompt the user again.
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /dismiss alarm/i })).toBeInTheDocument(),
-    );
+    fireEvent.click(screen.getByRole('button', { name: /dismiss alarm/i }));
+    await advanceDismissal();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    act(() => useControlTempStore.setState({ deviceStatus: makeStatus(false) }));
+    act(() => useControlTempStore.setState({ deviceStatus: makeStatus(true) }));
+    expect(screen.getByRole('button', { name: /dismiss alarm/i })).toBeInTheDocument();
   });
+});
+
+for (const initial of ['left', 'right'] as const) {
+  it(`still shows the other side after dismissing ${initial}`, async () => {
+    useAppStore.setState({ side: initial });
+    renderWithProviders(<AlarmDismissal refetch={ () => Promise.resolve() } />);
+    fireEvent.click(screen.getByRole('button', { name: /dismiss alarm/i }));
+    await advanceDismissal();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    const other = initial === 'left' ? 'right' : 'left';
+    act(() => useAppStore.setState({ side: other }));
+    expect(screen.getByRole('dialog', { name: `${other === 'left' ? 'Left' : 'Right'} side alarm` })).toBeInTheDocument();
+    act(() => useAppStore.setState({ side: initial }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    act(() => useAppStore.setState({ side: other }));
+    const stopped = makeStatus(true);
+    stopped[initial].isAlarmVibrating = false;
+    act(() => useControlTempStore.setState({ deviceStatus: stopped }));
+    act(() => useControlTempStore.setState({ deviceStatus: makeStatus(true) }));
+    act(() => useAppStore.setState({ side: initial }));
+    expect(screen.getByRole('dialog', { name: `${initial === 'left' ? 'Left' : 'Right'} side alarm` })).toBeInTheDocument();
+  });
+}
+
+it('keeps the other side visible when switching during a dismiss request', async () => {
+  let finishRequest!: (value: Awaited<ReturnType<typeof deviceStatusApi.postDeviceStatus>>) => void;
+  vi.mocked(deviceStatusApi.postDeviceStatus).mockReturnValue(new Promise(resolve => { finishRequest = resolve; }));
+  renderWithProviders(<AlarmDismissal refetch={ () => Promise.resolve() } />);
+  fireEvent.click(screen.getByRole('button', { name: /dismiss alarm/i }));
+  expect(useAppStore.getState().isUpdating).toBe(true);
+  act(() => useAppStore.setState({ side: 'right' }));
+  await act(async () => finishRequest({} as Awaited<ReturnType<typeof deviceStatusApi.postDeviceStatus>>));
+  await advanceDismissal();
+  expect(useAppStore.getState().isUpdating).toBe(false);
+  expect(screen.getByRole('dialog', { name: 'Right side alarm' })).toBeInTheDocument();
+  act(() => useAppStore.setState({ side: 'left' }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });

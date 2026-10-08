@@ -136,7 +136,9 @@ generic message; the details go to the server log.
 - While either side is in away mode, a change to one side is applied to
   both.
 - `isAlarmVibrating: false` stops a ringing alarm: the server sends a
-  one-second replacement alarm and then clears the armed alarm.
+  one-second replacement alarm only to the tracked ringing side, then clears
+  its ringing record and pending snooze. Dismissing an idle side sends no
+  alarm command.
 - `isPriming: true` starts a prime. `isPriming: false` is accepted and
   ignored. No verified command stops an active prime.
 - A manual `targetTemperatureF` change pauses that side's temperature
@@ -665,6 +667,13 @@ instead of the weekly schedule.
   other command takes `arg` as a string (or no `arg`), and a value of
   another type is refused with `400`. Nothing is sent to the Pod for a
   `400`, which answers `{ "message": "..." }`.
+- For `ALARM_LEFT` and `ALARM_RIGHT`, `arg` must be a hex-encoded CBOR
+  object with integer `pl` from 0 to 100, integer `du` from 1 to 2147483
+  seconds, `pi` of `double` or `rise`, and a nonnegative safe integer `tt`
+  in Unix seconds. Future target times return `400` before any hardware
+  command. The in-memory tracker supports immediate ringing alarms, not
+  pending firmware starts. Accepted raw alarms remain tracked for `du`
+  seconds after command acceptance so they can be dismissed.
 
 #### Request body
 

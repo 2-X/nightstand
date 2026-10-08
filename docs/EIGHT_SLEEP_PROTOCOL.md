@@ -34,7 +34,7 @@ newline-delimited response.
 | 2 | `SET_ALARM` | ? | ❓ | Named by position only; free-sleep uses `ALARM_LEFT`/`ALARM_RIGHT` (5/6) instead. |
 | 3 | `REBOOT` | none | 📖 (8rp) | Reboots the device. Free-sleep has this commented out as `RESET` and doesn't call it: the pod's daily reboot schedule reboots at the OS level instead, not through this socket. |
 | 4 | `FORCE_RESET` | ? | ❓ | Commented out, never used or tested. |
-| 5 | `ALARM_LEFT` | CBOR alarm string | ✅ | Free-sleep uses this actively. Encodes target time (unix ts), duration (seconds), vibration pattern (`double` or `rise`), power level (0-100). Nightstand sends `rise` only to a Pod 5 and `double` to every other Pod, see [other Pod generations](#other-pod-generations). |
+| 5 | `ALARM_LEFT` | CBOR alarm string | ✅ | Free-sleep uses this actively. Encodes target time (unix ts), duration (seconds), vibration pattern (`double` or `rise`), power level (0-100). Nightstand sends `rise` only when both hub and cover are reported as Pod 5, otherwise `double`, see [other Pod generations](#other-pod-generations). |
 | 6 | `ALARM_RIGHT` | CBOR alarm string | ✅ | Same shape as 5, right side. |
 | 7 | `FORMAT` | ? | ❓ | Commented out, never used or tested. Sounds destructive: do not try without a strong reason and a backup plan. |
 | 8 | `SET_SETTINGS` | CBOR settings string | ✅ | Free-sleep uses this actively. Encodes `gl`/`gr` (gain left/right) and `lb` (LED brightness). |
@@ -45,7 +45,7 @@ newline-delimited response.
 | 13 | `PRIME` | none (arg ignored) | ✅ starts, ❌ can't stop | Starts a priming cycle. `isPriming` goes `true` ~10s after the command and clears on its own after ~11-12 minutes: a genuinely long operation, not a quick flush. No known way to stop one early (see [below](#priming-cancellation)). |
 | 14 | `DEVICE_STATUS` | none | ✅ | Returns the full status blob: see [DEVICE_STATUS response fields](#device_status-response-fields) below. |
 | 15 | n/a | n/a | ❓ | Unused/unknown. Not referenced by free-sleep, jmew, or 8rp. |
-| 16 | `ALARM_CLEAR` | none | ✅ | Free-sleep uses this to stop an active alarm vibration. Other projects send a side argument, and a Pod 3 report says it does not stop a running alarm, see [other Pod generations](#other-pod-generations). |
+| 16 | `ALARM_CLEAR` | none | ✅ | Upstream free-sleep uses this to stop an active alarm vibration. Nightstand dismissal uses a side-specific one-second replacement and sends no `ALARM_CLEAR`. Other projects send a side argument, and a Pod 3 report says it does not stop a running alarm, see [other Pod generations](#other-pod-generations). |
 | 17 | `STOP_PRIME` / `ALARM_SOLO` (disputed) | unverified | 📖 unverified, ❌ cancellation on tested Pod 5 | [8rp](https://github.com/Schluggi/8rp/blob/main/docs/commands.md) names it `STOP_PRIME`. [Upstream free-sleep's commented command table](https://github.com/throwaway31265/free-sleep/blob/e5172139874a274d1ced12c8da052ab2cbaa286d/server/src/8sleep/deviceApi.ts#L23) and [seanpasino/free-sleep](https://github.com/seanpasino/free-sleep/commit/50580edff3) name it `ALARM_SOLO`, a whole-bed alarm. Neither meaning is verified in Nightstand. Sent before and after priming was confirmed active on the tested Pod 5, it left `isPriming` true for 5+ minutes with no visible effect. Nightstand does not expose command 17 through its API; do not add a cancellation action without a positive hardware test. |
 
 ### Temperature levels and reported targets
@@ -230,10 +230,10 @@ other projects, and none of them has been checked on our hardware.
   ([jmakes/free-sleep](https://github.com/jmakes/free-sleep/commit/9be14cdb)).
   sleepypod's notes say the two patterns feel the same on a Pod 5
   ([sleepypod alarms notes](https://github.com/sleepypod/core/blob/dev/docs/hardware/alarms.md)).
-  Nightstand sends the chosen pattern when the hub is detected as a Pod 5
-  and `double` for any other or unknown hub, since `double` rings on every
-  Pod. The app offers "Builds up" only on a Pod 5. Saved schedules keep
-  accepting `rise`.
+  Nightstand sends the chosen pattern only when both hub and cover are
+  reported as Pod 5. It sends `double` for mixed, older or unknown hardware.
+  The app offers "Builds up" only when both are reported as Pod 5. Saved
+  schedules keep accepting `rise`.
 - 📖 **Stopping a running alarm.** On a Pod 3, `ALARM_CLEAR` with the
   argument `empty` produced no firmware log line and the alarm ran its full
   length; re-sending `ALARM_LEFT`/`ALARM_RIGHT` with a duration of 1 second
@@ -242,7 +242,16 @@ other projects, and none of them has been checked on our hardware.
   sleepypod sends `ALARM_CLEAR` with `0` (left) or `1` (right) on a Pod 5
   and notes that a clear sent within about 100 ms of the start cancels the
   alarm before it is felt. Whether the side argument works on a Pod 3 has
-  not been tested.
+  not been tested. Nightstand dismisses a tracked ringing alarm with a
+  one-second replacement on that side, without an unscoped clear. Dismissing
+  an idle side sends no alarm command. Replacement-only dismissal and partner
+  isolation still need physical confirmation on Pod 4 and Pod 5.
+  Before release, the owner must authorize and complete a physical Pod 5
+  dismissal check: each side ringing alone, both sides ringing with
+  dismissal in each direction, dismissal of an idle side, and a subsequent
+  alarm. Record the hub, cover and firmware versions and confirm that the
+  partner keeps ringing. This is a hardware release gate; mocked command
+  assertions do not verify replacement effectiveness or partner isolation.
 - 📖 **`SET_SETTINGS` keys.** The firmware reads only the two-letter keys
   `v`, `gl`, `gr` and `lb`, and a write changes only the keys it contains
   (sleepypod, Pod 5,

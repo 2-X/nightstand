@@ -33,6 +33,9 @@ mock.module(new URL('../serverStatus.js', import.meta.url).href, { defaultExport
 mock.module(new URL('../routes/deviceStatus/updateDeviceStatus.js', import.meta.url).href, {
   namedExports: { updateDeviceStatus: async () => {} },
 });
+mock.module(new URL('../8sleep/frankenServer.js', import.meta.url).href, {
+  namedExports: { connectFrankenWithin: async () => { throw new Error('No hardware connection under test'); } },
+});
 mock.module(new URL('./calibrateSensors.js', import.meta.url).href, { namedExports: { executeCalibrateSensors: () => {} } });
 mock.module(new URL('./runMetricsRetention.js', import.meta.url).href, { namedExports: { runMetricsRetention: async () => {} } });
 const { default: reboot } = await import('./reboot.js');

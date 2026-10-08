@@ -24,16 +24,18 @@ mock.module(new URL('../logger.js', import.meta.url).href, {
     error(message: string) { errors.push(message); } },
 });
 mock.module('child_process', {
-  namedExports: { execFile: Object.assign(() => { throw new Error('Unexpected callback invocation'); }, {
-    [promisify.custom]: async (command: string, args: string[]) => {
-      assert.equal(command, 'df');
-      assert.deepEqual(args, ['-k', '-P', `${folder}/`]);
-      dfCalls++;
-      if (diskError) throw new Error('df failed');
-      return { stdout: `Filesystem 1024-blocks Used Available Capacity Mounted on\n`
+  namedExports: {
+    exec: () => { throw new Error('Unexpected exec'); },
+    execFile: Object.assign(() => { throw new Error('Unexpected callback invocation'); }, {
+      [promisify.custom]: async (command: string, args: string[]) => {
+        assert.equal(command, 'df');
+        assert.deepEqual(args, ['-k', '-P', `${folder}/`]);
+        dfCalls++;
+        if (diskError) throw new Error('df failed');
+        return { stdout: `Filesystem 1024-blocks Used Available Capacity Mounted on\n`
         + `/dev/test 1000000 100000 ${spaceKb} 10% /persistent\n` };
-    },
-  }) },
+      },
+    }) },
 });
 mock.module(new URL('../db/prisma.js', import.meta.url).href, { namedExports: { prisma: {} } });
 mock.module(new URL('./metricsRetention.js', import.meta.url).href, { namedExports: {

@@ -87,7 +87,7 @@ class ServerStatus {
       systemDate: {
         name: 'System date',
         status: 'not_started',
-        description: 'Whether or not the system date is correct. Scheduling jobs depend on this.',
+        description: 'Jobs arm when the system year is plausible. NTP synchronization is checked separately.',
         message: '',
       },
       temperatureSchedule: {
@@ -158,8 +158,12 @@ class ServerStatus {
   updateSystemDate() {
     const isValid = isSystemDateValid();
     if (isValid) {
-      this.status.systemDate.status = 'healthy';
-      this.status.systemDate.message = '';
+      // The scheduler owns the year check and clock synchronization warnings.
+      if (this.status.systemDate.status !== 'retrying' && this.status.systemDate.status !== 'healthy'
+        && this.status.systemDate.status !== 'started') {
+        this.status.systemDate.status = 'healthy';
+        this.status.systemDate.message = '';
+      }
     } else {
       this.status.systemDate.status = 'failed';
       this.status.systemDate.message = `Invalid system date: ${new Date().toISOString()}`;

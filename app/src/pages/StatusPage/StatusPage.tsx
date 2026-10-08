@@ -53,6 +53,9 @@ export default function StatusPage() {
               { impact }
             </Typography>) }
           </Alert> }
+          { data.systemDate?.status === 'healthy' && data.systemDate.message && (
+            <Alert severity="warning" aria-label="Clock warning">{ data.systemDate.message }</Alert>
+          ) }
           <Stack direction="row" alignItems="baseline" spacing={ 1 }>
             <Typography variant="body2" color="text.secondary">
               { dataUpdatedAt > 0 && `Checked ${moment(dataUpdatedAt).format('h:mm A')}` }
