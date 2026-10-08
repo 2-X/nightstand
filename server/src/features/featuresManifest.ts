@@ -321,6 +321,32 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
       + 'correctly.',
   },
   {
+    id: 'cover-buttons',
+    title: 'Cover buttons',
+    description: 'Reads presses of the three buttons on each side of a Pod 5 cover from the firmware\'s log '
+      + 'records in the RAW files, which the firmware itself ignores. Plus and minus step that side\'s target; '
+      + 'the logo button stops a ringing or snoozed alarm, or sets the side to its favorite temperature and on. '
+      + 'Long presses are left to the firmware, which on newer host firmware reports them as taps. The step, '
+      + 'favorite and button order are set through the API.',
+    category: 'platform',
+    version: '3.7.0',
+    flag: 'coverButtons',
+    default: false,
+    touchpoints: [
+      'server/src/8sleep/buttonMonitor.ts', 'server/src/8sleep/buttonEvents.ts', 'server/src/8sleep/rawLogReader.ts',
+      'app/src/pages/SettingsPage/FeaturesSection',
+    ],
+    depends_on: [],
+    reversible: true,
+    tests: [
+      'server/src/8sleep/buttonMonitor.test.ts', 'server/src/8sleep/buttonEvents.test.ts',
+      'server/src/8sleep/rawLogReader.test.ts',
+    ],
+    upstream_offer: false,
+    rationale: 'Off by default: it reads the RAW files once a second and acts on the bed, and has been checked '
+      + 'on one Pod 4 hub with a Pod 5 cover only. Off, no file is opened and the status entry says so.',
+  },
+  {
     id: 'biometrics-v2',
     title: 'New sleep tracking (beta)',
     description: 'Tells the two sides apart with the bed\'s capacitance sensors, in live presence and the '

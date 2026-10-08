@@ -19,6 +19,10 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 const BIOMETRICS_ESTIMATES = 'Detects time in bed and estimates heart rate from the bed\'s sensors. '
   + 'These are estimates, not medical measurements, and have only been checked on a Pod 5.';
 const BIOMETRICS_UNCHECKED_MODEL = 'Not checked on this Pod model. Numbers may be further off than on a Pod 5.';
+const COVER_BUTTONS = 'Makes the buttons on a Pod 5 cover work: plus and minus step that side\'s temperature, '
+  + 'and the logo button stops a ringing alarm or sets the side to its favorite temperature. '
+  + 'Reads the Pod\'s RAW files; checked on one Pod 4 hub with a Pod 5 cover. '
+  + 'The step and the favorite are set through the API.';
 const NEW_SLEEP_TRACKING_CHECKED = 'Tells the two sides apart with the bed\'s capacitance sensors, for bed times, '
   + 'the in-bed indicator, auto-off and Smart Schedule; that part has been checked on one Pod 5. '
   + 'Heart rate and breathing use newer estimates.';
@@ -171,6 +175,13 @@ export default function FeaturesSection() {
         checked={ features?.oneOffAlarms ?? false }
         onChange={ (next) => updateFeature({ oneOffAlarms: next }) }
         description="Adds a one-time alarm to Schedule, separate from the daily wake-up."
+      />
+      <FeatureToggleRow
+        label="Cover buttons"
+        disabled={ isUpdating || features?.coverButtons === undefined }
+        checked={ features?.coverButtons ?? false }
+        onChange={ (next) => updateFeature({ coverButtons: next }) }
+        description={ COVER_BUTTONS }
       />
       <FeatureToggleRow
         label="Rhythms (beta)"

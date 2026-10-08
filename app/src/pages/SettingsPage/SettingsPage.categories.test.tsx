@@ -63,7 +63,7 @@ it('counts new sleep tracking once it is on', async () => {
   const settings = getSettings();
   server.use(http.get('*/settings', () => HttpResponse.json({ ...settings, features: { ...settings.features, biometricsV2: true } })));
   renderWithProviders(<SettingsPage/>, { initialRoute: '/settings' });
-  expect(await screen.findByText('5 of 6 on')).toBeVisible();
+  expect(await screen.findByText('5 of 7 on')).toBeVisible();
 });
 
 it('does not claim the Pod is running before all core services are ready', async () => {
@@ -80,7 +80,7 @@ it('does not count dependent feature switches while biometrics is off', async ()
   const services = getServices();
   server.use(http.get('*/services', () => HttpResponse.json({ ...services, biometrics: { ...services.biometrics, enabled: false } })));
   renderWithProviders(<SettingsPage/>, { initialRoute: '/settings' });
-  expect(await screen.findByText('2 of 6 on')).toBeVisible();
+  expect(await screen.findByText('2 of 7 on')).toBeVisible();
 });
 
 

@@ -137,6 +137,14 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
     blurb: 'Watches for physical taps on the Pod and keeps the hardware connection alive.',
     meaning: { healthy: 'Watching for taps and monitoring the connection.' },
   },
+  buttonMonitor: {
+    group: 'core',
+    blurb: 'Reads presses of the buttons on a Pod 5 cover from the Pod\'s RAW files, when Cover buttons is on in Settings > Features.',
+    meaning: {
+      healthy: 'Watching for button presses, or off in Settings.',
+      failed: 'Cannot read fresh button presses. The Pod is not writing RAW files, or a press could not be applied.',
+    },
+  },
   jobs: {
     group: 'core',
     blurb: 'The internal scheduler that runs all the timed jobs below (temperature, power, priming, reboots).',

@@ -6,6 +6,20 @@ is a hard fork; for the history of the projects it descends from, see
 [jmew/free-sleep](https://github.com/jmew/free-sleep) and
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
 
+## [Unreleased]
+
+- Settings > Features has a new Cover buttons switch, off by default, for
+  the three buttons on each side of a Pod 5 cover. Plus and minus step that
+  side's temperature by one degree, and the logo button stops a ringing or
+  snoozed alarm or sets the side to its favorite temperature and turns it
+  on. The firmware logs every press to the Pod's RAW files and ignores the
+  short clicks itself; Nightstand reads the newest file once a second. The
+  step, the favorite and the button order are set through
+  `/api/settings`. Long presses are left to the firmware, which on newer
+  host firmware reports them as taps. Checked on one Pod 4 hub with a Pod 5
+  cover by @2-X, not on a Pod 5 hub, and not on firmware that writes no RAW
+  files, where the switch reports that no file is being written.
+
 ## [3.6.1] - 2026-10-07
 
 Keeps tap temperature changes within range, reports the daily reboot under its own status, stops sending an unverified command, and credits three contributors.

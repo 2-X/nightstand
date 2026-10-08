@@ -48,7 +48,12 @@ const defaultSideSettings: SideSettings = {
       type: 'base_control',
       behavior: 'toggle_preset',
     },
-  }
+  },
+  buttons: {
+    invertButtons: false,
+    stepF: 1,
+    favoriteTemperatureF: 80,
+  },
 };
 
 const defaultData: Settings = {
