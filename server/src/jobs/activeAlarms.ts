@@ -1,3 +1,4 @@
+import memoryDB from '../db/memoryDB.js';
 import type { AlarmJob, Side } from '../db/schedulesSchema.js';
 
 // What a ringing alarm was started with. Each start stores a new object, so
@@ -32,4 +33,23 @@ export function setSnooze(side: Side, delayMs: number, ring: () => void): void {
 export function forgetActiveAlarm(side: Side): void {
   activeAlarms.delete(side);
   cancelSnooze(side);
+}
+
+
+// Records only an accepted start; each expiry belongs to that particular alarm.
+export async function recordActiveAlarm(side: Side, alarm: ActiveAlarm, durationSeconds = alarm.duration): Promise<void> {
+  const activeAlarm = { ...alarm };
+  activeAlarms.set(side, activeAlarm);
+  cancelSnooze(side);
+  await memoryDB.read();
+  memoryDB.data[side].isAlarmVibrating = true;
+  await memoryDB.write();
+  setTimeout(async () => {
+    if (activeAlarms.get(side) !== activeAlarm) return;
+    await memoryDB.read();
+    if (activeAlarms.get(side) !== activeAlarm) return;
+    activeAlarms.delete(side);
+    memoryDB.data[side].isAlarmVibrating = false;
+    await memoryDB.write();
+  }, durationSeconds * 1_000);
 }

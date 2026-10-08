@@ -2,6 +2,9 @@
 // pulling in the Franken/config module chain (deviceApi.js requires env vars
 // that aren't set in the test environment).
 
+import cbor from 'cbor';
+import { z } from 'zod';
+import type { ActiveAlarm } from '../../jobs/activeAlarms.js';
 import type { frankenCommands } from '../../8sleep/deviceApi.js';
 
 // This route sends `arg` straight to hardware, bypassing the range checks
@@ -31,3 +34,23 @@ export const normalizeExecuteArg = (command: string, arg: unknown): string | und
   const [min, max] = bounds;
   return value >= min && value <= max ? String(value) : undefined;
 };
+
+
+const rawAlarmSchema = z.object({
+  pl: z.number().int().min(0).max(100),
+  // Node timers must fit in a signed 32-bit millisecond delay.
+  du: z.number().int().positive().max(2_147_483),
+  pi: z.enum(['double', 'rise']),
+  tt: z.number().int().nonnegative().safe(),
+});
+
+export function alarmFromExecuteArg(arg: string): ActiveAlarm | undefined {
+  try {
+    const alarm = rawAlarmSchema.safeParse(cbor.decodeFirstSync(Buffer.from(arg, 'hex')));
+    // The in-memory tracker supports ringing alarms, not pending firmware starts.
+    if (!alarm.success || alarm.data.tt > Math.floor(Date.now() / 1_000)) return undefined;
+    return { vibrationIntensity: alarm.data.pl, duration: alarm.data.du, vibrationPattern: alarm.data.pi };
+  } catch {
+    return undefined;
+  }
+}

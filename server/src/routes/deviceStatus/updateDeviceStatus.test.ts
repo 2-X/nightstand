@@ -21,6 +21,15 @@ const executeFunctionMock = mock.fn(async (...args: [string, (string | (() => st
 mock.module('../../8sleep/deviceApi.js', {
   namedExports: { executeFunction: executeFunctionMock },
 });
+const alarmCommandMock = mock.fn(async (command: string, arg: string) => { void command; void arg; });
+const alarmConnectionMock = mock.fn(async (options?: { background?: boolean; latest?: boolean }, key?: string) => {
+  void options;
+  void key;
+  return { callFunction: alarmCommandMock };
+});
+mock.module('../../8sleep/frankenServer.js', {
+  namedExports: { connectFrankenWithin: alarmConnectionMock },
+});
 
 const { updateDeviceStatus } = await import('./updateDeviceStatus.js');
 const { default: settingsDB } = await import('../../db/settings.js');
@@ -94,17 +103,19 @@ describe('updateDeviceStatus', () => {
 
   it('marks power and set point commands as state, and alarm clearing as not', async () => {
     executeFunctionMock.mock.resetCalls();
+    alarmCommandMock.mock.resetCalls();
+    alarmConnectionMock.mock.resetCalls();
 
+    const { default: memoryDB } = await import('../../db/memoryDB.js');
+    memoryDB.data.left.isAlarmVibrating = true;
     await updateDeviceStatus({ left: { isOn: false, targetTemperatureF: 80, isAlarmVibrating: false } }, { background: true });
 
     const options = (command: string) => executeFunctionMock.mock.calls
       .find(call => call.arguments[0] === command)?.arguments[2] as { latest?: boolean } | undefined;
     assert.equal(options('LEFT_TEMP_DURATION')?.latest, true);
     assert.equal(options('TEMP_LEVEL_LEFT')?.latest, true);
-    for (const command of ['ALARM_LEFT', 'ALARM_CLEAR']) {
-      assert.ok(executeFunctionMock.mock.calls.some(call => call.arguments[0] === command), `${command} was never sent`);
-      assert.equal(options(command)?.latest, undefined);
-    }
+    assert.equal(alarmCommandMock.mock.calls[0]?.arguments[0], 'ALARM_LEFT');
+    assert.deepEqual(alarmConnectionMock.mock.calls[0]?.arguments, [{ background: true }, 'ALARM_LEFT']);
   });
 
   it('stops quietly when a newer update replaced this one while the Pod was unreachable', async () => {

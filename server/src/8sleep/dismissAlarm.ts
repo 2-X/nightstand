@@ -1,13 +1,17 @@
 import cbor from 'cbor';
 import type { Side } from '../db/schedulesSchema.js';
-import type { CommandOptions } from './frankenServer.js';
-import { executeFunction } from './deviceApi.js';
+import { connectFrankenWithin, type CommandOptions } from './frankenServer.js';
+import memoryDB from '../db/memoryDB.js';
+import { activeAlarms } from '../jobs/activeAlarms.js';
 
-// Replace a running alarm with a short one, then cancel any armed alarm.
+// Replace only this side's running alarm. An unscoped clear may stop both sides.
 export async function dismissAlarm(side: Side, options: CommandOptions = {}): Promise<void> {
+  if (!memoryDB.data[side].isAlarmVibrating && !activeAlarms.has(side)) return;
   const command = side === 'left' ? 'ALARM_LEFT' : 'ALARM_RIGHT';
-  await executeFunction(command, () => cbor.encode({
+  const connection = await connectFrankenWithin(options, command);
+  // The alarm may have ended while the connection was unavailable.
+  if (!memoryDB.data[side].isAlarmVibrating && !activeAlarms.has(side)) return;
+  await connection.callFunction(command, cbor.encode({
     pl: 1, du: 1, pi: 'double', tt: Math.floor(Date.now() / 1_000),
-  }).toString('hex'), options);
-  await executeFunction('ALARM_CLEAR', 'empty', options);
+  }).toString('hex'));
 }
