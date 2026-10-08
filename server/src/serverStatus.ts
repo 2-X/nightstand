@@ -2,7 +2,7 @@ import settingsDB from './db/settings.js';
 import { firmwareHealthSummary } from './firmware/firmwareRuntime.js';
 import { ServerStatus as ServerStatusType } from './routes/serverStatus/serverStatusSchema.js';
 import { isSystemDateValid } from './jobs/isSystemDateValid.js';
-import servicesDB from './db/services.js';
+import servicesDB, { updateServices } from './db/services.js';
 import { prisma } from './db/prisma.js';
 import { findUnappliedMigrations, listLocalMigrations, MigrationRow } from './db/unappliedMigrations.js';
 import moment from 'moment-timezone';
@@ -167,23 +167,25 @@ class ServerStatus {
   }
 
   async updateServices() {
-    await servicesDB.read();
-    this.status.biometricsInstallation = servicesDB.data.biometrics.jobs.installation;
-    if (servicesDB.data.biometrics.enabled) {
-      this.status.analyzeSleepLeft = servicesDB.data.biometrics.jobs.analyzeSleepLeft;
-      this.status.analyzeSleepRight = servicesDB.data.biometrics.jobs.analyzeSleepRight;
-      this.status.biometricsCalibrationLeft = servicesDB.data.biometrics.jobs.calibrateLeft;
-      this.status.biometricsCalibrationRight = servicesDB.data.biometrics.jobs.calibrateRight;
-      this.status.pumpHealthLeft = servicesDB.data.biometrics.jobs.pumpLeft;
-      this.status.pumpHealthRight = servicesDB.data.biometrics.jobs.pumpRight;
-
-      const time = moment(servicesDB.data.biometrics.jobs.stream.timestamp);
-      if (moment().diff(time, 'minutes') >= 5) {
-        servicesDB.data.biometrics.jobs.stream.status = 'failed';
-        servicesDB.data.biometrics.jobs.stream.message = 'Biometrics stream died! Run `systemctl restart free-sleep-stream`';
-      }
-      await servicesDB.write();
-      this.status.biometricsStream = servicesDB.data.biometrics.jobs.stream;
+    // Check inside the write queue so a fresh stream report cannot be overwritten.
+    const services = await updateServices(draft => {
+      const stream = draft.biometrics.jobs.stream;
+      const message = 'Biometrics stream died! Run `systemctl restart free-sleep-stream`';
+      if (!draft.biometrics.enabled || moment().diff(moment(stream.timestamp), 'minutes') < 5
+        || !moment(stream.timestamp).isValid()) return false;
+      if (stream.status === 'failed' && stream.message === message) return false;
+      stream.status = 'failed';
+      stream.message = message;
+    });
+    this.status.biometricsInstallation = services.biometrics.jobs.installation;
+    if (services.biometrics.enabled) {
+      this.status.analyzeSleepLeft = services.biometrics.jobs.analyzeSleepLeft;
+      this.status.analyzeSleepRight = services.biometrics.jobs.analyzeSleepRight;
+      this.status.biometricsCalibrationLeft = services.biometrics.jobs.calibrateLeft;
+      this.status.biometricsCalibrationRight = services.biometrics.jobs.calibrateRight;
+      this.status.pumpHealthLeft = services.biometrics.jobs.pumpLeft;
+      this.status.pumpHealthRight = services.biometrics.jobs.pumpRight;
+      this.status.biometricsStream = services.biometrics.jobs.stream;
     } else {
       // Delete keys from server status
       delete this.status.analyzeSleepLeft;
