@@ -8,7 +8,7 @@ is a hard fork; for the history of the projects it descends from, see
 
 ## [Unreleased]
 
-### Fixes
+### Cover taps
 
 - Two taps that arrive in the same 2 s read now step one after the other,
   each from the target the one before it wrote, and a tap after a read that
@@ -16,48 +16,206 @@ is a hard fork; for the history of the projects it descends from, see
   stepped from the same read's target and the second write undid the first.
   Seen on a Pod 4 hub with a Pod 5 cover by @2-X, where the newer host
   firmware reports a held cover button as a tap.
-- The live RAW reader recovers after a corrupt record when a complete later
-  record is available, logs the skipped bytes and retries partial live tails.
-  Ideas from [onemec/free-sleep](https://github.com/onemec/free-sleep/commit/e3511ab096554a6d60a83e00f69c1a8c26325dc8),
+
+### Alarms
+
+- Dismiss sends a one-second replacement only to the side reported or
+  tracked as ringing, without the unscoped clear that could stop a partner's
+  alarm. Alarms started through `/api/execute` are tracked too. Checked in
+  tests; replacement-only dismissal and partner isolation still need a
+  hardware check on Pod 4 and Pod 5.
+- A raw `ALARM_LEFT` or `ALARM_RIGHT` sent through `/api/execute` with a
+  target time (`tt`) in the future is now refused with `400`, because only
+  an alarm that rings at once can be tracked for dismissal.
+- The app keeps a separate dismissal latch for each side, so dismissing one
+  side's alarm no longer hides the other side's dismissal dialog.
+- The "Builds up" (`rise`) pattern now needs both a Pod 5 hub and a Pod 5
+  cover, because the vibration firmware runs on the cover. Mixed, older or
+  unknown hardware uses `double`. This change has not been checked on hardware.
+
+### Updates and recovery
+
+- Boot recovery now records the outcome of an interrupted update, including
+  server or Biometrics restart failures, so Settings shows that recovery's
+  result instead of the previous update's result.
+- An open tab whose page files disappeared after a reinstall now reloads
+  once after a failed page load, at most once every five minutes per tab.
+  If browser storage is unavailable, it does not attempt the reload.
+- Switch to upstream still installs the pinned pre-3.0 upstream commit
+  `ca7dc543`, with the same steps and wording as before. The Versions page
+  now sends the exact target it showed, and the switch refuses a target that
+  changed in the meantime. Groundwork for switching to upstream 3.0.x is in
+  place but not offered yet: it records each switch, return and cross-fork
+  rollback as a transaction that a power cut can finish or undo at boot,
+  keeps upstream's Python environment separate, and records where each
+  calibration came from. With no switch journal on the Pod, none of this
+  runs at startup. The newer target is published only after the checks in
+  [TESTING.md](docs/TESTING.md#upstream-switch-publication-gate) pass on a
+  VM and on hardware.
+
+### Network and security
+
+- Browser controls and WebSocket updates now accept bare hostnames and names
+  ending in `.lan`, `.home.arpa` or `.internal`, alongside `.local`. A
+  Tailscale `.ts.net` origin must match the hostname used to reach the Pod;
+  other `.ts.net` sites are not allowed by that rule.
+- The firewall now rejects blocked outbound traffic so programs fail
+  without waiting for a timeout, with a checked drop-rule fallback if
+  rejection is unavailable. It also allows local-link IPv6 router and
+  neighbour discovery, needed for IPv6 connectivity, DNS and time sync.
+  Recovery restores the normal output policy only after terminal blocks
+  are in place. Checked in tests; firewall behavior after a reboot still
+  needs a hardware check.
+- SSH setup now uses the built-in SFTP server, so file transfers do not
+  depend on an external `sftp-server` binary that some Pods lack.
+
+### Installation and fork migration
+
+- The installer checks for a Wi-Fi profile and password salts reported in a
+  shared prebuilt SD image. It offers to remove the profile and change the
+  affected accounts' passwords, with separate consent for each. Without an
+  interactive terminal, it changes neither.
+- Coming from another fork now stops before changing anything if the data
+  contains a single schedule per side or dated away settings that Nightstand
+  cannot use. The message explains what needs changing in the current fork.
+- Coming from another fork now checks for firewall-opening cron jobs and
+  an ambient-light service, backs them up and requires consent to remove
+  them. It stops services it does not own before the database checkpoint.
+  Failure to restore those files does not block the remaining recovery.
+  Installs and updates also warn about the cron jobs without editing them.
+  These migration changes have not been checked on a Pod.
+
+### Firmware readouts
+
+- Settings > Features > Firmware target, off by default, shows each side's
+  thermostat target from firmware records on System status. It needs
+  Biometrics. This is separate from the app's temperature scale and from
+  measured water or mattress temperature; saved temperatures and command
+  conversions keep their existing convention.
+- Settings > Features > Firmware health, off by default, shows selected
+  firmware messages about pumps, sensors, storage and connections on
+  System status. It needs Biometrics; raw firmware log text stays local.
+- Settings > Features > Tap diagnostics, off by default, lists button and
+  tap candidates on System status with an export. It needs Biometrics and
+  does not trigger actions. Button records alone do not prove a cover tap
+  or a temperature change.
+- Settings > Features > Cooling warning, off by default, reports when
+  measured water keeps warming while cooling is requested. It needs
+  Biometrics and does not send a hardware command. The warning is a sensor
+  observation, not a diagnosis of a failed component.
+
+### Sleep data and retention
+
+- The RAW reader now reads every record in bundled payloads and keeps
+  incomplete tails for the next pass. After a corrupt record, the live
+  reader finds the next complete record and logs the skipped bytes instead
+  of retrying the same offset until a newer file appears. It does not skip
+  a partial record still being written at the live file's end.
+- Settings > Features > Low-disk protection is on by default and checked
+  daily, even with Biometrics off. Below 150 MiB free, it deletes the oldest
+  detailed vitals in bounded batches, aiming for 16 MiB of reusable SQLite
+  pages while keeping at least the last two nights of detail per side.
+  It saves each night's vitals summary before deleting any of its detail.
+  Sleep records, scores and movement are kept. Pruning does not shrink the
+  database file or run VACUUM.
+- Settings > Features > Prune detail after 30 days is off by default. It
+  deletes detailed vitals older than 30 days with the same recent-night
+  protection and saved summaries. The Sleep page uses those summaries when
+  detail is gone. Deleted detail cannot be restored by rollback; turning
+  either switch off stops future deletions. See
+  [metrics retention](docs/METRICS_RETENTION.md) for the limits.
+- `/api/metrics/sleep` and `/api/metrics/vitals/summary` now default to the
+  last 90 days when no range is given, instead of reading every recorded
+  night. Explicit ranges and older-week browsing still work, and the app
+  keeps the latest recording visible while a newer night is being analysed.
+
+### System status
+
+- System status now warns when clock synchronization is unavailable or the
+  clock is not synchronized. Schedules still arm once the system year is
+  plausible, so the warning does not stop jobs from running.
+- The daily prime now checks the Pod's priming state after 30 seconds and
+  reports a failure on its status row if priming was not confirmed.
+- Status polls within 15 seconds share one snapshot, measured with a
+  monotonic clock. The status check writes stream health to disk only when
+  it changes, reducing work from integrations that poll frequently.
+
+### Integrations
+
+- Legacy single-`alarm` schedule writes now edit only the first alarm and
+  preserve later alarms, instead of replacing the day's whole list.
+- The new [integration guide](docs/INTEGRATIONS.md) covers Home Assistant,
+  Homebridge and scripts, including client compatibility limits, request
+  shapes and Rhythms falling back after a weekly-schedule write. It explains
+  how to turn off Homebridge's keepAlive, which resets the Pod's scheduled
+  off timer to 12 hours. Compatibility checks use source inspection and
+  local route tests, not live integration or hardware sessions.
+
+### Adjustable base
+
+- Adjustable-base parsing now strips bracketed tags and MAC addresses from
+  `bluetoothctl` lines before reading notification bytes. Checked in tests;
+  the base controls remain untested on a physical base.
+
+### Docs
+
+- The protocol notes now distinguish the app's temperature convention from
+  fourteen firmware level-to-target pairs observed in my Pod 5's offline
+  captures. They also record bundled RAW shapes, missing readings, buttons,
+  socket framing, alarm and recovery reports, mixed hardware and conflicting
+  generation thresholds. Reports from other owners remain marked as
+  unverified here; detection thresholds do not change.
+
+### Credits
+
+- Cooling warning thresholds follow ideas from GoogleBot42/podd, reimplemented
+  without copying code ([first change](https://github.com/GoogleBot42/podd/commit/3268bdbe379211c6b0e4c5fb88ef25d8e16b8560),
+  [follow-up](https://github.com/GoogleBot42/podd/commit/ed91118e7d92573dad5b3ae7b16e3ddb98a2cfa7)).
+  The prime check and per-side dismissal latch also follow that fork's
+  ideas ([prime check](https://github.com/GoogleBot42/podd/commit/cc0eaea),
+  [dismissal latch](https://github.com/GoogleBot42/podd/commit/e36e4d4)).
+- RAW recovery follows ideas from
+  [onemec/free-sleep](https://github.com/onemec/free-sleep/commit/e3511ab096554a6d60a83e00f69c1a8c26325dc8),
   [onemec's follow-up](https://github.com/onemec/free-sleep/commit/c5a5dafd5c6eda6035f513695524617d83e446dd)
-  and [SFenton/free-sleep](https://github.com/SFenton/free-sleep/commit/f768fc807d8ecd90e4ad8253e1c74229ddd5be58).
-
-### Features
-
-- Low-disk protection runs daily and is on by default. Below 150 MiB free,
-  it deletes the oldest detailed vitals in batches until 16 MiB of SQLite
-  pages can be reused, keeping at least the last two nights of detail.
-  Age-based pruning is a separate opt-in switch, off by default, that deletes
-  detailed vitals older than 30 days. Both preserve nightly vitals summaries,
-  sleep records, scores and movement. Settings > Features explains each
-  switch. Deleted detail cannot be restored. Pruning stops database growth
-  by reusing pages, it does not shrink the file or run VACUUM. Based on an
-  idea from [jmakes/free-sleep](https://github.com/jmakes/free-sleep/commit/8769af4161d73bbf8afdb1747b8b81358dc5eaa8).
-- Added integration guidance and local API contract tests for
+  and [SFenton/free-sleep](https://github.com/SFenton/free-sleep/commit/f768fc807d8ecd90e4ad8253e1c74229ddd5be58),
+  reimplemented here.
+- Retention tiers and local hostname support follow ideas from jmakes/free-sleep
+  ([retention](https://github.com/jmakes/free-sleep/commit/8769af4161d73bbf8afdb1747b8b81358dc5eaa8),
+  [hostnames](https://github.com/jmakes/free-sleep/commit/407814ca88bf81cbea5751bd85df5d56ec5d8dd7)).
+- The replacement-alarm approach follows caseyWebb's Pod 3 report in
+  [throwaway31265/free-sleep issue 54](https://github.com/throwaway31265/free-sleep/issues/54).
+  The pattern restriction follows caseyWebb's
+  [rise report](https://github.com/throwaway31265/free-sleep/issues/55) and
+  [LiamSnow/opensleep's mixed-cover notes](https://github.com/LiamSnow/opensleep/issues/12).
+- Integration guidance covers
   [Mrtenz/hass-free-sleep](https://github.com/Mrtenz/hass-free-sleep/commit/ddf0c5e),
   [DaSonOfPoseidon/free-sleep-ha](https://github.com/DaSonOfPoseidon/free-sleep-ha/commit/b390441),
   [NylonDiamond/free-sleep-hacs](https://github.com/NylonDiamond/free-sleep-hacs/commit/d6328cc)
   and [caseyWebb/homebridge-free-sleep](https://github.com/caseyWebb/homebridge-free-sleep/commit/8f92a83).
-  Status polls share a 15-second snapshot and write service health only
-  when it changes. Sleep reads default to 90 days; explicit ranges and
-  older-week browsing still work.
-- Documented how to disable Homebridge's keepAlive, which resets
-  Nightstand's firmware off timer to 12 hours. Based on
+  The keepAlive warning comes from
   [caseyWebb's implementation](https://github.com/caseyWebb/homebridge-free-sleep/blob/8f92a83/src/pod/keepAlive.ts).
-- Legacy single-alarm schedule writes now edit only the first alarm and
-  preserve later alarms. Integration-driven weekly edits still cause
-  Rhythms to fall back to the weekly schedule; the integration guide
-  explains how to avoid that.
-
-### Docs
-
-- Expanded the protocol notes with Pod 5 RAW observations, alarm and recovery
-  reports, mixed hardware and unconfirmed generation thresholds.
-
-### Credits
-
-- Refined @Geczy's base-control credit with main-branch driver and angle-map
-  links and the HTTP route, app API client and four-tap action.
+- The migration compatibility checks cover shapes from
+  [EpicPi/free-sleep](https://github.com/EpicPi/free-sleep/commit/bc7b63a2de44c4dfe7c8ee4631b92cf54996da6c)
+  and [Geczy/free-sleep](https://github.com/Geczy/free-sleep/commit/98edcf28cbaaa2566ea7906a3d5b3f4ad1e5defb).
+  The cron and service checks cover Geczy's installer
+  ([firewall jobs](https://github.com/Geczy/free-sleep/commit/3bbd5708d5ada6ac3a0fac5364eab838393786c2),
+  [ambient-light service](https://github.com/Geczy/free-sleep/commit/fa81f92430314de60cb31e662b4bda4041bd2229)).
+- The SFTP change comes from
+  [onemec/free-sleep](https://github.com/onemec/free-sleep/commit/b47c07301e9fffccca674a818e64cd9793b0c5b3).
+- The prebuilt-image credential check follows
+  [GoogleBot42/podd's research notes](https://github.com/GoogleBot42/podd/blob/main/docs/research/connectivity-and-diff.md).
+- Outbound rejection follows
+  [M4v3R1cK-dev/free-sleep](https://github.com/M4v3R1cK-dev/free-sleep/commit/783291fe9e70d7afb5c2dd51926bfef4bbdcd0b9).
+  The IPv6 gap was described in
+  [throwaway31265/free-sleep pull request 60](https://github.com/throwaway31265/free-sleep/pull/60).
+- Base output tag parsing restores Geczy/free-sleep's
+  [original expression](https://github.com/Geczy/free-sleep/commit/32ace15b5c391db0905dcff209abd2d0c7a0d83d).
+  The README now links the main-branch copies of Geczy's
+  [driver](https://github.com/Geczy/free-sleep/commit/74d6439c0fffbd634e3b84ec054cb52d741eddab)
+  and [angle maps](https://github.com/Geczy/free-sleep/commit/fccb7916fbf3f8f1e0da4324de57bdf1a1fe12a4)
+  credited in 3.6.1, and credits the
+  [preset integration](https://github.com/Geczy/free-sleep/commit/c17cb0866489889b2230f698e99eb74184c15623),
+  including the HTTP route, app API client and four-tap base action.
 
 ## [3.6.1] - 2026-10-07
 
