@@ -12,6 +12,7 @@ import servicesDB from '../db/services.js';
 import reboot from './reboot.js';
 import { rebootClock } from './rebootTime.js';
 import { OperationCheckError, PrivilegedCommandError } from './privilegedCommand.js';
+import { runMetricsRetention } from './runMetricsRetention.js';
 
 
 const scheduleRebootJob = (onHour: number, onMinute: number, timeZone: TimeZone) => {
@@ -57,6 +58,7 @@ const scheduleCalibrationJob = (onHour: number, onMinute: number, timeZone: Time
   const time = `${String(onHour).padStart(2,'0')}:${String(onMinute).padStart(2,'0')}`;
   logger.debug(`Scheduling daily calibration job at ${time} for ${side}`);
   schedule.scheduleJob(`daily-calibration-${time}-${side}`, dailyRule, async () => {
+    if (side === 'left') await runMetricsRetention();
     await servicesDB.read();
     if (!servicesDB.data.biometrics.enabled) {
       logger.debug('Not executing calibration job, biometrics is disabled');

@@ -32,7 +32,7 @@ import { useRhythmsState } from '@api/rhythms';
 import useAnalyzeSleep from '@lib/useAnalyzeSleep';
 import { SLEEP_ANALYSIS_HOUR, SLEEP_ANALYSIS_MINUTE } from '../../../../../server/src/sleepAnalysisSchedule';
 
-type MetricRow = { key: VitalsMetric; label: string; unit: string; summary: keyof VitalsSummary };
+type MetricRow = { key: VitalsMetric; label: string; unit: string; summary: keyof NonNullable<VitalsSummary['retained']> };
 
 const METRICS: ReadonlyArray<MetricRow> = [
   { key: 'heart_rate', label: 'Average heart rate', unit: 'bpm', summary: 'avgHeartRate' },
@@ -55,6 +55,7 @@ function NightVitals({ record, side, timeZone, biometricsV2 }: {
   const metric = requested && !metrics.some(item => item.key === requested) ? metrics[0].key : requested;
   const query = { side, startTime: record.entered_bed_at, endTime: record.left_bed_at };
   const { data: vitals, isPending, isError, refetch } = useVitalsRecords(query);
+  const { data: nightSummary } = useVitalsSummary(query);
   const { data: weekSummary } = useVitalsSummary({
     side, startTime: moment.tz(record.left_bed_at, timeZone).subtract(7, 'days').toISOString(), endTime: record.left_bed_at,
   });
@@ -74,7 +75,8 @@ function NightVitals({ record, side, timeZone, biometricsV2 }: {
       </Typography>
       { metrics.map((item, index) => {
         const points = metricPoints[index];
-        const value = points.length ? points.reduce((sum, point) => sum + point.value, 0) / points.length : undefined;
+        const value = nightSummary?.retained?.[item.summary]
+          ?? (points.length ? points.reduce((sum, point) => sum + point.value, 0) / points.length : undefined);
         return (
           <Accordion
             key={ item.key }
@@ -104,7 +106,10 @@ function NightVitals({ record, side, timeZone, biometricsV2 }: {
                     timeZone={ timeZone }
                     startTime={ record.entered_bed_at }
                     endTime={ record.left_bed_at }/>
-                ) : <Typography color="text.secondary">No { item.label.toLowerCase() } estimate for this recording.</Typography> }
+                ) : <Typography color="text.secondary">
+                  { nightSummary?.retained ? 'Detailed measurements were pruned. The nightly average is preserved.'
+                    : `No ${item.label.toLowerCase()} estimate for this recording.` }
+                </Typography> }
               </ErrorBoundary>
             </AccordionDetails>
           </Accordion>

@@ -1000,8 +1000,19 @@ and wherever an estimate failed its quality check.
 
 - Returns summary statistics for vitals over a range.
 - Query parameters, all optional: `side`, `startTime` and `endTime`
-  (ISO 8601). Without a range it summarizes every stored row. A malformed
-  value returns `400`.
+  (ISO 8601). When both time bounds are missing, it summarizes the last
+  90 days, ending now. A single bound leaves the other end unbounded. A
+  malformed value returns `400`.
+- An exact recorded night uses its retained summary after detail pruning.
+  Larger ranges combine fully enclosed, non-overlapping retained nights with
+  remaining detail. Arbitrary slices within a pruned night cannot be rebuilt.
+- Retained nights also return optional `retained.avgHeartRate` and
+  `retained.avgBreathingRate`, the rounded positive-only averages displayed
+  by the app. The breathing value uses `resp_rate`. The ordinary summary
+  fields keep their existing filters and rounding.
+- Retention never deletes nightly summaries, sleep records, scores or
+  movement. See [Metrics retention](../docs/METRICS_RETENTION.md) for the
+  two settings and the limits of reusable database space.
 - `avgHRV` averages only `hrv` values from 30 to 120.
 - `avgBreathingRate` averages `breathing_rate` values from 5 to 20 with New
   sleep tracking off. With it on, it averages `resp_rate`, so nights without

@@ -16,6 +16,23 @@ is a hard fork; for the history of the projects it descends from, see
   stepped from the same read's target and the second write undid the first.
   Seen on a Pod 4 hub with a Pod 5 cover by @2-X, where the newer host
   firmware reports a held cover button as a tap.
+- The live RAW reader recovers after a corrupt record when a complete later
+  record is available, logs the skipped bytes and retries partial live tails.
+  Ideas from [onemec/free-sleep](https://github.com/onemec/free-sleep/commit/e3511ab096554a6d60a83e00f69c1a8c26325dc8),
+  [onemec's follow-up](https://github.com/onemec/free-sleep/commit/c5a5dafd5c6eda6035f513695524617d83e446dd)
+  and [SFenton/free-sleep](https://github.com/SFenton/free-sleep/commit/f768fc807d8ecd90e4ad8253e1c74229ddd5be58).
+
+### Features
+
+- Low-disk protection runs daily and is on by default. Below 150 MiB free,
+  it deletes the oldest detailed vitals in batches until 16 MiB of SQLite
+  pages can be reused, keeping at least the last two nights of detail.
+  Age-based pruning is a separate opt-in switch, off by default, that deletes
+  detailed vitals older than 30 days. Both preserve nightly vitals summaries,
+  sleep records, scores and movement. Settings > Features explains each
+  switch. Deleted detail cannot be restored. Pruning stops database growth
+  by reusing pages, it does not shrink the file or run VACUUM. Based on an
+  idea from [jmakes/free-sleep](https://github.com/jmakes/free-sleep/commit/8769af4161d73bbf8afdb1747b8b81358dc5eaa8).
 
 ## [3.6.1] - 2026-10-07
 

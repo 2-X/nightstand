@@ -36,4 +36,5 @@ export type VitalsSummary = {
   maxHeartRate: number;
   avgHRV: number;
   avgBreathingRate: number;
+  retained?: { avgHeartRate: number; avgBreathingRate: number };
 };

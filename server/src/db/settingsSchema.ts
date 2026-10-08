@@ -105,6 +105,8 @@ export const defaultFeatures = {
   firmwareHealth: false,
   tapDiagnostics: false,
   coolingWarning: false,
+  metricsRetention: false,
+  metricsLowDiskProtection: true,
 } as const;
 const FeaturesSchema = z.object({
   sleepScore: z.boolean(),
@@ -118,6 +120,8 @@ const FeaturesSchema = z.object({
   firmwareHealth: z.boolean(),
   tapDiagnostics: z.boolean(),
   coolingWarning: z.boolean(),
+  metricsRetention: z.boolean(),
+  metricsLowDiskProtection: z.boolean(),
 }).strict();
 
 export const SettingsSchema = z.object({

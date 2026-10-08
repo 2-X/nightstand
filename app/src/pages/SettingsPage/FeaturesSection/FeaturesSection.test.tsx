@@ -16,6 +16,28 @@ const NEW_SLEEP_TRACKING_CHECKED = 'Tells the two sides apart with the bed\'s ca
   + 'Heart rate and breathing use newer estimates.';
 
 describe('FeaturesSection', () => {
+  it('defaults to low-disk protection, keeps age pruning opt-in and saves each separately', async () => {
+    const posted: unknown[] = [];
+    server.use(http.post('*/api/settings', async ({ request }) => {
+      posted.push(await request.json());
+      return HttpResponse.json({});
+    }));
+    const { user } = renderWithProviders(<FeaturesSection />);
+    const lowDisk = await screen.findByRole('switch', { name: 'Low-disk protection' });
+    const age = screen.getByRole('switch', { name: 'Prune detail after 30 days' });
+    expect(lowDisk).toBeChecked();
+    expect(age).not.toBeChecked();
+    expect(screen.getByText(/Below 150 MiB/)).toHaveTextContent('does not shrink');
+    expect(screen.getByText(/Below 150 MiB/)).toHaveTextContent('last 2 nights');
+    expect(screen.getByText(/Opt-in/)).toHaveTextContent('Never deletes nightly summaries, sleep records or scores');
+    await user.click(age);
+    await waitFor(() => expect(age).toBeEnabled());
+    await user.click(lowDisk);
+    expect(posted).toEqual([
+      { features: { metricsRetention: true } }, { features: { metricsLowDiskProtection: false } },
+    ]);
+  });
+
   it('posts the flag change when a feature toggle is switched', async () => {
     let posted: unknown;
     server.use(

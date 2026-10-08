@@ -1,10 +1,13 @@
+import type { Prisma } from '@prisma/client';
 import { prisma } from './prisma.js';
 
 export type MovementRow = { id: number; timestamp: number; side: string; total_movement: number };
 
 // Movement is stored with fractions.
-export async function loadMovement(side?: string, startUnix?: number, endUnix?: number): Promise<MovementRow[]> {
-  return prisma.movement.findMany({
+export async function loadMovement(
+  side?: string, startUnix?: number, endUnix?: number, client: Pick<Prisma.TransactionClient, 'movement'> = prisma,
+): Promise<MovementRow[]> {
+  return client.movement.findMany({
     where: { side, timestamp: { gte: startUnix, lte: endUnix } },
     orderBy: { timestamp: 'asc' },
   });

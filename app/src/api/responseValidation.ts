@@ -209,6 +209,7 @@ const responseSchemas: Record<string, z.ZodTypeAny> = {
     maxHeartRate: seconds,
     avgHRV: seconds,
     avgBreathingRate: seconds,
+    retained: z.object({ avgHeartRate: seconds, avgBreathingRate: seconds }).optional(),
   }),
   '/metrics/sleep-stages': z.object({
     active: z.boolean(), epochs: z.array(z.object({ startUnix: seconds, endUnix: seconds, stage: z.enum(['awake', 'rem', 'light', 'deep']) })),

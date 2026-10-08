@@ -34,6 +34,7 @@ mock.module(new URL('../routes/deviceStatus/updateDeviceStatus.js', import.meta.
   namedExports: { updateDeviceStatus: async () => {} },
 });
 mock.module(new URL('./calibrateSensors.js', import.meta.url).href, { namedExports: { executeCalibrateSensors: () => {} } });
+mock.module(new URL('./runMetricsRetention.js', import.meta.url).href, { namedExports: { runMetricsRetention: async () => {} } });
 const { default: reboot } = await import('./reboot.js');
 const { schedulePrimingRebootAndCalibration } = await import('./primeScheduler.js');
 
