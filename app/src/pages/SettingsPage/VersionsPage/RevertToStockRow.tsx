@@ -5,7 +5,8 @@ import {
   DialogContentText, DialogTitle, Stack, Typography,
 } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import { useReleases, selectUpstreamTarget, type UpstreamSwitchTarget } from '@api/releases.ts';
+import { useReleases, selectSwitchTarget } from '@api/releases.ts';
+import type { UpstreamSwitchRecord } from '@api/updateSchema.ts';
 import { postSwitchToUpstream } from '@api/update.ts';
 import { useUpdateProgress } from '@api/useUpdateProgress.ts';
 import InUseConfirm from '../../../components/InUseConfirm';
@@ -17,12 +18,12 @@ type Props = {
 
 export default function RevertToStockRow({ runningVersion }: Props) {
   const [open, setOpen] = useState(false);
-  const [confirmed, setConfirmed] = useState<UpstreamSwitchTarget>();
+  const [confirmed, setConfirmed] = useState<UpstreamSwitchRecord>();
   const titleId = useId();
   const { phase, error, inUse, recordedOutcome, start, reset } = useUpdateProgress(runningVersion, undefined, 'switch');
   const { data: manifest, isLoading } = useReleases();
-  const target = selectUpstreamTarget(manifest);
-  const targetUnchanged = confirmed !== undefined && selectUpstreamTarget(manifest, confirmed) !== undefined;
+  const target = selectSwitchTarget(manifest);
+  const targetUnchanged = confirmed !== undefined && selectSwitchTarget(manifest, confirmed) !== undefined;
 
   const revert = () => {
     if (!confirmed || !targetUnchanged) return;
@@ -73,9 +74,9 @@ export default function RevertToStockRow({ runningVersion }: Props) {
                 Schedules and alarms pause during restart.
               </Typography>
               <Typography variant="body2" sx={ { mb: 2 } }>
-                { confirmed
+                { confirmed && 'version' in confirmed
                   ? `Installs upstream free-sleep ${confirmed.version}, commit ${confirmed.commit}, validated ${confirmed.date}.`
-                  : 'Switch to upstream installs the pinned pre-3.0 commit ca7dc543, not upstream 3.0.3.'
+                  : `Switch to upstream installs the pinned pre-3.0 commit ${confirmed?.commit ?? 'ca7dc543'}, not upstream 3.0.3.`
                     + ' The full switch has not been tested on hardware. Support for switching to 3.0.x is being prepared.' }
               </Typography>
               { !targetUnchanged && <Alert severity="warning" sx={ { mb: 2 } }>

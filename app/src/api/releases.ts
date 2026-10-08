@@ -3,6 +3,10 @@ import axios from 'axios';
 import semver from 'semver';
 import { z } from 'zod';
 import currentServerInfo from '../../../server/src/serverInfo.json';
+import { LegacyUpstreamSwitchTargetSchema, UpstreamSwitchTargetSchema, type UpstreamSwitchTarget,
+  type UpstreamSwitchRecord } from './updateSchema.ts';
+
+export { UpstreamSwitchTargetSchema, type UpstreamSwitchTarget } from './updateSchema.ts';
 // Keep the release manifest independent of the full device-settings schema:
 // the small updater overlay also runs against upstream settings.
 const RELEASE_CHANNELS = ['stable', 'beta'] as const;
@@ -30,17 +34,6 @@ const BundleReleaseSchema = z.object({
 
 const ReleaseSchema = z.discriminatedUnion('kind', [AgentReleaseSchema, BundleReleaseSchema]);
 
-export const UpstreamSwitchTargetSchema = z.object({
-  commit: z.string().regex(/^[0-9a-f]{40}$/),
-  version: z.string().regex(/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/),
-  treeSha256: z.string().regex(/^[0-9a-f]{64}$/),
-  date: z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/).refine(value => {
-    const date = new Date(`${value}T00:00:00Z`);
-    return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value && !value.startsWith('0000');
-  }),
-});
-export type UpstreamSwitchTarget = z.infer<typeof UpstreamSwitchTargetSchema>;
-
 export const ReleasesManifestSchema = z.object({
   channels: z.array(z.string()),
   releases: z.array(z.unknown()).transform(entries => entries.filter(entry => {
@@ -52,9 +45,9 @@ export const ReleasesManifestSchema = z.object({
   // The upstream commit "Switch to upstream" installs, recorded once the
   // switch has been checked with it. A malformed record is dropped rather
   // than taking the release list down with it.
-  upstreamSwitch: z.object({ commit: z.string(), date: z.string(), treeSha256: z.string().optional() })
+  upstreamSwitch: LegacyUpstreamSwitchTargetSchema
     .optional().catch(undefined),
-  upstreamSwitchV2: UpstreamSwitchTargetSchema.optional().catch(undefined),
+  upstreamSwitchV2: UpstreamSwitchTargetSchema.optional().nullable().catch(null),
 });
 
 export type Release = z.infer<typeof ReleaseSchema>;
@@ -70,6 +63,17 @@ export const selectUpstreamTarget = (
     if (!parsed.success || Object.keys(target).some(key =>
       target[key as keyof UpstreamSwitchTarget] !== parsed.data[key as keyof UpstreamSwitchTarget])) return undefined;
   }
+  return target;
+};
+
+export const selectSwitchTarget = (
+  manifest: ReleasesManifest | undefined, confirmed?: UpstreamSwitchRecord,
+): UpstreamSwitchRecord | undefined => {
+  if (!manifest || manifest.upstreamSwitchV2 === null) return undefined;
+  const target = selectUpstreamTarget(manifest) ?? manifest.upstreamSwitch;
+  if (!target) return undefined;
+  if (confirmed && (Object.keys(target).length !== Object.keys(confirmed).length
+    || Object.keys(target).some(key => target[key as keyof typeof target] !== confirmed[key as keyof typeof confirmed]))) return undefined;
   return target;
 };
 

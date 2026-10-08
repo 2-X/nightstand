@@ -22,6 +22,7 @@ ZIP=/home/dac/free-sleep-revert.zip
 BACKUPS=/persistent/free-sleep-backups
 DATABASE_BACKUPS=/persistent/free-sleep-database-backups
 SQLITE_SAFETY="$(dirname "${BASH_SOURCE[0]}")/sqlite-safety.py"
+UPSTREAM_TARGET_HELPER="$(dirname "${BASH_SOURCE[0]}")/upstream_target.py"
 PRUNE_SNAPSHOTS="$(dirname "${BASH_SOURCE[0]}")/prune_db_snapshots.sh"
 KEEP_BACKUPS=5
 NPM=/home/dac/.volta/bin/npm
@@ -305,6 +306,13 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 [ ! -f /persistent/free-sleep-data/update-swap.json ] || fail "an earlier update swap still needs recovery; live install untouched"
 
+# Read the confirmed target before the bed-use helper consumes the request.
+CONFIRMED_TARGET=""
+if [ -f "/persistent/free-sleep-data/operation-request.json" ]; then
+  CONFIRMED_TARGET=$(python3 -B "$UPSTREAM_TARGET_HELPER" --request "/persistent/free-sleep-data/operation-request.json") \
+    || fail "could not read the confirmed upstream target; live install untouched"
+fi
+
 # Bed-in-use helpers, kept identical in update.sh, rollback_pod.sh and
 # switch-to-upstream.sh. The app writes REQUEST_FILE as it starts one of them.
 # A request the owner did not confirm while the bed was in use is checked
@@ -388,6 +396,13 @@ open_wan
 # read and records no such commit; an unreadable list or a malformed record
 # stops the switch, since the app may already have promised the checked one.
 SWITCH_MANIFEST=$(curl -fsSL --max-time 20 "$SWITCH_RELEASES_URL") || SWITCH_MANIFEST=""
+if [ -n "$CONFIRMED_TARGET" ]; then
+  SWITCH_PIN=$(printf '%s' "$SWITCH_MANIFEST" | python3 -B "$UPSTREAM_TARGET_HELPER" - --confirmed-json "$CONFIRMED_TARGET") \
+    || fail "the confirmed upstream target is no longer available; live install untouched"
+  case "$SWITCH_PIN" in
+    v2\ *) fail "this target requires the transactional switch runner, which is not available in this release; live install untouched" ;;
+  esac
+else
 SWITCH_PIN=$(printf '%s' "$SWITCH_MANIFEST" | python3 -c '
 import json, re, sys
 data = json.load(sys.stdin)
@@ -407,6 +422,7 @@ if not isinstance(digest, str) or (digest and not re.fullmatch(r"[0-9a-f]{64}", 
     sys.exit(1)
 print("pin", commit, digest)' 2>/dev/null) \
   || fail "could not read the release list to find the checked upstream version; live install untouched"
+fi
 SWITCH_COMMIT=""
 SWITCH_DIGEST=""
 read -r _ SWITCH_COMMIT SWITCH_DIGEST _ <<< "$SWITCH_PIN" || true
@@ -432,6 +448,7 @@ if [ -n "$SWITCH_COMMIT" ]; then
   if [ -z "$SWITCH_DIGEST" ]; then
     say "No published checksum for upstream commit $SWITCH_COMMIT; installing without one"
   elif [ ! -f "$LIVE/scripts/tree_digest.py" ]; then
+    [ -z "$CONFIRMED_TARGET" ] || fail "cannot verify the confirmed upstream checksum; live install untouched"
     say "This install cannot check checksums yet; installing without one"
   else
     SWITCH_ACTUAL=$(python3 "$LIVE/scripts/tree_digest.py" "$STAGE") \

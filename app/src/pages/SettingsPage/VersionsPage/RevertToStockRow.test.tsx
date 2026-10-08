@@ -73,13 +73,23 @@ describe('RevertToStockRow when the bed may be in use', () => {
 });
 
 describe('RevertToStockRow target confirmation', () => {
-  it('disables the new switch without V2 and explains the legacy pin', async () => {
+  it.each(['legacy only', 'legacy plus V2'])('sends the confirmed record for a %s manifest', async variant => {
+    const releases = variant === 'legacy only'
+      ? { channels: ['stable'], releases: [], upstreamSwitch: manifest.upstreamSwitch } : manifest;
+    const expected = variant === 'legacy only' ? manifest.upstreamSwitch : target;
     server.use(http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json',
-      () => HttpResponse.json({ channels: ['stable'], releases: [], upstreamSwitch: manifest.upstreamSwitch })));
+      () => HttpResponse.json(releases)));
+    const bodies = serveInUse('*/update/switch-to-upstream', []);
     const { user } = await openDialog();
-    expect(screen.getByText(/pinned pre-3.0 commit ca7dc543/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Switch to upstream free-sleep' })).toBeDisabled();
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    if (variant === 'legacy only') {
+      expect(screen.getByText(/pinned pre-3.0 commit ca7dc543/)).toBeInTheDocument();
+      expect(screen.getByText(/not been tested on hardware/)).toBeInTheDocument();
+    } else {
+      expect(screen.getByText(new RegExp(target.commit))).toBeInTheDocument();
+    }
+    expect(screen.getByRole('button', { name: 'Switch to upstream free-sleep' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Switch to upstream free-sleep' }));
+    await waitFor(() => expect(bodies).toEqual([{ target: expected }]));
   });
 
   it.each(['unavailable', 'malformed'])('sends no switch request when the manifest is %s', async state => {

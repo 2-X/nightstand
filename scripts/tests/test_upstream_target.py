@@ -60,6 +60,58 @@ class TargetTests(unittest.TestCase):
                     self.assertNotEqual(result.returncode, 0)
                     self.assertEqual(result.stdout, '')
 
+class SwitchScriptContractTests(unittest.TestCase):
+    def run_preflight(self, manifest, request):
+        scripts = Path(__file__).resolve().parents[1]
+        source = (scripts / 'switch-to-upstream.sh').read_text()
+        target_block = source[source.index('# Read the confirmed target'):source.index('# Bed-in-use helpers')]
+        request_block = target_block + source[source.index('\nREQUEST_FILE=') + 1:source.index('# Tests can ask')]
+        selection = source[source.index('SWITCH_MANIFEST=$('):source.index('say "Downloading upstream')]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request_path = root / 'operation-request.json'
+            if request is not None:
+                request_path.write_text(json.dumps(request))
+            manifest_path = root / 'manifest.json'
+            manifest_path.write_text(json.dumps(manifest))
+            request_block = request_block.replace('/persistent/free-sleep-data/operation-request.json', str(request_path))
+            shell = '''set -uo pipefail
+SWITCH_RELEASES_URL=fixture
+UPSTREAM_ZIP_URL=main
+say() { echo "$*"; }
+fail() { echo "$*" >&2; exit 1; }
+curl() { cat "$MANIFEST_FIXTURE"; }
+''' + request_block + selection + '\nprintf "%s\\n" "$SWITCH_COMMIT" "$SWITCH_DIGEST" "$UPSTREAM_ZIP_URL"\n'
+            environment = dict(__import__('os').environ, MANIFEST_FIXTURE=str(manifest_path),
+                               UPSTREAM_TARGET_HELPER=str(scripts / 'upstream_target.py'))
+            return subprocess.run(['bash', '-c', shell], capture_output=True, text=True, env=environment)
+
+    def test_confirmed_legacy_record_is_used_with_or_without_v2(self):
+        for manifest in (FIXTURES[0]['manifest'], FIXTURES[1]['manifest']):
+            target = manifest['upstreamSwitch']
+            result = self.run_preflight(manifest, dict(source='app', confirmInUse=True, target=target))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(target['commit'], result.stdout)
+            self.assertIn(target['treeSha256'], result.stdout)
+
+    def test_changed_confirmation_refuses_instead_of_switching_to_another_record(self):
+        for target in (FIXTURES[1]['expected'], FIXTURES[1]['manifest']['upstreamSwitch']):
+            target = dict(target, commit='b' * 40)
+            result = self.run_preflight(FIXTURES[1]['manifest'], dict(source='app', target=target))
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertIn('live install untouched', result.stderr)
+
+    def test_v2_refuses_until_the_transactional_runner_is_available(self):
+        result = self.run_preflight(FIXTURES[1]['manifest'], dict(source='app', target=FIXTURES[1]['expected']))
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn('transactional switch runner', result.stderr)
+        self.assertIn('live install untouched', result.stderr)
+
+    def test_malformed_explicit_target_never_falls_back_to_legacy(self):
+        for target in (None, {}, dict(FIXTURES[1]['expected'], commit='main')):
+            result = self.run_preflight(FIXTURES[1]['manifest'], dict(source='app', target=target))
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+
 
 if __name__ == '__main__':
     unittest.main()
