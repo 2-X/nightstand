@@ -6,6 +6,7 @@ import { postAlarm } from './alarm';
 import { postServices } from './services';
 import { postSwitchToUpstream, postRollback, postUpdate } from './update';
 import { sleepStagesQueryOptions } from './sleepStages';
+import targetFixtures from '../../../scripts/tests/fixtures/upstream_targets.json';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -19,7 +20,7 @@ describe('request timeouts', () => {
     ['jobs', () => postJobs(['analyzeSleepLeft'])],
     ['update', () => postUpdate()],
     ['rollback', () => postRollback()],
-    ['switch to upstream', () => postSwitchToUpstream()],
+    ['switch to upstream', () => postSwitchToUpstream({ target: targetFixtures[1].expected! })],
   ])('lets the %s request run longer than the default', async (_name, send) => {
     const post = vi.spyOn(api, 'post').mockResolvedValue({ data: undefined });
     await send();
