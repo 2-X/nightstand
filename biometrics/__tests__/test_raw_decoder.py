@@ -51,6 +51,16 @@ def test_outer_truncation_can_be_retried(monkeypatch):
         assert len(list(decode_row(_read_raw_record(handle, with_sequence=True), 3))) == 2
 
 
+def test_envelope_inside_a_payload_is_corrupt():
+    swallowed = cbor2.dumps({'seq': 2, 'data': cbor2.dumps({'type': 'log', 'ts': 1})})
+    payload = cbor2.dumps({'type': 'log', 'ts': 0}) + swallowed
+    try:
+        list(decode_payload(payload, 1))
+    except ValueError:
+        return
+    raise AssertionError('an envelope inside a payload must be reported as corrupt')
+
+
 def test_unknown_objects_and_empty_payload():
     payload = cbor2.dumps('unknown') + cbor2.dumps({'type': 'log', 'ts': 1})
     assert list(decode_payload(payload, 2, 3))[0]['_firmware']['index'] == 1

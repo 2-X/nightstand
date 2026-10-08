@@ -17,9 +17,12 @@ def decode_payload(payload, sequence=None, received_at=None):
     for index in range(len(payload)):
         try:
             record = decoder.decode()
-        except cbor2.CBORDecodeError:
+        except Exception:
             # Keep the complete prefix when the remaining inner bytes are invalid.
             break
+        if isinstance(record, dict) and 'type' not in record and {'seq', 'data'} <= record.keys():
+            # A whole envelope inside a payload means a wrong length swallowed the next record.
+            raise ValueError('RAW envelope inside a payload')
         if isinstance(record, dict):
             record['_firmware'] = {'sequence': sequence, 'index': index, 'receivedAt': received_at}
             if sequence is not None:

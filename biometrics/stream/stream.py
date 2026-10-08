@@ -55,7 +55,7 @@ from presence.model import on_this_pod
 from presence.params import baselines_from_calibration, learned_levels, params_from_calibration
 from presence.sensors import TYPE_NAME_LENGTH, printable_type, read_cap, unknown_cap_type
 from stream_processor import LatestCap, StreamProcessor
-from load_raw_files import load_piezo_row, _read_raw_record
+from load_raw_files import load_piezo_row, _read_raw_record, _find_next_raw_record
 from service_health import update_health, update_sensor_temps, update_pump_health
 from pump_speed import PumpSpeed
 from raw_decoder import decode_row
@@ -68,6 +68,7 @@ latest_cap = LatestCap()
 # When the pump ran fast, from frzHealth frames, for the newer vitals.
 pump_speed = PumpSpeed()
 _pump_frame_warned = False
+_firmware_ingest_warning_at = None
 # A vitals switch that fails is retried every refresh; only the first failure is an error.
 _vitals_switch_failed = False
 # Capacitance presence runs only while capacitance records keep arriving, so a
@@ -304,10 +305,16 @@ def _put_latest(record):
 
 def _ingest_live_record(record, source='RAW') -> bool:
     """Hand a record on; True when it is a fresh sensor record."""
-    global _last_sensor_record
+    global _last_sensor_record, _firmware_ingest_warning_at
     if not isinstance(record, dict):
         return False
-    firmware_delivery.ingest(record, source)
+    try:
+        firmware_delivery.ingest(record, source)
+    except Exception as error:
+        now = time.monotonic()
+        if _firmware_ingest_warning_at is None or now - _firmware_ingest_warning_at >= 60:
+            _firmware_ingest_warning_at = now
+            logger.warning(f'Could not ingest firmware telemetry: {error}')
     kind = record.get('type')
     timestamp = record.get('ts')
     fresh = (kind in ('piezo-dual', 'capSense', 'capSense2', 'frzTemp', 'frzHealth', 'frzTherm', 'bedTemp', 'bedTemp2')
@@ -400,23 +407,28 @@ class LatestRawFileHandler(FileSystemEventHandler):
                     self.last_pos = self.latest_file_obj.tell()
                     continue  # empty placeholder record
 
-                for decoded_data in _decode_raw_row(data_bytes):
-                    _ingest_live_record(decoded_data)
+                decoded_records = list(_decode_raw_row(data_bytes))
 
-                # Update last read position
-                self.last_pos = self.latest_file_obj.tell()
-
-            except EOFError:
-                # Mid-record EOF means a partially written record; last_pos
-                # still points at its start, so the next pass retries it once
-                # the firmware finishes writing.
+            except (EOFError, ValueError, cbor2.CBORDecodeError) as error:
+                next_pos = _find_next_raw_record(self.latest_file_obj, self.last_pos)
+                if next_pos is not None:
+                    logger.warning(f'Skipped {next_pos - self.last_pos} bytes in {self.latest_file} '
+                                   f'at offset {self.last_pos} after RAW decode failure: {error}')
+                    self.last_pos = next_pos
+                    continue
+                # No complete later record: retry this offset after an append.
+                if not isinstance(error, EOFError):
+                    logger.error(f'Error reading record: {error}')
                 break
-            except Exception as e:
-                logger.error(f"Error reading record: {e}")
-                # Seek back to the last known good position so a transient
-                # bad read doesn't cascade.
+
+            try:
+                for decoded_data in decoded_records:
+                    _ingest_live_record(decoded_data)
+            except Exception as error:
+                logger.error(f'Error processing record: {error}')
                 self.latest_file_obj.seek(self.last_pos)
                 break
+            self.last_pos = self.latest_file_obj.tell()
 
 
 def process_biometrics(stop_event=None):

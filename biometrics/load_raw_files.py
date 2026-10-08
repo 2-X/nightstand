@@ -8,12 +8,14 @@ from typing import Optional
 import gc
 import sys
 import os
+import io
 from collections import Counter
 
 # Add the current directory to sys.path
 sys.path.append(os.getcwd())
 from data_types import *
 from get_logger import get_logger
+from raw_decoder import decode_payload
 from presence.detector import piezo_range
 from presence.piezo import piezo_layout
 from presence.sensors import FORMATS, read_cap, unknown_cap_type
@@ -78,6 +80,8 @@ def _read_raw_record(f, with_sequence=False):
     bs = f.read(1)
     if not bs:
         raise EOFError
+    if bs[0] >> 5 != 2:
+        raise ValueError('Expected data byte string')
     ai = bs[0] & 0x1f
     if ai <= 23:
         length = ai
@@ -98,12 +102,51 @@ def _read_raw_record(f, with_sequence=False):
         length = struct.unpack('>I', lb)[0]
     else:
         raise ValueError('Unsupported length encoding: %d' % ai)
+    # Check the live file's current end before allocating for a corrupt length.
+    payload_start = f.tell()
+    available = f.seek(0, io.SEEK_END) - payload_start
+    f.seek(payload_start)
+    if length > available:
+        raise EOFError
     data = f.read(length)
     if len(data) < length:
         raise EOFError
     if not data:
         return None  # empty placeholder record, caller should skip
     return {'seq': sequence, 'data': data} if with_sequence else data
+
+
+def _find_next_raw_record(handle, after):
+    """Find a complete record after a bad offset, leaving a live partial tail intact."""
+    header = b'\xa2\x63seq'
+    # Snapshot the end so a concurrent append is retried on the next pass.
+    end = os.fstat(handle.fileno()).st_size
+    offset = after + 1
+    while offset < end:
+        handle.seek(offset)
+        chunk = handle.read(min(65536, end - offset))
+        if not chunk:
+            break
+        index = chunk.find(header)
+        if index < 0:
+            offset += max(1, len(chunk) - len(header) + 1)
+            continue
+        candidate = offset + index
+        handle.seek(candidate)
+        try:
+            payload = _read_raw_record(handle)
+            if handle.tell() <= end:
+                # A payload may bundle several records; the first must be a typed record.
+                record = next(decode_payload(payload), None) if payload is not None else None
+                if (payload is None or (isinstance(record, dict)
+                        and isinstance(record.get('type'), str) and record['type'])):
+                    handle.seek(candidate)
+                    return candidate
+        except (EOFError, ValueError, cbor2.CBORDecodeError):
+            pass
+        offset = candidate + 1
+    handle.seek(after)
+    return None
 
 
 def get_current_files(folder_path: str):

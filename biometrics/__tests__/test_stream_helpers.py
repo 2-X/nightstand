@@ -677,6 +677,145 @@ class TestDeadProcessingThread(unittest.TestCase):
         watch.assert_called_once_with('/persistent')
 
 
+class TestRawFileRecovery(StreamHelpersTestCase):
+    def _ingested(self):
+        # The decoder adds envelope metadata; the recovery tests compare sensor fields.
+        return [{key: value for key, value in call.args[0].items() if key != '_firmware'}
+                for call in self.ingest.call_args_list]
+
+    def setUp(self):
+        super().setUp()
+        self.folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
+        self.path = os.path.join(self.folder, 'a.RAW')
+        self.frames = [recent_piezo(seq=sequence) for sequence in (1, 2)]
+        self.records = [cbor2.dumps({'seq': sequence, 'data': cbor2.dumps(frame)})
+                        for sequence, frame in enumerate(self.frames)]
+        patcher = unittest.mock.patch.object(stream, '_ingest_live_record')
+        self.ingest = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def handler(self, fixture):
+        with open(self.path, 'wb') as handle:
+            handle.write(fixture)
+        handler = stream.LatestRawFileHandler(self.folder)
+        self.addCleanup(lambda: handler.latest_file_obj.close())
+        return handler
+
+    def test_resyncs_corrupt_middle_header_and_logs_skipped_bytes(self):
+        corrupt = b'\xa2\x63bad header'
+        fixture = self.records[0] + corrupt + self.records[1]
+        handler = self.handler(fixture)
+        with self.assertLogs(stream.logger, 'WARNING') as logs:
+            handler.follow_latest_file()
+        self.assertEqual(self._ingested(), self.frames)
+        self.assertEqual(handler.last_pos, len(fixture))
+        self.assertTrue(any('Skipped %d bytes' % len(corrupt) in entry for entry in logs.output))
+
+    def test_resyncs_invalid_inner_cbor(self):
+        corrupt = cbor2.dumps({'seq': 7, 'data': b'\x1c'})
+        handler = self.handler(self.records[0] + corrupt + self.records[1])
+        handler.follow_latest_file()
+        self.assertEqual(self.ingest.call_count, 2)
+
+    def test_skips_invalid_decimal_payload_and_advances_the_follower(self):
+        corrupt = cbor2.dumps({'seq': 7, 'data': bytes.fromhex('c4 82 1b 7f ff ff ff ff ff ff ff 01')})
+        for gap in (b'', b'broken'):
+            with self.subTest(gap=gap):
+                self.ingest.reset_mock()
+                fixture = self.records[0] + gap + corrupt + self.records[1]
+                handler = self.handler(fixture)
+                handler.follow_latest_file()
+                handler.follow_latest_file()
+                self.assertEqual(self._ingested(), self.frames)
+                self.assertEqual(handler.last_pos, len(fixture))
+
+    def test_resyncs_to_a_complete_empty_sequence_marker(self):
+        marker = cbor2.dumps({'seq': 7, 'data': b''})
+        fixture = self.records[0] + b'broken' + marker
+        handler = self.handler(fixture)
+        handler.follow_latest_file()
+        self.assertEqual(handler.last_pos, len(fixture))
+        self.assertEqual(self.ingest.call_count, 1)
+        with open(self.path, 'ab') as handle:
+            handle.write(self.records[1])
+        handler.follow_latest_file()
+        self.assertEqual(self._ingested(), self.frames)
+
+    def test_rejects_false_matches_and_finds_a_header_across_the_scan_boundary(self):
+        false = cbor2.dumps({'seq': 7, 'data': cbor2.dumps(['not a record'])})
+        corrupt = b'broken' + false + b'x' * (65535 - len(false) - len(b'broken'))
+        wide = cbor2.dumps({'seq': 0x12345678, 'data': cbor2.dumps(self.frames[1])})
+        handler = self.handler(self.records[0] + corrupt + wide)
+        handler.follow_latest_file()
+        self.assertEqual(self._ingested(), self.frames)
+        self.assertEqual(handler.last_pos, len(self.records[0] + corrupt + wide))
+
+    def test_does_not_skip_a_corrupt_live_tail_to_an_incomplete_later_header(self):
+        handler = self.handler(self.records[0] + b'broken' + self.records[1][:-3])
+        handler.follow_latest_file()
+        self.assertEqual(handler.last_pos, len(self.records[0]))
+        with open(self.path, 'ab') as handle:
+            handle.write(self.records[1][-3:])
+        handler.follow_latest_file()
+        self.assertEqual(self.ingest.call_count, 2)
+
+    def test_resyncs_a_broken_length_that_reads_past_the_next_record(self):
+        corrupt = b'\xa2\x63seq\x01\x64data\x59\xff\xffbroken'
+        handler = self.handler(self.records[0] + corrupt + self.records[1])
+        handler.follow_latest_file()
+        self.assertEqual(self.ingest.call_count, 2)
+
+    def test_resyncs_when_a_wrong_length_swallows_the_next_record(self):
+        inner = cbor2.dumps(self.frames[0])
+        corrupt = cbor2.dumps({'seq': 7, 'data': inner + self.records[1]})
+        handler = self.handler(self.records[0] + corrupt)
+        handler.follow_latest_file()
+        self.assertEqual(self._ingested(), self.frames)
+
+    def test_keeps_partial_live_tail_and_reads_it_after_append(self):
+        fixture = self.records[0] + self.records[1][:-4]
+        handler = self.handler(fixture)
+        handler.follow_latest_file()
+        handler.follow_latest_file()
+        self.assertEqual(handler.last_pos, len(self.records[0]))
+        self.assertEqual(self.ingest.call_count, 1)
+        with open(self.path, 'ab') as handle:
+            handle.write(self.records[1][-4:])
+        handler.follow_latest_file()
+        self.assertEqual(self.ingest.call_count, 2)
+        self.assertEqual(handler.last_pos, sum(map(len, self.records)))
+
+    def test_keeps_live_tail_even_when_it_contains_an_invalid_header_match(self):
+        tail = b'bad\xa2\x63seq\x01\x64data\x41\xff'
+        handler = self.handler(self.records[0] + tail)
+        handler.follow_latest_file()
+        self.assertEqual(handler.last_pos, len(self.records[0]))
+        self.assertEqual(self.ingest.call_count, 1)
+
+    def test_switches_to_a_newer_file_after_a_partial_tail(self):
+        handler = self.handler(self.records[0] + self.records[1][:-4])
+        handler.follow_latest_file()
+        self.assertEqual(handler.last_pos, len(self.records[0]))
+        newer = os.path.join(self.folder, 'b.RAW')
+        with open(newer, 'wb') as handle:
+            handle.write(self.records[1])
+        later = os.path.getmtime(self.path) + 1
+        os.utime(newer, (later, later))
+        handler.on_created(types.SimpleNamespace(is_directory=False, src_path=newer))
+        handler.follow_latest_file()
+        self.assertEqual(self._ingested(), self.frames)
+        self.assertEqual(handler.latest_file, newer)
+        self.assertEqual(handler.last_pos, len(self.records[1]))
+
+    def test_a_processing_failure_does_not_resync_past_a_decoded_record(self):
+        handler = self.handler(b''.join(self.records))
+        self.ingest.side_effect = RuntimeError('processor failed')
+        handler.follow_latest_file()
+        self.assertEqual(handler.last_pos, 0)
+        self.assertEqual(self.ingest.call_count, 1)
+
+
 class TestRawFileCapRecords(CapPresenceTestCase):
     def test_the_file_watcher_stores_capsense2_and_queues_piezo(self):
         cap = recent_cap()
@@ -690,6 +829,23 @@ class TestRawFileCapRecords(CapPresenceTestCase):
         handler.latest_file_obj.close()
         self.assertEqual(self.latest.read()[0], int(cap['ts']))
         self.assertEqual(stream.piezo_record_queue.qsize(), 1)
+
+
+class TestFirmwareIngestIsolation(CapPresenceTestCase):
+    def test_delivery_failure_preserves_sensor_ingestion_and_limits_warnings(self):
+        cap = recent_cap()
+        with unittest.mock.patch.object(stream, '_firmware_ingest_warning_at', None), \
+                unittest.mock.patch.object(stream.firmware_delivery, 'ingest', side_effect=RuntimeError('bad telemetry')), \
+                unittest.mock.patch.object(stream.time, 'monotonic', return_value=100) as clock, \
+                self.assertLogs(stream.logger, 'WARNING') as logs:
+            self.assertTrue(stream._ingest_live_record(cap))
+            self.assertTrue(stream._ingest_live_record(recent_piezo(seq=30)))
+            clock.return_value = 161
+            self.assertTrue(stream._ingest_live_record(recent_piezo(seq=31)))
+        self.assertEqual(self.latest.read()[0], int(cap['ts']))
+        self.assertEqual(stream.piezo_record_queue.qsize(), 2)
+        self.assertEqual(len(logs.records), 2)
+        self.assertTrue(all('firmware telemetry' in record.getMessage() for record in logs.records))
 
 
 if __name__ == "__main__":
