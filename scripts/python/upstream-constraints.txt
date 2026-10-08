@@ -1,0 +1,17 @@
+# Upstream switch dependencies for the Pod's Python 3.9 and 3.10 interpreters.
+# Keep the resolved package record with each prepared environment.
+numpy==2.0.2; python_version < "3.10"
+numpy==2.2.6; python_version >= "3.10"
+scipy==1.13.1; python_version < "3.10"
+scipy==1.15.3; python_version >= "3.10"
+pandas==2.3.3
+cbor2==5.7.1
+watchdog==6.0.0
+sentry-sdk==2.71.0
+nats-py==2.16.0
+python-dateutil==2.9.0.post0
+pytz==2025.2
+tzdata==2025.2
+six==1.17.0
+urllib3==2.5.0
+certifi==2025.10.5
