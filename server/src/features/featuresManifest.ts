@@ -250,7 +250,8 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
       + 'The marker clears only after a health check passes. A timeout or failed restore keeps it for manual '
       + 'recovery. Database and settings backups are not restored. Checked on one Pod 5 with no marker, a hand-set '
       + 'marker and a power cut after the server stopped, before the tree move. A cut during the move is covered '
-      + 'only by automated tests. An interrupted update records no new result, so the last result stays at the previous run.',
+      + 'only by automated tests. Boot recovery records the outcome of an interrupted update, including server or '
+      + 'Biometrics restart failures, so Settings shows the recovery result.',
     category: 'safety',
     version: '3.6.0',
     flag: null,

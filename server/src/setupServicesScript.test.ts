@@ -41,6 +41,7 @@ function sandbox(opts: {
     units.push('free-sleep-recover-update.service', 'free-sleep-recover-update.timer');
     copyFileSync(path.join(repoRoot, 'scripts/restore_helpers.sh'), path.join(repo, 'scripts/restore_helpers.sh'));
     copyFileSync(path.join(repoRoot, 'scripts/recover_update.sh'), path.join(repo, 'scripts/recover_update.sh'));
+    copyFileSync(path.join(repoRoot, 'scripts/write_result.py'), path.join(repo, 'scripts/write_result.py'));
   }
   for (const unit of units) {
     copyFileSync(path.join(repoRoot, 'scripts/systemd', unit), path.join(repo, 'scripts/systemd', unit));

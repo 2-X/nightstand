@@ -31,10 +31,16 @@ restore_restart_services() {
       sh "$LIVE/scripts/block_internet_access.sh" || say "WARNING: restored firewall could not be applied"
     fi
   fi
-  systemctl start free-sleep
+  systemctl start free-sleep || {
+    RESTORE_SERVICE_ERROR="start free-sleep failed"
+    return 1
+  }
   if [ "$STREAM_WAS_ACTIVE" = active ]; then
     if [ "$stream_errors" = strict ]; then
-      systemctl restart free-sleep-stream
+      systemctl restart free-sleep-stream || {
+        RESTORE_SERVICE_ERROR="restart free-sleep-stream failed"
+        return 1
+      }
     else
       systemctl restart free-sleep-stream 2>/dev/null || true
     fi

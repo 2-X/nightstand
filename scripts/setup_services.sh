@@ -37,6 +37,7 @@ import os, sys, tempfile
 repo, recovery, systemd = sys.argv[1:]
 os.makedirs(recovery, exist_ok=True)
 files = [("recover_update.sh", recovery, 0o755), ("restore_helpers.sh", recovery, 0o644),
+         ("write_result.py", recovery, 0o644),
          ("systemd/free-sleep-recover-update.service", systemd, 0o644),
          ("systemd/free-sleep-recover-update.timer", systemd, 0o644)]
 for source, directory, mode in files:

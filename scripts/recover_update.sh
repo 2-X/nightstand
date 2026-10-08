@@ -7,11 +7,23 @@ PREV=/home/dac/free-sleep-prev
 FAILED=/home/dac/free-sleep-failed
 STAGE=/home/dac/free-sleep-staging
 MARKER=/persistent/free-sleep-data/update-swap.json
+RESULT_FILE=/persistent/free-sleep-data/update-result.json
+RESULT_WRITER="$(dirname "${BASH_SOURCE[0]}")/write_result.py"
 RESTORE_HELPERS="$(dirname "${BASH_SOURCE[0]}")/restore_helpers.sh"
 RECOVERY_DEADLINE=$((SECONDS + 50))
 
 say() { echo "$*"; }
-fail() { say "Recovery stopped: $*"; exit 1; }
+record_recovery() {
+  python3 "$RESULT_WRITER" "$RESULT_FILE" update "$1" "$RECOVERY_FROM" "$RECOVERY_TO" "$2"
+}
+
+fail() {
+  say "Recovery stopped: $*"
+  if [ -n "${RECOVERY_FROM:-}" ]; then
+    record_recovery failed "The update was interrupted. Recovery stopped: $*" || true
+  fi
+  exit 1
+}
 
 clear_marker() {
   sync
@@ -30,9 +42,9 @@ PY
 
 case "${1:-}" in
   --arm)
-    python3 - "$MARKER" "$LIVE" "${2:-inactive}" <<'PY'
+    python3 - "$MARKER" "$LIVE" "${2:-inactive}" "${3:-}" <<'PY'
 import json, os, sys
-path, live, stream = sys.argv[1:]
+path, live, stream, target = sys.argv[1:]
 stream = "active" if stream == "active" else "inactive"
 if os.path.exists(path):
     sys.exit("An earlier update swap still needs recovery")
@@ -40,7 +52,7 @@ info = os.stat(live)
 version = json.load(open(live + "/server/src/serverInfo.json"))["version"]
 with open(path + ".tmp", "w") as handle:
     json.dump({"device": info.st_dev, "inode": info.st_ino, "version": version,
-               "stream": stream}, handle)
+               "stream": stream, "toVersion": target or None}, handle)
     handle.flush()
     os.fsync(handle.fileno())
 os.replace(path + ".tmp", path)
@@ -83,10 +95,14 @@ import json, sys
 marker = json.load(open(sys.argv[1]))
 assert isinstance(marker["device"], int) and isinstance(marker["inode"], int)
 assert isinstance(marker["version"], str)
+assert marker.get("toVersion") is None or isinstance(marker["toVersion"], str)
 assert marker["stream"] in ("active", "inactive", "failed", "unknown", "")
 print(marker["stream"])
 PY
 ) || fail "unreadable swap marker; manual recovery required"
+
+RECOVERY_FROM=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' "$MARKER")
+RECOVERY_TO=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("toVersion") or "")' "$MARKER")
 
 # The original tree may already be live if recovery itself was interrupted.
 matches_marker() {
@@ -152,6 +168,13 @@ if [ "${SETTLE_RESTORED:-no}" = yes ]; then
 fi
 
 if healthy_live; then
+  if matches_marker "$LIVE"; then
+    record_recovery rolled-back "The update was interrupted. The original install is healthy." \
+      || fail "could not record recovery; marker kept"
+  else
+    record_recovery success "The update was interrupted. The target install passed boot recovery checks." \
+      || fail "could not record recovery; marker kept"
+  fi
   clear_marker
   say "The live install is healthy; cleared the interrupted update marker"
   exit 0
@@ -184,9 +207,11 @@ fi
 for source in "$FAILED" "$STAGE"; do
   restore_dependencies "$source"
 done
-restore_restart_services strict
+restore_restart_services strict || fail "${RESTORE_SERVICE_ERROR:-could not restart restored services}; marker kept"
 
 if healthy_live 15; then
+  record_recovery rolled-back "The update was interrupted. Boot recovery restored the previous install." \
+    || fail "could not record recovery; marker kept"
   clear_marker
   say "Restored the previous install after an interrupted update"
 else
