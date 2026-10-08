@@ -24,8 +24,10 @@ Free-sleep's Node server (`server/src/8sleep/frankenServer.ts`, referred to
 internally as "Franken") *is* the socket server at `dac.sock`, the pod's own
 firmware component connects to it as a client and answers text commands. This
 is the same socket Eight Sleep's own `dac` process used to own before
-free-sleep replaced it. Protocol: write `<command number>\n\n`, read back a
-newline-delimited response.
+free-sleep replaced it. Protocol: write `<cmd>\n<arg>\n\n` when there is an
+argument, or `<cmd>\n\n` without one; read back a newline-delimited response.
+Nightstand's [socket implementation](https://github.com/LTimothy/nightstand/blob/dbc024b00d79d0f79e6c8f8bf9f2a740c2e38333/server/src/8sleep/frankenServer.ts)
+appends the blank-line separator after the command and optional argument.
 
 | # | Name | Args | Status | Notes |
 |---|------|------|--------|-------|
@@ -37,7 +39,7 @@ newline-delimited response.
 | 5 | `ALARM_LEFT` | CBOR alarm string | ✅ | Free-sleep uses this actively. Encodes target time (unix ts), duration (seconds), vibration pattern (`double` or `rise`), power level (0-100). Nightstand sends `rise` only when both hub and cover are reported as Pod 5, otherwise `double`, see [other Pod generations](#other-pod-generations). |
 | 6 | `ALARM_RIGHT` | CBOR alarm string | ✅ | Same shape as 5, right side. |
 | 7 | `FORMAT` | ? | ❓ | Commented out, never used or tested. Sounds destructive: do not try without a strong reason and a backup plan. |
-| 8 | `SET_SETTINGS` | CBOR settings string | ✅ | Free-sleep uses this actively. Encodes `gl`/`gr` (gain left/right) and `lb` (LED brightness). |
+| 8 | `SET_SETTINGS` | CBOR settings string | ✅ | Free-sleep uses this actively. Encodes `gl`/`gr` (left/right piezo gains) and `lb` (LED brightness), see the settings observation below. |
 | 9 | `LEFT_TEMP_DURATION` (aka `TURN_ON_LEFT`) | integer seconds | ✅ | Free-sleep uses this to turn a side on/off: `0` = off, `43200` (12h) = on. |
 | 10 | `RIGHT_TEMP_DURATION` (aka `TURN_ON_RIGHT`) | integer seconds | ✅ | Same as 9, right side. |
 | 11 | `TEMP_LEVEL_LEFT` | integer level, -100..100 | ✅ | Free-sleep uses this actively. Command transport verified. The app's legacy level-to-°F formula is not the firmware target scale (see below). |
@@ -46,7 +48,14 @@ newline-delimited response.
 | 14 | `DEVICE_STATUS` | none | ✅ | Returns the full status blob: see [DEVICE_STATUS response fields](#device_status-response-fields) below. |
 | 15 | n/a | n/a | ❓ | Unused/unknown. Not referenced by free-sleep, jmew, or 8rp. |
 | 16 | `ALARM_CLEAR` | none | ✅ | Upstream free-sleep uses this to stop an active alarm vibration. Nightstand dismissal uses a side-specific one-second replacement and sends no `ALARM_CLEAR`. Other projects send a side argument, and a Pod 3 report says it does not stop a running alarm, see [other Pod generations](#other-pod-generations). |
-| 17 | `STOP_PRIME` / `ALARM_SOLO` (disputed) | unverified | 📖 unverified, ❌ cancellation on tested Pod 5 | [8rp](https://github.com/Schluggi/8rp/blob/main/docs/commands.md) names it `STOP_PRIME`. [Upstream free-sleep's commented command table](https://github.com/throwaway31265/free-sleep/blob/e5172139874a274d1ced12c8da052ab2cbaa286d/server/src/8sleep/deviceApi.ts#L23) and [seanpasino/free-sleep](https://github.com/seanpasino/free-sleep/commit/50580edff3) name it `ALARM_SOLO`, a whole-bed alarm. Neither meaning is verified in Nightstand. Sent before and after priming was confirmed active on the tested Pod 5, it left `isPriming` true for 5+ minutes with no visible effect. Nightstand does not expose command 17 through its API; do not add a cancellation action without a positive hardware test. |
+| 17 | `STOP_PRIME` / `ALARM_SOLO` (disputed) | unverified | 📖 unverified, ❌ cancellation on my Pod 5 | [8rp](https://github.com/Schluggi/8rp/blob/main/docs/commands.md) names it `STOP_PRIME`, as Nightstand used to. [Upstream free-sleep's commented command table](https://github.com/throwaway31265/free-sleep/blob/e5172139874a274d1ced12c8da052ab2cbaa286d/server/src/8sleep/deviceApi.ts#L23) and [seanpasino/free-sleep](https://github.com/seanpasino/free-sleep/commit/50580edff36e6a632f7d29ec4b8c69ceb3b62c93) name it `ALARM_SOLO`, a whole-bed alarm. Neither meaning is confirmed here. On my Pod 5, sending it before and after priming was confirmed active left `isPriming` true for 5+ minutes with no visible effect. [Nightstand 3.6.1 removed it from the command table and API](https://github.com/LTimothy/nightstand/commit/3c394e10b55bf20c9ac1fb10274070c08bf06bd0); do not add a cancellation action without a positive hardware test. |
+
+Alarm duration (`du`) is in seconds. A [published RAW sample](https://github.com/davidsilva2841/8sleep_biometrics/commit/0dd440b7483b984d18b65f163d7041460a3a38c8)
+logs `dur 179` at the hub and `dur 179000 ms` at the sensor, followed by
+`ramp power to 10` for `rise` (pattern 255 in that sample). 📖 The sample's
+Pod model is not stated; it does not establish a ramp rate or that `rise`
+works on every generation. See [other Pod generations](#other-pod-generations)
+for the separate Pod 3 intensity report.
 
 ### Temperature levels and reported targets
 
@@ -56,9 +65,9 @@ Fahrenheit values and outgoing level commands keep that convention.
 `frzTherm.target` reports the thermostat target in Celsius, separately from
 measured water or mattress temperature.
 
-Offline Pod 5 RAW captures contain 33 target-setting log entries with these
-14 distinct pairs. These observations cover one Pod 5, not all generations
-or firmware versions.
+In offline RAW captures from my Pod 5, I found 33 target-setting log entries
+with these 14 distinct pairs. These observations cover my Pod 5, not all
+generations or firmware versions.
 
 | Firmware level | Logged target °C | Occurrences |
 |---:|---:|---:|
@@ -96,7 +105,8 @@ so 31.86°C is a logged conversion, not a confirmed active target.
 
 Cancellation has not been demonstrated on the tested Pod 5:
 
-- Command 17 (`STOP_PRIME` per 8rp) had no observable effect, see above.
+- On my Pod 5, command 17 (`STOP_PRIME` per 8rp) had no observable effect,
+  see above. Its removal in 3.6.1 does not establish its meaning.
 - `opensleep`'s lower-level protocol notes (direct STM32 serial, Pod 3)
   list one prime command and no stop/cancel variant.
 - `ninesleep` sends `13\n\n` with no argument; a code comment there
@@ -115,10 +125,10 @@ Response is newline-delimited `key = value` text, values as strings.
 | `tgHeatLevelL` / `tgHeatLevelR` | Target heat level, -100..100 | ✅ |
 | `heatLevelL` / `heatLevelR` | Current heat level, -100..100: **this is the hub sensor reading water temp near the heating element, not a direct bed-surface reading.** See [pump-stall caveat](#pump-stall-can-make-heatlevel-lie) below. | ✅ |
 | `heatTimeL` / `heatTimeR` | Seconds remaining until this side auto-shuts-off | ✅ |
-| `sensorLabel` | Hardware revision string for the cover sensor; free-sleep parses the 3rd `-`-delimited segment to guess Pod generation (`J00+`→Pod 5, `I00+`→Pod 4, `H00+`→Pod 3) | 📖 sourced from a Discord thread, not an official spec: see `loadDeviceStatus.ts` |
+| `sensorLabel` | Hardware revision string for the cover sensor; free-sleep parses the 3rd `-`-delimited segment to guess Pod generation (`J00+`→Pod 5, `I00+`→Pod 4, `H00+`→Pod 3) | ❓ Unconfirmed thresholds, see [hardware generation detection](#hardware-generation-detection) for the conflicting public sources. |
 | `waterLevel` | `"true"`/`"false"`: whether the reservoir has enough water | ✅ |
 | `priming` | `"true"`/`"false"`: whether a priming cycle is active | ✅ |
-| `settings` | Hex-encoded CBOR blob: `gl`/`gr` (gain), `lb` (LED brightness) | ✅ |
+| `settings` | Hex-encoded CBOR blob: `gl`/`gr` (left/right piezo gains), `lb` (LED brightness) | ✅ On my Pod 5, `{v: 1, gl: 400, gr: 400, lb: 4}` accompanied a firmware log `[sampling] req gain 400 400`. |
 | `doubleTap` / `tripleTap` / `quadTap` | JSON string `{l, r, s}`: unix timestamp (or `0`) of the last tap gesture per side/sensor. free-sleep uses `quadTap` to cycle the adjustable-base preset. | ✅ |
 | `dismissAlarm` | JSON object keyed by `l` and `r`, with numeric values that upstream free-sleep treats as dismissal timestamps. Nightstand baselines each alarm on its first valid status after starting. The first valid sample after reconnecting can only raise that alarm's high-water mark. Decreases and restored historical values do not dismiss it. Missing or malformed values and the unmapped `s` channel are ignored. Only a later value strictly above the highest seen for that alarm across all connections clears it, without sending a command. | ✅ On my Pod 5, the value rose after a double tap stopped a Nightstand alarm, and Nightstand cleared its ringing state and logged the dismissal. Timestamp units remain unverified. Reading adapted from the [upstream monitor](https://github.com/throwaway31265/free-sleep/blob/a35972d839a68a1a7a78c57085edf7a5a4be314d/server/src/8sleep/frankenMonitor.ts#L350). |
 
@@ -145,17 +155,26 @@ buffer truncates it. See `biometrics/load_raw_files.py` and
 |---|---|---|
 | `piezo-dual` | Raw piezo sensor waveform, both sides | ✅ yes: core presence/vitals signal |
 | `capSense` (Pod 3, possibly some Pod 5) / `capSense2` (Pod 5 newer cover; Pod 4 not confirmed) | Capacitance sensor readings; Pod 5's `capSense2` shape is normalized to the legacy `capSense` fields (`out`/`cen`/`in`) | ✅ yes |
-| `bedTemp` (Pod 3, v1 integer centidegrees) / `bedTemp2` (Pod 4/5, float °C, `temps[]` array) | Bed-surface temperature sensors | `bedTemp` yes, `bedTemp2` intentionally not consumed yet (Pod 5 writes `bedTemp2`, kept for a future project) |
+| `bedTemp` (Pod 3, v1 integer centidegrees) / `bedTemp2` (Pod 4/5, float °C, `temps[]` array) | Bed-surface temperature sensors. On my Pod 5, `bedTemp2` has `{version: 1, mcu, left: {amb, hu, board, temps: [four values]}, right: {...}}`; `-327.68` marks a missing reading, including in `temps`, `amb` and `hu`. | `bedTemp` yes; `bedTemp2` surface temperatures are not used yet |
 | `frzTemp` | `{amb, hs, left, right}`: ambient, heatsink, and per-side hub sensor temps in centidegrees C | ✅ yes: feeds the Settings page sensor-temp display |
 | `frzHealth` | `{left, right, fan}`, each side `{tec: {current}, pump: {mode, rpm, water}, temps: {flowrate}}`: see [pump/thermal telemetry](#pumpthermal-telemetry-frzhealth) below | ✅ yes: pump-stall detection and pump-speed checks for the newer vitals estimators |
-| `frzTherm` | `{left, right}`, each `{target, power, valid, enabled}` in the observed Pod 5 captures; target is Celsius | ✅ decoded from offline Pod 5 RAW captures; optional target readout and cooling diagnostics |
-| `log` | `{type, ts, level, msg}`, firmware's internal messages | Optional allowlisted health feed and dismissal diagnostics; no raw text sent to clients |
-| `buttonEvent` | `{type, ts, left/right: {top/bottom: count}}` | Optional diagnostics; observed right-side top and bottom buttons on Pod 5 |
-| `tap-gesture` | `{type, ts, side, taps}` | Optional diagnostics only. 📖 [Reported by dallonby](https://github.com/throwaway31265/free-sleep/pull/30), not observed in our Pod 5 captures |
+| `frzTherm` | `{version: 1, left, right}`, each `{target, power, valid, enabled}` on my Pod 5; target is Celsius, and negative power was observed while cooling | ✅ decoded from offline captures on my Pod 5; optional target readout and cooling diagnostics |
+| `log` | `{type, ts, level, msg}`, firmware's internal messages. Several log records can share one RAW envelope's `data` payload. | ✅ observed on my Pod 5; optional allowlisted health feed and dismissal diagnostics; no raw text sent to clients |
+| `buttonEvent` | `{type, ts, left/right: {top/bottom: count}}`, the temperature buttons via the TCA8418 keypad | ✅ on my Pod 5, five right-side events (three `top: 1`, two `bottom: 1`), alongside `[tca8418R]` logs; optional diagnostics |
+| `tap-gesture` | `{type, ts, side, taps}` | Optional diagnostics only. 📖 [Reported by dallonby on a Pod 3 hub with a Pod 4 cover](https://github.com/throwaway31265/free-sleep/pull/30), which reports no taps in `DEVICE_STATUS`; not seen on my Pod 5 |
+
+These Pod 5 shapes are observations from my offline RAW captures. One
+envelope contained 14 `log` records; decoding only the first CBOR object
+would miss the others. The `buttonEvent` records identify top and bottom
+buttons, not cover tap gestures. Four accompanied `temp_up`/`temp_down`
+logs; the fifth accompanied `off | off`, so a button record alone does not
+prove a temperature change. The public [RAW samples](https://github.com/davidsilva2841/8sleep_biometrics/commit/0dd440b7483b984d18b65f163d7041460a3a38c8)
+also show `log` fields; dallonby's [tap reader](https://github.com/dallonby/free-sleep/commit/514086f96919699230227b74d8872c60aa743892)
+documents the separate `tap-gesture` shape.
 
 ### Pump/thermal telemetry (`frzHealth`)
 
-Decoded `frzHealth` example from a Pod 5, with the timestamp replaced:
+Decoded `frzHealth` example from my Pod 5, with the timestamp replaced:
 
 ```python
 {'type': 'frzHealth', 'ts': 0, 'version': 1,
@@ -173,10 +192,10 @@ Decoded `frzHealth` example from a Pod 5, with the timestamp replaced:
   used for stall detection for that reason, `tec.current` combined with
   `pump.rpm`/`pump.water` is used instead. Potentially useful later for
   clog detection (compare loop temp to bed temp under load).
-- `tec.current`: amps the heating/cooling element is drawing. Nonzero means
-  actively heating or cooling; near-zero means idle. This can be read as a
-  self-contained "is this side commanded active right now" signal without
-  needing to cross-reference free-sleep's own on/off state.
+- `tec.current`: reported current in amps. In one capture on my Pod 5 it
+  stayed at 10.7213 A left and 11.5162 A right with both running and stopped
+  pumps. It cannot by itself establish that a side is actively heating or
+  cooling; correlate it with thermostat and pump state.
 - `pump.water`: boolean, appears to be the firmware's own water-flow-sensed
   flag.
 - Frame cadence observed: ~1 every 10 seconds.
@@ -207,21 +226,34 @@ Bluetooth LE via `bluetoothctl`, not `dac.sock`. See
 `server/src/8sleep/trimixBaseControl.ts` for the packet format (20-byte
 frames, `0xff 0xff 0xff 0xff` header, a 2-byte checksum). Not duplicated here;
 that file is the source of truth and already has inline documentation.
+The driver and angle maps came from [Geczy/free-sleep](https://github.com/Geczy/free-sleep/commit/74d6439c0fffbd634e3b84ec054cb52d741eddab)
+([angle maps](https://github.com/Geczy/free-sleep/commit/fccb7916fbf3f8f1e0da4324de57bdf1a1fe12a4));
+the [preset integration](https://github.com/Geczy/free-sleep/commit/c17cb0866489889b2230f698e99eb74184c15623)
+includes the HTTP route, app API client and four-tap base action. I have
+not verified base control on a physical base.
 
 ## Hardware generation detection
 
-Both of free-sleep's Pod-generation heuristics (`detectCoverVersion` and
-`detectHubVersion` in `loadDeviceStatus.ts`) are based on a hardware
-revision string prefix observed on a Discord thread, not an official spec.
-They're marked as guesses in the source and have held up in practice so
-far, but treat them as best-effort.
+Nightstand's `detectCoverVersion` and `detectHubVersion` in
+[`loadDeviceStatus.ts`](https://github.com/LTimothy/nightstand/blob/dbc024b00d79d0f79e6c8f8bf9f2a740c2e38333/server/src/8sleep/loadDeviceStatus.ts)
+guess Pod 5 from cover revision `J00` and up and hub revision `G53` and up.
+The comments cite Discord, not an official specification. ❓ Both
+thresholds are unconfirmed.
+
+📖 [Geczy's hardware page](https://github.com/Geczy/free-sleep/commit/39e2b25e631299e26a175f375b7914336e364b80)
+instead uses cover `J50` and up and hub `G40` and up for Pod 5. Its comments
+cite a `J55` Pod 5 cover, an `I14` Pod 4 cover and one user's `G43` Pod 5
+hub. Those observations do not confirm the boundaries either. This
+disagreement is unresolved; no detection thresholds change here. Pod
+owners can help by sharing the hub and cover model and hardware-revision
+segments from their labels, with serial numbers omitted.
 
 <a id="other-pod-generations"></a>
 
 ## Other Pod generations
 
-We test on a Pod 5. These notes come from Pod 3 and Pod 4 owners and from
-other projects, and none of them has been checked on our hardware.
+I test on my Pod 5. These notes come from other owners and projects and
+have not been verified here.
 
 - 📖 **Alarm pattern.** Pod 3 firmware accepts only `double`: with `rise`
   it answers with an error code and does not vibrate
@@ -234,6 +266,18 @@ other projects, and none of them has been checked on our hardware.
   reported as Pod 5. It sends `double` for mixed, older or unknown hardware.
   The app offers "Builds up" only when both are reported as Pod 5. Saved
   schedules keep accepting `rise`.
+- 📖 **Alarm intensity ramp.** On the Pod 3 in
+  [free-sleep#55](https://github.com/throwaway31265/free-sleep/issues/55),
+  intensity was reported as a ceiling: power starts at 10 and rises on
+  roughly an eight-second cadence, reaching about 37 after two minutes.
+  This is separate from the `rise` sample above; that Pod 3 rejects `rise`.
+  Neither report establishes the ramp rate on my Pod 5.
+- 📖 **Mixed hub and cover.** dallonby reports a Pod 3 hub with a Pod 4
+  cover: taps are absent from `DEVICE_STATUS`, while RAW contains
+  `tap-gesture` records
+  ([free-sleep#30](https://github.com/throwaway31265/free-sleep/pull/30)).
+  Hub and cover generation can therefore differ; the socket tap counters
+  alone do not establish whether that combination detects gestures.
 - 📖 **Stopping a running alarm.** On a Pod 3, `ALARM_CLEAR` with the
   argument `empty` produced no firmware log line and the alarm ran its full
   length; re-sending `ALARM_LEFT`/`ALARM_RIGHT` with a duration of 1 second
@@ -287,6 +331,33 @@ other projects, and none of them has been checked on our hardware.
 - 📖 **Firmware without RAW files.** Firmware from about April 2026 writes
   sensor data to a NATS JetStream stream and creates no `.RAW` files
   ([sleepypod ADR 0018](https://github.com/sleepypod/core/blob/dev/docs/adr/0018-tmpfs-raw-frames.md)).
+- 📖 **Reset completion.** A Pod 4 owner reported that powering off while
+  the reset light still blinked green left `/extlinux/extlinux.conf`
+  unreadable. Wait for the light to blink blue (pairing mode) before
+  powering off after a firmware reset
+  ([free-sleep#12](https://github.com/throwaway31265/free-sleep/issues/12#issuecomment-2902456458)).
+- 📖 **Boot slot after reinstall.** A user who still saw `current_slot=b`
+  after reinstalling the firmware reported that `setenv current_slot a`,
+  then `saveenv`, then `reset` allowed installation to continue
+  ([free-sleep#45](https://github.com/throwaway31265/free-sleep/issues/45#issuecomment-4058193796)).
+  This persists the slot choice and boots whatever is in slot `a`; it is
+  a user report, not a verified recovery procedure here.
+
+Reported by users, not verified here:
+
+- Pod 3 with sensor firmware 3.0.5 and Frozen firmware 1.1.40
+  ([caseyWebb, #55](https://github.com/throwaway31265/free-sleep/issues/55)).
+- Pod 3 without an SD card, running firmware
+  `444c5a9ee7c7092120ec19a12ed964b6f7865a41` and NATS JetStream instead of
+  RAW files ([jfrykman, #58](https://github.com/throwaway31265/free-sleep/pull/58)).
+- Pod 3 hub with a Pod 4 cover
+  ([dallonby, #30](https://github.com/throwaway31265/free-sleep/pull/30)).
+- Pod 4 installed through serial
+  ([shiftforce240, #12](https://github.com/throwaway31265/free-sleep/issues/12)).
+- A pictured newer Pod 5 Core control-board revision, with a maintainer
+  reply saying it worked
+  ([simonepsp, #33](https://github.com/throwaway31265/free-sleep/issues/33),
+  [reply](https://github.com/throwaway31265/free-sleep/issues/33#issuecomment-3659260445)).
 
 ## Credits & sources
 
@@ -306,8 +377,16 @@ other projects, and none of them has been checked on our hardware.
   throwaway31265/free-sleep#54 and #55.
 - [jmakes/free-sleep](https://github.com/jmakes/free-sleep), Pod 4 alarm
   pattern behavior.
-- Hardware-generation detection heuristics: a Discord thread linked inline
-  in `loadDeviceStatus.ts`.
+- [Geczy/free-sleep](https://github.com/Geczy/free-sleep/commit/39e2b25e631299e26a175f375b7914336e364b80),
+  conflicting hardware-generation thresholds and the base-control work
+  linked above.
+- [davidsilva2841/8sleep_biometrics](https://github.com/davidsilva2841/8sleep_biometrics/commit/0dd440b7483b984d18b65f163d7041460a3a38c8),
+  published RAW log samples, alarm duration and initial ramp power.
+- [dallonby](https://github.com/throwaway31265/free-sleep/pull/30), mixed
+  Pod 3 hub/Pod 4 cover tap reports and the `tap-gesture` reader.
+- [shiftforce240](https://github.com/throwaway31265/free-sleep/issues/12)
+  and [Ejwittig](https://github.com/throwaway31265/free-sleep/issues/45),
+  reset completion and boot-slot reports.
 - [jmew/free-sleep](https://github.com/jmew/free-sleep/commit/3ffaa0d), the
   RAW-file archive that keeps overnight data past the firmware's rolling
   buffer.
