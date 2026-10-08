@@ -16,6 +16,7 @@ import calendar
 import gc
 import sqlite3
 import math
+from collections import Counter
 from typing import List, Optional, Tuple
 from datetime import datetime, timedelta
 
@@ -311,7 +312,8 @@ def _presence_v2_params(collector: Optional[FrameCollector], profiles) -> Option
                 logger.warning('No readable capacitance record in the window, reading the night as before')
             return None
         if unknown:
-            logger.warning(f'Left out capacitance records of a type this version does not read ({unknown})')
+            logger.warning(f'Capacitance includes a type this version does not read ({unknown}), reading the night as before')
+            return None
         formats = sorted(name for name, count in collector.cap_formats.items() if count)
         if len(formats) > 1:
             # One format's counts read against another's baseline would look like a rise.
@@ -503,9 +505,15 @@ def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_pa
     logger.info(f"Detecting sleep interval for {side} side | {start_time.isoformat()} -> {end_time.isoformat()} | Expected row count: {expected_row_count:,}")
 
     collector, profiles = _presence_v2_setup(start_time, end_time)
+    cap_formats = Counter()
     data = load_raw_files(folder_path, start_time, end_time, side, sensor_count=1, raw_data_types=['capSense', 'piezo-dual'],
-                          presence_collector=collector)
+                          presence_collector=collector, cap_formats=cap_formats)
     presence = _presence_v2_params(collector, profiles)
+    if presence is not None and calibration.observed_cap_format(cap_formats) != presence[1].name:
+        logger.warning('Capacitance format diagnostics disagree, using piezo for this window')
+        presence = None
+    provenance = (calibration.cap_provenance(cap_formats, calibration.source_hash(data['cap_senses']))
+                  if presence is not None else None)
     params, cap_format = presence if presence is not None else (None, None)
 
     piezo_df = load_piezo_df(data, side, expected_row_count=expected_row_count, with_p2p=True)
@@ -531,7 +539,9 @@ def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_pa
     del piezo_df
     gc.collect()
 
-    cap_baseline = load_baseline(side)
+    cap_baseline = load_baseline(side, cap_formats)
+    if not calibration.provenance_matches(cap_baseline, calibration.observed_cap_format(cap_formats)):
+        cap_baseline = None
     from_capacitance = _read_night_from_capacitance(
         merged_df, side, cap_baseline, collector if presence is not None else None, params)
     if from_capacitance is not None and not cap_format.validated:
@@ -549,7 +559,7 @@ def detect_sleep(side: Side, start_time: datetime, end_time: datetime, folder_pa
         if learned is not None:
             try:
                 # The span of the night itself, so the same night analyzed over another window is recognized.
-                calibration.record_occupied_level(side, *learned)
+                calibration.record_occupied_level(side, *learned, provenance=provenance)
             except sqlite3.Error as error:
                 logger.warning(f'Could not store the {side} occupied capacitance level: {error}')
     if len(sleep_records) == 0:

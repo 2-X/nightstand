@@ -216,7 +216,7 @@ def _presence_v2_inputs(stream_processor=None):
     cap_format = on_this_pod(cap_format, logger)
     profiles = calibration.load_presence_profiles()
     params = params_from_calibration(profiles, cap_format)
-    baselines = baselines_from_calibration(profiles)
+    baselines = baselines_from_calibration(profiles, cap_format)
     if params is None or baselines is None:
         return None
     if cap_format.validated:
@@ -227,7 +227,7 @@ def _presence_v2_inputs(stream_processor=None):
 
 
 def _experimental_ready(stream_processor, profiles, cap_format) -> bool:
-    if not learned_levels(profiles):
+    if not learned_levels(profiles, cap_format):
         reason = "until the nightly analysis has learned both sides' occupied levels"
     elif stream_processor is None or stream_processor.cadence.ok() is not True:
         reason = 'until piezo records are seen to come once a second'

@@ -9,11 +9,14 @@ disagreeing about sensor health, is the failure this prevents.
 The server reads these same tables through Prisma and never writes them.
 """
 import json
+import hashlib
 import math
 import time
 from typing import List, Optional, Tuple
 
 from get_logger import get_logger
+from cap_provenance import (baseline_payload, cap_provenance, observed_cap_format,
+                            provenance_matches, source_hash, valid_channels)
 
 logger = get_logger()
 
@@ -226,14 +229,21 @@ def import_legacy_baseline(side: str, file_path: str, conn=None) -> bool:
     if not os.path.isfile(file_path):
         return False
 
-    with open(file_path, 'r') as json_file:
-        payload = json.load(json_file)
+    with open(file_path, 'rb') as json_file:
+        data = json_file.read()
+    value = json.loads(data)
+    payload = baseline_payload(value, hashlib.sha256(data).hexdigest())
+    if payload is None:
+        return False
+    if 'format' in value and not valid_channels(payload, side):
+        return False
 
     now = int(time.time())
     run_id = record_run(
         side, 'cap', STATUS_SUCCESS, TRIGGER_MIGRATION,
         started_at=now, duration_ms=0, quality=0.0,
-        message='Carried over from a baseline file that predates provenance tracking',
+        message='Carried over from a baseline file, confidence unknown',
+        payload=payload,
         conn=conn,
     )
     save_profile(
@@ -293,7 +303,12 @@ def _occupied_for_window(profile: Optional[dict], window) -> Optional[dict]:
     if not _same_night((profile['source_start'], profile['source_end']), (int(window[0]), int(window[1]))):
         return payload
     before = payload.get('before') if isinstance(payload, dict) else None
-    return None if before is None else {'level': before}
+    if before is None:
+        return None
+    result = {'level': before}
+    if 'provenance' in payload:
+        result['provenance'] = payload['provenance']
+    return result
 
 
 def record_occupied_level(
@@ -303,6 +318,7 @@ def record_occupied_level(
     source_start: int,
     source_end: int,
     conn=None,
+    provenance=None,
 ) -> Optional[float]:
     """Store the capacitance rise a night showed while this side was occupied.
 
@@ -324,6 +340,9 @@ def record_occupied_level(
     source_start, source_end = int(source_start), int(source_end)
     stored = float(level)
     previous = get_profile(side, SENSOR_TYPE_CAP_OCCUPIED, conn=conn)
+    if provenance is not None and (previous is not None and
+                                   not provenance_matches(previous['payload'], provenance.get('format'))):
+        previous = None
     base = None
     night_start, night_end = source_start, source_end
     if previous:
@@ -346,6 +365,8 @@ def record_occupied_level(
         base = None
     quality = min(1.0, seconds / OCCUPIED_FULL_SECONDS)
     payload = {'level': stored, 'measured': float(level), 'seconds': int(seconds), 'before': base}
+    if provenance is not None:
+        payload['provenance'] = dict(provenance)
     run_id = record_run(
         side, SENSOR_TYPE_CAP_OCCUPIED, STATUS_SUCCESS, TRIGGER_DAILY,
         started_at=int(time.time()), duration_ms=0, quality=quality, payload=payload,

@@ -50,6 +50,7 @@ def cap_payload(side, **extra):
         for channel, mean in zip(('out', 'cen', 'in'), scenarios.BASELINE_MEANS[side])
     }
     payload.update(extra)
+    payload.setdefault('provenance', {'format': 'capSense2', 'normalizationVersion': 1})
     return payload
 
 
@@ -81,7 +82,7 @@ def analyze(side, records, enabled, presence_profiles=None, profiles_error=None,
                 unittest.mock.patch.object(sleep_detector, 'biometrics_v2_enabled', return_value=enabled), \
                 unittest.mock.patch.object(sleep_detector.calibration, 'load_presence_profiles', load_profiles), \
                 unittest.mock.patch.object(sleep_detector.calibration, 'record_occupied_level',
-                                           side_effect=lambda *args: stored.append(args)):
+                                           side_effect=lambda *args, **kwargs: stored.append(args)):
             merged_df, records, _ = sleep_detector.detect_sleep(side, start, end, folder)
     frame_hash = hashlib.sha256(merged_df.to_csv(float_format='%.6f').encode()).hexdigest()
     return records, frame_hash, stored
@@ -93,6 +94,55 @@ def as_json(records):
 
 def utc(offset):
     return datetime.fromtimestamp(T0 + offset, timezone.utc).replace(tzinfo=None)
+
+
+class HistoricalProvenanceTest(unittest.TestCase):
+    def test_legacy_analysis_uses_only_a_matching_baseline(self):
+        for tag, allowed in ((None, True), ('unknown', False), ('capSense', False), ('capSense2', True)):
+            with self.subTest(tag=tag), tempfile.TemporaryDirectory() as folder:
+                scenarios.write_raw_file(os.path.join(folder, 'night.RAW'),
+                                         scenarios.raw_records(scenarios.STAGGERED, end=30))
+                baseline = cap_payload('left')
+                baseline.pop('provenance')
+                if tag:
+                    baseline['provenance'] = {'format': tag, 'normalizationVersion': 1}
+                start = datetime.fromtimestamp(T0, timezone.utc)
+                end = datetime.fromtimestamp(T0 + 30, timezone.utc)
+                with unittest.mock.patch.object(load_raw_files.logger, 'folder_path', folder + '/'), \
+                        unittest.mock.patch.object(sleep_detector, 'load_baseline', return_value=baseline), \
+                        unittest.mock.patch.object(sleep_detector, 'biometrics_v2_enabled', return_value=False):
+                    frame, _, _ = sleep_detector.detect_sleep('left', start, end, folder)
+                self.assertEqual('cap_left_occupied' in frame, allowed)
+
+    def test_mixed_window_cannot_reuse_matching_majority_baseline(self):
+        with tempfile.TemporaryDirectory() as folder:
+            def records():
+                yield from scenarios.raw_records(scenarios.STAGGERED, end=30)
+                yield from scenarios.legacy_raw_records(scenarios.STAGGERED, 75, start=10, end=11)
+            scenarios.write_raw_file(os.path.join(folder, 'night.RAW'), records())
+            baseline = cap_payload('left', provenance={'format': 'capSense2', 'normalizationVersion': 1})
+            with unittest.mock.patch.object(load_raw_files.logger, 'folder_path', folder + '/'), \
+                    unittest.mock.patch.object(sleep_detector, 'load_baseline', return_value=baseline), \
+                    unittest.mock.patch.object(sleep_detector, 'biometrics_v2_enabled', return_value=False):
+                frame, _, _ = sleep_detector.detect_sleep('left', datetime.fromtimestamp(T0, timezone.utc),
+                                                        datetime.fromtimestamp(T0 + 30, timezone.utc), folder)
+            self.assertNotIn('cap_left_occupied', frame)
+
+    def test_malformed_opposite_side_in_a_mixed_window_preserves_piezo_analysis(self):
+        with tempfile.TemporaryDirectory() as folder:
+            def records():
+                yield from scenarios.raw_records(scenarios.STAGGERED, end=30)
+                yield {'type': 'capSense', 'ts': T0 + 10,
+                       'left': {'out': 500, 'cen': 500, 'in': 500, 'status': 'good'},
+                       'right': {'out': 'bad', 'cen': 500, 'in': 500, 'status': 'good'}}
+            scenarios.write_raw_file(os.path.join(folder, 'night.RAW'), records())
+            with unittest.mock.patch.object(load_raw_files.logger, 'folder_path', folder + '/'), \
+                    unittest.mock.patch.object(sleep_detector, 'load_baseline', return_value=cap_payload('left')), \
+                    unittest.mock.patch.object(sleep_detector.calibration, 'load_presence_profiles', return_value=profiles()), \
+                    unittest.mock.patch.object(sleep_detector, 'biometrics_v2_enabled', return_value=True):
+                frame, _, _ = sleep_detector.detect_sleep('left', datetime.fromtimestamp(T0, timezone.utc),
+                                                        datetime.fromtimestamp(T0 + 30, timezone.utc), folder)
+            self.assertNotIn('cap_left_occupied', frame)
 
 
 class CapacitancePresenceTest(unittest.TestCase):
@@ -204,7 +254,8 @@ class ReanalysisTest(unittest.TestCase):
     def test_the_level_learned_the_night_before_is_the_one_used(self):
         day = 24 * 3600
         for side, level in (('left', 10.0), ('right', 10.0)):
-            calibration.record_occupied_level(side, level, 7 * 3600, T0 - day, T0 - day + 7 * 3600, conn=self.conn)
+            calibration.record_occupied_level(side, level, 7 * 3600, T0 - day, T0 - day + 7 * 3600, conn=self.conn,
+                                              provenance={'format': 'capSense2', 'normalizationVersion': 1})
         self.assert_same_every_run([WHOLE, AROUND_SLEEP, WHOLE])
         # Exit at 2 from the level of 10 keeps the tail in bed; the night's own level of 20 would end it.
         left = self.runs([WHOLE])[0]['left'][0]
@@ -296,7 +347,8 @@ def legacy_profiles(levels=None, noise=2.0):
     return {
         side: {
             'cap': scenarios.legacy_cap_payload(side, delta_noise=noise),
-            'cap_occupied': None if levels is None else {'level': levels[side]},
+            'cap_occupied': None if levels is None else {'level': levels[side],
+                                                       'provenance': {'format': 'capSense', 'normalizationVersion': 1}},
             'piezo_floors': [],
         }
         for side in ('left', 'right')
@@ -534,11 +586,11 @@ class PresenceParamsTest(unittest.TestCase):
         self.assertIn('and 3 more', logs.output[0])
         self.assertNotIn('capSense3', logs.output[0])
 
-    def test_unknown_types_beside_a_known_format_are_named_and_left_out(self):
+    def test_unknown_types_beside_a_known_format_prevent_baseline_reuse(self):
         with self.assertLogs(sleep_detector.logger, level='WARNING') as logs:
             result = sleep_detector._presence_v2_params(
                 self.collector([('capSense2', 10)], unknown=[('capSense' + 'x' * 100, 4)]), profiles())
-        self.assertIsNotNone(result)
+        self.assertIsNone(result)
         self.assertEqual(len(logs.output), 1)
         self.assertIn('capSense' + 'x' * 32 + ': 4', logs.output[0])
         self.assertNotIn('x' * 33, logs.output[0])

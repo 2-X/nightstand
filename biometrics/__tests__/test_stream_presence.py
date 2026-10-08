@@ -280,7 +280,8 @@ class OutOfOrderRecordTest(unittest.TestCase):
 
 
 LEGACY_PROFILES = {
-    side: {'cap': scenarios.legacy_cap_payload(side, delta_noise=2.0), 'cap_occupied': {'level': level},
+    side: {'cap': scenarios.legacy_cap_payload(side, delta_noise=2.0),
+           'cap_occupied': {'level': level, 'provenance': {'format': 'capSense', 'normalizationVersion': 1}},
            'piezo_floors': [40_000.0]}
     for side, level in (('left', 1000.0), ('right', 500.0))
 }
@@ -343,7 +344,7 @@ class LegacyLiveTest(unittest.TestCase):
         self.assertFalse(any('presence' in message for message in messages))
         processor.use_presence_v2(legacy_inputs())
         self.assertIsNone(processor.presence)
-        changed = dict(LEGACY_PROFILES, left=dict(LEGACY_PROFILES['left'], cap_occupied={'level': 900.0}))
+        changed = dict(LEGACY_PROFILES, left=dict(LEGACY_PROFILES['left'], cap_occupied={'level': 900.0, 'provenance': {'format': 'capSense', 'normalizationVersion': 1}}))
         processor.use_presence_v2((params_from_calibration(changed, CAPSENSE), LEGACY_INPUTS[1], CAPSENSE))
         self.assertIsNotNone(processor.presence)
 
@@ -357,7 +358,7 @@ class LegacyLiveTest(unittest.TestCase):
         processor = StreamProcessor(legacy_records(Night(seconds=1))[0], cap_source=LatestCap())
         processor.use_presence_v2(LEGACY_INPUTS)
         piezo, detector = processor._piezo_presence, processor.presence
-        changed = dict(LEGACY_PROFILES, right=dict(LEGACY_PROFILES['right'], cap_occupied={'level': 600.0}))
+        changed = dict(LEGACY_PROFILES, right=dict(LEGACY_PROFILES['right'], cap_occupied={'level': 600.0, 'provenance': {'format': 'capSense', 'normalizationVersion': 1}}))
         processor.use_presence_v2((params_from_calibration(changed, CAPSENSE), LEGACY_INPUTS[1], CAPSENSE))
         self.assertIsNot(processor.presence, detector)
         self.assertIs(processor._piezo_presence, piezo)
@@ -380,7 +381,7 @@ class LegacyLiveTest(unittest.TestCase):
         processor = StreamProcessor(legacy_records(Night(seconds=1))[0], cap_source=LatestCap())
         processor.use_presence_v2(legacy_inputs())
         detector, piezo, guard = processor.presence, processor._piezo_presence, processor._guard
-        changed = dict(LEGACY_PROFILES, right=dict(LEGACY_PROFILES['right'], cap_occupied={'level': 600.0}))
+        changed = dict(LEGACY_PROFILES, right=dict(LEGACY_PROFILES['right'], cap_occupied={'level': 600.0, 'provenance': {'format': 'capSense', 'normalizationVersion': 1}}))
         with unittest.mock.patch.object(stream_processor_module, 'PresenceDetector', side_effect=RuntimeError('boom')):
             with self.assertRaises(RuntimeError):
                 processor.use_presence_v2((params_from_calibration(changed, CAPSENSE), LEGACY_INPUTS[1], CAPSENSE))

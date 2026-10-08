@@ -125,10 +125,11 @@ def recent_cap(ts=None):
     }
 
 
-def cap_profiles():
+def cap_profiles(cap_format=CAPSENSE2):
     return {
         side: {
-            'cap': {f'{side}_{channel}': {'mean': 11.0, 'std': 1} for channel in ('out', 'cen', 'in')},
+            'cap': {**{f'{side}_{channel}': {'mean': 11.0, 'std': 1} for channel in ('out', 'cen', 'in')},
+                    'provenance': {'format': cap_format.name, 'normalizationVersion': 1}},
             'cap_occupied': None,
             'piezo_floors': [],
         }
@@ -266,6 +267,15 @@ class TestPresenceMode(CapPresenceTestCase):
         profiles['right']['cap'] = None
         self.assertIsNone(self._inputs(profiles=profiles))
 
+    def test_unknown_or_mismatched_provenance_keeps_live_presence_on_piezo(self):
+        self.latest.update(time.time(), [12.0] * 8, [12.0] * 8)
+        for provenance in (None, {'format': 'capSense', 'normalizationVersion': 1},
+                           {'format': 'capSense2', 'normalizationVersion': 99}):
+            profiles = cap_profiles()
+            for side in ('left', 'right'):
+                profiles[side]['cap']['provenance'] = provenance
+            self.assertIsNone(self._inputs(profiles=profiles))
+
     def test_on_with_the_switch_fresh_readings_and_a_baseline(self):
         self.latest.update(time.time(), [12.0] * 8, [12.0] * 8)
         params, baselines = self._inputs()
@@ -282,24 +292,24 @@ class TestPresenceMode(CapPresenceTestCase):
 
     def test_an_unchecked_format_waits_for_learned_levels(self):
         with self.assertLogs(stream.logger, level='INFO') as logs:
-            self.assertIsNone(self._legacy_inputs(cap_profiles()))
-            self.assertIsNone(self._legacy_inputs(cap_profiles()))
+            self.assertIsNone(self._legacy_inputs(cap_profiles(CAPSENSE)))
+            self.assertIsNone(self._legacy_inputs(cap_profiles(CAPSENSE)))
         self.assertEqual(len(logs.output), 1)
         self.assertIn('learned', logs.output[0])
         self.assertIn('the vibration sensor keeps deciding who is in bed, and the legacy estimators keep taking vitals',
                       logs.output[0])
 
     def test_an_unchecked_format_waits_for_records_once_a_second(self):
-        profiles = cap_profiles()
+        profiles = cap_profiles(CAPSENSE)
         for side in ('left', 'right'):
-            profiles[side]['cap_occupied'] = {'level': 900.0}
+            profiles[side]['cap_occupied'] = {'level': 900.0, 'provenance': {'format': 'capSense', 'normalizationVersion': 1}}
         self.assertIsNone(self._legacy_inputs(profiles, cadence_ok=None))
         self.assertIsNone(self._legacy_inputs(profiles, cadence_ok=False))
 
     def test_an_unchecked_format_runs_with_its_units_once_ready(self):
-        profiles = cap_profiles()
+        profiles = cap_profiles(CAPSENSE)
         for side in ('left', 'right'):
-            profiles[side]['cap_occupied'] = {'level': 900.0}
+            profiles[side]['cap_occupied'] = {'level': 900.0, 'provenance': {'format': 'capSense', 'normalizationVersion': 1}}
         params, baselines, cap_format = self._legacy_inputs(profiles)
         self.assertIs(cap_format, CAPSENSE)
         self.assertAlmostEqual(params.left.enter_delta, 360.0)
@@ -326,7 +336,7 @@ class TestPresenceMode(CapPresenceTestCase):
         self.assertIn('With capSense2 capacitance,', logs.output[0])
         profiles = cap_profiles()
         for side in ('left', 'right'):
-            profiles[side]['cap_occupied'] = {'level': 20.0}
+            profiles[side]['cap_occupied'] = {'level': 20.0, 'provenance': {'format': 'capSense2', 'normalizationVersion': 1}}
         self.assertIsNone(self._capsense2_inputs(False, profiles, cadence_ok=False))
         params, baselines, cap_format = self._capsense2_inputs(False, profiles)
         self.assertEqual(cap_format.name, 'capSense2')
@@ -408,9 +418,9 @@ class TestUncheckedFormatRunning(CapPresenceTestCase):
         self.latest.update(time.time(), (500.0, 500.0, 500.0), (500.0, 500.0, 500.0), CAPSENSE)
         self.processor = stream.StreamProcessor(recent_piezo(), cap_source=self.latest)
         self.piezo = (self.processor.left_processor, self.processor.right_processor)
-        self.profiles = cap_profiles()
+        self.profiles = cap_profiles(CAPSENSE)
         for side in ('left', 'right'):
-            self.profiles[side]['cap_occupied'] = {'level': 900.0}
+            self.profiles[side]['cap_occupied'] = {'level': 900.0, 'provenance': {'format': 'capSense', 'normalizationVersion': 1}}
         self.enabled = unittest.mock.patch.object(stream, 'biometrics_v2_enabled', return_value=True)
         self.enabled.start()
         self.addCleanup(self.enabled.stop)
@@ -475,7 +485,7 @@ class TestUncheckedFormatRunning(CapPresenceTestCase):
     def test_the_refresh_takes_new_levels_into_a_running_detector(self):
         self._refresh()
         detector = self.processor.presence
-        self.profiles['right']['cap_occupied'] = {'level': 600.0}
+        self.profiles['right']['cap_occupied'] = {'level': 600.0, 'provenance': {'format': 'capSense', 'normalizationVersion': 1}}
         self._refresh()
         self.assertIsNot(self.processor.presence, detector)
         self.assertEqual(self.processor._piezo_presence, self.piezo)

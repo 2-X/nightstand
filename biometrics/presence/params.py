@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 import statistics
+from cap_provenance import provenance_matches
 from typing import Dict, Optional
 
 from .cap import CapBaseline
@@ -53,34 +54,45 @@ def piezo_floor(floors) -> float:
     return min(PIEZO_FLOOR_MAX, max(PIEZO_FLOOR_MIN, statistics.median(usable)))
 
 
-def baselines_from_calibration(profiles) -> Optional[Dict[str, CapBaseline]]:
+def baselines_from_calibration(profiles, cap_format=None) -> Optional[Dict[str, CapBaseline]]:
     """Both sides' capacitance baselines, or None unless both are calibrated."""
     baselines = {}
+    names = set()
     for side in SIDES:
-        baseline = _cap_baseline(side, _side_entry(profiles, side).get('cap'))
+        payload = _side_entry(profiles, side).get('cap')
+        provenance = payload.get('provenance') if isinstance(payload, dict) else None
+        name = provenance.get('format') if isinstance(provenance, dict) else None
+        if not provenance_matches(payload, cap_format if cap_format is not None else name):
+            return None
+        if name is not None:
+            names.add(name)
+        baseline = _cap_baseline(side, payload)
         if baseline is None:
             return None
         baselines[side] = baseline
-    return baselines
+    return baselines if len(names) <= 1 else None
 
 
 def params_from_calibration(profiles, cap_format: CapFormat = CAPSENSE2) -> Optional[DetectorParams]:
     """Detector parameters in cap_format's units, or None when there is no capacitance baseline to detect against."""
-    baselines = baselines_from_calibration(profiles)
+    baselines = baselines_from_calibration(profiles, cap_format)
     if baselines is None:
         return None
     sides = {}
     floors = {}
     for side in SIDES:
         entry = _side_entry(profiles, side)
-        sides[side] = side_params(_occupied_level(entry.get('cap_occupied')), baselines[side].noise, cap_format.unit)
+        occupied = entry.get('cap_occupied')
+        level = _occupied_level(occupied) if provenance_matches(occupied, cap_format) else None
+        sides[side] = side_params(level, baselines[side].noise, cap_format.unit)
         floors[side] = piezo_floor(entry.get('piezo_floors'))
     return DetectorParams(left=sides['left'], right=sides['right'], piezo_floor=floors)
 
 
-def learned_levels(profiles) -> bool:
+def learned_levels(profiles, cap_format: CapFormat = CAPSENSE2) -> bool:
     """Whether both sides have a learned occupied capacitance level."""
-    return all(_occupied_level(_side_entry(profiles, side).get('cap_occupied')) is not None for side in SIDES)
+    return all(provenance_matches(_side_entry(profiles, side).get('cap_occupied'), cap_format)
+               and _occupied_level(_side_entry(profiles, side).get('cap_occupied')) is not None for side in SIDES)
 
 
 def _side_entry(profiles, side: str) -> dict:

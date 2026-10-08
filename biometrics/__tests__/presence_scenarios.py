@@ -151,6 +151,7 @@ def legacy_cap_payload(side: str, **extra) -> Dict:
     """A calibrated capacitance baseline in counts, as the calibrator stores it."""
     payload = {f'{side}_{name}': {'mean': float(mean), 'std': 1}
                for name, mean in zip(('out', 'cen', 'in'), LEGACY_COUNTS[side])}
+    payload['provenance'] = {'format': 'capSense', 'normalizationVersion': 1}
     payload.update(extra)
     return payload
 
