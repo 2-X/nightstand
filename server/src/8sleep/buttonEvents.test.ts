@@ -3,98 +3,80 @@ import { describe, it } from 'node:test';
 
 import { ButtonEventMachine } from './buttonEvents.js';
 
+const topRight = { side: 'right', button: 'top', kind: 'click' };
+const bottomLeft = { side: 'left', button: 'bottom', kind: 'click' };
+
+function click(machine: ButtonEventMachine, side: 'L' | 'R', code: number): void {
+  assert.deepEqual(machine.push(`[tca8418${side}] gpi press ${code}`), []);
+  assert.deepEqual(machine.push(`[tca8418${side}] gpi release ${code}`), []);
+}
+
 describe('ButtonEventMachine', () => {
-  it('makes one click of a press and its release', () => {
+  it('waits for the firmware to say a click was ignored', () => {
     const machine = new ButtonEventMachine();
-    assert.deepEqual(machine.push('[tca8418R] gpi press 97'), []);
-    assert.deepEqual(machine.push('[tca8418R] gpi release 97'), [
-      { side: 'right', button: 'top', kind: 'click' },
-    ]);
-  });
-
-  it('maps codes 97, 98 and 99 to top, middle and bottom, and R and L to the sides', () => {
-    const machine = new ButtonEventMachine();
-    machine.push('[tca8418L] gpi press 98');
-    assert.deepEqual(machine.push('[tca8418L] gpi release 98'), [
-      { side: 'left', button: 'middle', kind: 'click' },
-    ]);
-    machine.push('[tca8418L] gpi press 99');
-    assert.deepEqual(machine.push('[tca8418L] gpi release 99'), [
-      { side: 'left', button: 'bottom', kind: 'click' },
-    ]);
-  });
-
-  it('collapses repeated press lines while held into one click', () => {
-    const machine = new ButtonEventMachine();
-    machine.push('[tca8418R] gpi press 97');
-    machine.push('[tca8418R] gpi press 97');
-    machine.push('[tca8418R] gpi press 97');
-    assert.deepEqual(machine.push('[tca8418R] gpi release 97'), [{ side: 'right', button: 'top', kind: 'click' }]);
-  });
-
-  it('ignores a release without a press', () => {
-    const machine = new ButtonEventMachine();
-    assert.deepEqual(machine.push('[tca8418R] gpi release 97'), []);
-  });
-
-  it('swallows the click when the older firmware aborts a hold before the release', () => {
-    const machine = new ButtonEventMachine();
-    machine.push('[tca8418R] gpi press 97');
-    assert.deepEqual(machine.push('[buttons] top button held for 320ms (abort)'), []);
-    assert.deepEqual(machine.push('[tca8418R] gpi release 97'), []);
-  });
-
-  it('makes a hold, not a click, of a completed hold', () => {
-    const machine = new ButtonEventMachine();
-    machine.push('[tca8418L] gpi press 98');
-    assert.deepEqual(machine.push('[buttons] middle button held for 160ms'), [
-      { side: 'left', button: 'middle', kind: 'hold' },
-    ]);
-    assert.deepEqual(machine.push('[tca8418L] gpi release 98'), []);
-  });
-
-  // The newer host firmware's lines, as archived from a Pod 4 hub with a
-  // Pod 5 cover: the long press is announced while the button is down and the
-  // firmware acts on it, so the release must not become a second step.
-  it('swallows the release after the newer firmware announces a long press', () => {
-    const machine = new ButtonEventMachine();
-    assert.deepEqual(machine.push('[tca8418R] gpi press 97'), []);
-    assert.deepEqual(machine.push('[buttons] top button clicked'), []);
-    assert.deepEqual(machine.push('[buttons] long press top: 500ms'), [
-      { side: 'right', button: 'top', kind: 'hold' },
-    ]);
-    assert.deepEqual(machine.push('[buttons] sent button event s0x01 i0x80 c0x01'), []);
-    assert.deepEqual(machine.push('[tca8418R] gpi release 97'), []);
-    assert.deepEqual(machine.push('[buttons] top button released'), []);
-  });
-
-  it('still makes a click of a short press whose abort line follows the release', () => {
-    const machine = new ButtonEventMachine();
-    machine.push('[tca8418L] gpi press 99');
-    machine.push('[buttons] bottom button clicked');
-    assert.deepEqual(machine.push('[tca8418L] gpi release 99'), [
-      { side: 'left', button: 'bottom', kind: 'click' },
-    ]);
-    assert.deepEqual(machine.push('[buttons] bottom button released'), []);
-    assert.deepEqual(machine.push('[buttons] bottom button held for 256ms (abort)'), []);
-  });
-
-  it('ignores a long press line without a press', () => {
-    const machine = new ButtonEventMachine();
-    assert.deepEqual(machine.push('[buttons] long press bottom: 500ms'), []);
-  });
-
-  it('ignores unknown keypad codes and other lines', () => {
-    const machine = new ButtonEventMachine();
-    assert.deepEqual(machine.push('[tca8418R] gpi press 42'), []);
+    click(machine, 'R', 97);
+    assert.deepEqual(machine.push('[TTC] ignoring 1 short clicks'), [topRight]);
     assert.deepEqual(machine.push('[TTC] ignoring 1 short clicks'), []);
   });
 
-  it('keeps the sides apart', () => {
+  it('emits at most the last N clicks in order across both sides', () => {
+    const machine = new ButtonEventMachine();
+    click(machine, 'R', 99);
+    click(machine, 'L', 99);
+    click(machine, 'R', 97);
+    assert.deepEqual(machine.push('[TTC] ignoring 2 short clicks'), [bottomLeft, topRight]);
+    assert.deepEqual(machine.push('[TTC] ignoring 2 short clicks'), []);
+  });
+
+  it('does not invent missing clicks or emit any for zero', () => {
+    const machine = new ButtonEventMachine();
+    click(machine, 'R', 97);
+    assert.deepEqual(machine.push('[TTC] ignoring 5 short clicks'), [topRight]);
+    click(machine, 'R', 97);
+    assert.deepEqual(machine.push('[TTC] ignoring 0 short clicks'), []);
+    assert.deepEqual(machine.push('[TTC] ignoring 1 short clicks'), []);
+  });
+
+  for (const handled of [
+    '[TTC] right top button clicked 1 times',
+    '[TTC] left top button clicked 2 times',
+    '[thermostat] temp_up right -24->-14',
+    '[thermostat] temp_down left -14->-24',
+    '[TTC] another firmware result',
+  ]) {
+    it(`clears pending clicks on ${handled}`, () => {
+      const machine = new ButtonEventMachine();
+      click(machine, 'R', 97);
+      assert.deepEqual(machine.push(handled), []);
+      assert.deepEqual(machine.push('[TTC] ignoring 1 short clicks'), []);
+    });
+  }
+
+  it('collapses repeated presses and ignores releases without a press', () => {
+    const machine = new ButtonEventMachine();
+    machine.push('[tca8418R] gpi release 97');
+    machine.push('[tca8418R] gpi press 97');
+    machine.push('[tca8418R] gpi press 97');
+    machine.push('[tca8418R] gpi release 97');
+    machine.push('[tca8418R] gpi release 97');
+    assert.deepEqual(machine.push('[TTC] ignoring 2 short clicks'), [topRight]);
+  });
+
+  it('ignores logo clicks, invalid keypad noise and incomplete presses', () => {
+    const machine = new ButtonEventMachine();
+    click(machine, 'L', 98);
+    click(machine, 'R', 105);
+    machine.push('[tca8418R] invalid gpi->row 105->255');
+    machine.push('[tca8418R] gpi press 127');
+    machine.push('[tca8418R] gpi press 97');
+    assert.deepEqual(machine.push('[TTC] ignoring 4 short clicks'), []);
+  });
+
+  it('leaves firmware long presses without an ignoring result alone', () => {
     const machine = new ButtonEventMachine();
     machine.push('[tca8418R] gpi press 97');
-    machine.push('[tca8418L] gpi press 97');
-    assert.deepEqual(machine.push('[tca8418L] gpi release 97'), [{ side: 'left', button: 'top', kind: 'click' }]);
-    assert.deepEqual(machine.push('[tca8418R] gpi release 97'), [{ side: 'right', button: 'top', kind: 'click' }]);
+    machine.push('[buttons] long press top: 500ms');
+    assert.deepEqual(machine.push('[tca8418R] gpi release 97'), []);
+    assert.deepEqual(machine.push('[buttons] top button held for 500ms'), []);
   });
 });

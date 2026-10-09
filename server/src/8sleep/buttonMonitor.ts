@@ -1,21 +1,4 @@
-// The buttons on a Pod 5 cover: three per side, plus, logo and minus. The
-// firmware logs every press to the RAW capture's `log` records and ignores
-// short clicks, so this monitor tails the newest /persistent/*.RAW file for
-// the button lines and applies the clicks: plus and minus step the side's
-// target, the logo button stops a ringing or snoozed alarm and otherwise sets
-// the side to its favorite temperature. Long presses are left to the
-// firmware, which on newer host firmware reports them through the tap
-// counters that FrankenMonitor handles.
-//
-// Checked on one Pod 4 hub with a Pod 5 cover (docs/EIGHT_SLEEP_PROTOCOL.md,
-// "Other Pod generations"). Off unless settings.features.coverButtons is on;
-// off, no RAW file is opened.
-//
-// It runs unattended next to bed control, so: it never blocks (one poll at a
-// time, incremental reads), every error is caught and logged, a bad byte
-// resyncs rather than stops, and no promise is left to reject on its own,
-// since an unhandled rejection shuts the whole server down.
-
+// Applies cover temperature clicks only when the firmware logged them as ignored.
 import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
@@ -32,28 +15,16 @@ import { DeviceStatus, MIN_TEMPERATURE_F, MAX_TEMPERATURE_F } from '../routes/de
 import { getDeviceStatusCoalesced } from './frankenServer.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import { markManualTempChange } from '../jobs/scheduleOverride.js';
-import { activeAlarms, hasSnooze } from '../jobs/activeAlarms.js';
-import { handleAlarmTap } from './tapAlarm.js';
-import { readRawRecord, RawTruncatedError, RawFramingError } from './rawLogReader.js';
 import { ButtonEventMachine, ButtonEvent, ButtonName } from './buttonEvents.js';
 
 // Where the firmware writes its rolling RAW captures. Tests point it elsewhere.
 const RAW_DIR = process.env.POD_RAW_DIR || '/persistent';
 const POLL_MS = 1_000;
-// Inner chunks over this size are not decoded. The firmware batches several
-// log records into one chunk (about 1.6 KB seen live); piezo chunks are far
-// larger and never carry the button tags that gate decoding below anyway.
+// Avoid decoding large sensor chunks that happen to contain a matching tag.
 const MAX_TAGGED_CHUNK_BYTES = 16 * 1024;
-// Most of a file read per poll, so the first look at a large file does not
-// allocate it whole.
+// Bound each read and any incomplete tail to 1 MiB.
 const MAX_READ_CHUNK = 1 << 20;
-// How long a target written here is the base for the next press. Presses
-// come faster than the device status refreshes, so without this three quick
-// plus presses all read the same target and net one step.
-const WRITTEN_TARGET_MS = 10_000;
-// The oldest press acted on. The firmware batches about a minute of log
-// records per chunk, so a press can be 15 to 25 s old when first readable;
-// anything older is history, for example a file read again after a restart.
+// Firmware batching can delay log records by 15 to 25 s.
 const MAX_PRESS_AGE_MS = 30_000;
 // A RAW file older than this is not being written: the firmware has stopped,
 // or writes to a stream instead.
@@ -66,11 +37,12 @@ interface TailState {
   carry: Buffer;
 }
 
-// Only chunks that mention a button tag are decoded.
+// Include result lines even when they arrive in a separate chunk from the press.
 const TAG_KEYPAD = Buffer.from('[tca8418');
-const TAG_BUTTONS = Buffer.from('[buttons]');
+const TAG_TTC = Buffer.from('[TTC]');
+const TAG_THERMOSTAT = Buffer.from('[thermostat]');
 function hasButtonTag(data: Buffer): boolean {
-  return data.includes(TAG_KEYPAD) || data.includes(TAG_BUTTONS);
+  return data.includes(TAG_KEYPAD) || data.includes(TAG_TTC) || data.includes(TAG_THERMOSTAT);
 }
 
 function errorMessage(error: unknown): string {
@@ -84,7 +56,6 @@ export class ButtonMonitor {
   private firstPoll = true;
   private readonly startedAt = Date.now();
   private readonly machine = new ButtonEventMachine();
-  private writtenTargets: Partial<Record<Side, { targetF: number; at: number }>> = {};
   // A press this poll could not apply, reported instead of a healthy status.
   private pollError: string | null = null;
 
@@ -135,11 +106,9 @@ export class ButtonMonitor {
         return;
       }
 
-      // The firmware starts a new file every few minutes. A new file is read
-      // from its start. The first file after a start is read from its end:
-      // the presses already in it were made before this server ran, and the
-      // RAW archive keeps old files that must never be replayed.
+      // Skip existing history at startup, but drain the old file on rotation.
       if (!this.tail || this.tail.file !== newest) {
+        if (this.tail) await this.readAppended();
         logger.debug(`[buttonMonitor] tailing ${newest}`);
         const offset = firstPoll ? (await fsp.stat(newest)).size : 0;
         this.tail = { file: newest, offset, carry: Buffer.alloc(0) };
@@ -231,24 +200,23 @@ export class ButtonMonitor {
     const events: ButtonEvent[] = [];
     let cursor = 0;
     while (cursor < chunk.length) {
-      let record;
+      if (chunk[cursor] === 0) {
+        cursor += 1;
+        continue;
+      }
       try {
-        record = readRawRecord(chunk, cursor);
+        const { value, length } = cbor.decodeFirstSync(chunk.subarray(cursor), { extendedResults: true });
+        cursor += length;
+        const data: unknown = value?.data;
+        if (Buffer.isBuffer(data)) events.push(...this.eventsIn(data));
       } catch (error) {
-        if (error instanceof RawTruncatedError) {
+        if (errorMessage(error) === 'Insufficient data' && chunk.length - cursor <= MAX_READ_CHUNK) {
           tail.carry = Buffer.from(chunk.subarray(cursor));
           break;
         }
-        if (error instanceof RawFramingError) {
-          cursor += 1;
-          continue;
-        }
-        logger.warn(`[buttonMonitor] parse error: ${errorMessage(error)}`);
-        break;
+        // Oversized incomplete records cannot hold the reader at a corrupt length.
+        cursor += 1;
       }
-      if (record === null) break;
-      cursor = record.nextOffset;
-      events.push(...this.eventsIn(record.data));
     }
 
     // The file offset moves past everything read; what was not consumed is
@@ -294,31 +262,9 @@ export class ButtonMonitor {
   private async dispatch(event: ButtonEvent): Promise<void> {
     try {
       await settingsDB.read();
+      if (!settingsDB.data.features.coverButtons) return;
       const side: Side = event.side;
-      const buttons = settingsDB.data[side].buttons;
-
-      if (event.kind === 'hold') {
-        // The firmware owns long presses; see the file comment.
-        logger.debug(`[buttonMonitor] ${side} ${event.button} held, left to the firmware`);
-        return;
-      }
-
-      if (event.button === 'middle') {
-        if (activeAlarms.has(side) || hasSnooze(side)) {
-          logger.info(`[buttonMonitor] ${side} logo button: stopping the alarm`);
-          await handleAlarmTap(side, {
-            type: 'alarm', behavior: 'dismiss', snoozeDuration: 60, inactiveAlarmBehavior: 'none',
-          });
-        } else {
-          await this.setFavorite(side, buttons.favoriteTemperatureF);
-        }
-        return;
-      }
-
-      // invertButtons swaps which end of the cover warms the bed, settled here
-      // so it can be flipped in settings without a restart.
-      const warms = buttons.invertButtons ? event.button === 'bottom' : event.button === 'top';
-      await this.step(side, warms ? buttons.stepF : -buttons.stepF, event.button);
+      await this.step(side, event.button === 'top' ? 1 : -1, event.button);
     } catch (error) {
       logger.warn(`[buttonMonitor] ${event.side} ${event.button} ${event.kind} failed: ${errorMessage(error)}`);
       this.pollError = errorMessage(error);
@@ -339,22 +285,10 @@ export class ButtonMonitor {
       return;
     }
 
-    const written = this.writtenTargets[side];
-    const base = written && Date.now() - written.at < WRITTEN_TARGET_MS ? written.targetF : readTarget;
-    const targetF = Math.max(MIN_TEMPERATURE_F, Math.min(MAX_TEMPERATURE_F, base + deltaF));
-    logger.info(`[buttonMonitor] ${side} ${button} button: ${base} -> ${targetF} F`);
+    const targetF = Math.max(MIN_TEMPERATURE_F, Math.min(MAX_TEMPERATURE_F, readTarget + deltaF));
+    logger.info(`[buttonMonitor] ${side} ${button} button: ${readTarget} -> ${targetF} F`);
     await updateDeviceStatus({ [side]: { targetTemperatureF: targetF } } as DeepPartial<DeviceStatus>, { background: true });
-    this.writtenTargets[side] = { targetF, at: Date.now() };
     // A press counts as a manual change for the schedule override, as a tap does.
-    await markManualTempChange(side);
-  }
-
-  // The logo button with no alarm: the side's favorite temperature, on if it
-  // was off. An absolute target, so pressing it again changes nothing.
-  private async setFavorite(side: Side, favoriteF: number): Promise<void> {
-    logger.info(`[buttonMonitor] ${side} logo button: ${favoriteF} F and on`);
-    await updateDeviceStatus({ [side]: { isOn: true, targetTemperatureF: favoriteF } } as DeepPartial<DeviceStatus>, { background: true });
-    this.writtenTargets[side] = { targetF: favoriteF, at: Date.now() };
     await markManualTempChange(side);
   }
 }

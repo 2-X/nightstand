@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it, before, beforeEach, mock } from 'node:test';
+import { describe, it, before, beforeEach, after, mock } from 'node:test';
 import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, appendFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -7,8 +7,7 @@ import cbor from 'cbor';
 
 import type { DeviceStatus } from '../routes/deviceStatus/deviceStatusSchema.js';
 
-// One outer RAW record. The cbor library writes the keys in this order, which
-// is the framing readRawRecord expects.
+// Synthetic RAW records only.
 const frameRecord = (seq: number, data: Buffer): Buffer => cbor.encode({ seq, data });
 
 // Same isolated DATA_FOLDER pattern as frankenMonitor.test.ts, plus a RAW
@@ -20,6 +19,7 @@ process.env.DATA_FOLDER = `${dataFolder}/`;
 process.env.ENV = 'local';
 process.env.POD_RAW_DIR = rawDir;
 
+let readTargets = { left: 82, right: 82 };
 let updates: Array<Partial<DeviceStatus>> = [];
 let updateRejectsWith: Error | null = null;
 mock.module(new URL('../routes/deviceStatus/updateDeviceStatus.js', import.meta.url).href, {
@@ -27,6 +27,11 @@ mock.module(new URL('../routes/deviceStatus/updateDeviceStatus.js', import.meta.
     updateDeviceStatus: async (status: Partial<DeviceStatus>) => {
       updates.push(status);
       if (updateRejectsWith) throw updateRejectsWith;
+      await Promise.resolve();
+      for (const side of ['left', 'right'] as const) {
+        const target = status[side]?.targetTemperatureF;
+        if (target !== undefined) readTargets[side] = target;
+      }
     },
   },
 });
@@ -38,20 +43,16 @@ mock.module(new URL('../jobs/scheduleOverride.js', import.meta.url).href, {
   },
 });
 
-let alarmTaps: Array<{ side: string; behavior: string }> = [];
-mock.module(new URL('./tapAlarm.js', import.meta.url).href, {
-  namedExports: {
-    handleAlarmTap: async (side: string, tap: { behavior: string }) => { alarmTaps.push({ side, behavior: tap.behavior }); },
-  },
-});
-
-let readTarget = 82;
+let readCalls: string[] = [];
 mock.module(new URL('./frankenServer.js', import.meta.url).href, {
   namedExports: {
-    getDeviceStatusCoalesced: async () => ({
-      left: { targetTemperatureF: readTarget },
-      right: { targetTemperatureF: readTarget },
-    }),
+    getDeviceStatusCoalesced: async () => {
+      readCalls.push('read');
+      return {
+        left: { targetTemperatureF: readTargets.left },
+        right: { targetTemperatureF: readTargets.right },
+      };
+    },
     connectFranken: async () => ({}),
     FrankenCommandTimeoutError: class extends Error {},
   },
@@ -60,15 +61,10 @@ mock.module(new URL('./frankenServer.js', import.meta.url).href, {
 let ButtonMonitor: typeof import('./buttonMonitor.js')['ButtonMonitor'];
 let settingsDB: typeof import('../db/settings.js')['default'];
 let serverStatus: typeof import('../serverStatus.js')['default'];
-let activeAlarms: typeof import('../jobs/activeAlarms.js')['activeAlarms'];
-let setSnooze: typeof import('../jobs/activeAlarms.js')['setSnooze'];
-let cancelSnooze: typeof import('../jobs/activeAlarms.js')['cancelSnooze'];
-
 before(async () => {
   ({ ButtonMonitor } = await import('./buttonMonitor.js'));
   ({ default: settingsDB } = await import('../db/settings.js'));
   ({ default: serverStatus } = await import('../serverStatus.js'));
-  ({ activeAlarms, setSnooze, cancelSnooze } = await import('../jobs/activeAlarms.js'));
 });
 
 const logRecord = (msg: string, seq = 1, ts = Date.now() / 1000): Buffer =>
@@ -78,6 +74,7 @@ function click(sideTag: 'R' | 'L', code: number, seq = 1): Buffer {
   return Buffer.concat([
     logRecord(`[tca8418${sideTag}] gpi press ${code}`, seq),
     logRecord(`[tca8418${sideTag}] gpi release ${code}`, seq),
+    logRecord('[TTC] ignoring 1 short clicks', seq),
   ]);
 }
 
@@ -94,13 +91,14 @@ function batchedClick(sideTag: 'R' | 'L', code: number, seq = 1): Buffer {
     cbor.encode({
       type: 'log', ts: now, level: 'debug', msg: `Sensor.cpp:608 handleCommand|[sensor] -> FW: 2 [tca8418${sideTag}] gpi release ${code}`,
     }),
+    cbor.encode({ type: 'log', ts: now, msg: '[TTC] ignoring 1 short clicks' }),
     ...Array.from({ length: 8 }, (_, index) =>
       cbor.encode({ type: 'log', ts: now, level: 'debug', msg: `Thermostat.cpp:99 tick|[therm] ${filler} ${index}` })),
   ]));
 }
 
 // Drives the private poll directly instead of waiting on the interval.
-type Internals = { poll(): Promise<void> };
+type Internals = { poll(): Promise<void>; tail: { carry: Buffer } | null };
 
 function writeRaw(name: string, buffer: Buffer, mtimeSec: number): string {
   const full = path.join(rawDir, name);
@@ -121,18 +119,11 @@ describe('ButtonMonitor', () => {
   let monitor: Internals;
 
   beforeEach(async () => {
-    updates = []; manualChanges = []; alarmTaps = [];
+    updates = []; manualChanges = []; readCalls = [];
     updateRejectsWith = null;
-    readTarget = 82;
+    readTargets = { left: 82, right: 82 };
     for (const file of readdirSync(rawDir)) rmSync(path.join(rawDir, file));
-    activeAlarms.clear();
-    cancelSnooze('left');
-    cancelSnooze('right');
-
     await settingsDB.read();
-    for (const side of ['left', 'right'] as const) {
-      settingsDB.data[side].buttons = { invertButtons: false, stepF: 1, favoriteTemperatureF: 78 };
-    }
     settingsDB.data.features.coverButtons = true;
     await settingsDB.write();
 
@@ -141,7 +132,7 @@ describe('ButtonMonitor', () => {
     await monitor.poll();
   });
 
-  it('steps the right side up by stepF on a top click', async () => {
+  it('steps the right side up by 1 F on an ignored top click', async () => {
     writeRaw('001.RAW', click('R', 97), Date.now() / 1000);
     await monitor.poll();
 
@@ -165,8 +156,7 @@ describe('ButtonMonitor', () => {
     assert.deepEqual(rightTargets(), [83]);
   });
 
-  it('stacks quick presses instead of stepping each from the same read', async () => {
-    // The read target stays at 82 the whole time, as it does live.
+  it('reads each target after the previous write resolves', async () => {
     writeRaw('001.RAW', Buffer.concat([click('R', 97, 1), click('R', 97, 2), click('R', 97, 3)]), Date.now() / 1000);
     await monitor.poll();
 
@@ -174,55 +164,65 @@ describe('ButtonMonitor', () => {
   });
 
   it('keeps the target within 55 to 110 F', async () => {
-    readTarget = 110;
+    readTargets.right = 110;
     writeRaw('001.RAW', click('R', 97), Date.now() / 1000);
     await monitor.poll();
 
     assert.deepEqual(rightTargets(), [110]);
   });
 
-  it('swaps the top and bottom buttons with invertButtons', async () => {
-    settingsDB.data.right.buttons.invertButtons = true;
-    await settingsDB.write();
-    writeRaw('001.RAW', click('R', 97), Date.now() / 1000);
+  it('does nothing for a logo click or keypad noise', async () => {
+    writeRaw('001.RAW', Buffer.concat([
+      click('L', 98), click('R', 105),
+      logRecord('[tca8418R] invalid gpi->row 105->255'),
+      logRecord('[tca8418R] gpi press 127'),
+      logRecord('[TTC] ignoring 1 short clicks'),
+    ]), Date.now() / 1000);
     await monitor.poll();
-
-    assert.deepEqual(rightTargets(), [81]);
-  });
-
-  it('steps by the side\'s stepF', async () => {
-    settingsDB.data.right.buttons.stepF = 3;
-    await settingsDB.write();
-    writeRaw('001.RAW', click('R', 97), Date.now() / 1000);
-    await monitor.poll();
-
-    assert.deepEqual(rightTargets(), [85]);
-  });
-
-  it('stops a ringing alarm with the logo button', async () => {
-    activeAlarms.set('right', { vibrationIntensity: 100, duration: 60, vibrationPattern: 'double' });
-    writeRaw('001.RAW', click('R', 98), Date.now() / 1000);
-    await monitor.poll();
-
-    assert.deepEqual(alarmTaps, [{ side: 'right', behavior: 'dismiss' }]);
     assert.deepEqual(updates, []);
+    assert.deepEqual(manualChanges, []);
   });
 
-  it('stops a snoozed alarm with the logo button', async () => {
-    setSnooze('left', 60_000, () => {});
-    writeRaw('001.RAW', click('L', 98), Date.now() / 1000);
-    await monitor.poll();
+  for (const encFirst of [true, false]) {
+    it(`does not double step a Pod 5 click (encoding first: ${encFirst})`, async () => {
+      const handled = [
+        '[TTC] right top button clicked 1 times',
+        '[buttons] enc {id:0,clicks:1}',
+      ];
+      if (encFirst) handled.reverse();
+      writeRaw('001.RAW', Buffer.concat([
+        logRecord('[tca8418R] gpi press 97'),
+        logRecord('[tca8418R] gpi release 97'),
+        ...handled.map(message => logRecord(message)),
+        logRecord('[buttons] sending 4 bytes incl lsp cmd byte'),
+        logRecord('[thermostat] on | on'),
+        logRecord('[thermostat] temp_up right -24->-14'),
+        logRecord('[TTC] ignoring 1 short clicks'),
+      ]), Date.now() / 1000);
+      await monitor.poll();
+      assert.deepEqual(updates, []);
+      assert.deepEqual(readCalls, []);
+    });
+  }
 
-    assert.deepEqual(alarmTaps, [{ side: 'left', behavior: 'dismiss' }]);
-    assert.deepEqual(updates, []);
+  it('applies two ignored clicks in order using fresh targets', async () => {
+    writeRaw('001.RAW', Buffer.concat([
+      logRecord('[tca8418R] gpi press 97'), logRecord('[tca8418R] gpi release 97'),
+      logRecord('[tca8418R] gpi press 99'), logRecord('[tca8418R] gpi release 99'),
+      logRecord('[TTC] ignoring 2 short clicks'),
+    ]), Date.now() / 1000);
+    await monitor.poll();
+    assert.deepEqual(rightTargets(), [83, 82]);
+    assert.equal(readCalls.length, 2);
   });
 
-  it('sets the side to its favorite temperature and on with the logo button', async () => {
-    writeRaw('001.RAW', click('L', 98), Date.now() / 1000);
+  it('uses an external target change between polls', async () => {
+    const full = writeRaw('001.RAW', click('R', 97), Date.now() / 1000);
     await monitor.poll();
-
-    assert.deepEqual(updates, [{ left: { isOn: true, targetTemperatureF: 78 } }]);
-    assert.deepEqual(manualChanges, ['left']);
+    readTargets.right = 90;
+    appendRaw(full, click('R', 99), Date.now() / 1000);
+    await monitor.poll();
+    assert.deepEqual(rightTargets(), [83, 89]);
   });
 
   it('leaves a hold to the firmware', async () => {
@@ -240,7 +240,11 @@ describe('ButtonMonitor', () => {
     settingsDB.data.features.coverButtons = false;
     await settingsDB.write();
     writeRaw('001.RAW', click('R', 97), Date.now() / 1000);
-    await monitor.poll();
+    const open = mock.method((await import('node:fs/promises')).default, 'open');
+    try {
+      await monitor.poll();
+      assert.equal(open.mock.callCount(), 0);
+    } finally { open.mock.restore(); }
 
     assert.deepEqual(updates, []);
     assert.equal(serverStatus.status.buttonMonitor.status, 'healthy');
@@ -310,7 +314,7 @@ describe('ButtonMonitor', () => {
   });
 
   it('resyncs past a stray byte and reads the records after it', async () => {
-    writeRaw('001.RAW', Buffer.concat([Buffer.from([0x55, 0x55]), click('R', 97)]), Date.now() / 1000);
+    writeRaw('001.RAW', Buffer.concat([Buffer.from([0xff, 0xff, 0, 0]), click('R', 97)]), Date.now() / 1000);
     await monitor.poll();
 
     assert.deepEqual(rightTargets(), [83]);
@@ -327,11 +331,75 @@ describe('ButtonMonitor', () => {
     assert.deepEqual(rightTargets(), [83]);
   });
 
+  it('finishes the old file before switching to a newer file', async () => {
+    const full = writeRaw('001.RAW', Buffer.alloc(0), Date.now() / 1000 - 5);
+    await monitor.poll();
+    appendRaw(full, logRecord('[tca8418L] gpi press 99'), Date.now() / 1000 - 1);
+    writeRaw('002.RAW', Buffer.concat([
+      logRecord('[tca8418L] gpi release 99'), logRecord('[TTC] ignoring 1 short clicks'),
+    ]), Date.now() / 1000);
+    await monitor.poll();
+    assert.deepEqual(leftTargets(), [81]);
+  });
+
+  it('caps a corrupt length tail and reads clicks in the following file', async () => {
+    const corrupt = Buffer.from([0xa2, 0x63, 0x73, 0x65, 0x71, 1, 0x64, 0x64, 0x61, 0x74, 0x61,
+      0x5a, 0x7f, 0xff, 0xff, 0xff]);
+    const full = writeRaw('001.RAW', Buffer.concat([corrupt, Buffer.alloc(1 << 20)]), Date.now() / 1000 - 1);
+    await monitor.poll();
+    assert.ok(monitor.tail);
+    assert.ok(monitor.tail.carry.length <= 1 << 20);
+    await monitor.poll();
+    assert.ok(monitor.tail);
+    assert.ok(monitor.tail.carry.length <= 1 << 20);
+    assert.equal(monitor.tail.carry.length, 0);
+    appendRaw(full, corrupt, Date.now() / 1000 - 1);
+    await monitor.poll();
+    writeRaw('002.RAW', click('R', 97), Date.now() / 1000);
+    await monitor.poll();
+    assert.deepEqual(rightTargets(), [83]);
+    assert.ok(monitor.tail);
+    assert.ok(monitor.tail.carry.length <= 1 << 20);
+  });
+
+  it('clears a pending click when a separate chunk says the firmware changed the target', async () => {
+    const full = writeRaw('001.RAW', Buffer.concat([
+      logRecord('[tca8418R] gpi press 97'), logRecord('[tca8418R] gpi release 97'),
+    ]), Date.now() / 1000);
+    await monitor.poll();
+    assert.deepEqual(updates, []);
+    appendRaw(full, logRecord('[thermostat] temp_up right -24->-14'), Date.now() / 1000);
+    await monitor.poll();
+    appendRaw(full, logRecord('[TTC] ignoring 1 short clicks'), Date.now() / 1000);
+    await monitor.poll();
+    assert.deepEqual(updates, []);
+  });
+
+  it('frames reversed outer keys and skips sensor records and NUL padding', async () => {
+    const sensor = frameRecord(1, cbor.encode({ type: 'piezo-dual', samples: Buffer.alloc(2048) }));
+    const data = cbor.encode({ type: 'log', ts: Date.now() / 1000, msg: '[TTC] ignoring 1 short clicks' });
+    writeRaw('001.RAW', Buffer.concat([
+      sensor, Buffer.alloc(16),
+      logRecord('[tca8418L] gpi press 99'), logRecord('[tca8418L] gpi release 99'),
+      cbor.encode({ data, seq: 2 }), Buffer.alloc(16),
+    ]), Date.now() / 1000);
+    await monitor.poll();
+    assert.deepEqual(leftTargets(), [81]);
+  });
+
+  it('clamps a bottom click to the lower temperature limit', async () => {
+    readTargets.left = 55;
+    writeRaw('001.RAW', click('L', 99), Date.now() / 1000);
+    await monitor.poll();
+    assert.deepEqual(leftTargets(), [55]);
+  });
+
   it('reports a press that could not be applied and keeps going', async () => {
     updateRejectsWith = new Error('franken write failed');
     const full = writeRaw('001.RAW', click('R', 97, 1), Date.now() / 1000);
     await monitor.poll();
     assert.equal(updates.length, 1);
+    assert.deepEqual(manualChanges, []);
     assert.equal(serverStatus.status.buttonMonitor.status, 'failed');
     assert.match(serverStatus.status.buttonMonitor.message, /franken write failed/);
 
@@ -341,4 +409,9 @@ describe('ButtonMonitor', () => {
     assert.equal(updates.length, 2);
     assert.equal(serverStatus.status.buttonMonitor.status, 'healthy');
   });
+});
+
+after(() => {
+  rmSync(dataFolder, { recursive: true, force: true });
+  rmSync(rawDir, { recursive: true, force: true });
 });

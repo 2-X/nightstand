@@ -285,7 +285,6 @@ const createSettings = (): Settings => ({
         inactiveAlarmBehavior: 'power',
       },
     },
-    buttons: { invertButtons: false, stepF: 1, favoriteTemperatureF: 80 },
   },
   right: {
     name: 'Sam',
@@ -321,7 +320,6 @@ const createSettings = (): Settings => ({
         inactiveAlarmBehavior: 'power',
       },
     },
-    buttons: { invertButtons: false, stepF: 1, favoriteTemperatureF: 80 },
   },
   primePodDaily: { enabled: true, time: '14:30' },
 });
@@ -466,7 +464,7 @@ const createServerStatus = (): ServerStatus => ({
   buttonMonitor: {
     name: 'Cover buttons',
     status: 'healthy',
-    description: 'Reads the buttons on a Pod 5 cover from the RAW files',
+    description: 'Reads ignored cover clicks from the RAW files',
     message: 'Off in Settings > Features',
   },
   jobs: {

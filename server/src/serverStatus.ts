@@ -57,7 +57,7 @@ class ServerStatus {
       buttonMonitor: {
         name: 'Cover buttons',
         status: 'not_started',
-        description: 'Reads the buttons on a Pod 5 cover from the RAW files',
+        description: 'Reads ignored cover clicks from the RAW files',
         message: '',
       },
       jobs: {
