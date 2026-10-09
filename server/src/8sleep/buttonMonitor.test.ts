@@ -230,6 +230,29 @@ describe('ButtonMonitor', () => {
     assert.deepEqual(rightTargets(), [83]);
   });
 
+  it('ignores a click made while off even if firmware logs it after reenabling', async () => {
+    const at = Date.now() + 10;
+    const clock = mock.method(Date, 'now', () => at);
+    try {
+      const full = writeRaw('001.RAW', Buffer.alloc(0), at / 1000);
+      await monitor.poll();
+      settingsDB.data.features.coverButtons = false;
+      await settingsDB.write();
+      await monitor.poll();
+      const delayed = click('R', 97);
+      clock.mock.mockImplementation(() => at + 100);
+      settingsDB.data.features.coverButtons = true;
+      await settingsDB.write();
+      await monitor.poll();
+      appendRaw(full, delayed, (at + 100) / 1000);
+      await monitor.poll();
+      assert.deepEqual(updates, []);
+      appendRaw(full, click('R', 97), (at + 100) / 1000);
+      await monitor.poll();
+      assert.deepEqual(rightTargets(), [83]);
+    } finally { clock.mock.restore(); }
+  });
+
   it('steps the right side up by 1 F on an ignored top click', async () => {
     writeRaw('001.RAW', click('R', 97), Date.now() / 1000);
     await monitor.poll();

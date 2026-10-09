@@ -56,7 +56,7 @@ export class ButtonMonitor {
   private inFlight = false;
   private tail: TailState | null = null;
   private firstPoll = true;
-  private readonly startedAt = Date.now();
+  private startedAt = Date.now();
   private machine = new ButtonEventMachine();
   // A press this poll could not apply, reported instead of a healthy status.
   private pollError: string | null = null;
@@ -105,6 +105,7 @@ export class ButtonMonitor {
 
       const newest = await this.findNewestRawFile();
       const firstPoll = this.firstPoll;
+      if (firstPoll) this.startedAt = Date.now();
       this.firstPoll = false;
       if (!newest) {
         this.markStatus('failed', `No RAW files in ${RAW_DIR}`);

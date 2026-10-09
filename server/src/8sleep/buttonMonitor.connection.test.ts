@@ -33,6 +33,7 @@ let writtenTargets: number[] = [];
 let nextDecode: (() => Promise<void>) | null = null;
 let afterDecode: (() => Promise<void>) | null = null;
 let beforeWrite: (() => Promise<void>) | null = null;
+let afterWrite: (() => void) | null = null;
 let connectError: Error | null = null;
 let connectionWait: Promise<Socket> | null = null;
 
@@ -80,6 +81,7 @@ mock.module(new URL('../routes/deviceStatus/updateDeviceStatus.js', import.meta.
       await beforeWrite?.();
       const connection = await franken.connectFrankenWithin({ ...options, latest: true }, 'TEMP_LEVEL_RIGHT');
       await connection.callFunction('TEMP_LEVEL_RIGHT', String(status.right?.targetTemperatureF));
+      afterWrite?.();
     },
   },
 });
@@ -104,7 +106,7 @@ before(async () => {
 beforeEach(async () => {
   await franken.disconnectFranken();
   physicalTarget = 82; writtenTargets = [];
-  nextDecode = null; afterDecode = null; beforeWrite = null;
+  nextDecode = null; afterDecode = null; beforeWrite = null; afterWrite = null;
   connectError = null; connectionWait = null;
   for (const file of readdirSync(rawDir)) rmSync(path.join(rawDir, file));
   settingsDB.data.features.coverButtons = true;
@@ -120,14 +122,22 @@ describe('ButtonMonitor connection and status ordering', () => {
     const started = new Promise<void>(resolve => { decodeStarted = resolve; });
     const decoding = new Promise<void>(resolve => { releaseDecode = resolve; });
     let staleRead: Promise<DeviceStatus> | undefined;
-    let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+    let waitingForDispatch = false;
+    afterWrite = () => { waitingForDispatch = true; };
+    const readSettings = settingsDB.read.bind(settingsDB);
+    const reading = mock.method(settingsDB, 'read', async () => {
+      await readSettings();
+      if (waitingForDispatch) {
+        waitingForDispatch = false;
+        setImmediate(releaseDecode);
+      }
+    });
     beforeWrite = async () => {
       beforeWrite = null;
       nextDecode = async () => { decodeStarted(); await decoding; };
       staleRead = franken.getDeviceStatusCoalesced();
       await started;
-      // Let the next click meet the cached promise before decoding completes.
-      releaseTimer = setTimeout(releaseDecode, 100);
+
     };
     try {
       writeFileSync(rawFile, Buffer.concat([click(), click()]));
@@ -136,7 +146,7 @@ describe('ButtonMonitor connection and status ordering', () => {
       releaseDecode();
       assert.equal((await staleRead)?.right.targetTemperatureF, 82);
     } finally {
-      clearTimeout(releaseTimer);
+      reading.mock.restore();
       releaseDecode();
       await staleRead;
     }
