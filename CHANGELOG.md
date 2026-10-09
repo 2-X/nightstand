@@ -6,6 +6,17 @@ is a hard fork; for the history of the projects it descends from, see
 [jmew/free-sleep](https://github.com/jmew/free-sleep) and
 [throwaway31265/free-sleep](https://github.com/throwaway31265/free-sleep).
 
+## [Unreleased]
+
+### Fixes
+
+- Two taps that arrive in the same 2 s read now step one after the other,
+  each from the target the one before it wrote, and a tap after a read that
+  still carries the old target steps from the written one. Before, both
+  stepped from the same read's target and the second write undid the first.
+  Seen on a Pod 4 hub with a Pod 5 cover by @2-X, where the newer host
+  firmware reports a held cover button as a tap.
+
 ## [3.6.1] - 2026-10-07
 
 Keeps tap temperature changes within range, reports the daily reboot under its own status, stops sending an unverified command, and credits three contributors.
