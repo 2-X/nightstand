@@ -172,6 +172,15 @@ prove a temperature change. The public [RAW samples](https://github.com/davidsil
 also show `log` fields; dallonby's [tap reader](https://github.com/dallonby/free-sleep/commit/514086f96919699230227b74d8872c60aa743892)
 documents the separate `tap-gesture` shape.
 
+On my Pod 5, `[tca8418R] gpi press 97` and `gpi release 97` are followed
+by `[TTC] right top button clicked 1 times` and `[buttons] enc {id:0,clicks:1}`,
+then `[thermostat] temp_up right -24->-14`. Two quick clicks report
+`clicks:2` and "clicked 2 times". The firmware changes the target itself by
+10 levels per click, so the buttons already work without Nightstand.
+The Pod 4 hub with a Pod 5 cover instead logs `[TTC] ignoring N short clicks`
+for plus and minus. My Pod 5 also logs a stray `gpi press 105` with
+`invalid gpi->row 105->255` every five minutes.
+
 ### Pump/thermal telemetry (`frzHealth`)
 
 Decoded `frzHealth` example from my Pod 5, with the timestamp replaced:
@@ -357,8 +366,8 @@ lines from that bed.
   firmware changes no target itself; the step comes from Nightstand's tap
   action, so with the default actions long presses step by the tap
   amounts and the logo button tries to move an adjustable base, which
-  fails harmlessly when none is paired. Whether the Pod 5 cover's buttons
-  behave the same on a Pod 5 hub has not been checked. The firmware batches about a minute of `log`
+  fails harmlessly when none is paired. The Pod 5 hub handles short clicks
+  differently, as noted above. The firmware batches about a minute of `log`
   records into one RAW chunk, so a press can be 15 to 25 seconds old
   before it is readable; in one archive 3 of 93 presses were older than 15
   seconds.
