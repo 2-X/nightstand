@@ -5,6 +5,7 @@ export interface ButtonEvent {
   side: ButtonSide;
   button: ButtonName;
   kind: 'click';
+  at: number;
 }
 
 const CODE_TO_BUTTON: Record<number, ButtonName> = { 97: 'top', 99: 'bottom' };
@@ -17,13 +18,14 @@ export class ButtonEventMachine {
   private down = new Set<string>();
   private pending: ButtonEvent[] = [];
 
-  public push(message: string): ButtonEvent[] {
+  public push(message: string, tsMs: number): ButtonEvent[] {
     const ignored = IGNORED_RE.exec(message);
     if (ignored) {
       const count = Number(ignored[1]);
-      // ponytail: The result names no side. Clicks on both sides inside one firmware window
-      // are attributed in order; this is the limit of the log's attribution.
-      const events = count > 0 ? this.pending.slice(-count) : [];
+      // The result names no side, so attribution follows the pending order.
+      const events = count > 0 ? this.pending.slice(-count)
+        .filter(event => tsMs - event.at <= 5000)
+        .map(event => ({ ...event, at: tsMs })) : [];
       this.pending = [];
       return events;
     }
@@ -41,7 +43,8 @@ export class ButtonEventMachine {
     if (press[2].toLowerCase() === 'press') {
       this.down.add(key);
     } else if (this.down.delete(key)) {
-      this.pending.push({ side, button, kind: 'click' });
+      this.pending.push({ side, button, kind: 'click', at: tsMs });
+      if (this.pending.length > 8) this.pending.shift();
     }
     return [];
   }

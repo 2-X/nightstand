@@ -12,7 +12,7 @@ import serverStatus from '../serverStatus.js';
 import eventBus from '../events/eventBus.js';
 import { Side } from '../db/schedulesSchema.js';
 import { DeviceStatus, MIN_TEMPERATURE_F, MAX_TEMPERATURE_F } from '../routes/deviceStatus/deviceStatusSchema.js';
-import { getDeviceStatusCoalesced } from './frankenServer.js';
+import { connectFrankenWithin } from './frankenServer.js';
 import { updateDeviceStatus } from '../routes/deviceStatus/updateDeviceStatus.js';
 import { markManualTempChange } from '../jobs/scheduleOverride.js';
 import { ButtonEventMachine, ButtonEvent, ButtonName } from './buttonEvents.js';
@@ -55,7 +55,7 @@ export class ButtonMonitor {
   private tail: TailState | null = null;
   private firstPoll = true;
   private readonly startedAt = Date.now();
-  private readonly machine = new ButtonEventMachine();
+  private machine = new ButtonEventMachine();
   // A press this poll could not apply, reported instead of a healthy status.
   private pollError: string | null = null;
 
@@ -94,6 +94,9 @@ export class ButtonMonitor {
     try {
       await settingsDB.read();
       if (!settingsDB.data.features.coverButtons) {
+        this.tail = null;
+        this.machine = new ButtonEventMachine();
+        this.firstPoll = true;
         this.markStatus('healthy', 'Off in Settings > Features');
         return;
       }
@@ -254,7 +257,7 @@ export class ButtonMonitor {
       if (typeof record.ts !== 'number' || !Number.isFinite(record.ts)) continue;
       const at = record.ts * 1000;
       if (at < this.startedAt || at > now + 1000 || now - at > MAX_PRESS_AGE_MS) continue;
-      events.push(...this.machine.push(record.msg));
+      events.push(...this.machine.push(record.msg, at));
     }
     return events;
   }
@@ -262,32 +265,26 @@ export class ButtonMonitor {
   private async dispatch(event: ButtonEvent): Promise<void> {
     try {
       await settingsDB.read();
-      if (!settingsDB.data.features.coverButtons) return;
+      if (!settingsDB.data.features.coverButtons || Date.now() - event.at > MAX_PRESS_AGE_MS) return;
       const side: Side = event.side;
-      await this.step(side, event.button === 'top' ? 1 : -1, event.button);
+      await this.step(side, event.button === 'top' ? 1 : -1, event.button, event.at);
     } catch (error) {
       logger.warn(`[buttonMonitor] ${event.side} ${event.button} ${event.kind} failed: ${errorMessage(error)}`);
       this.pollError = errorMessage(error);
     }
   }
 
-  private async step(side: Side, deltaF: number, button: ButtonName): Promise<void> {
-    let readTarget: number | undefined;
-    try {
-      const status = await getDeviceStatusCoalesced();
-      readTarget = status[side]?.targetTemperatureF;
-    } catch (error) {
-      logger.warn(`[buttonMonitor] could not read the device status for a ${button} press: ${errorMessage(error)}`);
-      return;
-    }
+  private async step(side: Side, deltaF: number, button: ButtonName, at: number): Promise<void> {
+    const status = await (await connectFrankenWithin()).getDeviceStatus();
+    const readTarget = status[side]?.targetTemperatureF;
     if (typeof readTarget !== 'number' || !Number.isFinite(readTarget)) {
-      logger.warn(`[buttonMonitor] no target for the ${side} side; skipping the press`);
-      return;
+      throw new Error(`no target for the ${side} side`);
     }
+    if (Date.now() - at > MAX_PRESS_AGE_MS) return;
 
     const targetF = Math.max(MIN_TEMPERATURE_F, Math.min(MAX_TEMPERATURE_F, readTarget + deltaF));
     logger.info(`[buttonMonitor] ${side} ${button} button: ${readTarget} -> ${targetF} F`);
-    await updateDeviceStatus({ [side]: { targetTemperatureF: targetF } } as DeepPartial<DeviceStatus>, { background: true });
+    await updateDeviceStatus({ [side]: { targetTemperatureF: targetF } } as DeepPartial<DeviceStatus>, { notAfter: at + MAX_PRESS_AGE_MS });
     // A press counts as a manual change for the schedule override, as a tap does.
     await markManualTempChange(side);
   }

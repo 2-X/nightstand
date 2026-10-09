@@ -22,16 +22,23 @@ process.env.POD_RAW_DIR = rawDir;
 let readTargets = { left: 82, right: 82 };
 let updates: Array<Partial<DeviceStatus>> = [];
 let updateRejectsWith: Error | null = null;
+let readRejectsWith: Error | null = null;
+let afterRead: (() => void) | null = null;
+let afterWrite: (() => void) | null = null;
+let writeOptions: Array<import('./frankenServer.js').CommandOptions> = [];
 mock.module(new URL('../routes/deviceStatus/updateDeviceStatus.js', import.meta.url).href, {
   namedExports: {
-    updateDeviceStatus: async (status: Partial<DeviceStatus>) => {
+    updateDeviceStatus: async (status: Partial<DeviceStatus>, options: import('./frankenServer.js').CommandOptions = {}) => {
+      writeOptions.push(options);
       updates.push(status);
       if (updateRejectsWith) throw updateRejectsWith;
+      if (options.notAfter !== undefined && Date.now() > options.notAfter) throw new Error('click expired');
       await Promise.resolve();
       for (const side of ['left', 'right'] as const) {
         const target = status[side]?.targetTemperatureF;
         if (target !== undefined) readTargets[side] = target;
       }
+      afterWrite?.();
     },
   },
 });
@@ -44,15 +51,20 @@ mock.module(new URL('../jobs/scheduleOverride.js', import.meta.url).href, {
 });
 
 let readCalls: string[] = [];
+const readStatus = async () => {
+  readCalls.push('read');
+  if (readRejectsWith) throw readRejectsWith;
+  const status = {
+    left: { targetTemperatureF: readTargets.left },
+    right: { targetTemperatureF: readTargets.right },
+  };
+  afterRead?.();
+  return status;
+};
 mock.module(new URL('./frankenServer.js', import.meta.url).href, {
   namedExports: {
-    getDeviceStatusCoalesced: async () => {
-      readCalls.push('read');
-      return {
-        left: { targetTemperatureF: readTargets.left },
-        right: { targetTemperatureF: readTargets.right },
-      };
-    },
+    getDeviceStatusCoalesced: readStatus,
+    connectFrankenWithin: async () => ({ getDeviceStatus: readStatus }),
     connectFranken: async () => ({}),
     FrankenCommandTimeoutError: class extends Error {},
   },
@@ -98,7 +110,11 @@ function batchedClick(sideTag: 'R' | 'L', code: number, seq = 1): Buffer {
 }
 
 // Drives the private poll directly instead of waiting on the interval.
-type Internals = { poll(): Promise<void>; tail: { carry: Buffer } | null };
+type Internals = {
+  poll(): Promise<void>;
+  dispatch(event: import('./buttonEvents.js').ButtonEvent): Promise<void>;
+  tail: { carry: Buffer } | null;
+};
 
 function writeRaw(name: string, buffer: Buffer, mtimeSec: number): string {
   const full = path.join(rawDir, name);
@@ -121,6 +137,7 @@ describe('ButtonMonitor', () => {
   beforeEach(async () => {
     updates = []; manualChanges = []; readCalls = [];
     updateRejectsWith = null;
+    readRejectsWith = null; afterRead = null; afterWrite = null; writeOptions = [];
     readTargets = { left: 82, right: 82 };
     for (const file of readdirSync(rawDir)) rmSync(path.join(rawDir, file));
     await settingsDB.read();
@@ -130,6 +147,84 @@ describe('ButtonMonitor', () => {
     monitor = new ButtonMonitor() as unknown as Internals;
     // The first poll reads nothing: it only finds where the newest file ends.
     await monitor.poll();
+  });
+
+  it('drops an emitted click that expired before dispatch', async () => {
+    await monitor.dispatch({ side: 'right', button: 'top', kind: 'click', at: Date.now() - 30_001 });
+    assert.deepEqual(updates, []);
+    assert.deepEqual(readCalls, []);
+  });
+
+  it('bounds a write by the timestamp of the ignoring line', async () => {
+    const at = Date.now();
+    writeRaw('001.RAW', Buffer.concat([
+      logRecord('[tca8418R] gpi press 97', 1, at / 1000),
+      logRecord('[tca8418R] gpi release 97', 1, at / 1000),
+      logRecord('[TTC] ignoring 1 short clicks', 1, (at + 1) / 1000),
+    ]), at / 1000);
+    await monitor.poll();
+    assert.deepEqual(writeOptions, [{ notAfter: at + 30_001 }]);
+  });
+
+  it('drops later clicks once a preceding write has consumed their time', async () => {
+    const at = Date.now();
+    const clock = mock.method(Date, 'now', () => at);
+    try {
+      afterWrite = () => { clock.mock.mockImplementation(() => at + 30_001); };
+      writeRaw('001.RAW', Buffer.concat([click('R', 97), click('R', 97)]), at / 1000);
+      await monitor.poll();
+      assert.deepEqual(rightTargets(), [83]);
+    } finally { clock.mock.restore(); }
+  });
+
+  for (const invalid of [false, true]) {
+    it(`reports a ${invalid ? 'missing target' : 'failed status read'} as failed and resumes polling`, async () => {
+      if (invalid) readTargets.right = Number.NaN;
+      else readRejectsWith = new Error('read failed');
+      const full = writeRaw('001.RAW', click('R', 97), Date.now() / 1000);
+      await monitor.poll();
+      assert.deepEqual(updates, []);
+      assert.equal(serverStatus.status.buttonMonitor.status, 'failed');
+      assert.match(serverStatus.status.buttonMonitor.message, invalid ? /no target/ : /read failed/);
+      readRejectsWith = null; readTargets.right = 82;
+      appendRaw(full, click('R', 97), Date.now() / 1000);
+      await monitor.poll();
+      assert.deepEqual(rightTargets(), [83]);
+      assert.equal(serverStatus.status.buttonMonitor.status, 'healthy');
+    });
+  }
+
+  it('does not send a click that expires during the status read', async () => {
+    const at = Date.now();
+    const clock = mock.method(Date, 'now', () => at);
+    try {
+      afterRead = () => { clock.mock.mockImplementation(() => at + 30_001); };
+      writeRaw('001.RAW', click('R', 97), at / 1000);
+      await monitor.poll();
+      assert.deepEqual(rightTargets(), []);
+      assert.deepEqual(manualChanges, []);
+    } finally { clock.mock.restore(); }
+  });
+
+  it('discards the tail and pending clicks while off and resumes at the newest file end', async () => {
+    const full = writeRaw('001.RAW', Buffer.concat([
+      logRecord('[tca8418R] gpi press 97'), logRecord('[tca8418R] gpi release 97'),
+    ]), Date.now() / 1000);
+    await monitor.poll();
+    settingsDB.data.features.coverButtons = false;
+    await settingsDB.write();
+    await monitor.poll();
+    appendRaw(full, click('L', 99), Date.now() / 1000);
+    const newest = writeRaw('002.RAW', click('L', 99), Date.now() / 1000 + 0.01);
+    settingsDB.data.features.coverButtons = true;
+    await settingsDB.write();
+    await monitor.poll();
+    appendRaw(newest, logRecord('[TTC] ignoring 1 short clicks'), Date.now() / 1000 + 0.01);
+    await monitor.poll();
+    assert.deepEqual(updates, []);
+    appendRaw(newest, click('R', 97), Date.now() / 1000 + 0.01);
+    await monitor.poll();
+    assert.deepEqual(rightTargets(), [83]);
   });
 
   it('steps the right side up by 1 F on an ignored top click', async () => {
