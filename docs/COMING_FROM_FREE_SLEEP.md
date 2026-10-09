@@ -38,6 +38,12 @@ The switch applies the
 which block most internet access (updates open what they need while they
 download). Nightstand sends no error reports or analytics.
 
+The switch asks before removing legacy root cron jobs that open the firewall,
+their time sync script and the ambient-light database writer. It stops other
+unknown `free-sleep*` units before the database checkpoint and never enables
+them. It reports IPv6-disable settings in `/etc/sysctl.conf` without changing
+them. Install and update only warn about the legacy cron jobs.
+
 Settings > Software has Stable and Beta channels, a version picker and a way
 back to the previous install. If your settings have no update channel yet,
 the switch saves the installed release's channel. A failed update tries to
@@ -75,12 +81,13 @@ on, the tool asks for a typed confirmation before going ahead.
 
 ## Switching
 
-1. Download the tool and the two helper files it copies to the Pod into one
+1. Download the tool and the four helper files it copies to the Pod into one
    folder, so you can read them before running them:
    ```bash
-   for f in switch-to-this-fork.sh pod-installer.sh restore-original-fork.sh; do
+   for f in switch-to-this-fork.sh pod-installer.sh restore-original-fork.sh fork-artifacts.sh; do
      curl -fO "https://raw.githubusercontent.com/LTimothy/nightstand/main/scripts/migrate/$f"
    done
+   curl -fO "https://raw.githubusercontent.com/LTimothy/nightstand/main/scripts/restore_helpers.sh"
    chmod +x switch-to-this-fork.sh
    ```
 2. Run it with `--dry-run`. It reports what it found and would do, without
@@ -96,6 +103,15 @@ on, the tool asks for a typed confirmation before going ahead.
 3. If the report looks right, run it again without `--dry-run`. It asks you
    to type `switch` before it changes anything. Keep the backup it saves in the
    folder you run it from for a few nights.
+
+The tool reports root cron jobs that open the firewall and fork-specific
+services before making changes. Removing those cron jobs and the ambient-light
+service requires a separate typed confirmation. Declining it refuses the
+switch. Other unknown `free-sleep*` units are stopped before the database
+checkpoint and are not restarted by the tool. Copies of removed artifacts
+stay in `/home/dac/free-sleep-migrate-artifacts/backup.*`; the installer prints
+the exact directory. A failed switch restores the cron and removed files,
+but leaves foreign units disabled or stopped for you to review.
 
 Keep your computer awake and the terminal open until the tool prints its
 result. Once the backup is on your computer, the install carries on in the
@@ -134,6 +150,11 @@ it:
 
 ## Going back
 
+After a successful switch, going back restores the application tree but does
+not reinstall removed cron jobs or enable foreign units. The artifact copies
+remain in the directory printed by the installer. Review them before restoring
+them, since the cron jobs open the firewall.
+
 To your previous install: in Settings > Software > Recovery, use "Go back to
 v{version}" under Previous installation. Right after switching, that is your
 old install. Installing any other Nightstand version replaces it, and from
@@ -171,6 +192,11 @@ On a Pod 5 there is no tested way back.
 
 ### Switching to upstream
 
+If the browser cannot fetch `releases.json`, the legacy switch remains
+available. It sends no target, so the Pod reads the legacy pin itself. A
+manifest that loads but changes during confirmation requires a new
+confirmation. A newer upstream target, once one is published, always needs a confirmed target.
+
 Before the switch, code and JSON settings are backed up under
 `/persistent/free-sleep-backups/<timestamp>_v<version>_prerevert-to-stock/`,
 and SQLite snapshots under `/persistent/free-sleep-database-backups/`.
@@ -183,7 +209,9 @@ keeps the original settings.
 Nightstand's own services, including the network watchdog, and its hardware
 watchdog setting are removed (on some Pods the watchdog turns off at the next
 restart). Backups and `raw-archive/` stay; the switch log prints the
-archive's size so you can delete it if you no longer need it.
+archive's size so you can delete it if you no longer need it. With no published
+switch journal, a successful legacy switch also removes the switch recovery
+service, its startup drop-ins and external helpers.
 
 Upstream's first update can print a "reset, all data will be lost" message
 because its migration history differs. Do not follow that reset prompt. Your

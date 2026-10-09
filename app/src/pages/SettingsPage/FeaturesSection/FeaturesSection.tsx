@@ -159,6 +159,53 @@ export default function FeaturesSection() {
         />
       </Box>
       <FeatureToggleRow
+        label="Cooling warning"
+        disabled={ isUpdating || features?.coolingWarning === undefined }
+        checked={ features?.coolingWarning ?? false }
+        onChange={ next => updateFeature({ coolingWarning: next }) }
+        description="Warns when measured water keeps warming during cooling demand. Needs Biometrics. Does not change bed operation."
+      />
+      <FeatureToggleRow
+        label="Tap diagnostics"
+        disabled={ isUpdating || features?.tapDiagnostics === undefined }
+        checked={ features?.tapDiagnostics ?? false }
+        onChange={ next => updateFeature({ tapDiagnostics: next }) }
+        description="Records button and tap candidates on System status, with export. Needs Biometrics. Does not trigger actions."
+      />
+      <FeatureToggleRow
+        label="Firmware health"
+        disabled={ isUpdating || features?.firmwareHealth === undefined }
+        checked={ features?.firmwareHealth ?? false }
+        onChange={ next => updateFeature({ firmwareHealth: next }) }
+        description="Shows selected firmware health messages on System status. Needs Biometrics."
+      />
+      <FeatureToggleRow
+        label="Firmware target"
+        disabled={ isUpdating || features?.firmwareTargetReadout === undefined }
+        checked={ features?.firmwareTargetReadout ?? false }
+        onChange={ next => updateFeature({ firmwareTargetReadout: next }) }
+        description="Shows the target reported by firmware on System status. Needs Biometrics."
+      />
+      <FeatureToggleRow
+        label="Low-disk protection"
+        disabled={ isUpdating || features?.metricsLowDiskProtection === undefined }
+        checked={ features?.metricsLowDiskProtection ?? true }
+        onChange={ (next) => updateFeature({ metricsLowDiskProtection: next }) }
+        description={ 'On by default. Below 150 MiB free, deletes the oldest detailed vitals in batches until '
+          + '16 MiB of database pages can be reused. Keeps at least the last 2 nights of detail. '
+          + 'Stops database growth by reusing space; does not shrink the database file. '
+          + 'Never deletes nightly summaries, sleep records, scores or movement.' }
+      />
+      <FeatureToggleRow
+        label="Prune detail after 30 days"
+        disabled={ isUpdating || features?.metricsRetention === undefined }
+        checked={ features?.metricsRetention ?? false }
+        onChange={ (next) => updateFeature({ metricsRetention: next }) }
+        description={ 'Opt-in, off by default. Deletes detailed vitals older than 30 days. '
+          + 'Never deletes nightly summaries, sleep records or scores, and keeps movement. '
+          + 'Deleted detail cannot be restored. Turning either switch off stops its future deletions.' }
+      />
+      <FeatureToggleRow
         label="Level temperature display"
         disabled={ isUpdating || features?.levelTemps === undefined }
         checked={ features?.levelTemps ?? false }

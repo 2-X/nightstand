@@ -5,7 +5,8 @@ import {
   DialogContentText, DialogTitle, Stack, Typography,
 } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import { useReleases } from '@api/releases.ts';
+import { useReleases, selectSwitchTarget } from '@api/releases.ts';
+import type { UpstreamSwitchRecord } from '@api/updateSchema.ts';
 import { postSwitchToUpstream } from '@api/update.ts';
 import { useUpdateProgress } from '@api/useUpdateProgress.ts';
 import InUseConfirm from '../../../components/InUseConfirm';
@@ -17,11 +18,23 @@ type Props = {
 
 export default function RevertToStockRow({ runningVersion }: Props) {
   const [open, setOpen] = useState(false);
+  const [confirmed, setConfirmed] = useState<UpstreamSwitchRecord>();
+  const [legacyFallback, setLegacyFallback] = useState(false);
   const titleId = useId();
   const { phase, error, inUse, recordedOutcome, start, reset } = useUpdateProgress(runningVersion, undefined, 'switch');
-  const checked = useReleases().data?.upstreamSwitch;
+  const { data: manifest, isLoading, isError } = useReleases();
+  const target = selectSwitchTarget(manifest);
+  const targetUnchanged = confirmed !== undefined && selectSwitchTarget(manifest, confirmed) !== undefined;
 
-  const revert = () => start(confirmInUse => postSwitchToUpstream(confirmInUse ? { confirmInUse } : undefined));
+  const manifestFailed = isError && manifest === undefined;
+  const canRevert = targetUnchanged || (legacyFallback && manifestFailed);
+
+  const revert = () => {
+    if (!canRevert) return;
+    return start(confirmInUse => postSwitchToUpstream({
+      ...(confirmed ? { target: confirmed } : {}), ...(confirmInUse ? { confirmInUse } : {}),
+    }));
+  };
 
   return (
     // The dialog is a sibling of the row, not a child of it. A portalled
@@ -29,7 +42,12 @@ export default function RevertToStockRow({ runningVersion }: Props) {
     // the row would feed every click back into the row's own open handler.
     <>
       <ButtonBase
-        onClick={ () => setOpen(true) }
+        disabled={ isLoading }
+        onClick={ () => {
+          setConfirmed(target ? { ...target } : undefined);
+          setLegacyFallback(manifestFailed);
+          setOpen(true);
+        } }
         sx={ {
           display: 'flex',
           alignItems: 'center',
@@ -66,11 +84,17 @@ export default function RevertToStockRow({ runningVersion }: Props) {
                 Schedules and alarms pause during restart.
               </Typography>
               <Typography variant="body2" sx={ { mb: 2 } }>
-                { checked
-                  ? `Installs the upstream free-sleep version this release pins, dated ${checked.date}.`
-                    + ' The full switch has not been tested on hardware.'
-                  : 'Installs upstream free-sleep\'s newest code, which this switch has not been checked with.' }
+                { legacyFallback
+                  ? "Installs upstream free-sleep's newest code, which this switch has not been checked with."
+                  : confirmed && 'version' in confirmed
+                    ? `Installs upstream free-sleep ${confirmed.version}, commit ${confirmed.commit}, validated ${confirmed.date}.`
+                    : `Switch to upstream installs the pinned pre-3.0 commit ${confirmed?.commit ?? 'ca7dc543'}, not upstream 3.0.3.`
+                    + ' The full switch has not been tested on hardware. Support for switching to 3.0.x is being prepared.' }
               </Typography>
+              { !canRevert && <Alert severity="warning" sx={ { mb: 2 } }>
+                { confirmed || legacyFallback ? 'The upstream target changed. Close this dialog and review the target again.'
+                  : 'No validated target is available for the new switch.' }
+              </Alert> }
               <Typography variant="body2" sx={ { mb: 2 } }>
                 A copy of the original code and settings is saved under /persistent/free-sleep-backups/
                 in a timestamped prerevert-to-stock directory. A consistent sleep database backup is saved
@@ -130,7 +154,7 @@ export default function RevertToStockRow({ runningVersion }: Props) {
           { phase === 'idle' && (
             <>
               <Button autoFocus={ inUse !== undefined } onClick={ () => { reset(); setOpen(false); } }>Cancel</Button>
-              <Button color="error" variant="contained" onClick={ revert }>
+              <Button color="error" variant="contained" disabled={ !canRevert } onClick={ revert }>
                 { inUse ? 'Continue anyway' : 'Switch to upstream free-sleep' }
               </Button>
             </>

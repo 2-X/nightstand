@@ -197,8 +197,8 @@ class TestMalformedInput(unittest.TestCase):
     def test_truncated_data_length(self):
         """Data length says 10 bytes but only 5 are present."""
         head = b'\xa2\x63seq\x18\x01\x64data'
-        # uint8 length = 10, only 5 bytes follow
-        raw = head + b'\x18\x0a' + b'\x00' * 5
+        # Byte string with uint8 length = 10, only 5 bytes follow.
+        raw = head + b'\x58\x0a' + b'\x00' * 5
         handle = BytesIO(raw)
         with self.assertRaises(EOFError):
             _read_raw_record(handle)
@@ -209,6 +209,21 @@ class TestMalformedInput(unittest.TestCase):
         handle = BytesIO(raw)
         with self.assertRaisesRegex(ValueError, "data key"):
             _read_raw_record(handle)
+
+    def test_data_must_be_a_byte_string(self):
+        raw = b'\xa2\x63seq\x01\x64data\x18\x0a' + b'\x00' * 10
+        with self.assertRaisesRegex(ValueError, 'data byte string'):
+            _read_raw_record(BytesIO(raw))
+
+    def test_corrupt_length_does_not_request_a_large_allocation(self):
+        class BoundedReader(BytesIO):
+            def read(reader, size=-1):
+                self.assertLessEqual(size, 65536)
+                return super().read(size)
+
+        raw = b'\xa2\x63seq\x01\x64data\x5a\xff\xff\xff\xffshort'
+        with self.assertRaises(EOFError):
+            _read_raw_record(BoundedReader(raw))
 
     def test_unsupported_length_ai(self):
         """CBOR major type 2 with additional info 27 (8-byte length) is not

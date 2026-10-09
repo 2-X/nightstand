@@ -10,17 +10,23 @@ function nightCaption(record: SleepRecord | undefined) {
   return `${formatSleepDuration(duration.seconds)} ${duration.kind}`;
 }
 
-export default function SleepSideControl({ selectedDate, timeZone }: { selectedDate: string; timeZone: string }) {
-  const left = useSleepRecords({ side: 'left' });
-  const right = useSleepRecords({ side: 'right' });
+export default function SleepSideControl({ selectedDate, timeZone, displayedRecord }: {
+  selectedDate: string; timeZone: string; displayedRecord?: SleepRecord;
+}) {
+  const start = moment.tz(selectedDate, timeZone).startOf('day');
+  const range = { startTime: start.toISOString(), endTime: start.clone().add(1, 'day').toISOString() };
+  const left = useSleepRecords({ side: 'left', ...range });
+  const right = useSleepRecords({ side: 'right', ...range });
   const nightFor = (side: 'left' | 'right', records: SleepRecord[] | undefined) =>
     recordForNight(withoutFutureRecords((records ?? []).filter(record => record.side === side), moment().valueOf()), selectedDate, timeZone);
-  const leftCaption = nightCaption(nightFor('left', left.isError ? [] : left.data));
-  const rightCaption = nightCaption(nightFor('right', right.isError ? [] : right.data));
+  const leftCaption = nightCaption(displayedRecord?.side === 'left' ? displayedRecord : nightFor('left', left.data));
+  const rightCaption = nightCaption(displayedRecord?.side === 'right' ? displayedRecord : nightFor('right', right.data));
   return <SideControl
     mergeAwaySides={ false }
     captions={ {
-      left: left.isError ? 'Recording unavailable' : left.isPending ? 'Loading recording' : leftCaption,
-      right: right.isError ? 'Recording unavailable' : right.isPending ? 'Loading recording' : rightCaption,
+      left: displayedRecord?.side === 'left' ? leftCaption
+        : left.isError ? 'Recording unavailable' : left.isPending ? 'Loading recording' : leftCaption,
+      right: displayedRecord?.side === 'right' ? rightCaption
+        : right.isError ? 'Recording unavailable' : right.isPending ? 'Loading recording' : rightCaption,
     } }/>;
 }

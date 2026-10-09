@@ -40,7 +40,7 @@ export default function OneOffAlarmSection() {
   const { side } = useAppStore();
   const { data: settings, refetch } = useSettings();
   const { data: deviceStatus } = useDeviceStatus();
-  const risePattern = supportsRisePattern(deviceStatus?.hubVersion);
+  const risePattern = supportsRisePattern(deviceStatus?.hubVersion, deviceStatus?.coverVersion);
 
   const [enabled, setEnabled] = useState(false);
   const [fireAtLocal, setFireAtLocal] = useState('');

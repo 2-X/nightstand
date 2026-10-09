@@ -86,6 +86,14 @@ class LegacyCalibrationTest(unittest.TestCase):
         runs = conn.execute("SELECT status, payload FROM calibration_runs WHERE sensor_type = 'cap'").fetchall()
         return (profile['payload'] if profile else None), runs
 
+    def test_one_unknown_record_does_not_fail_capsense2_calibration(self):
+        records = list(empty_records('capsense2'))
+        records.append({'type': 'capSense3', 'ts': scenarios.T0 + 100})
+        payload, runs = self.calibrate(enabled=True, records=records)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload['provenance']['format'], 'capSense2')
+        self.assertEqual(runs[0][0], 'success')
+
     def test_a_baseline_in_counts_is_learned_from_capsense(self):
         payload, _ = self.calibrate(enabled=True)
         self.assertAlmostEqual(payload['left_out']['mean'], 387.0, places=0)
@@ -106,15 +114,19 @@ class LegacyCalibrationTest(unittest.TestCase):
 
     def test_the_run_records_the_format_with_the_switch_on(self):
         _, runs = self.calibrate(enabled=True)
-        self.assertEqual([(status, json.loads(payload)) for status, payload in runs],
-                         [('success', {'format': 'capSense'})])
+        self.assertEqual([(status, json.loads(payload)['format']) for status, payload in runs],
+                         [('success', 'capSense')])
+        self.assertEqual(json.loads(runs[0][1])['provenance']['format'], 'capSense')
         _, runs = self.calibrate(enabled=True, records=empty_records('capsense2'))
-        self.assertEqual(json.loads(runs[0][1]), {'format': 'capSense2'})
+        self.assertEqual(json.loads(runs[0][1])['format'], 'capSense2')
+        self.assertEqual(json.loads(runs[0][1])['provenance']['normalizationVersion'], 1)
 
-    def test_nothing_new_is_written_with_the_switch_off(self):
+    def test_switch_off_keeps_channel_calculations_and_adds_provenance(self):
         payload, runs = self.calibrate(enabled=False)
         self.assertNotIn('delta_noise', payload)
-        self.assertEqual(runs, [('success', None)])
+        self.assertEqual(runs[0][0], 'success')
+        self.assertEqual(json.loads(runs[0][1])['provenance'], payload['provenance'])
+        self.assertEqual(payload['provenance']['format'], 'capSense')
 
     def test_a_placeholder_count_stays_out_of_what_the_new_detector_reads(self):
         records = list(with_placeholders(empty_records()))

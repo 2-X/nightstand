@@ -55,6 +55,9 @@ NPX=/home/dac/.volta/bin/npx
 
 say() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
+# Report legacy firewall jobs without editing the root crontab.
+bash "$RECOVERY_SOURCE/scripts/migrate/fork-artifacts.sh" warn-cron || true
+
 RESULT_OPERATION=update
 
 # How this run ended, for the app to show. The writer is read now because the
@@ -93,16 +96,8 @@ record_result() {
 WAN_RULES=("-p tcp --dport 443 -j ACCEPT" "-p udp --dport 53 -j ACCEPT" "-p tcp --dport 53 -j ACCEPT")
 WAN_RULE6="-p tcp --dport 443 -j REJECT --reject-with tcp-reset"
 WAN_OPEN=no
-# iptables 1.6.0 added "-w SECONDS"; older builds take a bare -w or no flag.
-IPT_W=
-for IPT_W in "-w 5" "-w" ""; do
-  # shellcheck disable=SC2086
-  iptables $IPT_W -S OUTPUT >/dev/null 2>&1 && break
-done
-# shellcheck disable=SC2086
-fw4() { iptables $IPT_W "$@"; }
-# shellcheck disable=SC2086
-fw6() { ip6tables $IPT_W "$@"; }
+source "$(dirname "${BASH_SOURCE[0]}")/restore_helpers.sh" || exit 1
+init_update_firewall
 # Removes the given rules only while one of them is the first rule in OUTPUT,
 # where the window puts them, so the same rule further down (Tailscale's
 # HTTPS allow) is left alone. Rules are compared with whitespace and the
@@ -135,6 +130,7 @@ open_wan() {
   done
   # shellcheck disable=SC2086
   fw6 -I OUTPUT 1 $WAN_RULE6 2>/dev/null || true
+  restore_output_policy
 }
 close_wan() {
   [ "$WAN_OPEN" = yes ] || return 0
@@ -143,6 +139,7 @@ close_wan() {
   strip_top fw6 "$WAN_RULE6" >/dev/null
   sh "$LIVE/scripts/block_internet_access.sh" >/dev/null 2>&1 \
     || sh "$PREV/scripts/block_internet_access.sh" >/dev/null 2>&1 || true
+  restore_output_policy
   WAN_OPEN=no
 }
 # A stalled step must not hold the window open. Busybox builds that only
@@ -643,7 +640,7 @@ if ! stop_writer free-sleep-stream || ! stop_writer free-sleep || ! stop_late_st
   RESULT_PHASE=preflight
   fail "could not stop the running services; live install untouched"
 fi
-bash "$RECOVERY_HELPER" --arm "$STREAM_WAS_ACTIVE" \
+bash "$RECOVERY_HELPER" --arm "$STREAM_WAS_ACTIVE" "$STAGED_VERSION" \
   || fail "could not write the update swap marker; live install untouched"
 # Flush the installed recovery helper, unit and marker before moving trees.
 sync
@@ -830,7 +827,9 @@ if [ "$HEALTHY" = yes ]; then
       ! grep -q -- '--dport 1337.*--reject-with tcp-reset' "$LIVE/scripts/block_internet_access.sh"; then
       EXPECT_RESET=no
     fi
-    if fw4 -C OUTPUT -j DROP; then
+    # Older releases end OUTPUT with DROP.
+    if { fw4 -C OUTPUT -j REJECT || fw4 -C OUTPUT -j DROP; } &&
+       { fw6 -C OUTPUT -j REJECT || fw6 -C OUTPUT -j DROP; }; then
       if [ "$EXPECT_RESET" = no ] || fw4 -C OUTPUT -p tcp --dport 1337 -j REJECT --reject-with tcp-reset; then
         bash "$RECOVERY_HELPER" --clear || fail "could not clear the update swap marker"
         say "SUCCESS: pod is serving v$STAGED_VERSION. Previous version kept at $PREV; backup at $BK"
@@ -838,7 +837,7 @@ if [ "$HEALTHY" = yes ]; then
         exit 0
       fi
       if [ "$FIREWALL_ATTEMPT" = 2 ]; then
-        say "WARNING: port 1337 reset rule is unavailable; internet access remains blocked by OUTPUT DROP"
+        say "WARNING: port 1337 reset rule is unavailable; internet access remains blocked by the final OUTPUT rule"
         bash "$RECOVERY_HELPER" --clear || fail "could not clear the update swap marker"
         say "SUCCESS: pod is serving v$STAGED_VERSION. Previous version kept at $PREV; backup at $BK"
         arm_watchdog
@@ -911,6 +910,7 @@ if [ "$STREAM_WAS_ACTIVE" = active ]; then
 fi
 RESTORE_TREE=
 sh "$LIVE/scripts/block_internet_access.sh" || say "WARNING: restored firewall could not be applied"
+restore_output_policy save
 if restored_version_answers; then
   bash "$RECOVERY_HELPER" --clear || fail "could not clear the update swap marker"
   fail "update failed but rollback OK (pod back on v$CUR_VERSION). Failed tree kept at $FAILED; see journalctl -u free-sleep"

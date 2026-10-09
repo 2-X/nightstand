@@ -150,7 +150,7 @@ def corpus():
 def _learned_profiles():
     presence = nightly.profiles()
     for side in ('left', 'right'):
-        presence[side]['cap_occupied'] = {'level': LEARNED[side]}
+        presence[side]['cap_occupied'] = {'level': LEARNED[side], 'provenance': {'format': 'capSense2', 'normalizationVersion': 1}}
     return presence
 
 

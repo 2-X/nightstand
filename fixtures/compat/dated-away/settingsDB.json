@@ -1,0 +1,13 @@
+{
+  "timeZone": "America/Los_Angeles",
+  "left": {
+    "awayMode": true,
+    "awayStart": "2030-10-01T12:00:00.000Z",
+    "awayReturn": "2030-10-14T12:00:00.000Z"
+  },
+  "right": {
+    "awayMode": false,
+    "awayStart": "2030-11-01T12:00:00.000Z",
+    "awayReturn": "2030-11-14T12:00:00.000Z"
+  }
+}

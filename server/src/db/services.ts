@@ -103,10 +103,14 @@ await servicesDB.write();
 // analyzeRight's write).
 let updateQueue: Promise<unknown> = Promise.resolve();
 
-export const updateServices = (partial: Record<string, unknown>): Promise<Services> => {
+export const updateServices = (partial: Record<string, unknown> | ((draft: Services) => void | false)): Promise<Services> => {
   const result = updateQueue.then(async () => {
     await servicesDB.read();
-    _.merge(servicesDB.data, partial);
+    if (typeof partial === 'function') {
+      if (partial(servicesDB.data) === false) return servicesDB.data;
+    } else {
+      _.merge(servicesDB.data, partial);
+    }
     await servicesDB.write();
     return servicesDB.data;
   });

@@ -34,20 +34,22 @@ export default function AlarmDismissal({ refetch }: AlarmDismissalProps) {
   const { side, setIsUpdating, isUpdating } = useAppStore();
   const deviceStatus = useControlTempStore(state => state.deviceStatus);
 
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState({ left: false, right: false });
   const [error, setError] = useState('');
   const isAlarmVibrating = deviceStatus?.[side]?.isAlarmVibrating || false;
+  const leftRinging = deviceStatus?.left?.isAlarmVibrating || false;
+  const rightRinging = deviceStatus?.right?.isAlarmVibrating || false;
 
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
 
-  // Clear the one-shot dismiss latch once the pod confirms the alarm has
-  // stopped, so the next alarm re-opens the dialog. Without this, `dismissed`
-  // stays true for the life of the mounted page and every alarm after the
-  // first vibrates with no dismissal UI.
+  // Reset each side when its alarm stops, including the side not being viewed.
   useEffect(() => {
-    if (!isAlarmVibrating) setDismissed(false);
-  }, [isAlarmVibrating]);
+    setDismissed(current => ({
+      left: leftRinging && current.left,
+      right: rightRinging && current.right,
+    }));
+  }, [leftRinging, rightRinging]);
 
 
   const handleDismiss = () => {
@@ -67,7 +69,8 @@ export default function AlarmDismissal({ refetch }: AlarmDismissalProps) {
         // Only hide the dialog once the dismiss actually succeeded. Marking it
         // dismissed unconditionally would close it on a failed dismiss while
         // the pod may still be vibrating.
-        setDismissed(true);
+        const stillRinging = useControlTempStore.getState().deviceStatus?.[side]?.isAlarmVibrating || false;
+        setDismissed(current => ({ ...current, [side]: stillRinging }));
       })
       .catch(error => {
         console.error(error);
@@ -80,7 +83,7 @@ export default function AlarmDismissal({ refetch }: AlarmDismissalProps) {
 
   return (
     <Dialog
-      open={ dismissed ? false : isAlarmVibrating }
+      open={ dismissed[side] ? false : isAlarmVibrating }
       fullScreen={ false }
       fullWidth
       maxWidth="xs"

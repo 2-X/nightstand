@@ -15,6 +15,7 @@ export type StatusItemMeta = {
 };
 
 export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
+  firmwareHealth: { group: 'biometrics', blurb: 'Selected firmware messages. Requires Biometrics; silence does not establish recovery.' },
   alarmSchedule: {
     group: 'schedules',
     blurb: 'Wakes you up with vibration and temperature changes at your alarm time.',

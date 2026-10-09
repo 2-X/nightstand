@@ -265,6 +265,14 @@ done
 fw4() { iptables $IPT_W "$@"; }
 # shellcheck disable=SC2086
 fw6() { ip6tables $IPT_W "$@"; }
+# Clear an emergency policy only after both families have terminal blocks.
+restore_output_policy() {
+  if { fw4 -C OUTPUT -j REJECT 2>/dev/null || fw4 -C OUTPUT -j DROP 2>/dev/null; } &&
+     { fw6 -C OUTPUT -j REJECT 2>/dev/null || fw6 -C OUTPUT -j DROP 2>/dev/null; }; then
+    fw4 -P OUTPUT ACCEPT || echo "WARNING: could not restore IPv4 OUTPUT policy"
+    fw6 -P OUTPUT ACCEPT || echo "WARNING: could not restore IPv6 OUTPUT policy"
+  fi
+}
 # Removes the given rules only while one of them is the first rule in OUTPUT,
 # so the same rule further down (Tailscale's HTTPS allow) is left alone.
 strip_top() {
@@ -313,6 +321,7 @@ close_window() {
   strip_top fw4 "${WAN_RULES[@]}" >/dev/null
   strip_top fw6 "$WAN_RULE6" >/dev/null
   sh "$STAGE/scripts/block_internet_access.sh" >/dev/null 2>&1 || echo "WARNING: could not apply the block script again"
+  restore_output_policy
 }
 trap close_window EXIT
 trap 'exit 129' HUP
@@ -324,6 +333,7 @@ for rule in "${WAN_RULES[@]}"; do
 done
 # shellcheck disable=SC2086
 fw6 -I OUTPUT 1 $WAN_RULE6 2>/dev/null
+restore_output_policy
 if [ "$LOCK_SAME" = no ]; then
   run_limited 900 sudo -u dac bash -c "cd '$STAGE/server' && '$NPM' install --no-audit --no-fund" || exit 1
 fi

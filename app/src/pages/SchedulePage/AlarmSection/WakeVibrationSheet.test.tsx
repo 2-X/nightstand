@@ -6,7 +6,7 @@ import { getSchedules } from '../../../mocks/mockData';
 import { useScheduleStore } from '../scheduleStore';
 import WakeVibrationSheet from './WakeVibrationSheet';
 
-const note = 'Builds up works only on a Pod 5, so alarms on this Pod use Double pulse.';
+const note = 'Builds up needs a Pod 5 hub and cover, so alarms on this Pod use Double pulse.';
 
 beforeEach(() => {
   useAppStore.setState({ side: 'left', isUpdating: false });

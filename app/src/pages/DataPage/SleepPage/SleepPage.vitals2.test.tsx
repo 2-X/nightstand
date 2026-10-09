@@ -88,4 +88,19 @@ describe('Sleep page vitals', () => {
     await screen.findByRole('button', { name: /Breathing rate.*16 breaths\/min/ }, { timeout: 10_000 });
     expect(screen.queryByText(/7-night average/)).not.toBeInTheDocument();
   });
+  it('keeps the nightly averages when detail has been pruned', async () => {
+    serve(true);
+    server.use(
+      http.get('*/metrics/vitals', () => HttpResponse.json([])),
+      http.get('*/metrics/vitals/summary', () => HttpResponse.json({
+        avgHeartRate: 40, minHeartRate: 0, maxHeartRate: 62, avgHRV: 0, avgBreathingRate: 16,
+        retained: { avgHeartRate: 60, avgBreathingRate: 16 },
+      })),
+    );
+    renderWithProviders(<SleepPage/>, { initialRoute: '/sleep?metric=heart_rate' });
+    expect(await screen.findByRole('button', { name: /Average heart rate.*60 bpm/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Breathing rate.*16 breaths\/min/ })).toBeInTheDocument();
+    expect(await screen.findByText(/Detailed measurements were pruned/)).toBeVisible();
+  });
+
 });

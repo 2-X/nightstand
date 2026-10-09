@@ -1,0 +1,845 @@
+[
+  {
+    "name": "missing V2",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "valid V2",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": null,
+    "expected": {
+      "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+      "version": "3.0.3",
+      "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+      "date": "2026-10-07"
+    }
+  },
+  {
+    "name": "unchanged confirmation",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": {
+      "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+      "version": "3.0.3",
+      "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+      "date": "2026-10-07"
+    },
+    "expected": {
+      "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+      "version": "3.0.3",
+      "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+      "date": "2026-10-07"
+    }
+  },
+  {
+    "name": "missing commit",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "missing version",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "missing treeSha256",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "missing date",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "branch commit",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "main",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "short commit",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "uppercase commit",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "short digest",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "abc",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "nonhex digest",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "invalid version",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "prerelease version",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3-rc.1",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "impossible date",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-02-30"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "nonpadded date",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-1-07"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "wrong type",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": 3,
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "nonobject None",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": null
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "nonobject []",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": []
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "nonobject main",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": "main"
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "nonobject 1",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": 1
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "changed commit",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": {
+      "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "version": "3.0.3",
+      "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+      "date": "2026-10-07"
+    },
+    "expected": null
+  },
+  {
+    "name": "changed version",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": {
+      "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+      "version": "3.0.2",
+      "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+      "date": "2026-10-07"
+    },
+    "expected": null
+  },
+  {
+    "name": "changed treeSha256",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": {
+      "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+      "version": "3.0.3",
+      "treeSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "date": "2026-10-07"
+    },
+    "expected": null
+  },
+  {
+    "name": "changed date",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": {
+      "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+      "version": "3.0.3",
+      "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+      "date": "2026-10-06"
+    },
+    "expected": null
+  },
+  {
+    "name": "newline in commit",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d\n",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "newline in version",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3\n",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "newline in treeSha256",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b\n",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "newline in date",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07\n"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "leading zero version",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "03.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "year zero date",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "0000-01-01"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "nonleap date",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-02-29"
+      }
+    },
+    "confirmed": null,
+    "expected": null
+  },
+  {
+    "name": "valid leap date",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2028-02-29"
+      }
+    },
+    "confirmed": null,
+    "expected": {
+      "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+      "version": "3.0.3",
+      "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+      "date": "2028-02-29"
+    }
+  },
+  {
+    "name": "empty confirmation",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": {},
+    "expected": null
+  },
+  {
+    "name": "branch confirmation",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": "main",
+    "expected": null
+  },
+  {
+    "name": "short commit confirmation",
+    "manifest": {
+      "channels": [
+        "stable",
+        "beta"
+      ],
+      "releases": [],
+      "upstreamSwitch": {
+        "commit": "ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f",
+        "date": "2026-10-02",
+        "treeSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "upstreamSwitchV2": {
+        "commit": "e5172139874a274d1ced12c8da052ab2cbaa286d",
+        "version": "3.0.3",
+        "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+        "date": "2026-10-07"
+      }
+    },
+    "confirmed": {
+      "commit": "short",
+      "version": "3.0.3",
+      "treeSha256": "59073c3b2b2c3db7d133ad5b33a3471bfbe83b15ec63e3143f3d42a11e0f628b",
+      "date": "2026-10-07"
+    },
+    "expected": null
+  }
+]

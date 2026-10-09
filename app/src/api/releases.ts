@@ -3,6 +3,10 @@ import axios from 'axios';
 import semver from 'semver';
 import { z } from 'zod';
 import currentServerInfo from '../../../server/src/serverInfo.json';
+import { LegacyUpstreamSwitchTargetSchema, UpstreamSwitchTargetSchema, type UpstreamSwitchTarget,
+  type UpstreamSwitchRecord } from './updateSchema.ts';
+
+export { UpstreamSwitchTargetSchema, type UpstreamSwitchTarget } from './updateSchema.ts';
 // Keep the release manifest independent of the full device-settings schema:
 // the small updater overlay also runs against upstream settings.
 const RELEASE_CHANNELS = ['stable', 'beta'] as const;
@@ -41,12 +45,37 @@ export const ReleasesManifestSchema = z.object({
   // The upstream commit "Switch to upstream" installs, recorded once the
   // switch has been checked with it. A malformed record is dropped rather
   // than taking the release list down with it.
-  upstreamSwitch: z.object({ commit: z.string(), date: z.string(), treeSha256: z.string().optional() })
+  upstreamSwitch: LegacyUpstreamSwitchTargetSchema
     .optional().catch(undefined),
+  upstreamSwitchV2: UpstreamSwitchTargetSchema.optional().nullable().catch(null),
 });
 
 export type Release = z.infer<typeof ReleaseSchema>;
 export type ReleasesManifest = z.infer<typeof ReleasesManifestSchema>;
+
+export const selectUpstreamTarget = (
+  manifest: ReleasesManifest | undefined, confirmed?: unknown,
+): UpstreamSwitchTarget | undefined => {
+  const target = manifest?.upstreamSwitchV2;
+  if (!target) return undefined;
+  if (confirmed !== undefined && confirmed !== null) {
+    const parsed = UpstreamSwitchTargetSchema.safeParse(confirmed);
+    if (!parsed.success || Object.keys(target).some(key =>
+      target[key as keyof UpstreamSwitchTarget] !== parsed.data[key as keyof UpstreamSwitchTarget])) return undefined;
+  }
+  return target;
+};
+
+export const selectSwitchTarget = (
+  manifest: ReleasesManifest | undefined, confirmed?: UpstreamSwitchRecord,
+): UpstreamSwitchRecord | undefined => {
+  if (!manifest || manifest.upstreamSwitchV2 === null) return undefined;
+  const target = selectUpstreamTarget(manifest) ?? manifest.upstreamSwitch;
+  if (!target) return undefined;
+  if (confirmed && (Object.keys(target).length !== Object.keys(confirmed).length
+    || Object.keys(target).some(key => target[key as keyof typeof target] !== confirmed[key as keyof typeof confirmed]))) return undefined;
+  return target;
+};
 
 // Fetched raw from GitHub, same reasoning as serverInfo.ts and the remote
 // changelog fetch: the pod itself has no WAN, so this only ever resolves

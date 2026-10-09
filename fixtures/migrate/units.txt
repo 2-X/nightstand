@@ -1,0 +1,14 @@
+free-sleep.service enabled
+free-sleep-stream.service enabled
+free-sleep-archive-raw.timer enabled
+free-sleep-health.timer enabled
+free-sleep-network-watchdog.timer enabled
+free-sleep-recover-update.timer enabled
+free-sleep-update.service static
+free-sleep-rollback.service static
+free-sleep-revert.service static
+free-sleep-migrate.service transient
+free-sleep-migrate-sentinel.timer enabled
+free-sleep-ambient-light.service enabled
+free-sleep-extra-writer.service enabled
+free-sleep-extra-writer.timer enabled

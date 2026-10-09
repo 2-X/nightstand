@@ -103,6 +103,7 @@ def run_analyzer(side: str, night: scenarios.Night = scenarios.STAGGERED) -> dic
             f'{side}_{channel}': {'mean': mean, 'std': 1}
             for channel, mean in zip(('out', 'cen', 'in'), scenarios.BASELINE_MEANS[side])
         }
+        baseline['provenance'] = {'format': 'capSense2', 'normalizationVersion': 1}
         # The data folder's raw-archive is scanned too; point it at the empty temp folder.
         with unittest.mock.patch.object(load_raw_files.logger, 'folder_path', os.path.join(folder, '')), \
                 unittest.mock.patch.object(sleep_detector, 'load_baseline', return_value=baseline), \

@@ -49,7 +49,7 @@ router.post('/schedules', async (req: Request, res: Response) => {
           draft[side][day].alarm = primaryAlarm(draft[side][day].alarms, draft[side][day].alarm);
         } else if (schedule.alarm) {
           draft[side][day].alarm = schedule.alarm;
-          draft[side][day].alarms = schedule.alarm.enabled ? [schedule.alarm] : [];
+          draft[side][day].alarms = [schedule.alarm, ...draft[side][day].alarms.slice(1)];
         }
       });
     });

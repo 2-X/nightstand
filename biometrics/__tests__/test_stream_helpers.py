@@ -66,15 +66,19 @@ class TestDecodeRawRow(StreamHelpersTestCase):
     def test_unwraps_nested_data(self):
         inner = {'type': 'piezo-dual', 'ts': 1.0}
         row = {'seq': 1, 'data': cbor2.dumps(inner)}
-        self.assertEqual(stream._decode_raw_row(row), inner)
+        decoded = list(stream._decode_raw_row(row))
+        self.assertEqual(len(decoded), 1)
+        self.assertEqual(decoded[0]['type'], inner['type'])
+        self.assertEqual(decoded[0]['ts'], inner['ts'])
+        self.assertEqual(decoded[0]['_firmware']['sequence'], 1)
 
     def test_passes_through_direct_records(self):
         row = {'type': 'piezo-dual', 'ts': 1.0}
-        self.assertEqual(stream._decode_raw_row(row), row)
+        self.assertEqual(list(stream._decode_raw_row(row))[0]['type'], row['type'])
 
     def test_rejects_non_dict(self):
-        self.assertIsNone(stream._decode_raw_row([1, 2]))
-        self.assertIsNone(stream._decode_raw_row(None))
+        self.assertEqual(list(stream._decode_raw_row([1, 2])), [])
+        self.assertEqual(list(stream._decode_raw_row(None)), [])
 
 
 class TestQueueDecodedPiezoRecord(StreamHelpersTestCase):
@@ -121,10 +125,11 @@ def recent_cap(ts=None):
     }
 
 
-def cap_profiles():
+def cap_profiles(cap_format=CAPSENSE2):
     return {
         side: {
-            'cap': {f'{side}_{channel}': {'mean': 11.0, 'std': 1} for channel in ('out', 'cen', 'in')},
+            'cap': {**{f'{side}_{channel}': {'mean': 11.0, 'std': 1} for channel in ('out', 'cen', 'in')},
+                    'provenance': {'format': cap_format.name, 'normalizationVersion': 1}},
             'cap_occupied': None,
             'piezo_floors': [],
         }
@@ -262,6 +267,15 @@ class TestPresenceMode(CapPresenceTestCase):
         profiles['right']['cap'] = None
         self.assertIsNone(self._inputs(profiles=profiles))
 
+    def test_unknown_or_mismatched_provenance_keeps_live_presence_on_piezo(self):
+        self.latest.update(time.time(), [12.0] * 8, [12.0] * 8)
+        for provenance in (None, {'format': 'capSense', 'normalizationVersion': 1},
+                           {'format': 'capSense2', 'normalizationVersion': 99}):
+            profiles = cap_profiles()
+            for side in ('left', 'right'):
+                profiles[side]['cap']['provenance'] = provenance
+            self.assertIsNone(self._inputs(profiles=profiles))
+
     def test_on_with_the_switch_fresh_readings_and_a_baseline(self):
         self.latest.update(time.time(), [12.0] * 8, [12.0] * 8)
         params, baselines = self._inputs()
@@ -278,24 +292,24 @@ class TestPresenceMode(CapPresenceTestCase):
 
     def test_an_unchecked_format_waits_for_learned_levels(self):
         with self.assertLogs(stream.logger, level='INFO') as logs:
-            self.assertIsNone(self._legacy_inputs(cap_profiles()))
-            self.assertIsNone(self._legacy_inputs(cap_profiles()))
+            self.assertIsNone(self._legacy_inputs(cap_profiles(CAPSENSE)))
+            self.assertIsNone(self._legacy_inputs(cap_profiles(CAPSENSE)))
         self.assertEqual(len(logs.output), 1)
         self.assertIn('learned', logs.output[0])
         self.assertIn('the vibration sensor keeps deciding who is in bed, and the legacy estimators keep taking vitals',
                       logs.output[0])
 
     def test_an_unchecked_format_waits_for_records_once_a_second(self):
-        profiles = cap_profiles()
+        profiles = cap_profiles(CAPSENSE)
         for side in ('left', 'right'):
-            profiles[side]['cap_occupied'] = {'level': 900.0}
+            profiles[side]['cap_occupied'] = {'level': 900.0, 'provenance': {'format': 'capSense', 'normalizationVersion': 1}}
         self.assertIsNone(self._legacy_inputs(profiles, cadence_ok=None))
         self.assertIsNone(self._legacy_inputs(profiles, cadence_ok=False))
 
     def test_an_unchecked_format_runs_with_its_units_once_ready(self):
-        profiles = cap_profiles()
+        profiles = cap_profiles(CAPSENSE)
         for side in ('left', 'right'):
-            profiles[side]['cap_occupied'] = {'level': 900.0}
+            profiles[side]['cap_occupied'] = {'level': 900.0, 'provenance': {'format': 'capSense', 'normalizationVersion': 1}}
         params, baselines, cap_format = self._legacy_inputs(profiles)
         self.assertIs(cap_format, CAPSENSE)
         self.assertAlmostEqual(params.left.enter_delta, 360.0)
@@ -322,7 +336,7 @@ class TestPresenceMode(CapPresenceTestCase):
         self.assertIn('With capSense2 capacitance,', logs.output[0])
         profiles = cap_profiles()
         for side in ('left', 'right'):
-            profiles[side]['cap_occupied'] = {'level': 20.0}
+            profiles[side]['cap_occupied'] = {'level': 20.0, 'provenance': {'format': 'capSense2', 'normalizationVersion': 1}}
         self.assertIsNone(self._capsense2_inputs(False, profiles, cadence_ok=False))
         params, baselines, cap_format = self._capsense2_inputs(False, profiles)
         self.assertEqual(cap_format.name, 'capSense2')
@@ -404,9 +418,9 @@ class TestUncheckedFormatRunning(CapPresenceTestCase):
         self.latest.update(time.time(), (500.0, 500.0, 500.0), (500.0, 500.0, 500.0), CAPSENSE)
         self.processor = stream.StreamProcessor(recent_piezo(), cap_source=self.latest)
         self.piezo = (self.processor.left_processor, self.processor.right_processor)
-        self.profiles = cap_profiles()
+        self.profiles = cap_profiles(CAPSENSE)
         for side in ('left', 'right'):
-            self.profiles[side]['cap_occupied'] = {'level': 900.0}
+            self.profiles[side]['cap_occupied'] = {'level': 900.0, 'provenance': {'format': 'capSense', 'normalizationVersion': 1}}
         self.enabled = unittest.mock.patch.object(stream, 'biometrics_v2_enabled', return_value=True)
         self.enabled.start()
         self.addCleanup(self.enabled.stop)
@@ -471,7 +485,7 @@ class TestUncheckedFormatRunning(CapPresenceTestCase):
     def test_the_refresh_takes_new_levels_into_a_running_detector(self):
         self._refresh()
         detector = self.processor.presence
-        self.profiles['right']['cap_occupied'] = {'level': 600.0}
+        self.profiles['right']['cap_occupied'] = {'level': 600.0, 'provenance': {'format': 'capSense', 'normalizationVersion': 1}}
         self._refresh()
         self.assertIsNot(self.processor.presence, detector)
         self.assertEqual(self.processor._piezo_presence, self.piezo)
@@ -582,17 +596,28 @@ class TestPumpSpeedFeed(StreamHelpersTestCase):
         handler.latest_file_obj.close()
         return handler
 
+    def assert_health_frame(self, frame, sequence):
+        self.health.assert_called_once()
+        decoded = self.health.call_args.args[0]
+        self.assertEqual({key: value for key, value in decoded.items() if key not in ('_firmware', 'seq')}, frame)
+        self.assertEqual(decoded['seq'], sequence)
+        receipt = decoded['_firmware']['receivedAt']
+        self.assertIsInstance(receipt, (int, float))
+        self.assertGreaterEqual(receipt, frame['ts'])
+        self.assertLessEqual(receipt, time.time())
+        self.assertEqual(decoded['_firmware'], {'sequence': sequence, 'index': 0, 'receivedAt': receipt})
+
     def test_the_file_watcher_feeds_both(self):
         frame = pump_frame()
         self.follow(frame)
         self.assertTrue(self.pump.fed)
         self.assertEqual(self.pump.speed_during(frame['ts'], frame['ts'] + 1), 'fast')
-        self.health.assert_called_once_with(frame)
+        self.assert_health_frame(frame, 0)
 
     def test_a_frame_the_pump_speed_cannot_read_still_reaches_pump_health(self):
         broken = {'type': 'frzHealth', 'ts': time.time(), 'left': ['not', 'a', 'side']}
         handler = self.follow(broken, recent_piezo(seq=9))
-        self.health.assert_called_once_with(broken)
+        self.assert_health_frame(broken, 0)
         self.assertFalse(self.pump.fed)
         # The reader moved past both records.
         self.assertEqual(handler.last_pos, os.path.getsize(handler.latest_file))
@@ -615,7 +640,7 @@ class TestPumpSpeedFeed(StreamHelpersTestCase):
             with self.assertRaises(asyncio.CancelledError):
                 asyncio.run(stream._nats_session(unittest.mock.Mock()))
         self.assertEqual(self.pump.speed_during(frame['ts'], frame['ts'] + 1), 'fast')
-        self.health.assert_called_once_with(frame)
+        self.assert_health_frame(frame, 1)
         message.ack.assert_not_called()
 
 
@@ -662,6 +687,145 @@ class TestDeadProcessingThread(unittest.TestCase):
         watch.assert_called_once_with('/persistent')
 
 
+class TestRawFileRecovery(StreamHelpersTestCase):
+    def _ingested(self):
+        # The decoder adds envelope metadata; the recovery tests compare sensor fields.
+        return [{key: value for key, value in call.args[0].items() if key != '_firmware'}
+                for call in self.ingest.call_args_list]
+
+    def setUp(self):
+        super().setUp()
+        self.folder = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
+        self.path = os.path.join(self.folder, 'a.RAW')
+        self.frames = [recent_piezo(seq=sequence) for sequence in (1, 2)]
+        self.records = [cbor2.dumps({'seq': sequence, 'data': cbor2.dumps(frame)})
+                        for sequence, frame in enumerate(self.frames)]
+        patcher = unittest.mock.patch.object(stream, '_ingest_live_record')
+        self.ingest = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def handler(self, fixture):
+        with open(self.path, 'wb') as handle:
+            handle.write(fixture)
+        handler = stream.LatestRawFileHandler(self.folder)
+        self.addCleanup(lambda: handler.latest_file_obj.close())
+        return handler
+
+    def test_resyncs_corrupt_middle_header_and_logs_skipped_bytes(self):
+        corrupt = b'\xa2\x63bad header'
+        fixture = self.records[0] + corrupt + self.records[1]
+        handler = self.handler(fixture)
+        with self.assertLogs(stream.logger, 'WARNING') as logs:
+            handler.follow_latest_file()
+        self.assertEqual(self._ingested(), self.frames)
+        self.assertEqual(handler.last_pos, len(fixture))
+        self.assertTrue(any('Skipped %d bytes' % len(corrupt) in entry for entry in logs.output))
+
+    def test_resyncs_invalid_inner_cbor(self):
+        corrupt = cbor2.dumps({'seq': 7, 'data': b'\x1c'})
+        handler = self.handler(self.records[0] + corrupt + self.records[1])
+        handler.follow_latest_file()
+        self.assertEqual(self.ingest.call_count, 2)
+
+    def test_skips_invalid_decimal_payload_and_advances_the_follower(self):
+        corrupt = cbor2.dumps({'seq': 7, 'data': bytes.fromhex('c4 82 1b 7f ff ff ff ff ff ff ff 01')})
+        for gap in (b'', b'broken'):
+            with self.subTest(gap=gap):
+                self.ingest.reset_mock()
+                fixture = self.records[0] + gap + corrupt + self.records[1]
+                handler = self.handler(fixture)
+                handler.follow_latest_file()
+                handler.follow_latest_file()
+                self.assertEqual(self._ingested(), self.frames)
+                self.assertEqual(handler.last_pos, len(fixture))
+
+    def test_resyncs_to_a_complete_empty_sequence_marker(self):
+        marker = cbor2.dumps({'seq': 7, 'data': b''})
+        fixture = self.records[0] + b'broken' + marker
+        handler = self.handler(fixture)
+        handler.follow_latest_file()
+        self.assertEqual(handler.last_pos, len(fixture))
+        self.assertEqual(self.ingest.call_count, 1)
+        with open(self.path, 'ab') as handle:
+            handle.write(self.records[1])
+        handler.follow_latest_file()
+        self.assertEqual(self._ingested(), self.frames)
+
+    def test_rejects_false_matches_and_finds_a_header_across_the_scan_boundary(self):
+        false = cbor2.dumps({'seq': 7, 'data': cbor2.dumps(['not a record'])})
+        corrupt = b'broken' + false + b'x' * (65535 - len(false) - len(b'broken'))
+        wide = cbor2.dumps({'seq': 0x12345678, 'data': cbor2.dumps(self.frames[1])})
+        handler = self.handler(self.records[0] + corrupt + wide)
+        handler.follow_latest_file()
+        self.assertEqual(self._ingested(), self.frames)
+        self.assertEqual(handler.last_pos, len(self.records[0] + corrupt + wide))
+
+    def test_does_not_skip_a_corrupt_live_tail_to_an_incomplete_later_header(self):
+        handler = self.handler(self.records[0] + b'broken' + self.records[1][:-3])
+        handler.follow_latest_file()
+        self.assertEqual(handler.last_pos, len(self.records[0]))
+        with open(self.path, 'ab') as handle:
+            handle.write(self.records[1][-3:])
+        handler.follow_latest_file()
+        self.assertEqual(self.ingest.call_count, 2)
+
+    def test_resyncs_a_broken_length_that_reads_past_the_next_record(self):
+        corrupt = b'\xa2\x63seq\x01\x64data\x59\xff\xffbroken'
+        handler = self.handler(self.records[0] + corrupt + self.records[1])
+        handler.follow_latest_file()
+        self.assertEqual(self.ingest.call_count, 2)
+
+    def test_resyncs_when_a_wrong_length_swallows_the_next_record(self):
+        inner = cbor2.dumps(self.frames[0])
+        corrupt = cbor2.dumps({'seq': 7, 'data': inner + self.records[1]})
+        handler = self.handler(self.records[0] + corrupt)
+        handler.follow_latest_file()
+        self.assertEqual(self._ingested(), self.frames)
+
+    def test_keeps_partial_live_tail_and_reads_it_after_append(self):
+        fixture = self.records[0] + self.records[1][:-4]
+        handler = self.handler(fixture)
+        handler.follow_latest_file()
+        handler.follow_latest_file()
+        self.assertEqual(handler.last_pos, len(self.records[0]))
+        self.assertEqual(self.ingest.call_count, 1)
+        with open(self.path, 'ab') as handle:
+            handle.write(self.records[1][-4:])
+        handler.follow_latest_file()
+        self.assertEqual(self.ingest.call_count, 2)
+        self.assertEqual(handler.last_pos, sum(map(len, self.records)))
+
+    def test_keeps_live_tail_even_when_it_contains_an_invalid_header_match(self):
+        tail = b'bad\xa2\x63seq\x01\x64data\x41\xff'
+        handler = self.handler(self.records[0] + tail)
+        handler.follow_latest_file()
+        self.assertEqual(handler.last_pos, len(self.records[0]))
+        self.assertEqual(self.ingest.call_count, 1)
+
+    def test_switches_to_a_newer_file_after_a_partial_tail(self):
+        handler = self.handler(self.records[0] + self.records[1][:-4])
+        handler.follow_latest_file()
+        self.assertEqual(handler.last_pos, len(self.records[0]))
+        newer = os.path.join(self.folder, 'b.RAW')
+        with open(newer, 'wb') as handle:
+            handle.write(self.records[1])
+        later = os.path.getmtime(self.path) + 1
+        os.utime(newer, (later, later))
+        handler.on_created(types.SimpleNamespace(is_directory=False, src_path=newer))
+        handler.follow_latest_file()
+        self.assertEqual(self._ingested(), self.frames)
+        self.assertEqual(handler.latest_file, newer)
+        self.assertEqual(handler.last_pos, len(self.records[1]))
+
+    def test_a_processing_failure_does_not_resync_past_a_decoded_record(self):
+        handler = self.handler(b''.join(self.records))
+        self.ingest.side_effect = RuntimeError('processor failed')
+        handler.follow_latest_file()
+        self.assertEqual(handler.last_pos, 0)
+        self.assertEqual(self.ingest.call_count, 1)
+
+
 class TestRawFileCapRecords(CapPresenceTestCase):
     def test_the_file_watcher_stores_capsense2_and_queues_piezo(self):
         cap = recent_cap()
@@ -675,6 +839,23 @@ class TestRawFileCapRecords(CapPresenceTestCase):
         handler.latest_file_obj.close()
         self.assertEqual(self.latest.read()[0], int(cap['ts']))
         self.assertEqual(stream.piezo_record_queue.qsize(), 1)
+
+
+class TestFirmwareIngestIsolation(CapPresenceTestCase):
+    def test_delivery_failure_preserves_sensor_ingestion_and_limits_warnings(self):
+        cap = recent_cap()
+        with unittest.mock.patch.object(stream, '_firmware_ingest_warning_at', None), \
+                unittest.mock.patch.object(stream.firmware_delivery, 'ingest', side_effect=RuntimeError('bad telemetry')), \
+                unittest.mock.patch.object(stream.time, 'monotonic', return_value=100) as clock, \
+                self.assertLogs(stream.logger, 'WARNING') as logs:
+            self.assertTrue(stream._ingest_live_record(cap))
+            self.assertTrue(stream._ingest_live_record(recent_piezo(seq=30)))
+            clock.return_value = 161
+            self.assertTrue(stream._ingest_live_record(recent_piezo(seq=31)))
+        self.assertEqual(self.latest.read()[0], int(cap['ts']))
+        self.assertEqual(stream.piezo_record_queue.qsize(), 2)
+        self.assertEqual(len(logs.records), 2)
+        self.assertTrue(all('firmware telemetry' in record.getMessage() for record in logs.records))
 
 
 if __name__ == "__main__":

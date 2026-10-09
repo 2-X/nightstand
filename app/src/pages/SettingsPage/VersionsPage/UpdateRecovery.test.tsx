@@ -9,6 +9,7 @@ import UpdateFreeSleepButton from '../DeviceSettingsSection/UpdateFreeSleepButto
 import ReleaseRow from './ReleaseRow';
 import RollbackRow from './RollbackRow';
 import RevertToStockRow from './RevertToStockRow';
+import targetFixtures from '../../../../../scripts/tests/fixtures/upstream_targets.json';
 
 const release = { kind: 'agent', version: '3.2.0', channel: 'stable', date: '2026-09-28' } as const;
 const cases = [
@@ -35,7 +36,7 @@ beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   server.use(
     http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json', () => HttpResponse.json({
-      channels: ['stable', 'beta'], releases: [release],
+      channels: ['stable', 'beta'], releases: [release], upstreamSwitchV2: targetFixtures[1].expected,
     })),
     http.get('*/deviceStatus', () => HttpResponse.json({
       ...getDeviceStatus(), freeSleep: { ...getDeviceStatus().freeSleep, version: '3.0.0' },

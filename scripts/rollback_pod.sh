@@ -177,6 +177,26 @@ say "Rolling back v$CUR_VERSION -> v$TARGET_VERSION"
 # Before the archive timer below stops, the first service this run stops.
 recheck_in_use
 
+# Cross-fork rollback requires companion state only for a recorded retained tree.
+# With no published switch journal, the switch helper is never consulted.
+if [ -f "$LIVE/scripts/switch_installation.py" ] && has_switch_journal; then
+  COMPANION_RECORDED=$(python3 -B "$LIVE/scripts/switch_installation.py" companion-recorded --stage "$PREV") \
+    || fail "cannot read the retained tree's switch records"
+  if [ "$COMPANION_RECORDED" = yes ]; then
+    recheck_in_use
+    RESULT_PHASE=swapping
+    restore_cross_fork_rollback
+    CROSS_FORK_STATUS=$?
+    if [ "$CROSS_FORK_STATUS" -eq 0 ]; then
+      RESULT_PHASE=swapped
+      say "SUCCESS: cross-fork rollback committed with its companion state"
+      exit 0
+    fi
+    [ "$CROSS_FORK_STATUS" -ne 3 ] || RESULT_PHASE=restored
+    fail "cross-fork rollback requires complete companion state and a successful transaction"
+  fi
+fi
+
 # Other forks cannot run Nightstand's archive timer or its memory drop-ins.
 TARGET_IS_NIGHTSTAND=no
 [ -f "$PREV/scripts/archive-raw.sh" ] && TARGET_IS_NIGHTSTAND=yes

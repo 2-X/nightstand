@@ -22,6 +22,7 @@ ZIP=/home/dac/free-sleep-revert.zip
 BACKUPS=/persistent/free-sleep-backups
 DATABASE_BACKUPS=/persistent/free-sleep-database-backups
 SQLITE_SAFETY="$(dirname "${BASH_SOURCE[0]}")/sqlite-safety.py"
+UPSTREAM_TARGET_HELPER="$(dirname "${BASH_SOURCE[0]}")/upstream_target.py"
 PRUNE_SNAPSHOTS="$(dirname "${BASH_SOURCE[0]}")/prune_db_snapshots.sh"
 KEEP_BACKUPS=5
 NPM=/home/dac/.volta/bin/npm
@@ -104,16 +105,8 @@ restore_switch_data_or_fail() {
 WAN_RULES=("-p tcp --dport 443 -j ACCEPT" "-p udp --dport 53 -j ACCEPT" "-p tcp --dport 53 -j ACCEPT")
 WAN_RULE6="-p tcp --dport 443 -j REJECT --reject-with tcp-reset"
 WAN_OPEN=no
-# iptables 1.6.0 added "-w SECONDS"; older builds take a bare -w or no flag.
-IPT_W=
-for IPT_W in "-w 5" "-w" ""; do
-  # shellcheck disable=SC2086
-  iptables $IPT_W -S OUTPUT >/dev/null 2>&1 && break
-done
-# shellcheck disable=SC2086
-fw4() { iptables $IPT_W "$@"; }
-# shellcheck disable=SC2086
-fw6() { ip6tables $IPT_W "$@"; }
+source "$(dirname "${BASH_SOURCE[0]}")/restore_helpers.sh" || exit 1
+init_update_firewall
 # Removes the given rules only while one of them is the first rule in OUTPUT,
 # where the window puts them, so the same rule further down (Tailscale's
 # HTTPS allow) is left alone. Rules are compared with whitespace and the
@@ -146,6 +139,7 @@ open_wan() {
   done
   # shellcheck disable=SC2086
   fw6 -I OUTPUT 1 $WAN_RULE6 2>/dev/null || true
+  restore_output_policy
 }
 close_wan() {
   [ "$WAN_OPEN" = yes ] || return 0
@@ -154,6 +148,7 @@ close_wan() {
   strip_top fw6 "$WAN_RULE6" >/dev/null
   sh "$LIVE/scripts/block_internet_access.sh" >/dev/null 2>&1 \
     || sh "$PREV/scripts/block_internet_access.sh" >/dev/null 2>&1 || true
+  restore_output_policy
   WAN_OPEN=no
 }
 # A stalled step must not hold the window open. Busybox builds that only
@@ -295,6 +290,13 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 [ ! -f /persistent/free-sleep-data/update-swap.json ] || fail "an earlier update swap still needs recovery; live install untouched"
 
+# Read the confirmed target before the bed-use helper consumes the request.
+CONFIRMED_TARGET=""
+if [ -f "/persistent/free-sleep-data/operation-request.json" ]; then
+  CONFIRMED_TARGET=$(python3 -B "$UPSTREAM_TARGET_HELPER" --request "/persistent/free-sleep-data/operation-request.json") \
+    || fail "could not read the confirmed upstream target; live install untouched"
+fi
+
 # Bed-in-use helpers, kept identical in update.sh, rollback_pod.sh and
 # switch-to-upstream.sh. The app writes REQUEST_FILE as it starts one of them.
 # A request the owner did not confirm while the bed was in use is checked
@@ -377,7 +379,17 @@ open_wan
 # releases.json names one. Upstream's main is installed only when the list was
 # read and records no such commit; an unreadable list or a malformed record
 # stops the switch, since the app may already have promised the checked one.
+TRANSACTIONAL_SWITCH=no
 SWITCH_MANIFEST=$(curl -fsSL --max-time 20 "$SWITCH_RELEASES_URL") || SWITCH_MANIFEST=""
+if [ -n "$CONFIRMED_TARGET" ]; then
+  SWITCH_PIN=$(printf '%s' "$SWITCH_MANIFEST" | python3 -B "$UPSTREAM_TARGET_HELPER" - --confirmed-json "$CONFIRMED_TARGET") \
+    || fail "the confirmed upstream target is no longer available; live install untouched"
+  case "$SWITCH_PIN" in
+    v2\ *)
+      [ -f "$LIVE/scripts/switch_installation.py" ] || fail "the transactional switch runner is missing; live install untouched"
+      TRANSACTIONAL_SWITCH=yes ;;
+  esac
+else
 SWITCH_PIN=$(printf '%s' "$SWITCH_MANIFEST" | python3 -c '
 import json, re, sys
 data = json.load(sys.stdin)
@@ -397,6 +409,7 @@ if not isinstance(digest, str) or (digest and not re.fullmatch(r"[0-9a-f]{64}", 
     sys.exit(1)
 print("pin", commit, digest)' 2>/dev/null) \
   || fail "could not read the release list to find the checked upstream version; live install untouched"
+fi
 SWITCH_COMMIT=""
 SWITCH_DIGEST=""
 read -r _ SWITCH_COMMIT SWITCH_DIGEST _ <<< "$SWITCH_PIN" || true
@@ -422,6 +435,7 @@ if [ -n "$SWITCH_COMMIT" ]; then
   if [ -z "$SWITCH_DIGEST" ]; then
     say "No published checksum for upstream commit $SWITCH_COMMIT; installing without one"
   elif [ ! -f "$LIVE/scripts/tree_digest.py" ]; then
+    [ -z "$CONFIRMED_TARGET" ] || fail "cannot verify the confirmed upstream checksum; live install untouched"
     say "This install cannot check checksums yet; installing without one"
   else
     SWITCH_ACTUAL=$(python3 "$LIVE/scripts/tree_digest.py" "$STAGE") \
@@ -462,6 +476,24 @@ if [ "$(node_fetch_mb "$(node_pin "$STAGE")" "$(node_pin "$LIVE")")" != 0 ]; the
   run_limited 600 sudo -u dac bash -c "cd '$STAGE/server' && '$NPM' --version" >/dev/null \
     || fail "could not fetch Node $(node_pin "$STAGE"); live install untouched"
 fi
+# Confirmed V2 targets use the durable transaction before any legacy mutation.
+if [ "$TRANSACTIONAL_SWITCH" = yes ]; then
+  [ -n "$SWITCH_DIGEST" ] && [ "${SWITCH_ACTUAL:-}" = "$SWITCH_DIGEST" ] \
+    || fail "the confirmed V2 artifact could not be verified; live install untouched"
+  recheck_in_use
+  RESULT_PHASE=swapping
+  python3 -B "$LIVE/scripts/switch_installation.py" forward --stage "$STAGE" \
+    --target-json "$CONFIRMED_TARGET" --artifact-digest "$SWITCH_ACTUAL" --recheck-in-use "$RECHECK_IN_USE"
+  SWITCH_STATUS=$?
+  if [ "$SWITCH_STATUS" -eq 0 ]; then
+    RESULT_PHASE=swapped
+    say "SUCCESS: the upstream transaction committed; recovery records and companion state retained"
+    exit 0
+  fi
+  [ "$SWITCH_STATUS" -ne 3 ] || RESULT_PHASE=restored
+  fail "the upstream transaction did not complete; see the retained recovery journal"
+fi
+
 # Upstream imports this even when the existing services record says installed.
 if [ -x /home/dac/venv/bin/python ]; then
   # Upstream leaves this unpinned; keep our revert dependency reproducible.
@@ -601,6 +633,16 @@ if [ "$HEALTHY" = yes ]; then
     /etc/systemd/system/free-sleep-network-watchdog.service /etc/systemd/system/free-sleep-network-watchdog.timer
   systemctl disable --now free-sleep-recover-update.timer free-sleep-recover-update.service >/dev/null 2>&1 || true
   rm -f /etc/systemd/system/free-sleep-recover-update.service /etc/systemd/system/free-sleep-recover-update.timer
+  if ! has_switch_journal; then
+    systemctl disable --now free-sleep-recover-switch.service >/dev/null 2>&1 || true
+    rm -f /etc/systemd/system/free-sleep-recover-switch.service
+    for unit in free-sleep.service free-sleep-stream.service free-sleep-archive-raw.service \
+      free-sleep-health.service free-sleep-network-watchdog.service free-sleep-recover-update.service \
+      free-sleep-update.service free-sleep-rollback.service free-sleep-revert.service free-sleep-migrate.service; do
+      rm -f "/etc/systemd/system/$unit.d/nightstand-switch-recovery.conf"
+    done
+    rm -rf /home/dac/free-sleep-switch-recovery
+  fi
   rm -rf /home/dac/free-sleep-recovery
   rm -f /persistent/free-sleep-data/update-swap.json
   sync

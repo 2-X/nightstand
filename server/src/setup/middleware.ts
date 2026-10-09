@@ -49,7 +49,16 @@ function localSubnetPrefixes(): string[] {
   return subnetPrefixes;
 }
 
-export function isAllowedOrigin(origin: string | undefined): boolean {
+function hostnameOf(host: string | undefined): string | undefined {
+  if (!host) return undefined;
+  try {
+    return new URL(`http://${host}`).hostname;
+  } catch {
+    return undefined;
+  }
+}
+
+export function isAllowedOrigin(origin: string | undefined, host?: string): boolean {
   if (!origin) {
     return true;
   }
@@ -65,7 +74,12 @@ export function isAllowedOrigin(origin: string | undefined): boolean {
     if (configuredOrigin && parsed.origin === configuredOrigin) return true;
     const hostname = parsed.hostname;
     if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]') return true;
-    if (/^[a-z0-9-]+\.local$/i.test(hostname)) return true;
+    const localSuffixes = ['.local', '.lan', '.home.arpa', '.internal'];
+    if (isIP(hostname) === 0 && (/^[a-z0-9-]+$/.test(hostname)
+      || localSuffixes.some(suffix => hostname.endsWith(suffix)))) return true;
+    // Anyone can serve a page on a ts.net name through Tailscale Funnel, so
+    // only the name this Pod was reached by counts.
+    if (hostname.endsWith('.ts.net')) return hostname === hostnameOf(host);
     return isIP(hostname) === 4 && localSubnetPrefixes().some(prefix => hostname.startsWith(prefix));
   } catch {
     return false;
@@ -118,7 +132,7 @@ export default function (app: Express) {
   });
 
   app.use((req, res, next) => {
-    if (!isAllowedOrigin(req.headers.origin)) {
+    if (!isAllowedOrigin(req.headers.origin, req.headers.host)) {
       res.status(403).json({ error: 'Origin is not allowed' });
       return;
     }

@@ -6,6 +6,7 @@ import { useStatusSummary } from './useStatusSummary';
 import { StatusInfo } from '@api/serverStatusSchema.ts';
 import { SubpageShell } from '../DataPage/Header.tsx';
 import GroupCard from './GroupCard.tsx';
+import FirmwarePanel from './FirmwarePanel.tsx';
 import {
   GROUP_LABELS, STATUS_META, StatusGroup, waitingCoreKeys, statusName, statusImpact,
 } from './statusMeta.ts';
@@ -52,6 +53,9 @@ export default function StatusPage() {
               { impact }
             </Typography>) }
           </Alert> }
+          { data.systemDate?.status === 'healthy' && data.systemDate.message && (
+            <Alert severity="warning" aria-label="Clock warning">{ data.systemDate.message }</Alert>
+          ) }
           <Stack direction="row" alignItems="baseline" spacing={ 1 }>
             <Typography variant="body2" color="text.secondary">
               { dataUpdatedAt > 0 && `Checked ${moment(dataUpdatedAt).format('h:mm A')}` }
@@ -70,6 +74,7 @@ export default function StatusPage() {
           )) }
         </>
       ) }
+      <FirmwarePanel />
     </SubpageShell>
   );
 }

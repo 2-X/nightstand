@@ -359,6 +359,217 @@ class LoadBaselineFallbackTest(unittest.TestCase):
                 unittest.mock.patch.object(calibration, 'import_legacy_baseline', return_value=False):
             self.assertIsNone(cap_data.load_baseline('left'))
 
+    def test_unknown_record_keeps_matching_detection_baseline(self):
+        from collections import Counter
+        payload = {f'left_{name}': {'mean': 12, 'std': 1} for name in ('out', 'cen', 'in')}
+        payload['provenance'] = {'format': 'capSense2', 'normalizationVersion': 1}
+        counts = Counter({'capSense2': 500, 'unknown': 1})
+        self.assertEqual(calibration.observed_cap_format(counts), 'capSense2')
+        with unittest.mock.patch.object(calibration, 'get_profile', return_value={'payload': payload}):
+            self.assertEqual(cap_data.load_baseline('left', counts), payload)
+        self.assertEqual(calibration.cap_provenance(counts, 'a' * 64)['format'], 'capSense2')
+
+    def test_store_baseline_requires_matching_observed_records(self):
+        payload = {f'left_{name}': {'mean': 12, 'std': 1} for name in ('out', 'cen', 'in')}
+        payload['provenance'] = {'format': 'capSense2', 'normalizationVersion': 1}
+        with unittest.mock.patch.object(calibration, 'get_profile', return_value={'payload': payload}):
+            self.assertEqual(cap_data.load_baseline('left', {'capSense2': 10}), payload)
+            for formats in ({'capSense': 10}, {'capSense2': 10, 'capSense': 1}, {}, None):
+                with self.subTest(formats=formats):
+                    self.assertIsNone(cap_data.load_baseline('left', formats))
+            payload['provenance']['normalizationVersion'] = 99
+            self.assertIsNone(cap_data.load_baseline('left', {'capSense2': 10}))
+
+    def test_database_failure_uses_only_matching_tagged_file(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile('w', suffix='.json') as output:
+            json.dump({'format': 'capSense2', 'version': 1,
+                       'channels': {f'left_{name}': {'mean': 12, 'std': 1} for name in ('out', 'cen', 'in')}}, output)
+            output.flush()
+            with unittest.mock.patch.object(calibration, 'get_profile', side_effect=sqlite3.OperationalError('locked')), \
+                    unittest.mock.patch.object(calibration, 'import_legacy_baseline', side_effect=sqlite3.OperationalError('locked')), \
+                    unittest.mock.patch.object(cap_data, 'LEFT_CAP_BASE_LINE_FILE_PATH', output.name):
+                baseline = cap_data.load_baseline('left', {'capSense2': 10})
+                self.assertEqual(baseline['left_out']['mean'], 12)
+                self.assertIsNone(cap_data.load_baseline('left', {'capSense': 10}))
+                self.assertEqual(cap_data.load_baseline('left', {'capSense2': 10, 'unknown': 1}), baseline)
+
+    def test_malformed_file_cannot_break_the_piezo_fallback(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile('w', suffix='.json') as output:
+            output.write('{broken')
+            output.flush()
+            with unittest.mock.patch.object(calibration, 'get_profile', return_value=None), \
+                    unittest.mock.patch.object(cap_data, 'LEFT_CAP_BASE_LINE_FILE_PATH', output.name):
+                self.assertIsNone(cap_data.load_baseline('left', {'capSense2': 10}))
+
+
+class NightstandCalibrationCompatibilityTest(unittest.TestCase):
+    tearDown = CalibrationStoreTest.tearDown
+
+    def setUp(self):
+        CalibrationStoreTest.setUp(self)
+        # v3.6.1's writer stores channel statistics, with optional detector metadata.
+        self.payloads = {}
+        for side in ('left', 'right'):
+            payload = {f'{side}_{channel}': {'mean': mean, 'std': 1.0}
+                       for channel, mean in zip(('out', 'cen', 'in'), (12.5, 13.0, 14.5))}
+            payload.update(delta_noise=0.05, reading_means={'out': 12.0, 'cen': 13.0, 'in': 14.0})
+            self.payloads[side] = payload
+            calibration.save_profile(side, 'cap', payload, quality=0.8, source_start=100,
+                                     source_end=1900, samples_used=1800, run_id=1, conn=self.conn)
+            calibration.record_occupied_level(side, 12.0, 7200, 2000, 9200, conn=self.conn)
+
+    def test_sleep_baseline_matches_the_v361_reader_without_provenance(self):
+        from pathlib import Path
+        from functools import partial
+        source = (Path(__file__).parent / 'fixtures/older_load_baseline.py').read_text()
+        namespace = dict(calibration=calibration, sqlite3=sqlite3, logger=logging.getLogger('older-reader'))
+        exec(compile(source, 'older_load_baseline.py', 'exec'), namespace)
+        with unittest.mock.patch.object(calibration, 'get_profile',
+                                        partial(calibration.get_profile, conn=self.conn)):
+            for side in ('left', 'right'):
+                expected = namespace['load_baseline'](side)
+                self.assertEqual(expected, self.payloads[side])
+                for formats in (None, {}, {'capSense': 10}, {'capSense2': 10}):
+                    with self.subTest(side=side, formats=formats):
+                        self.assertEqual(cap_data.load_baseline(side, formats), expected)
+
+    def test_presence_baselines_and_learned_levels_keep_v361_values(self):
+        from presence.cap import CapBaseline
+        from presence.params import baselines_from_calibration, learned_levels, params_from_calibration
+        from presence.sensors import CAPSENSE, CAPSENSE2
+        profiles = calibration.load_presence_profiles(conn=self.conn)
+        expected = {side: CapBaseline(mean=(12.0, 13.0, 14.0), noise=0.05)
+                    for side in ('left', 'right')}
+        self.assertEqual(baselines_from_calibration(profiles), expected)
+        for cap_format in (CAPSENSE, CAPSENSE2):
+            with self.subTest(cap_format=cap_format.name):
+                self.assertEqual(baselines_from_calibration(profiles, cap_format), expected)
+                self.assertTrue(learned_levels(profiles, cap_format))
+        self.assertAlmostEqual(params_from_calibration(profiles, CAPSENSE2).left.enter_delta, 4.8)
+
+    def test_tagged_learning_keeps_the_previous_untagged_level(self):
+        stored = calibration.record_occupied_level(
+            'left', 100.0, 7200, 10000, 17200, conn=self.conn,
+            provenance={'format': 'capSense2', 'normalizationVersion': 1, 'origin': 'nightstand'})
+        self.assertAlmostEqual(stored, 15.0)
+
+    def test_untagged_file_loads_when_the_store_is_unavailable(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile('w', suffix='.json') as output:
+            json.dump(self.payloads['left'], output)
+            output.flush()
+            with unittest.mock.patch.object(calibration, 'get_profile', side_effect=sqlite3.OperationalError('locked')), \
+                    unittest.mock.patch.object(calibration, 'import_legacy_baseline', side_effect=sqlite3.OperationalError('locked')), \
+                    unittest.mock.patch.object(cap_data, 'LEFT_CAP_BASE_LINE_FILE_PATH', output.name):
+                self.assertEqual(cap_data.load_baseline('left', {'capSense2': 10}), self.payloads['left'])
+
+
+class CalibrationProvenanceTest(unittest.TestCase):
+    setUp = CalibrationStoreTest.setUp
+    tearDown = CalibrationStoreTest.tearDown
+    def _import(self, payload):
+        import tempfile
+        with tempfile.NamedTemporaryFile('w', suffix='.json') as output:
+            json.dump(payload, output)
+            output.flush()
+            self.assertTrue(calibration.import_legacy_baseline('left', output.name, conn=self.conn))
+        profile = calibration.get_profile('left', 'cap', conn=self.conn)['payload']
+        run = json.loads(self.conn.execute('SELECT payload FROM calibration_runs').fetchone()[0])
+        return profile, run
+
+    def test_tagged_upstream_import_keeps_provenance_in_profile_and_run(self):
+        channels = {f'left_{name}': {'mean': 12, 'std': 1} for name in ('out', 'cen', 'in')}
+        payload = {'format': 'capSense2', 'version': 1, 'channels': channels}
+        profile, run = self._import(payload)
+        import hashlib
+        expected_hash = hashlib.sha256(json.dumps(payload).encode()).hexdigest()
+        for stored in (profile, run):
+            self.assertEqual(stored['left_out'], {'mean': 12, 'std': 1})
+            self.assertEqual(stored['provenance'], {'format': 'capSense2', 'normalizationVersion': 1,
+                                                 'origin': 'upstream', 'sourceHash': expected_hash})
+        self.assertEqual(calibration.get_profile('left', 'cap', conn=self.conn)['quality'], 0)
+
+    def test_untagged_nightstand_file_keeps_its_payload(self):
+        payload = {f'left_{name}': {'mean': 12, 'std': 1} for name in ('out', 'cen', 'in')}
+        profile, run = self._import(payload)
+        self.assertEqual(profile, payload)
+        self.assertEqual(run, payload)
+
+    def test_additive_metadata_round_trips_without_changing_channel_keys(self):
+        provenance = {'format': 'capSense', 'normalizationVersion': 1,
+                      'origin': 'nightstand', 'sourceHash': 'b' * 64}
+        profile, run = self._import({'left_out': {'mean': 500, 'std': 5}, 'provenance': provenance})
+        self.assertEqual(profile['provenance'], provenance)
+        self.assertEqual(run['left_out']['mean'], 500)
+
+    def test_calibration_rejects_mixed_and_unknown_windows(self):
+        for counts in ({'capSense': 10, 'capSense2': 20}, {'unknown': 1}, {}):
+            with self.subTest(counts=counts), self.assertRaises(ValueError):
+                calibration.cap_provenance(counts, 'a' * 64)
+
+    def test_calibration_records_known_format_and_source_hash(self):
+        self.assertEqual(calibration.cap_provenance({'capSense2': 100}, 'a' * 64),
+                         {'format': 'capSense2', 'normalizationVersion': 1,
+                          'origin': 'nightstand', 'sourceHash': 'a' * 64})
+
+    def test_unsupported_tags_never_become_visible_to_the_older_reader(self):
+        import tempfile
+        from pathlib import Path
+        from types import SimpleNamespace
+        source = (Path(__file__).parent / 'fixtures/older_load_baseline.py').read_text()
+        namespace = dict(calibration=SimpleNamespace(
+            get_profile=lambda side, sensor: calibration.get_profile(side, sensor, conn=self.conn),
+            import_legacy_baseline=lambda side, path: calibration.import_legacy_baseline(side, path, conn=self.conn)),
+            sqlite3=sqlite3, logger=logging.getLogger('older-reader'),
+            LEFT_CAP_BASE_LINE_FILE_PATH='/nonexistent/baseline', RIGHT_CAP_BASELINE_FILE_PATH='/nonexistent/baseline')
+        exec(compile(source, 'older_load_baseline.py', 'exec'), namespace)
+        channels = {f'left_{name}': {'mean': 900, 'std': 1} for name in ('out', 'cen', 'in')}
+        for payload in (
+            {'format': 'capSense2', 'version': 99, 'channels': channels},
+            {'format': 'futureCap', 'version': 1, 'channels': channels},
+            {'format': 'capSense2', 'version': True, 'channels': channels},
+            {'format': 'capSense2', 'channels': channels},
+            dict(channels, provenance={'format': 'capSense2', 'normalizationVersion': 99}),
+            dict(channels, provenance={'format': 'futureCap', 'normalizationVersion': 1}),
+        ):
+            with self.subTest(payload=payload), tempfile.NamedTemporaryFile('w', suffix='.json') as output:
+                json.dump(payload, output)
+                output.flush()
+                imported = calibration.import_legacy_baseline('left', output.name, conn=self.conn)
+                self.assertIsNone(namespace['load_baseline']('left'))
+                self.assertFalse(imported)
+                self.assertEqual(self.conn.execute('SELECT COUNT(*) FROM calibration_runs').fetchone()[0], 0)
+                self.assertIsNone(calibration.get_profile('left', 'cap', conn=self.conn))
+        with tempfile.NamedTemporaryFile('w', suffix='.json') as output:
+            json.dump({'format': 'capSense2', 'version': 1, 'channels': channels}, output)
+            output.flush()
+            self.assertTrue(calibration.import_legacy_baseline('left', output.name, conn=self.conn))
+        self.assertEqual(namespace['load_baseline']('left')['left_out'], {'mean': 900, 'std': 1})
+
+    def test_invalid_tagged_channels_are_not_imported(self):
+        import tempfile
+        for bad in ({}, {'left_out': {'mean': 12, 'std': 0}},
+                    {'left_out': {'mean': float('nan'), 'std': 1}}):
+            with self.subTest(channels=bad), tempfile.NamedTemporaryFile('w', suffix='.json') as output:
+                json.dump({'format': 'capSense2', 'version': 1, 'channels': bad}, output)
+                output.flush()
+                self.assertFalse(calibration.import_legacy_baseline('left', output.name, conn=self.conn))
+                self.assertIsNone(calibration.get_profile('left', 'cap', conn=self.conn))
+
+    def test_new_occupied_units_do_not_step_from_an_incompatible_old_level(self):
+        calibration.record_occupied_level('left', 900, 7200, 1, 7201, conn=self.conn,
+                                          provenance={'format': 'capSense', 'normalizationVersion': 1})
+        tag = {'format': 'capSense2', 'normalizationVersion': 1, 'origin': 'nightstand', 'sourceHash': 'a' * 64}
+        self.assertEqual(calibration.record_occupied_level('left', 12, 7200, 8000, 15200,
+                                                         conn=self.conn, provenance=tag), 12)
+        profile = calibration.get_profile('left', 'cap_occupied', conn=self.conn)['payload']
+        self.assertEqual(profile['provenance'], tag)
+        self.assertIsNone(profile['before'])
+        run = json.loads(self.conn.execute('SELECT payload FROM calibration_runs ORDER BY id DESC').fetchone()[0])
+        self.assertEqual(run['provenance'], tag)
+
 
 class FinalOccupancyPiezoOnlyFallbackTest(unittest.TestCase):
     def test_no_baseline_falls_back_to_piezo_alone(self):

@@ -1,20 +1,32 @@
 import express from 'express';
+import { performance } from 'node:perf_hooks';
 
 import serverStatus from '../../serverStatus.js';
+import type { ServerStatus } from './serverStatusSchema.js';
 const router = express.Router();
+const CACHE_MS = 15_000;
+let cached: ServerStatus | undefined;
+let expiresAt = 0;
+let pending: Promise<ServerStatus> | undefined;
 
+// Pollers share the database check and an immutable response snapshot.
+async function getStatus(): Promise<ServerStatus> {
+  if (cached && performance.now() < expiresAt) return cached;
+  pending ??= serverStatus.toJSON().then(status => {
+    cached = structuredClone(status);
+    expiresAt = performance.now() + CACHE_MS;
+    return cached;
+  }).finally(() => { pending = undefined; });
+  return pending;
+}
 
-
-// Answers only that the server and its event loop are alive. The health
-// check asks every minute, and the full status below rewrites the services
-// file each time.
+// Answers only that the server and its event loop are alive.
 router.get('/alive', (_req, res) => {
   res.status(204).end();
 });
 
-// Endpoint to list all log files as clickable links
 router.get('/', async (req, res) => {
-  const response = await serverStatus.toJSON();
+  const response = await getStatus();
   res.json(response);
 });
 

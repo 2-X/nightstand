@@ -1,4 +1,5 @@
 import { lazy } from 'react';
+import { loadRoute } from './utils/loadRoute';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import SideRoute from './components/SideRoute';
@@ -10,15 +11,15 @@ import PageContainer from './pages/PageContainer';
 // Pages are lazy-loaded so each route ships only what it needs. The shell
 // (Layout, AppStoreProvider, theme, query client) stays in the entry chunk so
 // the first paint doesn't wait on a route-specific download.
-const ControlTempPage = lazy(() => import('./pages/ControlTempPage/ControlTempPage'));
-const BaseControlPage = lazy(() => import('./pages/BaseControlPage/BaseControlPage'));
-const SettingsPage = lazy(() => import('./pages/SettingsPage/SettingsPage'));
-const ScheduleTab = lazy(() => import('./pages/SchedulePage/ScheduleTab.tsx'));
-const SleepPage = lazy(() => import('./pages/DataPage/SleepPage/SleepPage.tsx'));
-const LogsPage = lazy(() => import('./pages/DataPage/LogsPage/LogsPage.tsx'));
-const ChangelogPage = lazy(() => import('./pages/DataPage/ChangelogPage/ChangelogPage.tsx'));
-const VersionsPage = lazy(() => import('./pages/SettingsPage/VersionsPage/VersionsPage.tsx'));
-const StatusPage = lazy(() => import('./pages/StatusPage/StatusPage.tsx'));
+const ControlTempPage = lazy(() => loadRoute(() => import('./pages/ControlTempPage/ControlTempPage')));
+const BaseControlPage = lazy(() => loadRoute(() => import('./pages/BaseControlPage/BaseControlPage')));
+const SettingsPage = lazy(() => loadRoute(() => import('./pages/SettingsPage/SettingsPage')));
+const ScheduleTab = lazy(() => loadRoute(() => import('./pages/SchedulePage/ScheduleTab.tsx')));
+const SleepPage = lazy(() => loadRoute(() => import('./pages/DataPage/SleepPage/SleepPage.tsx')));
+const LogsPage = lazy(() => loadRoute(() => import('./pages/DataPage/LogsPage/LogsPage.tsx')));
+const ChangelogPage = lazy(() => loadRoute(() => import('./pages/DataPage/ChangelogPage/ChangelogPage.tsx')));
+const VersionsPage = lazy(() => loadRoute(() => import('./pages/SettingsPage/VersionsPage/VersionsPage.tsx')));
+const StatusPage = lazy(() => loadRoute(() => import('./pages/StatusPage/StatusPage.tsx')));
 
 export default function AppRoutes() {
   return (

@@ -54,6 +54,8 @@ BK=fixture-backup
     def test_failed_restore_is_not_repeated_by_cleanup(self):
         script = read('switch-to-upstream.sh')
         functions = section(script, 'DATA_CHANGED=no', '# Keep the descriptor')
+        functions = functions.replace('$(dirname "${BASH_SOURCE[0]}")/restore_helpers.sh',
+                                      str(ROOT / 'scripts/restore_helpers.sh'))
         result, log = self.run_shell(functions + '\n' + """
 DATA_CHANGED=yes
 ARCHIVE_WAS_ACTIVE=active
@@ -65,7 +67,11 @@ cp() { echo restore-attempt >> "$FIXTURE/services"; return 1; }
 rm() { :; }
 trap cleanup EXIT
 restore_switch_data_or_fail "restore failed"
-""", 'systemctl() { [ "$1" != is-active ] || { echo inactive; return 3; }; echo "$*" >> "$FIXTURE/services"; }')
+""", '''
+iptables() { return 0; }
+ip6tables() { return 0; }
+systemctl() { [ "$1" != is-active ] || { echo inactive; return 3; }; echo "$*" >> "$FIXTURE/services"; }
+''')
         self.assertEqual(result.returncode, 1)
         self.assertEqual(log.count('restore-attempt'), 1)
         self.assertIn('start free-sleep-archive-raw.timer', log)
@@ -195,6 +201,39 @@ ssh_cmd() {
                 self.assertEqual(result.returncode, 0 if terminal else 1, result.stderr)
                 if terminal:
                     self.assertIn('"' + outcome + '"', result.stdout)
+
+
+class TransactionDispatchTests(unittest.TestCase):
+    def test_confirmed_v2_dispatches_before_shared_venv_or_legacy_mutations(self):
+        script = read('switch-to-upstream.sh')
+        self.assertIn('TRANSACTIONAL_SWITCH=yes', script)
+        start = script.index('# Confirmed V2 targets use the durable transaction')
+        end = script.index('# Upstream imports', start)
+        block = script[start:end]
+        self.assertIn('switch_installation.py', block)
+        self.assertIn('recheck_in_use', block)
+        self.assertIn('forward', block)
+        self.assertIn('"$CONFIRMED_TARGET"', block)
+        self.assertIn('"$SWITCH_ACTUAL"', block)
+        self.assertNotIn('pip install', block)
+
+    def test_return_and_restore_share_the_operation_lock_and_durable_recovery(self):
+        installer = read('migrate/pod-installer.sh')
+        restore = read('migrate/restore-original-fork.sh')
+        self.assertIn('NIGHTSTAND_OPERATION_LOCK', installer)
+        self.assertIn('switch_installation.py" return', installer)
+        self.assertLess(installer.index('switch_installation.py" return'), installer.index('Dead-man sentinel, armed'))
+        self.assertIn('recover_switch.sh', restore)
+        self.assertIn('NIGHTSTAND_OPERATION_OWNER', restore)
+
+    def test_cross_fork_rollback_dispatches_before_ordinary_swap(self):
+        script = read('rollback_pod.sh')
+        start = script.index('# Cross-fork rollback requires companion state')
+        end = script.index('# Other forks cannot run', start)
+        block = script[start:end]
+        self.assertIn('restore_cross_fork_rollback', block)
+        self.assertIn('recheck_in_use', block)
+        self.assertLess(start, script.index('RESULT_PHASE=swapping', start))
 
 
 if __name__ == '__main__':

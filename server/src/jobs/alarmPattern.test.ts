@@ -12,12 +12,13 @@ process.env.ENV = 'local';
 
 const commands: unknown[][] = [];
 let hubVersion = 'Pod 5';
+let coverVersion: string | undefined = 'Pod 5';
 mock.module(new URL('../8sleep/deviceApi.js', import.meta.url).href, {
   namedExports: { executeFunction: async (...args: unknown[]) => { commands.push(args); } },
 });
 mock.module(new URL('../8sleep/frankenServer.js', import.meta.url).href, {
   namedExports: { connectFrankenWithin: async () => ({
-    getDeviceStatus: async () => ({ left: { isOn: true }, right: { isOn: true }, hubVersion }),
+    getDeviceStatus: async () => ({ left: { isOn: true }, right: { isOn: true }, hubVersion, coverVersion }),
   }) },
 });
 
@@ -56,3 +57,11 @@ describe('alarm vibration pattern', () => {
     assert.equal(await sentPattern('double'), 'double');
   });
 });
+
+for (const cover of ['Pod 3', 'Pod 4', 'Version not found', undefined]) {
+  it(`sends double on a Pod 5 hub with cover ${cover}`, async () => {
+    hubVersion = 'Pod 5';
+    coverVersion = cover;
+    assert.equal(await sentPattern('rise'), 'double');
+  });
+}

@@ -44,6 +44,21 @@ for your model. On a Pod 5 there is no tested way back.
   Once you can SSH in as root, do [step 11](#11-disable-software-updates)
   right away. Then skip step 12 (the Pod is already on your network) and
   continue from step 13.
+  Some prebuilt free-sleep SD images contain shared root and rewt passwords
+  and an EyePhone Wi-Fi profile that auto-joins a hotspot with a shared key,
+  as reported in [GoogleBot42's podd research](https://github.com/GoogleBot42/podd/blob/main/docs/research/connectivity-and-diff.md).
+  If you used a prebuilt image, also set your own passwords with `passwd root`
+  and `passwd rewt`, as in [step 7](#7-set-the-root-and-rewt-passwords).
+  The installer checks for the reported password salt and a possibly inherited
+  EyePhone profile. The profile check matches its path, connection ID, type and
+  SSID, without comparing the key or autoconnect setting. A custom EyePhone
+  profile with your own key and autoconnect disabled can also match. Review the
+  profile before removing it. The installer offers to remove each profile and
+  change each affected account's password, only after a separate yes. A
+  non-interactive run warns and changes neither. Keep your SSH session open
+  and configure your own Wi-Fi before
+  removing EyePhone. To run the check later, use
+  `bash /home/dac/free-sleep/scripts/check_image_credentials.sh` as root.
 - Pod 3 without an SD card (FCC ID 2AYXT61100001, printed on the back of the
   Pod where the water tubes plug in) and Pod 4: supported by upstream
   free-sleep.
@@ -486,6 +501,14 @@ I haven't run this exact command against a Pod.
    its own. That is expected.
 
 ## What installation changes on the Pod
+
+Install and update warn if root cron contains legacy jobs that open the
+firewall, without changing the crontab. The fork-switch tool asks before
+removing those jobs, their time sync script and the ambient-light service.
+It backs up removed files, stops unknown `free-sleep*` units before the database
+checkpoint and does not enable them afterward. It reports IPv6-disable settings
+without changing them. See [Coming from free-sleep](docs/COMING_FROM_FREE_SLEEP.md#what-changes)
+for consent and recovery details.
 
 Nightstand never replaces Eight Sleep's programs. It changes these system
 settings, and since 3.6.0 it saves them the first time it changes them,

@@ -167,9 +167,17 @@ already? [Coming from free-sleep](docs/COMING_FROM_FREE_SLEEP.md) covers
 switching without reinstalling, and going back.
 
 Once installed, the app is at `http://eight-pod.local:3000` (or
-`http://<POD_IP>:3000`). Keep the Pod on a trusted network and do not expose
-it to the internet. For access away from home, see
+`http://<POD_IP>:3000`). The origin check also accepts bare hostnames and
+names ending in `.lan`, `.home.arpa` or `.internal`. A Tailscale MagicDNS
+name ending in `.ts.net` is accepted when it matches the hostname used to
+reach the Pod. Keep the Pod on a trusted network and do not expose it to
+the internet. For access away from home, see
 [remote access with Tailscale](docs/REMOTE_ACCESS.md).
+
+For Home Assistant, Homebridge and scripts, see
+[Integrations](docs/INTEGRATIONS.md) for compatibility limits, API request
+shapes and how to disable Homebridge's keepAlive, which overrides the Pod's
+scheduled off timer with a new 12-hour timer.
 
 ## Features
 
@@ -180,6 +188,11 @@ it to the internet. For access away from home, see
   week that assigns one to each day, and single-date changes
 - Sleep data (see [Biometrics](#biometrics)): time in bed (measured); heart
   rate and, with New sleep tracking, breathing rate (estimates)
+- Firmware target, Firmware health and Tap diagnostics show the firmware's
+  thermostat targets, selected health messages and button/tap candidates
+  on System status. Cooling warning reports water warming during cooling
+  demand. These Settings > Features switches are all off by default, need
+  Biometrics and do not send hardware commands
 - Three themes under Settings > Bed and sides > Theme, saved on each device:
   lamp (the default), free-sleep classic and jmew. The last two
   follow the original free-sleep app by throwaway31265 and jmew's fork of it
@@ -190,6 +203,8 @@ scheduled on hours.
 
 With daily priming on, the Pod also restarts an hour before each prime, as
 free-sleep does (the switch is under Settings > Bed and sides > Priming).
+System status reports when the daily prime was not confirmed and warns
+when clock synchronization is unavailable or reports an unsynchronized clock.
 
 ### Smart Schedule
 
@@ -220,6 +235,14 @@ sh /home/dac/free-sleep/scripts/enable_biometrics.sh
 Nightstand keeps its sleep data on the Pod ([server/API.md](server/API.md));
 the firmware's own uploads are covered under
 [Before you install](#before-you-install).
+
+Settings > Features has Low-disk protection (on by default), which deletes
+old detailed vitals below 150 MiB free, and Prune detail after 30 days (off
+by default). Both keep at least the last two nights of detail, nightly
+summaries, sleep records, scores and movement. Pruning makes database pages
+reusable; it does not shrink the file, and deleted detail cannot be restored
+([metrics retention](docs/METRICS_RETENTION.md)). Sleep reads default to
+90 days; the app can still browse older weeks.
 
 ### Accuracy
 
@@ -334,7 +357,12 @@ upstream built the installer, server, app and biometrics pipeline, and
 jmew's fork added presence detection, sleep stages, one-time alarms,
 adjustable base control and live screen updates.
 Matt Gates ([@Geczy](https://github.com/Geczy/free-sleep)) originally wrote
-the adjustable base control that jmew's fork carried.
+the adjustable base control that jmew's fork carried
+([driver](https://github.com/Geczy/free-sleep/commit/74d6439c0fffbd634e3b84ec054cb52d741eddab),
+[angle maps](https://github.com/Geczy/free-sleep/commit/fccb7916fbf3f8f1e0da4324de57bdf1a1fe12a4)).
+These are the main-branch copies of the patches credited in 3.6.1. His
+[preset integration](https://github.com/Geczy/free-sleep/commit/c17cb0866489889b2230f698e99eb74184c15623)
+also includes the HTTP route, app API client and four-tap base action.
 Multiple alarms per night came from
 [SFenton's fork](https://github.com/SFenton/free-sleep), and `sensorTemps`
 came from Felix Sommer's [Beat2er fork](https://github.com/Beat2er/free-sleep).

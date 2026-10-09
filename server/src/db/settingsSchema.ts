@@ -101,6 +101,12 @@ export const defaultFeatures = {
   nightstandTheme: true,
   rhythms: false,
   biometricsV2: false,
+  firmwareTargetReadout: false,
+  firmwareHealth: false,
+  tapDiagnostics: false,
+  coolingWarning: false,
+  metricsRetention: false,
+  metricsLowDiskProtection: true,
 } as const;
 const FeaturesSchema = z.object({
   sleepScore: z.boolean(),
@@ -110,6 +116,12 @@ const FeaturesSchema = z.object({
   nightstandTheme: z.boolean(),
   rhythms: z.boolean(),
   biometricsV2: z.boolean(),
+  firmwareTargetReadout: z.boolean(),
+  firmwareHealth: z.boolean(),
+  tapDiagnostics: z.boolean(),
+  coolingWarning: z.boolean(),
+  metricsRetention: z.boolean(),
+  metricsLowDiskProtection: z.boolean(),
 }).strict();
 
 export const SettingsSchema = z.object({

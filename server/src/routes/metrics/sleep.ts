@@ -7,10 +7,15 @@ import { prisma } from '../../db/prisma.js';
 import { parseMetricsQuery } from './metricsQuery.js';
 
 const router = express.Router();
+const DEFAULT_SLEEP_SECONDS = 90 * 24 * 3600;
 
 router.get('/sleep', async (req: Request, res: Response) => {
   const range = parseMetricsQuery(req.query);
   if (!range) return res.status(400).json({ error: 'Invalid side, startTime or endTime' });
+  if (range.start === undefined && range.end === undefined) {
+    range.end = Math.floor(Date.now() / 1000);
+    range.start = range.end - DEFAULT_SLEEP_SECONDS;
+  }
   const query: Prisma.sleep_recordsWhereInput = {
     side: range.side,
     left_bed_at: { gte: range.start },
