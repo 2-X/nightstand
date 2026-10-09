@@ -216,17 +216,15 @@ is a hard fork; for the history of the projects it descends from, see
   credited in 3.6.1, and credits the
   [preset integration](https://github.com/Geczy/free-sleep/commit/c17cb0866489889b2230f698e99eb74184c15623),
   including the HTTP route, app API client and four-tap base action.
-- Settings > Features has a new Cover buttons switch, off by default, for
-  the three buttons on each side of a Pod 5 cover. Plus and minus step that
-  side's temperature by one degree, and the logo button stops a ringing or
-  snoozed alarm or sets the side to its favorite temperature and turns it
-  on. The firmware logs every press to the Pod's RAW files and ignores the
-  short clicks itself; Nightstand reads the newest file once a second. The
-  step, the favorite and the button order are set through
-  `/api/settings`. Long presses are left to the firmware, which on newer
-  host firmware reports them as taps. Checked on one Pod 4 hub with a Pod 5
-  cover by @2-X, not on a Pod 5 hub, and not on firmware that writes no RAW
-  files, where the switch reports that no file is being written.
+- Settings > Features has a new Cover buttons switch, off by default.
+  It acts only on clicks the firmware logged as ignored in the Pod's RAW
+  files: the top button raises that side's target by 1 F and the bottom
+  lowers it by 1 F. The logo button has no action here. It is inert on hubs
+  whose firmware handles the buttons, such as a Pod 5 hub. Presses can take
+  15 to 25 s to arrive because the firmware batches its log records.
+  Adapted from @2-X's pull request 5, reported on a Pod 4 hub with a Pod 5
+  cover. The ignore gate is checked in synthetic tests, not on hardware.
+  Firmware that writes no RAW files reports that no file is being written.
 
 ## [3.6.1] - 2026-10-07
 

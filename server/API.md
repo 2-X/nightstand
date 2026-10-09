@@ -185,8 +185,7 @@ generic message; the details go to the server log.
       "doubleTap": { "type": "temperature", "change": "decrement", "amount": 2 },
       "tripleTap": { "type": "temperature", "change": "increment", "amount": 2 },
       "quadTap": { "type": "base_control", "behavior": "toggle_preset" }
-    },
-    "buttons": { "invertButtons": false, "stepF": 1, "favoriteTemperatureF": 80 }
+    }
   },
   "right": { "...": "same shape as left" },
   "primePodDaily": {
@@ -257,18 +256,15 @@ generic message; the details go to the server log.
     tap stopped a Nightstand alarm in firmware, the `dismissAlarm` value
     rose, and Nightstand cleared its ringing state and logged the dismissal.
     Timestamp units remain unverified.
-- `buttons` is what the buttons on a Pod 5 cover do while
-  `features.coverButtons` is on. A click on the top button adds `stepF`
-  (0 to 10 degrees F) to that side's target and the bottom button takes it
-  away; `invertButtons: true` swaps them for a cover whose ends are the
-  other way round. The logo button stops a ringing or snoozed alarm, or
-  sets the side to `favoriteTemperatureF` (55 to 110) and turns it on. The
-  app has no editor for them. Long presses are left to the firmware, which
-  on newer host firmware reports them through `taps`.
 - `features` are feature flags. `sleepScore` turns the sleep score and sleep
   stage routes on and off; the app no longer shows either.
   `coverButtons` is Cover buttons, off by default: the server then opens no
-  RAW file.
+  RAW file. When on, it acts only on clicks the firmware logged as ignored
+  in `/persistent/*.RAW`: the top button raises that side's target by 1 F
+  and the bottom lowers it by 1 F, within 55 to 110 F. The logo button has
+  no action here. It is inert on hubs whose firmware handles the buttons,
+  such as a Pod 5 hub. Presses can take 15 to 25 s to arrive because the
+  firmware batches its log records.
   `nightstandTheme` is no longer read and stays so stored settings keep
   validating. `features.rhythms` is the Rhythms switch (see `/api/rhythms`
   below); it changes only through `POST /api/rhythms/enable` and
@@ -1328,7 +1324,7 @@ the biometrics service; `/api/deviceStatus` converts them.
   "express": { "name": "Express", "status": "healthy", "description": "The back-end server", "message": "" },
   "franken": { "name": "Franken sock", "status": "healthy", "description": "Socket service for controlling the hardware", "message": "" },
   "frankenMonitor": { "name": "Franken monitor", "status": "healthy", "description": "Handles gestures and monitoring the status", "message": "" },
-  "buttonMonitor": { "name": "Cover buttons", "status": "healthy", "description": "Reads the buttons on a Pod 5 cover from the RAW files", "message": "Off in Settings > Features", "timestamp": "2026-09-20T18:04:11-07:00" },
+  "buttonMonitor": { "name": "Cover buttons", "status": "healthy", "description": "Reads ignored cover clicks from the RAW files", "message": "Off in Settings > Features", "timestamp": "2026-09-20T18:04:11-07:00" },
   "jobs": { "name": "Job scheduler", "status": "healthy", "description": "Scheduling service for temperature changes, alarms, and maintenance", "message": "" },
   "logger": { "name": "Logger", "status": "healthy", "description": "Logging service", "message": "" },
   "powerSchedule": { "name": "Power schedule", "status": "healthy", "description": "Power on/off schedule", "message": "" },

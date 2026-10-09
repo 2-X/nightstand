@@ -140,9 +140,9 @@ export const STATUS_META: Record<ServerStatusKey, StatusItemMeta> = {
   },
   buttonMonitor: {
     group: 'core',
-    blurb: 'Reads presses of the buttons on a Pod 5 cover from the Pod\'s RAW files, when Cover buttons is on in Settings > Features.',
+    blurb: 'Reads cover clicks the firmware logged as ignored in the Pod\'s RAW files, when Cover buttons is on in Settings > Features.',
     meaning: {
-      healthy: 'Watching for button presses, or off in Settings.',
+      healthy: 'Watching for ignored button clicks, or off in Settings.',
       failed: 'Cannot read fresh button presses. The Pod is not writing RAW files, or a press could not be applied.',
     },
   },
