@@ -81,6 +81,54 @@ class SwitchServicesTests(unittest.TestCase):
         self.assertTrue((self.config.systemd / 'free-sleep-update.service.d/nightstand-switch-recovery.conf').exists() is False)
         self.assertTrue(any(item['name'] == 'reconcile-system' for item in self.store.load('switch')['intents']))
 
+    def test_reject_failure_reaches_drop_fallback_in_both_families(self):
+        self.snapshot()
+        bindir = self.root / 'bin'
+        bindir.mkdir()
+        firewall = """#!/bin/sh
+family=${0##*/}
+if [ "$1" = -A ] && [ "$4" = REJECT ]; then exit 1; fi
+if [ "$1" = -A ] && [ "$4" = DROP ]; then
+  echo DROP > "$TEST_FIREWALL/$family"
+  exit 0
+fi
+[ "$1" = -C ] && [ "$(cat "$TEST_FIREWALL/$family" 2>/dev/null)" = "$4" ]
+"""
+        for family in ('iptables', 'ip6tables'):
+            command = bindir / family
+            command.write_text(firewall)
+            command.chmod(0o755)
+        (self.live / 'scripts/block_internet_access.sh').write_text("""#!/bin/sh
+iptables -A OUTPUT -j REJECT
+iptables -C OUTPUT -j REJECT || iptables -A OUTPUT -j DROP
+ip6tables -A OUTPUT -j REJECT
+ip6tables -C OUTPUT -j REJECT || ip6tables -A OUTPUT -j DROP
+iptables -C OUTPUT -j DROP && ip6tables -C OUTPUT -j DROP
+""")
+        environment = dict(os.environ, PATH=str(bindir) + os.pathsep + os.environ['PATH'],
+                           TEST_FIREWALL=str(self.root))
+        def apply_command(command, **kwargs):
+            if command[0] in ('sh', 'iptables', 'ip6tables'):
+                return self.module.subprocess.run(command, check=True, capture_output=True, text=True,
+                                                  env=environment).stdout
+            return self.execute(command, **kwargs)
+        with patch.object(self.module, 'execute', side_effect=apply_command):
+            self.module.apply(self.store, 'switch', self.config, 'upstream')
+        self.assertEqual((self.root / 'iptables').read_text(), 'DROP\n')
+        self.assertEqual((self.root / 'ip6tables').read_text(), 'DROP\n')
+
+    def test_successful_block_script_without_a_terminal_rule_is_refused(self):
+        self.snapshot()
+        for missing in ('iptables', 'ip6tables'):
+            with self.subTest(missing=missing):
+                def missing_tail(command, **kwargs):
+                    if command[0] == missing and command[1:3] == ['-C', 'OUTPUT']:
+                        raise subprocess.CalledProcessError(1, command)
+                    return self.execute(command, **kwargs)
+                with patch.object(self.module, 'execute', side_effect=missing_tail):
+                    with self.assertRaisesRegex(ValueError, 'OUTPUT'):
+                        self.module.apply(self.store, 'switch', self.config, 'upstream')
+
     def test_mocked_subsequent_update_uses_guard_after_checkout_copy_is_removed(self):
         self.snapshot()
         self.apply()

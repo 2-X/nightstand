@@ -3,17 +3,14 @@
 set -euo pipefail
 TRANSACTIONS="${NIGHTSTAND_TRANSACTION_ROOT:-/persistent/free-sleep-maintenance/nightstand-transactions}"
 # Ordinary startup needs no Python, service state or maintenance lock.
-HAS_JOURNAL=no
-for journal in "$TRANSACTIONS"/*/journal.json; do
-  if [ -e "$journal" ] || [ -L "$journal" ]; then HAS_JOURNAL=yes; break; fi
-done
-if [ "$HAS_JOURNAL" = no ]; then
+RECOVERY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$RECOVERY_DIR/restore_helpers.sh"
+if ! has_switch_journal "$TRANSACTIONS"; then
   if [ -e "$TRANSACTIONS" ] && { [ ! -d "$TRANSACTIONS" ] || [ ! -r "$TRANSACTIONS" ] || [ ! -x "$TRANSACTIONS" ]; }; then
     echo 'Warning: switch journals could not be inspected; allowing startup without a known journal' >&2
   fi
   exit 0
 fi
-RECOVERY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HELPER="$RECOVERY_DIR/recover_switch.py"
 OPERATION_LOCK="${NIGHTSTAND_OPERATION_LOCK:-/run/lock/free-sleep-operation.lock}"
 if [ -z "${NIGHTSTAND_OPERATION_LOCK:-}" ] && [ ! -d /run/lock ]; then
@@ -52,5 +49,4 @@ try:
 except OSError:
     sys.exit('Another maintenance operation holds the lock; switch recovery deferred')
 PY
-source "$RECOVERY_DIR/restore_helpers.sh"
 restore_switch_offline "$RECOVERY_DIR" "$TRANSACTIONS"

@@ -116,11 +116,10 @@ describe('RevertToStockRow target confirmation', () => {
       .toHaveTextContent('arrange local or SSH access first.');
   });
 
-  it.each(['unavailable', 'malformed'])('sends no switch request when the manifest is %s', async state => {
+  it('sends no switch request when the V2 target is malformed', async () => {
     const bodies = serveInUse('*/update/switch-to-upstream', []);
     server.use(http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json', () =>
-      state === 'unavailable' ? new HttpResponse(null, { status: 503 })
-        : HttpResponse.json({ ...manifest, upstreamSwitchV2: { ...target, commit: 'main' } })));
+      HttpResponse.json({ ...manifest, upstreamSwitchV2: { ...target, commit: 'main' } })));
     await openDialog();
     const confirm = screen.getByRole('button', { name: 'Switch to upstream free-sleep' });
     expect(confirm).toBeDisabled();
@@ -150,5 +149,42 @@ describe('RevertToStockRow target confirmation', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Continue anyway' })).toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: 'Continue anyway' }));
     expect(bodies).toEqual([{ target }]);
+  });
+});
+
+describe('RevertToStockRow with a failed manifest fetch', () => {
+  beforeEach(() => {
+    server.use(http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json',
+      () => new HttpResponse(null, { status: 503 })));
+  });
+
+  it('allows the legacy switch without a target and uses the legacy wording', async () => {
+    const bodies = serveInUse('*/update/switch-to-upstream', []);
+    const { user } = await openDialog();
+    expect(screen.getByText("Installs upstream free-sleep's newest code, which this switch has not been checked with."))
+      .toBeInTheDocument();
+    expect(screen.queryByText(/No validated target/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Switch to upstream free-sleep' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Switch to upstream free-sleep' }));
+    await waitFor(() => expect(bodies).toEqual([{}]));
+  });
+
+  it('keeps the bed-use confirmation on an untargeted legacy switch', async () => {
+    const bodies = serveInUse('*/update/switch-to-upstream', ['left-on']);
+    const { user } = await openDialog();
+    await user.click(screen.getByRole('button', { name: 'Switch to upstream free-sleep' }));
+    expect(await screen.findByText(SIDE_ON)).toBeInTheDocument();
+    expect(bodies).toEqual([{}]);
+    await user.click(screen.getByRole('button', { name: 'Continue anyway' }));
+    await waitFor(() => expect(bodies).toEqual([{}, { confirmInUse: true }]));
+  });
+
+  it('requires a new confirmation if the manifest loads while the legacy dialog is open', async () => {
+    const bodies = serveInUse('*/update/switch-to-upstream', []);
+    const { queryClient } = await openDialog();
+    queryClient.setQueryData(['useReleases'], manifest);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Switch to upstream free-sleep' })).toBeDisabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to upstream free-sleep' }));
+    expect(bodies).toEqual([]);
   });
 });

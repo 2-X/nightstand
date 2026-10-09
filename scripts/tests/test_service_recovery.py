@@ -54,6 +54,8 @@ BK=fixture-backup
     def test_failed_restore_is_not_repeated_by_cleanup(self):
         script = read('switch-to-upstream.sh')
         functions = section(script, 'DATA_CHANGED=no', '# Keep the descriptor')
+        functions = functions.replace('$(dirname "${BASH_SOURCE[0]}")/restore_helpers.sh',
+                                      str(ROOT / 'scripts/restore_helpers.sh'))
         result, log = self.run_shell(functions + '\n' + """
 DATA_CHANGED=yes
 ARCHIVE_WAS_ACTIVE=active
@@ -65,7 +67,11 @@ cp() { echo restore-attempt >> "$FIXTURE/services"; return 1; }
 rm() { :; }
 trap cleanup EXIT
 restore_switch_data_or_fail "restore failed"
-""", 'systemctl() { [ "$1" != is-active ] || { echo inactive; return 3; }; echo "$*" >> "$FIXTURE/services"; }')
+""", '''
+iptables() { return 0; }
+ip6tables() { return 0; }
+systemctl() { [ "$1" != is-active ] || { echo inactive; return 3; }; echo "$*" >> "$FIXTURE/services"; }
+''')
         self.assertEqual(result.returncode, 1)
         self.assertEqual(log.count('restore-attempt'), 1)
         self.assertIn('start free-sleep-archive-raw.timer', log)

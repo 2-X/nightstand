@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import signal
 import subprocess
 import sys
@@ -248,7 +249,7 @@ restore_cross_fork_rollback() {
   echo companion
 }
 '''
-        return subprocess.run(['bash', '-c', setup + body + '\necho ordinary'],
+        return subprocess.run(['bash', '-c', 'source ' + shlex.quote(str(SCRIPTS / 'restore_helpers.sh')) + '\n' + setup + body + '\necho ordinary'],
                               env=dict(os.environ, LIVE=str(self.system.live), PREV=str(previous),
                                        NIGHTSTAND_TRANSACTION_ROOT=str(self.system.store.root)),
                               capture_output=True, text=True, timeout=10)
@@ -551,7 +552,7 @@ bash "$TEST_ROLLBACK"
         self.assertIn(['start', '--no-block', 'free-sleep-archive-raw.timer'], self.system.calls)
         self.assertIn(['iptables-restore'], self.system.calls)
         self.assertIn(['ip6tables-restore'], self.system.calls)
-        policy = ['sh', '-e', str(self.system.live / 'scripts/block_internet_access.sh')]
+        policy = ['sh', str(self.system.live / 'scripts/block_internet_access.sh')]
         self.assertLess(self.system.calls.index(policy), self.system.calls.index(['iptables-restore']))
 
     def test_failed_return_restores_new_upstream_calibration_updater_and_environment(self):

@@ -105,24 +105,8 @@ restore_switch_data_or_fail() {
 WAN_RULES=("-p tcp --dport 443 -j ACCEPT" "-p udp --dport 53 -j ACCEPT" "-p tcp --dport 53 -j ACCEPT")
 WAN_RULE6="-p tcp --dport 443 -j REJECT --reject-with tcp-reset"
 WAN_OPEN=no
-# iptables 1.6.0 added "-w SECONDS"; older builds take a bare -w or no flag.
-IPT_W=
-for IPT_W in "-w 5" "-w" ""; do
-  # shellcheck disable=SC2086
-  iptables $IPT_W -S OUTPUT >/dev/null 2>&1 && break
-done
-# shellcheck disable=SC2086
-fw4() { iptables $IPT_W "$@"; }
-# shellcheck disable=SC2086
-fw6() { ip6tables $IPT_W "$@"; }
-# Clear an emergency policy only after both families have terminal blocks.
-restore_output_policy() {
-  if { fw4 -C OUTPUT -j REJECT 2>/dev/null || fw4 -C OUTPUT -j DROP 2>/dev/null; } &&
-     { fw6 -C OUTPUT -j REJECT 2>/dev/null || fw6 -C OUTPUT -j DROP 2>/dev/null; }; then
-    fw4 -P OUTPUT ACCEPT || echo "WARNING: could not restore IPv4 OUTPUT policy"
-    fw6 -P OUTPUT ACCEPT || echo "WARNING: could not restore IPv6 OUTPUT policy"
-  fi
-}
+source "$(dirname "${BASH_SOURCE[0]}")/restore_helpers.sh" || exit 1
+init_update_firewall
 # Removes the given rules only while one of them is the first rule in OUTPUT,
 # where the window puts them, so the same rule further down (Tailscale's
 # HTTPS allow) is left alone. Rules are compared with whitespace and the
@@ -649,6 +633,16 @@ if [ "$HEALTHY" = yes ]; then
     /etc/systemd/system/free-sleep-network-watchdog.service /etc/systemd/system/free-sleep-network-watchdog.timer
   systemctl disable --now free-sleep-recover-update.timer free-sleep-recover-update.service >/dev/null 2>&1 || true
   rm -f /etc/systemd/system/free-sleep-recover-update.service /etc/systemd/system/free-sleep-recover-update.timer
+  if ! has_switch_journal; then
+    systemctl disable --now free-sleep-recover-switch.service >/dev/null 2>&1 || true
+    rm -f /etc/systemd/system/free-sleep-recover-switch.service
+    for unit in free-sleep.service free-sleep-stream.service free-sleep-archive-raw.service \
+      free-sleep-health.service free-sleep-network-watchdog.service free-sleep-recover-update.service \
+      free-sleep-update.service free-sleep-rollback.service free-sleep-revert.service free-sleep-migrate.service; do
+      rm -f "/etc/systemd/system/$unit.d/nightstand-switch-recovery.conf"
+    done
+    rm -rf /home/dac/free-sleep-switch-recovery
+  fi
   rm -rf /home/dac/free-sleep-recovery
   rm -f /persistent/free-sleep-data/update-swap.json
   sync

@@ -1,4 +1,5 @@
 import json
+import os
 import io
 from pathlib import Path
 import subprocess
@@ -35,6 +36,28 @@ class TargetTests(unittest.TestCase):
                 self.assertEqual(case['manifest']['upstreamSwitch']['commit'],
                                  'ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f')
 
+    def test_expired_or_unparseable_request_is_absent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            request = Path(directory) / 'operation-request.json'
+            for content in ('{broken', 'null', '[]', '"invalid"'):
+                with self.subTest(content=content):
+                    request.write_text(content)
+                    self.assertIsNone(upstream_target.request_target(request))
+            for target in (FIXTURES[1]['expected'], None, {'commit': 'main'}):
+                with self.subTest(target=target):
+                    request.write_text(json.dumps(dict(source='app', target=target)))
+                    os.utime(request, (1000, 1000))
+                    self.assertIsNone(upstream_target.request_target(request))
+
+    def test_fresh_malformed_request_target_is_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            request = Path(directory) / 'operation-request.json'
+            for target in (None, {}, {'commit': 'main'}, dict(FIXTURES[1]['expected'], extra=True)):
+                with self.subTest(target=target):
+                    request.write_text(json.dumps(dict(source='app', target=target)))
+                    with self.assertRaises(ValueError):
+                        upstream_target.request_target(request)
+
     def test_download_identity_must_match_every_field(self):
         target = FIXTURES[1]['expected']
         upstream_target.verify_artifact(target, target['commit'], target['version'], target['treeSha256'])
@@ -61,7 +84,7 @@ class TargetTests(unittest.TestCase):
                     self.assertEqual(result.stdout, '')
 
 class SwitchScriptContractTests(unittest.TestCase):
-    def run_preflight(self, manifest, request):
+    def run_preflight(self, manifest, request, expired=False, raw_request=None):
         scripts = Path(__file__).resolve().parents[1]
         source = (scripts / 'switch-to-upstream.sh').read_text()
         target_block = source[source.index('# Read the confirmed target'):source.index('# Bed-in-use helpers')]
@@ -72,6 +95,10 @@ class SwitchScriptContractTests(unittest.TestCase):
             request_path = root / 'operation-request.json'
             if request is not None:
                 request_path.write_text(json.dumps(request))
+            if raw_request is not None:
+                request_path.write_text(raw_request)
+            if expired:
+                os.utime(request_path, (1000, 1000))
             manifest_path = root / 'manifest.json'
             manifest_path.write_text(json.dumps(manifest))
             request_block = request_block.replace('/persistent/free-sleep-data/operation-request.json', str(request_path))
@@ -86,6 +113,17 @@ curl() { cat "$MANIFEST_FIXTURE"; }
             environment = dict(__import__('os').environ, MANIFEST_FIXTURE=str(manifest_path),
                                UPSTREAM_TARGET_HELPER=str(scripts / 'upstream_target.py'))
             return subprocess.run(['bash', '-c', shell], capture_output=True, text=True, env=environment)
+
+    def test_expired_or_unparseable_request_uses_the_untargeted_legacy_path(self):
+        manifest = FIXTURES[1]['manifest']
+        cases = ({'raw_request': '{broken'}, {'raw_request': 'null'},
+                 {'request': dict(source='app', target={'commit': 'main'}), 'expired': True})
+        for case in cases:
+            with self.subTest(case=case):
+                result = self.run_preflight(manifest, **dict({'request': None}, **case))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(manifest['upstreamSwitch']['commit'], result.stdout)
+                self.assertNotIn('transactional switch runner', result.stderr)
 
     def test_confirmed_legacy_record_is_used_with_or_without_v2(self):
         for manifest in (FIXTURES[0]['manifest'], FIXTURES[1]['manifest']):

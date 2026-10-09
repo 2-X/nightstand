@@ -39,15 +39,18 @@ def validate_legacy(value):
 
 
 def request_target(path):
-    if not path.exists():
+    try:
+        if time.time() - path.stat().st_mtime > 600:
+            return None
+        request = json.loads(path.read_text())
+    except (OSError, ValueError):
         return None
-    request = json.loads(path.read_text())
     if not isinstance(request, dict):
-        raise ValueError('Invalid switch request')
+        return None
     if 'target' not in request:
         return None
-    if request.get('source') != 'app' or time.time() - path.stat().st_mtime > 600:
-        raise ValueError('Invalid or expired confirmed switch request')
+    if request.get('source') != 'app':
+        raise ValueError('Invalid confirmed switch request')
     value = request['target']
     fields = {'commit', 'date', 'treeSha256', 'version'}
     if not isinstance(value, dict) or set(value) - fields:

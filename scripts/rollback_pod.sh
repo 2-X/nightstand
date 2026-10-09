@@ -179,14 +179,7 @@ recheck_in_use
 
 # Cross-fork rollback requires companion state only for a recorded retained tree.
 # With no published switch journal, the switch helper is never consulted.
-switch_journal_published() {
-  local journal
-  for journal in "${NIGHTSTAND_TRANSACTION_ROOT:-/persistent/free-sleep-maintenance/nightstand-transactions}"/*/journal.json; do
-    [ -e "$journal" ] && return 0
-  done
-  return 1
-}
-if [ -f "$LIVE/scripts/switch_installation.py" ] && switch_journal_published; then
+if [ -f "$LIVE/scripts/switch_installation.py" ] && has_switch_journal; then
   COMPANION_RECORDED=$(python3 -B "$LIVE/scripts/switch_installation.py" companion-recorded --stage "$PREV") \
     || fail "cannot read the retained tree's switch records"
   if [ "$COMPANION_RECORDED" = yes ]; then

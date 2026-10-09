@@ -189,7 +189,15 @@ def apply(store, transaction, config, direction):
     execute(['systemctl', 'daemon-reload'])
     if direction == 'upstream':
         verify_updater(config)
-    execute(['sh', '-e', str(config.live / 'scripts/block_internet_access.sh')])
+    execute(['sh', str(config.live / 'scripts/block_internet_access.sh')])
+    for family in ('iptables', 'ip6tables'):
+        try:
+            execute([family, '-C', 'OUTPUT', '-j', 'REJECT'])
+        except subprocess.CalledProcessError:
+            try:
+                execute([family, '-C', 'OUTPUT', '-j', 'DROP'])
+            except subprocess.CalledProcessError as error:
+                raise ValueError(family + ' OUTPUT has no terminal REJECT or DROP') from error
 
 
 def restore_enablement(unit, state, runner=None):

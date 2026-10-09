@@ -19,15 +19,21 @@ type Props = {
 export default function RevertToStockRow({ runningVersion }: Props) {
   const [open, setOpen] = useState(false);
   const [confirmed, setConfirmed] = useState<UpstreamSwitchRecord>();
+  const [legacyFallback, setLegacyFallback] = useState(false);
   const titleId = useId();
   const { phase, error, inUse, recordedOutcome, start, reset } = useUpdateProgress(runningVersion, undefined, 'switch');
-  const { data: manifest, isLoading } = useReleases();
+  const { data: manifest, isLoading, isError } = useReleases();
   const target = selectSwitchTarget(manifest);
   const targetUnchanged = confirmed !== undefined && selectSwitchTarget(manifest, confirmed) !== undefined;
 
+  const manifestFailed = isError && manifest === undefined;
+  const canRevert = targetUnchanged || (legacyFallback && manifestFailed);
+
   const revert = () => {
-    if (!confirmed || !targetUnchanged) return;
-    return start(confirmInUse => postSwitchToUpstream({ target: confirmed, ...(confirmInUse ? { confirmInUse } : {}) }));
+    if (!canRevert) return;
+    return start(confirmInUse => postSwitchToUpstream({
+      ...(confirmed ? { target: confirmed } : {}), ...(confirmInUse ? { confirmInUse } : {}),
+    }));
   };
 
   return (
@@ -37,7 +43,11 @@ export default function RevertToStockRow({ runningVersion }: Props) {
     <>
       <ButtonBase
         disabled={ isLoading }
-        onClick={ () => { setConfirmed(target ? { ...target } : undefined); setOpen(true); } }
+        onClick={ () => {
+          setConfirmed(target ? { ...target } : undefined);
+          setLegacyFallback(manifestFailed);
+          setOpen(true);
+        } }
         sx={ {
           display: 'flex',
           alignItems: 'center',
@@ -74,13 +84,15 @@ export default function RevertToStockRow({ runningVersion }: Props) {
                 Schedules and alarms pause during restart.
               </Typography>
               <Typography variant="body2" sx={ { mb: 2 } }>
-                { confirmed && 'version' in confirmed
-                  ? `Installs upstream free-sleep ${confirmed.version}, commit ${confirmed.commit}, validated ${confirmed.date}.`
-                  : `Switch to upstream installs the pinned pre-3.0 commit ${confirmed?.commit ?? 'ca7dc543'}, not upstream 3.0.3.`
+                { legacyFallback
+                  ? "Installs upstream free-sleep's newest code, which this switch has not been checked with."
+                  : confirmed && 'version' in confirmed
+                    ? `Installs upstream free-sleep ${confirmed.version}, commit ${confirmed.commit}, validated ${confirmed.date}.`
+                    : `Switch to upstream installs the pinned pre-3.0 commit ${confirmed?.commit ?? 'ca7dc543'}, not upstream 3.0.3.`
                     + ' The full switch has not been tested on hardware. Support for switching to 3.0.x is being prepared.' }
               </Typography>
-              { !targetUnchanged && <Alert severity="warning" sx={ { mb: 2 } }>
-                { confirmed ? 'The upstream target changed. Close this dialog and review the target again.'
+              { !canRevert && <Alert severity="warning" sx={ { mb: 2 } }>
+                { confirmed || legacyFallback ? 'The upstream target changed. Close this dialog and review the target again.'
                   : 'No validated target is available for the new switch.' }
               </Alert> }
               <Typography variant="body2" sx={ { mb: 2 } }>
@@ -142,7 +154,7 @@ export default function RevertToStockRow({ runningVersion }: Props) {
           { phase === 'idle' && (
             <>
               <Button autoFocus={ inUse !== undefined } onClick={ () => { reset(); setOpen(false); } }>Cancel</Button>
-              <Button color="error" variant="contained" disabled={ !targetUnchanged } onClick={ revert }>
+              <Button color="error" variant="contained" disabled={ !canRevert } onClick={ revert }>
                 { inUse ? 'Continue anyway' : 'Switch to upstream free-sleep' }
               </Button>
             </>
