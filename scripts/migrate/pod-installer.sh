@@ -55,8 +55,6 @@ MAIN_ZIP_URL="https://github.com/LTimothy/nightstand/archive/refs/heads/main.zip
 # Recheck before staging. Standalone runs need the laptop's explicit cleanup consent.
 REMOVE_FOREIGN=${1:-no}
 ARTIFACT_HELPER="$REPO_DIR_SELF/migrate/fork-artifacts.sh"
-[ -f "$ARTIFACT_HELPER" ] || { echo "Refusing switch: fork artifact helper is missing"; exit 1; }
-bash "$ARTIFACT_HELPER" check "$REMOVE_FOREIGN" || exit 1
 
 mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
 exec > >(tee -a "$LOG_FILE") 2>&1
@@ -69,6 +67,16 @@ write_status() {
   printf '{"stage":"%s","outcome":"%s","message":"%s","timestamp":"%s"}\n' \
     "$1" "$2" "$3" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATUS_FILE" 2>/dev/null || true
 }
+
+if [ ! -f "$ARTIFACT_HELPER" ]; then
+  say "Refusing switch: fork artifact helper is missing"
+  write_status preflight refused "fork artifact helper is missing"
+  exit 1
+fi
+if ! bash "$ARTIFACT_HELPER" check "$REMOVE_FOREIGN"; then
+  write_status preflight refused "fork artifact check refused the switch; see the migration log"
+  exit 1
+fi
 
 # Share admission with updates, rollback and the forward switch.
 if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
@@ -540,14 +548,15 @@ say "Applying this fork's WAN policy..."
 sh "$LIVE/scripts/block_internet_access.sh" >/dev/null 2>&1 \
   || say "WARNING: could not apply block_internet_access.sh, check manually"
 
-bash "$ARTIFACT_HELPER" finish \
-  || { restore_and_report "could not retire legacy artifact restore marker"; exit 1; }
 disarm_sentinel
 # Their original tree now lives at $PREV as this fork's instant-rollback slot;
 # their older pre-existing slot (if any) is intentionally retired, and the swap
 # marker is cleared so a stray later restore run correctly no-ops.
+rm -f "$SWAP_MARKER" || { restore_and_report "could not clear the swap marker"; exit 1; }
+sync
+bash "$ARTIFACT_HELPER" finish \
+  || { restore_and_report "could not retire legacy artifact restore marker"; exit 1; }
 rm -rf "$IPTABLES_SNAPSHOT" "$BASELINE_FILE" "$RESTORE_SCRIPT_DEST" "$PREEXISTING_PREV"
-rm -f "$SWAP_MARKER"
 write_status "install" "success" "migrated to v$STAGED_VERSION; previous fork kept at $PREV (in-app instant rollback)"
 say "SUCCESS: migrated to v$STAGED_VERSION. Their original install is kept at $PREV; Settings > Software > Recovery in the app can go back to it."
 

@@ -30,21 +30,21 @@ set -uo pipefail
 
 # Durable switch journals take precedence over the older migration markers.
 TRANSACTION_ROOT="${NIGHTSTAND_TRANSACTION_ROOT:-/persistent/free-sleep-maintenance/nightstand-transactions}"
-for journal in "$TRANSACTION_ROOT"/*/journal.json; do
-  if [ -e "$journal" ] || [ -L "$journal" ]; then
-    SWITCH_RECOVERY=/home/dac/free-sleep-switch-recovery/recover_switch.sh
-    [ -f "$SWITCH_RECOVERY" ] || { echo "Switch recovery helper is missing" >&2; exit 1; }
-    PENDING_SWITCH=$(python3 -B /home/dac/free-sleep-switch-recovery/recover_switch.py --root "$TRANSACTION_ROOT" pending) || exit 1
-    if [ "${NIGHTSTAND_OPERATION_OWNER:-}" = "$PPID" ]; then
-      source /home/dac/free-sleep-switch-recovery/restore_helpers.sh || exit 1
-      restore_switch_offline /home/dac/free-sleep-switch-recovery "$TRANSACTION_ROOT" || exit 1
-    else
-      bash "$SWITCH_RECOVERY" || exit 1
-    fi
-    [ -z "$PENDING_SWITCH" ] || exit 0
-    break
+RESTORE_HELPER_SOURCE="$(dirname "${BASH_SOURCE[0]}")/restore_helpers.sh"
+[ -f "$RESTORE_HELPER_SOURCE" ] || RESTORE_HELPER_SOURCE="$(dirname "${BASH_SOURCE[0]}")/../restore_helpers.sh"
+[ -f "$RESTORE_HELPER_SOURCE" ] || RESTORE_HELPER_SOURCE=/home/dac/migrate/restore_helpers.sh
+source "$RESTORE_HELPER_SOURCE" || exit 1
+if has_switch_journal "$TRANSACTION_ROOT"; then
+  SWITCH_RECOVERY=/home/dac/free-sleep-switch-recovery/recover_switch.sh
+  [ -f "$SWITCH_RECOVERY" ] || { echo "Switch recovery helper is missing" >&2; exit 1; }
+  PENDING_SWITCH=$(python3 -B /home/dac/free-sleep-switch-recovery/recover_switch.py --root "$TRANSACTION_ROOT" pending) || exit 1
+  if [ "${NIGHTSTAND_OPERATION_OWNER:-}" = "$PPID" ]; then
+    restore_switch_offline /home/dac/free-sleep-switch-recovery "$TRANSACTION_ROOT" || exit 1
+  else
+    bash "$SWITCH_RECOVERY" || exit 1
   fi
-done
+  [ -z "$PENDING_SWITCH" ] || exit 0
+fi
 
 LIVE=/home/dac/free-sleep
 PREV=/home/dac/free-sleep-prev

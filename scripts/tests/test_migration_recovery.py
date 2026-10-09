@@ -40,6 +40,7 @@ class MigrationRecovery(unittest.TestCase):
             systemd.mkdir()
             migrate = base / 'migrate'
             migrate.mkdir()
+            (migrate / 'restore_helpers.sh').write_text((ROOT / 'scripts/restore_helpers.sh').read_text())
             local_bin = base / 'local-bin'
             local_bin.mkdir()
             replacements = {'/home/dac/': str(base) + '/', '/persistent/': str(base) + '/persistent/',
@@ -205,6 +206,7 @@ bash "$TEST_SCRIPT" yes
                 systemd.mkdir()
                 migrate = base / 'migrate'
                 migrate.mkdir()
+                (migrate / 'restore_helpers.sh').write_text((ROOT / 'scripts/restore_helpers.sh').read_text())
                 replacements = {'/home/dac/': str(base) + '/', '/persistent/': str(base) + '/persistent/',
                                 '/etc/systemd/system': str(systemd), '/tmp/free-sleep-migrate-health': str(base / 'health')}
                 for name, target in (('restore-original-fork.sh', base / 'restore.sh'), ('fork-artifacts.sh', migrate / 'fork-artifacts.sh')):
@@ -345,6 +347,7 @@ bash "$TEST_BASE/restore.sh"
                 .replace('/etc/systemd/system', str(systemd)))
             migrate_dir = base / 'migrate'
             migrate_dir.mkdir()
+            (migrate_dir / 'restore_helpers.sh').write_text((ROOT / 'scripts/restore_helpers.sh').read_text())
             (migrate_dir / 'fork-artifacts.sh').write_text(script.read_text())
             local_bin = base / 'local-bin'
             local_bin.mkdir()
@@ -408,12 +411,16 @@ fail() { echo "$*" >&2; exit 1; }
             elif driver in ('install', 'update'):
                 source = (ROOT / f'scripts/{driver}.sh').read_text()
                 start = source.index('# Report legacy firewall jobs')
-                end = source.index('\nfi', start) + 3
+                end = source.index('\nRESULT_OPERATION=', start) if driver == 'update' else source.index('\nfi', start) + 3
                 helper_dir = base / 'scripts/migrate'
                 helper_dir.mkdir(parents=True)
                 if not missing_helper:
                     (helper_dir / 'fork-artifacts.sh').write_text(script.read_text())
+                recovery_helper = base / 'recovery-source/scripts/migrate/fork-artifacts.sh'
+                recovery_helper.parent.mkdir(parents=True)
+                recovery_helper.write_text(script.read_text())
                 wrapper = wrapper[:wrapper.index('bash "$TEST_SCRIPT"')] + r'''
+RECOVERY_SOURCE="$TEST_BASE/recovery-source"
 SRC_DIR="$TEST_BASE"
 LIVE="$TEST_BASE"
 ''' + source[start:end]
@@ -428,6 +435,15 @@ LIVE="$TEST_BASE"
                      'STILL_ACTIVE': 'yes' if still_active else 'no',
                      'EMPTY': 'yes' if empty else 'no', 'TEST_BASE': folder})
             return result, cron.read_text(), ambient.exists(), log.read_text()
+
+    def test_switch_recovery_unit_is_owned_and_not_stopped_as_a_foreign_writer(self):
+        result, cron, ambient, log = self.run_artifacts('clean', empty=True,
+            unit_text='free-sleep.service enabled\nfree-sleep-recover-switch.service enabled\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('unit: free-sleep-recover-switch.service', result.stdout)
+        self.assertNotIn('systemctl stop free-sleep-recover-switch.service', log)
+        self.assertEqual(cron, '')
+        self.assertFalse(ambient)
 
     def test_foreign_artifacts_are_reported_without_changes(self):
         result, cron, ambient, log = self.run_artifacts('inspect')
@@ -569,6 +585,14 @@ LIVE="$TEST_BASE"
             self.assertEqual(cron, (ROOT / 'fixtures/migrate/root.crontab').read_text())
             self.assertTrue(ambient)
             self.assertNotIn('systemctl', log)
+
+    def test_update_warns_using_its_own_helper_when_live_tree_is_older(self):
+        result, cron, ambient, log = self.run_artifacts('warn-cron', driver='update', missing_helper=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('fork-switch tool', result.stdout)
+        self.assertEqual(cron, (ROOT / 'fixtures/migrate/root.crontab').read_text())
+        self.assertTrue(ambient)
+        self.assertNotIn('systemctl', log)
 
     def test_install_and_update_warn_with_an_older_tree(self):
         for driver in ('install', 'update'):

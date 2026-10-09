@@ -173,6 +173,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 for helper in pod-installer.sh restore-original-fork.sh fork-artifacts.sh; do
   [ -f "$SCRIPT_DIR/$helper" ] || fail "$helper was not found next to this script. Download it from scripts/migrate/ into $SCRIPT_DIR and run again."
 done
+RESTORE_HELPER_LOCAL="$SCRIPT_DIR/../restore_helpers.sh"
+[ -f "$RESTORE_HELPER_LOCAL" ] || RESTORE_HELPER_LOCAL="$SCRIPT_DIR/restore_helpers.sh"
+[ -f "$RESTORE_HELPER_LOCAL" ] || fail "Download scripts/restore_helpers.sh next to this script and run again."
 command -v python3 >/dev/null 2>&1 || fail "python3 is required on this computer."
 
 # ==============================================================================
@@ -602,6 +605,7 @@ ssh_cmd "$SSH_PORT" "mkdir -p /home/dac/migrate"
 scp_to_pod "$SSH_PORT" "$SCRIPT_DIR/pod-installer.sh" "/home/dac/migrate/pod-installer.sh"
 scp_to_pod "$SSH_PORT" "$SCRIPT_DIR/restore-original-fork.sh" "/home/dac/migrate/restore-original-fork.sh"
 scp_to_pod "$SSH_PORT" "$SCRIPT_DIR/fork-artifacts.sh" "/home/dac/migrate/fork-artifacts.sh"
+scp_to_pod "$SSH_PORT" "$RESTORE_HELPER_LOCAL" "/home/dac/migrate/restore_helpers.sh"
 ssh_cmd "$SSH_PORT" "chmod +x /home/dac/migrate/pod-installer.sh /home/dac/migrate/restore-original-fork.sh"
 # Push the Stage 2 (pre-consent) iptables snapshot rather than letting
 # pod-installer.sh take a fresh one later, every abort path must restore
@@ -613,10 +617,11 @@ ssh_cmd "$SSH_PORT" "
   rm -f /persistent/free-sleep-data/migration-status.json
   if command -v systemd-run >/dev/null 2>&1; then
     systemd-run --unit=free-sleep-migrate --collect --property=KillMode=control-group \
-      --property=ExecStopPost='/bin/systemctl restart --no-block free-sleep-recover-switch.service' bash /home/dac/migrate/pod-installer.sh \"$REMOVE_FOREIGN\"
+      --property=ExecStopPost='-/bin/systemctl restart --no-block free-sleep-recover-switch.service' bash /home/dac/migrate/pod-installer.sh \"$REMOVE_FOREIGN\" \
+      || systemd-run --unit=free-sleep-migrate --collect bash /home/dac/migrate/pod-installer.sh \"$REMOVE_FOREIGN\"
   else
     command -v setsid >/dev/null || exit 1
-    nohup setsid bash /home/dac/migrate/pod-installer.sh $REMOVE_FOREIGN >/home/dac/migrate/installer.out 2>&1 & disown
+    nohup setsid bash /home/dac/migrate/pod-installer.sh \"$REMOVE_FOREIGN\" >/home/dac/migrate/installer.out 2>&1 & disown
   fi
 " || fail "could not start the installer on the pod"
 

@@ -57,7 +57,7 @@ filter_cron() {
 
 owned_unit() {
   case "$1" in
-    free-sleep.service|free-sleep-stream.service|free-sleep-update.service|free-sleep-rollback.service|free-sleep-revert.service|free-sleep-archive-raw.service|free-sleep-archive-raw.timer|free-sleep-health.service|free-sleep-health.timer|free-sleep-network-watchdog.service|free-sleep-network-watchdog.timer|free-sleep-recover-update.service|free-sleep-recover-update.timer|free-sleep-migrate.service|free-sleep-migrate-sentinel.service|free-sleep-migrate-sentinel.timer) return 0 ;;
+    free-sleep.service|free-sleep-stream.service|free-sleep-update.service|free-sleep-rollback.service|free-sleep-revert.service|free-sleep-archive-raw.service|free-sleep-archive-raw.timer|free-sleep-health.service|free-sleep-health.timer|free-sleep-network-watchdog.service|free-sleep-network-watchdog.timer|free-sleep-recover-switch.service|free-sleep-recover-update.service|free-sleep-recover-update.timer|free-sleep-migrate.service|free-sleep-migrate-sentinel.service|free-sleep-migrate-sentinel.timer) return 0 ;;
     *) return 1 ;;
   esac
 }

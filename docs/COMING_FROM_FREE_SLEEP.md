@@ -81,12 +81,13 @@ on, the tool asks for a typed confirmation before going ahead.
 
 ## Switching
 
-1. Download the tool and the three helper files it copies to the Pod into one
+1. Download the tool and the four helper files it copies to the Pod into one
    folder, so you can read them before running them:
    ```bash
    for f in switch-to-this-fork.sh pod-installer.sh restore-original-fork.sh fork-artifacts.sh; do
      curl -fO "https://raw.githubusercontent.com/LTimothy/nightstand/main/scripts/migrate/$f"
    done
+   curl -fO "https://raw.githubusercontent.com/LTimothy/nightstand/main/scripts/restore_helpers.sh"
    chmod +x switch-to-this-fork.sh
    ```
 2. Run it with `--dry-run`. It reports what it found and would do, without
@@ -191,6 +192,11 @@ On a Pod 5 there is no tested way back.
 
 ### Switching to upstream
 
+If the browser cannot fetch `releases.json`, the legacy switch remains
+available. It sends no target, so the Pod reads the legacy pin itself. A
+manifest that loads but changes during confirmation requires a new
+confirmation. A newer upstream target, once one is published, always needs a confirmed target.
+
 Before the switch, code and JSON settings are backed up under
 `/persistent/free-sleep-backups/<timestamp>_v<version>_prerevert-to-stock/`,
 and SQLite snapshots under `/persistent/free-sleep-database-backups/`.
@@ -203,7 +209,9 @@ keeps the original settings.
 Nightstand's own services, including the network watchdog, and its hardware
 watchdog setting are removed (on some Pods the watchdog turns off at the next
 restart). Backups and `raw-archive/` stay; the switch log prints the
-archive's size so you can delete it if you no longer need it.
+archive's size so you can delete it if you no longer need it. With no published
+switch journal, a successful legacy switch also removes the switch recovery
+service, its startup drop-ins and external helpers.
 
 Upstream's first update can print a "reset, all data will be lost" message
 because its migration history differs. Do not follow that reset prompt. Your
