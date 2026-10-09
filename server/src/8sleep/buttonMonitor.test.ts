@@ -209,6 +209,7 @@ describe('ButtonMonitor', () => {
   it('discards the tail and pending clicks while off and resumes at the newest file end', async () => {
     const full = writeRaw('001.RAW', Buffer.concat([
       logRecord('[tca8418R] gpi press 97'), logRecord('[tca8418R] gpi release 97'),
+      logRecord('[tca8418R] gpi press 99'),
     ]), Date.now() / 1000);
     await monitor.poll();
     settingsDB.data.features.coverButtons = false;
@@ -219,7 +220,9 @@ describe('ButtonMonitor', () => {
     settingsDB.data.features.coverButtons = true;
     await settingsDB.write();
     await monitor.poll();
-    appendRaw(newest, logRecord('[TTC] ignoring 1 short clicks'), Date.now() / 1000 + 0.01);
+    appendRaw(newest, Buffer.concat([
+      logRecord('[tca8418R] gpi release 99'), logRecord('[TTC] ignoring 2 short clicks'),
+    ]), Date.now() / 1000 + 0.01);
     await monitor.poll();
     assert.deepEqual(updates, []);
     appendRaw(newest, click('R', 97), Date.now() / 1000 + 0.01);
@@ -429,7 +432,7 @@ describe('ButtonMonitor', () => {
   it('finishes the old file before switching to a newer file', async () => {
     const full = writeRaw('001.RAW', Buffer.alloc(0), Date.now() / 1000 - 5);
     await monitor.poll();
-    appendRaw(full, logRecord('[tca8418L] gpi press 99'), Date.now() / 1000 - 1);
+    appendRaw(full, Buffer.concat([Buffer.alloc((1 << 20) + 32), logRecord('[tca8418L] gpi press 99')]), Date.now() / 1000 - 1);
     writeRaw('002.RAW', Buffer.concat([
       logRecord('[tca8418L] gpi release 99'), logRecord('[TTC] ignoring 1 short clicks'),
     ]), Date.now() / 1000);
@@ -437,25 +440,68 @@ describe('ButtonMonitor', () => {
     assert.deepEqual(leftTargets(), [81]);
   });
 
-  it('caps a corrupt length tail and reads clicks in the following file', async () => {
+  it('drains only the old file end captured when rollover is detected', async () => {
+    const full = writeRaw('001.RAW', Buffer.alloc(0), Date.now() / 1000 - 5);
+    await monitor.poll();
+    appendRaw(full, Buffer.concat([Buffer.alloc((1 << 20) + 32), click('R', 97)]), Date.now() / 1000 - 1);
+    writeRaw('002.RAW', click('L', 99), Date.now() / 1000);
+    const fsp = (await import('node:fs/promises')).default;
+    const open = fsp.open.bind(fsp);
+    let appended = false;
+    const opening = mock.method(fsp, 'open', async (file: string, flags: string) => {
+      const handle = await open(file, flags);
+      if (file === full && !appended) {
+        appended = true;
+        appendRaw(full, click('R', 99), Date.now() / 1000 - 1);
+      }
+      return handle;
+    });
+    try {
+      await monitor.poll();
+      assert.deepEqual(rightTargets(), [83]);
+      assert.deepEqual(leftTargets(), [81]);
+    } finally { opening.mock.restore(); }
+  });
+
+  it('caps an incomplete corrupt length at 64 KiB and recovers in the same file', async () => {
     const corrupt = Buffer.from([0xa2, 0x63, 0x73, 0x65, 0x71, 1, 0x64, 0x64, 0x61, 0x74, 0x61,
-      0x5a, 0x7f, 0xff, 0xff, 0xff]);
-    const full = writeRaw('001.RAW', Buffer.concat([corrupt, Buffer.alloc(1 << 20)]), Date.now() / 1000 - 1);
+      0x5a, 0x00, 0x20, 0x00, 0x00]);
+    const full = writeRaw('001.RAW', Buffer.concat([corrupt, Buffer.alloc(32 * 1024 - corrupt.length)]), Date.now() / 1000);
     await monitor.poll();
-    assert.ok(monitor.tail);
-    assert.ok(monitor.tail.carry.length <= 1 << 20);
+    assert.equal(monitor.tail?.carry.length, 32 * 1024);
+    appendRaw(full, Buffer.alloc(32 * 1024), Date.now() / 1000);
     await monitor.poll();
-    assert.ok(monitor.tail);
-    assert.ok(monitor.tail.carry.length <= 1 << 20);
-    assert.equal(monitor.tail.carry.length, 0);
-    appendRaw(full, corrupt, Date.now() / 1000 - 1);
-    await monitor.poll();
-    writeRaw('002.RAW', click('R', 97), Date.now() / 1000);
+    assert.equal(monitor.tail?.carry.length, 64 * 1024);
+    appendRaw(full, Buffer.concat([Buffer.alloc(1), click('R', 97)]), Date.now() / 1000);
     await monitor.poll();
     assert.deepEqual(rightTargets(), [83]);
-    assert.ok(monitor.tail);
-    assert.ok(monitor.tail.carry.length <= 1 << 20);
+    assert.equal(monitor.tail?.carry.length, 0);
+    writeRaw('002.RAW', click('L', 99), Date.now() / 1000 + 0.01);
+    await monitor.poll();
+    assert.deepEqual(leftTargets(), [81]);
   });
+
+  it('searches for record starts without decoding every stray byte', async () => {
+    const decode = mock.method(cbor, 'decodeFirstSync');
+    try {
+      writeRaw('001.RAW', Buffer.alloc(8192, 0xff), Date.now() / 1000);
+      await monitor.poll();
+      assert.equal(decode.mock.callCount(), 0);
+      assert.deepEqual(monitor.tail?.carry, Buffer.alloc(4, 0xff));
+    } finally { decode.mock.restore(); }
+  });
+
+  for (const length of [1, 2, 3, 4]) {
+    it(`carries a record start split after byte ${length}`, async () => {
+      const whole = click('R', 97);
+      const full = writeRaw('001.RAW', Buffer.concat([Buffer.alloc(16, 0xff), whole.subarray(0, length)]), Date.now() / 1000);
+      await monitor.poll();
+      assert.ok((monitor.tail?.carry.length ?? 0) <= 4);
+      appendRaw(full, whole.subarray(length), Date.now() / 1000);
+      await monitor.poll();
+      assert.deepEqual(rightTargets(), [83]);
+    });
+  }
 
   it('clears a pending click when a separate chunk says the firmware changed the target', async () => {
     const full = writeRaw('001.RAW', Buffer.concat([
@@ -470,13 +516,14 @@ describe('ButtonMonitor', () => {
     assert.deepEqual(updates, []);
   });
 
-  it('frames reversed outer keys and skips sensor records and NUL padding', async () => {
+  it('skips sensor records, reversed outer keys and NUL padding', async () => {
     const sensor = frameRecord(1, cbor.encode({ type: 'piezo-dual', samples: Buffer.alloc(2048) }));
     const data = cbor.encode({ type: 'log', ts: Date.now() / 1000, msg: '[TTC] ignoring 1 short clicks' });
     writeRaw('001.RAW', Buffer.concat([
       sensor, Buffer.alloc(16),
       logRecord('[tca8418L] gpi press 99'), logRecord('[tca8418L] gpi release 99'),
       cbor.encode({ data, seq: 2 }), Buffer.alloc(16),
+      frameRecord(2, data),
     ]), Date.now() / 1000);
     await monitor.poll();
     assert.deepEqual(leftTargets(), [81]);

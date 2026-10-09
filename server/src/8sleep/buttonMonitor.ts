@@ -22,8 +22,10 @@ const RAW_DIR = process.env.POD_RAW_DIR || '/persistent';
 const POLL_MS = 1_000;
 // Avoid decoding large sensor chunks that happen to contain a matching tag.
 const MAX_TAGGED_CHUNK_BYTES = 16 * 1024;
-// Bound each read and any incomplete tail to 1 MiB.
+// Bound reads and incomplete records independently.
 const MAX_READ_CHUNK = 1 << 20;
+const MAX_CARRY_BYTES = 64 * 1024;
+const RECORD_START = Buffer.from([0xa2, 0x63, 0x73, 0x65, 0x71]);
 // Firmware batching can delay log records by 15 to 25 s.
 const MAX_PRESS_AGE_MS = 30_000;
 // A RAW file older than this is not being written: the firmware has stopped,
@@ -111,7 +113,13 @@ export class ButtonMonitor {
 
       // Skip existing history at startup, but drain the old file on rotation.
       if (!this.tail || this.tail.file !== newest) {
-        if (this.tail) await this.readAppended();
+        if (this.tail) {
+          const end = await fsp.stat(this.tail.file).then(stats => stats.size, () => 0);
+          let bytesRead: number;
+          do {
+            bytesRead = await this.readAppended(end);
+          } while (bytesRead > 0 && this.tail && this.tail.offset < end);
+        }
         logger.debug(`[buttonMonitor] tailing ${newest}`);
         const offset = firstPoll ? (await fsp.stat(newest)).size : 0;
         this.tail = { file: newest, offset, carry: Buffer.alloc(0) };
@@ -164,15 +172,15 @@ export class ButtonMonitor {
 
   // Reads the bytes appended since the last poll, parses the log records out
   // of them and acts on the button events.
-  private async readAppended(): Promise<void> {
+  private async readAppended(end?: number): Promise<number> {
     const tail = this.tail;
-    if (!tail) return;
+    if (!tail) return 0;
     let stats: fs.Stats;
     try {
       stats = await fsp.stat(tail.file);
     } catch {
       this.tail = null;
-      return;
+      return 0;
     }
 
     // Shorter than before: replaced under the same name, so read it from the start.
@@ -181,8 +189,8 @@ export class ButtonMonitor {
       tail.carry = Buffer.alloc(0);
     }
 
-    const available = stats.size - tail.offset;
-    if (available <= 0) return;
+    const available = Math.min(stats.size, end ?? stats.size) - tail.offset;
+    if (available <= 0) return 0;
 
     const toRead = Math.min(available, MAX_READ_CHUNK);
     const buffer = Buffer.alloc(toRead);
@@ -193,7 +201,7 @@ export class ButtonMonitor {
     } finally {
       await handle.close();
     }
-    if (bytesRead <= 0) return;
+    if (bytesRead <= 0) return 0;
 
     const chunk = tail.carry.length
       ? Buffer.concat([tail.carry, buffer.subarray(0, bytesRead)])
@@ -203,17 +211,19 @@ export class ButtonMonitor {
     const events: ButtonEvent[] = [];
     let cursor = 0;
     while (cursor < chunk.length) {
-      if (chunk[cursor] === 0) {
-        cursor += 1;
-        continue;
+      const start = chunk.indexOf(RECORD_START, cursor);
+      if (start < 0) {
+        tail.carry = Buffer.from(chunk.subarray(Math.max(cursor, chunk.length - 4)));
+        break;
       }
+      cursor = start;
       try {
         const { value, length } = cbor.decodeFirstSync(chunk.subarray(cursor), { extendedResults: true });
         cursor += length;
         const data: unknown = value?.data;
         if (Buffer.isBuffer(data)) events.push(...this.eventsIn(data));
       } catch (error) {
-        if (errorMessage(error) === 'Insufficient data' && chunk.length - cursor <= MAX_READ_CHUNK) {
+        if (errorMessage(error) === 'Insufficient data' && chunk.length - cursor <= MAX_CARRY_BYTES) {
           tail.carry = Buffer.from(chunk.subarray(cursor));
           break;
         }
@@ -229,6 +239,7 @@ export class ButtonMonitor {
     for (const event of events) {
       await this.dispatch(event);
     }
+    return bytesRead;
   }
 
   // The button events in one inner chunk, which holds several concatenated
