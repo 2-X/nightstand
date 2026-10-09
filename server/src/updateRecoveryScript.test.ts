@@ -430,9 +430,11 @@ describe('update.sh swap marker lifecycle', () => {
       box.arm();
       box.tree(box.stage, '3.7.0', true);
       const update = readFileSync(path.join(repo, 'scripts/update.sh'), 'utf8')
+        .replace('$(dirname "${BASH_SOURCE[0]}")/restore_helpers.sh', path.join(box.root, 'restore_helpers.sh'))
         .replaceAll('/home/dac/', `${box.root}/`).replaceAll('/persistent/', `${box.root}/persistent/`);
       const result = spawnSync('bash', ['-c', `
 iptables() { :; }
+ip6tables() { :; }
 curl() { echo 'unexpected download'; exit 99; }
 ${update}`], {
         encoding: 'utf8', env: { ...process.env, NIGHTSTAND_OPERATION_LOCK: path.join(box.root, 'lock') },
@@ -600,8 +602,9 @@ kill -TERM $$`);
     try {
       box.arm();
       const upstream = readFileSync(path.join(repo, 'scripts/switch-to-upstream.sh'), 'utf8')
+        .replace('$(dirname "${BASH_SOURCE[0]}")/restore_helpers.sh', path.join(box.root, 'restore_helpers.sh'))
         .replaceAll('/home/dac/', `${box.root}/`).replaceAll('/persistent/', `${box.root}/persistent/`);
-      const result = box.run([], {}, `iptables() { :; }; curl() { echo unexpected-download; exit 99; }; ${upstream}`);
+      const result = box.run([], {}, `iptables() { :; }; ip6tables() { :; }; curl() { echo unexpected-download; exit 99; }; ${upstream}`);
       assert.equal(result.status, 1, result.stdout + result.stderr);
       assert.match(result.stdout, /earlier update swap still needs recovery/);
       assert.doesNotMatch(result.stdout, /unexpected-download/);

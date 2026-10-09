@@ -149,6 +149,7 @@ esac
 
 function closeScript(dir: string) {
   return read('scripts/close_update_window.sh')
+    .replace('$(dirname "${BASH_SOURCE[0]}")/restore_helpers.sh', `${dir}/restore_helpers.sh`)
     .replaceAll('/etc/iptables/', `${dir}/`)
     .replaceAll('/home/dac/free-sleep-prev', `${dir}/prev`)
     .replaceAll('/home/dac/free-sleep', `${dir}/live`);
@@ -156,6 +157,8 @@ function closeScript(dir: string) {
 
 function fixture(tailscale = false, blockScripts: 'live' | 'prev' | 'none' = 'live', unblocked = false): Fixture {
   const dir = mkdtempSync(path.join(tmpdir(), 'nightstand-update-firewall-'));
+  writeFileSync(path.join(dir, 'restore_helpers.sh'), read('scripts/restore_helpers.sh')
+    .replaceAll('/etc/iptables/', `${dir}/`));
   const bin = path.join(dir, 'bin');
   mkdirSync(bin);
   const tools: Array<[string, string]> = [
@@ -201,6 +204,8 @@ function fixture(tailscale = false, blockScripts: 'live' | 'prev' | 'none' = 'li
 function driver(file: string, body: string) {
   const src = read(file).replaceAll('/etc/iptables/', '$F/');
   const traps = between(src, 'trap cleanup EXIT', '\n\n').trim();
+  const window = between(src, '# While downloading', '# Free-space helpers')
+    .replace('$(dirname "${BASH_SOURCE[0]}")/restore_helpers.sh', '$F/restore_helpers.sh');
   return `set -uo pipefail
 LIVE="$F/live"; PREV="$F/prev"; STAGE="$F/stage"; ZIP="$F/download.zip"; BK="$F/backup"
 SWAP_MARKER="$F/swap-marker"
@@ -210,7 +215,7 @@ snapshot() {
   { iptables -S; echo; ip6tables -S; } > "$F/window"
   cp "$F/fw/calls" "$F/window-calls" 2>/dev/null || : > "$F/window-calls"
 }
-${between(src, '# While downloading', '# Free-space helpers')}
+${window}
 ${traps}
 ${body}`;
 }
@@ -1186,4 +1191,42 @@ echo finished`], { env: { ...f.env, ...opts.env }, encoding: 'utf8', timeout: 20
       }
     });
   }
+});
+
+describe('firewall recovery persistence', () => {
+  for (const family of ['iptables', 'ip6tables']) {
+    for (const consumer of ['updater', 'stop-post']) {
+      it(`${consumer} does not save rules without ${family} INPUT DROP`, () => {
+        const f = fixture(false, 'none');
+        try {
+          const saved = ['iptables', 'ip6tables'].map(tool => readFileSync(path.join(f.dir, `${tool}.rules`), 'utf8'));
+          const removed = spawnSync(family, ['-D', 'INPUT', '-j', 'DROP'], { env: f.env, encoding: 'utf8' });
+          assert.equal(removed.status, 0, removed.stderr);
+          for (const tool of ['iptables', 'ip6tables']) {
+            const policy = spawnSync(tool, ['-P', 'OUTPUT', 'DROP'], { env: f.env, encoding: 'utf8' });
+            assert.equal(policy.status, 0, policy.stderr);
+          }
+          const result = consumer === 'stop-post' ? runCloseScript(f)
+            : spawnSync('bash', ['-c', driver('scripts/update.sh', 'restore_output_policy save')], {
+              env: f.env, encoding: 'utf8', timeout: 10000,
+            });
+          assert.equal(result.status, 0, result.stdout + result.stderr);
+          assertPolicies(f);
+          for (const [index, tool] of ['iptables', 'ip6tables'].entries()) {
+            assert.equal(readFileSync(path.join(f.dir, `${tool}.rules`), 'utf8'), saved[index]);
+          }
+        } finally { cleanup(f); }
+      });
+    }
+  }
+
+  it('ships one firewall policy implementation used by updater and stop-post', () => {
+    const updater = read('scripts/update.sh');
+    const stopPost = read('scripts/close_update_window.sh');
+    const switchScript = read('scripts/switch-to-upstream.sh');
+    for (const source of [updater, stopPost, switchScript]) {
+      assert.doesNotMatch(source, /restore_output_policy\(\)\s*\{|fw[46]\(\)\s*\{/);
+      assert.match(source, /source .*restore_helpers[.]sh/);
+    }
+  });
 });

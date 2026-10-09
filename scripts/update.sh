@@ -56,16 +56,7 @@ NPX=/home/dac/.volta/bin/npx
 say() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
 # Report legacy firewall jobs without editing the root crontab.
-if [ -f "$LIVE/scripts/migrate/fork-artifacts.sh" ]; then
-  bash "$LIVE/scripts/migrate/fork-artifacts.sh" warn-cron || true
-elif command -v crontab >/dev/null 2>&1; then
-  # Older release trees do not carry the inspection helper.
-  LEGACY_CRON=$(crontab -u root -l 2>/dev/null | awk '
-    $0 !~ /^[[:space:]]*#/ && ($0 ~ /sync-time-with-internet[.]sh/ || $0 ~ /\/home\/dac\/free-sleep\/scripts\/unblock_internet_access[.]sh/) { print }
-  ' || true)
-  [ -z "$LEGACY_CRON" ] || echo "WARNING: root cron contains legacy jobs that open the firewall. Review them with crontab -u root -e. No cron entries were changed.
-$LEGACY_CRON"
-fi
+bash "$RECOVERY_SOURCE/scripts/migrate/fork-artifacts.sh" warn-cron || true
 
 RESULT_OPERATION=update
 
@@ -105,32 +96,8 @@ record_result() {
 WAN_RULES=("-p tcp --dport 443 -j ACCEPT" "-p udp --dport 53 -j ACCEPT" "-p tcp --dport 53 -j ACCEPT")
 WAN_RULE6="-p tcp --dport 443 -j REJECT --reject-with tcp-reset"
 WAN_OPEN=no
-# iptables 1.6.0 added "-w SECONDS"; older builds take a bare -w or no flag.
-IPT_W=
-for IPT_W in "-w 5" "-w" ""; do
-  # shellcheck disable=SC2086
-  iptables $IPT_W -S OUTPUT >/dev/null 2>&1 && break
-done
-# shellcheck disable=SC2086
-fw4() { iptables $IPT_W "$@"; }
-# shellcheck disable=SC2086
-fw6() { ip6tables $IPT_W "$@"; }
-# Clear an emergency policy only after both families have terminal blocks.
-restore_output_policy() {
-  if { fw4 -C OUTPUT -j REJECT 2>/dev/null || fw4 -C OUTPUT -j DROP 2>/dev/null; } &&
-     { fw6 -C OUTPUT -j REJECT 2>/dev/null || fw6 -C OUTPUT -j DROP 2>/dev/null; }; then
-    local policy_failed=no
-    fw4 -P OUTPUT ACCEPT || { echo "WARNING: could not restore IPv4 OUTPUT policy"; policy_failed=yes; }
-    fw6 -P OUTPUT ACCEPT || { echo "WARNING: could not restore IPv6 OUTPUT policy"; policy_failed=yes; }
-    # Download windows change live policies only.
-    if [ "${1:-}" = save ] && [ "$WAN_OPEN" = no ] && [ "$policy_failed" = no ]; then
-      if ! iptables-save > /etc/iptables/iptables.rules ||
-         ! ip6tables-save > /etc/iptables/ip6tables.rules; then
-        say "WARNING: could not save recovered firewall rules"
-      fi
-    fi
-  fi
-}
+source "$(dirname "${BASH_SOURCE[0]}")/restore_helpers.sh" || exit 1
+init_update_firewall
 # Removes the given rules only while one of them is the first rule in OUTPUT,
 # where the window puts them, so the same rule further down (Tailscale's
 # HTTPS allow) is left alone. Rules are compared with whitespace and the

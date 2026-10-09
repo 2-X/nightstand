@@ -1,6 +1,14 @@
 #!/bin/bash
 # Shared restore steps, sourced before either application tree moves.
 
+has_switch_journal() {
+  local root="${1:-${NIGHTSTAND_TRANSACTION_ROOT:-/persistent/free-sleep-maintenance/nightstand-transactions}}" journal
+  for journal in "$root"/*/journal.json; do
+    if [ -e "$journal" ] || [ -L "$journal" ]; then return 0; fi
+  done
+  return 1
+}
+
 restore_stop_writer() {
   systemctl stop "$1" 2>/dev/null
   case "$(systemctl is-active "$1" 2>/dev/null)" in
@@ -59,4 +67,35 @@ restore_cross_fork_rollback() {
   [ -f "$runner" ] || return 1
   python3 -B "$runner" companion --stage "$PREV" >/dev/null || return 1
   python3 -B "$runner" rollback --stage "$PREV" --recheck-in-use "${RECHECK_IN_USE:-no}"
+}
+
+init_update_firewall() {
+  # iptables 1.6.0 added "-w SECONDS"; older builds take a bare -w or no flag.
+  IPT_W=(-w 5)
+  if ! iptables "${IPT_W[@]}" -S OUTPUT >/dev/null 2>&1; then
+    IPT_W=(-w)
+    if ! iptables "${IPT_W[@]}" -S OUTPUT >/dev/null 2>&1; then
+      IPT_W=()
+    fi
+  fi
+}
+
+fw4() { iptables ${IPT_W[@]+"${IPT_W[@]}"} "$@"; }
+fw6() { ip6tables ${IPT_W[@]+"${IPT_W[@]}"} "$@"; }
+# Clear an emergency policy only after both families have terminal blocks.
+restore_output_policy() {
+  if { fw4 -C OUTPUT -j REJECT 2>/dev/null || fw4 -C OUTPUT -j DROP 2>/dev/null; } &&
+     { fw6 -C OUTPUT -j REJECT 2>/dev/null || fw6 -C OUTPUT -j DROP 2>/dev/null; }; then
+    local policy_failed=no
+    fw4 -P OUTPUT ACCEPT || { echo "WARNING: could not restore IPv4 OUTPUT policy"; policy_failed=yes; }
+    fw6 -P OUTPUT ACCEPT || { echo "WARNING: could not restore IPv6 OUTPUT policy"; policy_failed=yes; }
+    # Download windows change live policies only.
+    if [ "${1:-}" = save ] && [ "${WAN_OPEN:-no}" = no ] && [ "$policy_failed" = no ] &&
+       fw4 -C INPUT -j DROP 2>/dev/null && fw6 -C INPUT -j DROP 2>/dev/null; then
+      if ! iptables-save > /etc/iptables/iptables.rules ||
+         ! ip6tables-save > /etc/iptables/ip6tables.rules; then
+        echo "WARNING: could not save recovered firewall rules"
+      fi
+    fi
+  fi
 }

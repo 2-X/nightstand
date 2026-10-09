@@ -4,37 +4,19 @@
 # the top unless another rule was inserted since; remove them wherever they
 # are and apply the block again. When neither family has a final DROP or REJECT,
 # internet access was opened on purpose, so only the download rules go.
-# Also restores and saves OUTPUT policies once both terminal blocks are verified.
+# Saves recovered rules only when both families also have INPUT DROP.
 LIVE=/home/dac/free-sleep
 PREV=/home/dac/free-sleep-prev
 
-# iptables 1.6.0 added "-w SECONDS"; older builds take a bare -w or no flag.
-IPT_W=
-for IPT_W in "-w 5" "-w" ""; do
-  # shellcheck disable=SC2086
-  iptables $IPT_W -S OUTPUT >/dev/null 2>&1 && break
-done
-# shellcheck disable=SC2086
-fw4() { iptables $IPT_W "$@"; }
-# shellcheck disable=SC2086
-fw6() { ip6tables $IPT_W "$@"; }
-# Clear an emergency policy only after both families have terminal blocks.
-restore_output_policy() {
-  if { fw4 -C OUTPUT -j REJECT 2>/dev/null || fw4 -C OUTPUT -j DROP 2>/dev/null; } &&
-     { fw6 -C OUTPUT -j REJECT 2>/dev/null || fw6 -C OUTPUT -j DROP 2>/dev/null; }; then
-    local policy_failed=no
-    fw4 -P OUTPUT ACCEPT || { echo "WARNING: could not restore IPv4 OUTPUT policy"; policy_failed=yes; }
-    fw6 -P OUTPUT ACCEPT || { echo "WARNING: could not restore IPv6 OUTPUT policy"; policy_failed=yes; }
-    [ "$policy_failed" = no ] || return 0
-    # Never save download rules that could not be removed.
-    if [ -n "$(left_open)" ] || output_rules fw6 | grep -Fxq -- "$WAN_RULE6"; then
-      echo "WARNING: download rules remain; recovered firewall rules will not be saved"
-      return 0
-    fi
-    if ! iptables-save > /etc/iptables/iptables.rules ||
-       ! ip6tables-save > /etc/iptables/ip6tables.rules; then
-      echo "WARNING: could not save recovered firewall rules"
-    fi
+source "$(dirname "${BASH_SOURCE[0]}")/restore_helpers.sh" || exit 1
+init_update_firewall
+
+restore_closed_output_policy() {
+  if [ -n "$(left_open)" ] || output_rules fw6 | grep -Fxq -- "$WAN_RULE6"; then
+    restore_output_policy
+    echo "WARNING: download rules remain; recovered firewall rules will not be saved"
+  else
+    restore_output_policy save
   fi
 }
 
@@ -82,7 +64,7 @@ while [ "$REMOVED" -lt 20 ] && output_rules fw6 | grep -Fxq -- "$WAN_RULE6"; do
   REMOVED=$((REMOVED + 1))
 done
 if [ "$REMOVED" -eq 0 ]; then
-  restore_output_policy
+  restore_closed_output_policy
   exit 0
 fi
 echo "Removed the download rules an interrupted update left open"
@@ -92,5 +74,5 @@ if fw4 -C OUTPUT -j REJECT 2>/dev/null || fw4 -C OUTPUT -j DROP 2>/dev/null ||
     || sh "$PREV/scripts/block_internet_access.sh" >/dev/null 2>&1 \
     || echo "WARNING: could not apply the block script again"
 fi
-restore_output_policy
+restore_closed_output_policy
 exit 0
