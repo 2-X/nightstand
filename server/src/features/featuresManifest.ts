@@ -520,7 +520,7 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
       + '15 to 25 s later, because the firmware writes its log in batches. A Pod 5 hub handles its buttons '
       + 'itself, so this does nothing there.',
     category: 'platform',
-    version: '3.8.0',
+    version: '3.7.0',
     flag: 'coverButtons',
     default: false,
     touchpoints: [
