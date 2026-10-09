@@ -3,6 +3,10 @@
 The server listens on port 3000 and serves a REST API under `/api/` and a
 WebSocket at `/ws/events`. Responses are JSON unless noted otherwise.
 
+For Home Assistant, Homebridge and scripts, see
+[Integrations](../docs/INTEGRATIONS.md), including the differences from
+upstream free-sleep and the Homebridge keepAlive setting.
+
 There is no login. A device that can reach the Pod, locally or over Tailscale,
 can control it and read its data. Use a trusted network, do not port-forward
 this API to the public internet, and restrict remote access.
@@ -132,7 +136,9 @@ generic message; the details go to the server log.
 - While either side is in away mode, a change to one side is applied to
   both.
 - `isAlarmVibrating: false` stops a ringing alarm: the server sends a
-  one-second replacement alarm and then clears the armed alarm.
+  one-second replacement alarm only to the tracked ringing side, then clears
+  its ringing record and pending snooze. Dismissing an idle side sends no
+  alarm command.
 - `isPriming: true` starts a prime. `isPriming: false` is accepted and
   ignored. No verified command stops an active prime.
 - A manual `targetTemperatureF` change pauses that side's temperature
@@ -393,8 +399,9 @@ generic message; the details go to the server log.
 `alarm` is kept as the older single-alarm field. Use `alarms` to store
 several alarms for the same side and day; when `alarms` is sent, Nightstand
 schedules every enabled item and copies the first into `alarm` for older
-clients. When only `alarm` is sent, `alarms` becomes that alarm if it is
-enabled, or empty.
+clients. When only `alarm` is sent, it replaces the first item in `alarms`
+and keeps all later items, even if the first is disabled. On an empty day
+it creates that first item. Use `alarms: []` to clear every alarm.
 
 ---
 
@@ -672,6 +679,13 @@ instead of the weekly schedule.
   other command takes `arg` as a string (or no `arg`), and a value of
   another type is refused with `400`. Nothing is sent to the Pod for a
   `400`, which answers `{ "message": "..." }`.
+- For `ALARM_LEFT` and `ALARM_RIGHT`, `arg` must be a hex-encoded CBOR
+  object with integer `pl` from 0 to 100, integer `du` from 1 to 2147483
+  seconds, `pi` of `double` or `rise`, and a nonnegative safe integer `tt`
+  in Unix seconds. Future target times return `400` before any hardware
+  command. The in-memory tracker supports immediate ringing alarms, not
+  pending firmware starts. Accepted raw alarms remain tracked for `du`
+  seconds after command acceptance so they can be dismissed.
 
 #### Request body
 
@@ -891,6 +905,9 @@ Sleep records are periods in bed found by the nightly analysis.
 - Returns the sleep records that overlap a range, oldest first.
 - Query parameters, all optional: `side` (`left` or `right`), `startTime`
   and `endTime` (ISO 8601). A malformed value returns `400`.
+- Without either date bound, the range is the last 90 days through now,
+  including records overlapping its start. An explicit `startTime` or
+  `endTime` keeps its supplied range without this limit.
 
 #### Response
 
@@ -1012,8 +1029,19 @@ and wherever an estimate failed its quality check.
 
 - Returns summary statistics for vitals over a range.
 - Query parameters, all optional: `side`, `startTime` and `endTime`
-  (ISO 8601). Without a range it summarizes every stored row. A malformed
-  value returns `400`.
+  (ISO 8601). When both time bounds are missing, it summarizes the last
+  90 days, ending now. A single bound leaves the other end unbounded. A
+  malformed value returns `400`.
+- An exact recorded night uses its retained summary after detail pruning.
+  Larger ranges combine fully enclosed, non-overlapping retained nights with
+  remaining detail. Arbitrary slices within a pruned night cannot be rebuilt.
+- Retained nights also return optional `retained.avgHeartRate` and
+  `retained.avgBreathingRate`, the rounded positive-only averages displayed
+  by the app. The breathing value uses `resp_rate`. The ordinary summary
+  fields keep their existing filters and rounding.
+- Retention never deletes nightly summaries, sleep records, scores or
+  movement. See [Metrics retention](../docs/METRICS_RETENTION.md) for the
+  two settings and the limits of reusable database space.
 - `avgHRV` averages only `hrv` values from 30 to 120.
 - `avgBreathingRate` averages `breathing_rate` values from 5 to 20 with New
   sleep tracking off. With it on, it averages `resp_rate`, so nights without
@@ -1268,6 +1296,9 @@ the biometrics service; `/api/deviceStatus` converts them.
   `{ name, status, description, message, timestamp? }`, where `status` is
   one of `not_started`, `started`, `healthy`, `restarting`, `retrying`,
   `waiting_for_data` or `failed`.
+- The full response is cached for 15 seconds. Concurrent requests share
+  one refresh, including the database integrity check. Reading status
+  writes `servicesDB.json` only when stream health changes.
 - `biometricsInstallation` is always present. The `analyzeSleep*`,
   `biometricsCalibration*`, `biometricsStream` and `pumpHealth*` entries are
   present only while biometrics is on. `biometricsStream` reads `failed`

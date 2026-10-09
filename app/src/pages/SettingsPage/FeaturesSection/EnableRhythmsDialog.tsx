@@ -116,7 +116,7 @@ export default function EnableRhythmsDialog({ onClose, onDone }: { onClose: () =
               const days = describeDays(rhythmUsage(db[side], rhythm.id, today).days);
               const differs = conversionDifference(rhythm, rhythms.filter(other => other.id !== rhythm.id),
                 fahrenheit => formatTemperature(fahrenheit, settings?.temperatureFormat ?? 'fahrenheit'),
-                supportsRisePattern(deviceStatus?.hubVersion));
+                supportsRisePattern(deviceStatus?.hubVersion, deviceStatus?.coverVersion));
               return <TextField
                 key={ rhythm.id }
                 autoFocus={ index === 0 && sideIndex === SIDES.findIndex(item => Object.keys(db[item].rhythms).length > 0) }

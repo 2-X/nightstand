@@ -8,12 +8,14 @@ from typing import Optional
 import gc
 import sys
 import os
+import io
 from collections import Counter
 
 # Add the current directory to sys.path
 sys.path.append(os.getcwd())
 from data_types import *
 from get_logger import get_logger
+from raw_decoder import decode_payload
 from presence.detector import piezo_range
 from presence.piezo import piezo_layout
 from presence.sensors import FORMATS, read_cap, unknown_cap_type
@@ -21,7 +23,7 @@ from presence.sensors import FORMATS, read_cap, unknown_cap_type
 logger = get_logger()
 
 
-def _read_raw_record(f):
+def _read_raw_record(f, with_sequence=False):
     """
     Manually parse one outer {seq, data} CBOR record using f.read().
 
@@ -34,7 +36,8 @@ def _read_raw_record(f):
     This function parses the outer {seq: uint, data: bytes} wrapper
     byte-by-byte with f.read(), keeping f.tell() accurate after each record.
 
-    Returns the raw inner data bytes, or None for empty placeholder records
+    With with_sequence=True, returns the envelope map, including seq.
+    Otherwise returns the raw inner data bytes, or None for empty placeholder records
     (the Pod firmware writes data=b'' records as sequence-number markers).
     Raises EOFError at end of file or on a record cut short, ValueError on malformed data.
     """
@@ -60,19 +63,13 @@ def _read_raw_record(f):
         raise EOFError
     val = hdr[0]
     if val <= 0x17:
-        pass  # tiny uint, value lives in the additional-info bits
-    elif val == 0x18:
-        if len(f.read(1)) < 1:
+        sequence = val
+    elif val in (0x18, 0x19, 0x1a, 0x1b):
+        size = {0x18: 1, 0x19: 2, 0x1a: 4, 0x1b: 8}[val]
+        encoded = f.read(size)
+        if len(encoded) < size:
             raise EOFError
-    elif val == 0x19:
-        if len(f.read(2)) < 2:
-            raise EOFError
-    elif val == 0x1a:
-        if len(f.read(4)) < 4:
-            raise EOFError
-    elif val == 0x1b:
-        if len(f.read(8)) < 8:
-            raise EOFError
+        sequence = int.from_bytes(encoded, 'big')
     else:
         raise ValueError('Unexpected seq encoding: 0x%02x' % val)
     key = f.read(5)
@@ -83,6 +80,8 @@ def _read_raw_record(f):
     bs = f.read(1)
     if not bs:
         raise EOFError
+    if bs[0] >> 5 != 2:
+        raise ValueError('Expected data byte string')
     ai = bs[0] & 0x1f
     if ai <= 23:
         length = ai
@@ -103,12 +102,51 @@ def _read_raw_record(f):
         length = struct.unpack('>I', lb)[0]
     else:
         raise ValueError('Unsupported length encoding: %d' % ai)
+    # Check the live file's current end before allocating for a corrupt length.
+    payload_start = f.tell()
+    available = f.seek(0, io.SEEK_END) - payload_start
+    f.seek(payload_start)
+    if length > available:
+        raise EOFError
     data = f.read(length)
     if len(data) < length:
         raise EOFError
     if not data:
         return None  # empty placeholder record, caller should skip
-    return data
+    return {'seq': sequence, 'data': data} if with_sequence else data
+
+
+def _find_next_raw_record(handle, after):
+    """Find a complete record after a bad offset, leaving a live partial tail intact."""
+    header = b'\xa2\x63seq'
+    # Snapshot the end so a concurrent append is retried on the next pass.
+    end = os.fstat(handle.fileno()).st_size
+    offset = after + 1
+    while offset < end:
+        handle.seek(offset)
+        chunk = handle.read(min(65536, end - offset))
+        if not chunk:
+            break
+        index = chunk.find(header)
+        if index < 0:
+            offset += max(1, len(chunk) - len(header) + 1)
+            continue
+        candidate = offset + index
+        handle.seek(candidate)
+        try:
+            payload = _read_raw_record(handle)
+            if handle.tell() <= end:
+                # A payload may bundle several records; the first must be a typed record.
+                record = next(decode_payload(payload), None) if payload is not None else None
+                if (payload is None or (isinstance(record, dict)
+                        and isinstance(record.get('type'), str) and record['type'])):
+                    handle.seek(candidate)
+                    return candidate
+        except (EOFError, ValueError, cbor2.CBORDecodeError):
+            pass
+        offset = candidate + 1
+    handle.seek(after)
+    return None
 
 
 def get_current_files(folder_path: str):

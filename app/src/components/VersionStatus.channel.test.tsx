@@ -20,13 +20,13 @@ for (const running of ['3.1.0', '3.2.0', '3.3.0']) {
             version: running } })),
       http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json', () => HttpResponse.json(manifest)),
     );
-    const { queryClient } = renderWithProviders(<VersionStatus/>);
-    await waitFor(() => expect(queryClient.getQueryData(['useReleases'])).toEqual(manifest));
+    renderWithProviders(<VersionStatus/>);
     if (running === '3.1.0') {
       expect(await screen.findByRole('button', { name: 'Update to v3.2.0' })).toBeEnabled();
-      expect(screen.getByText('Latest version: 3.2.0')).toBeInTheDocument();
-      expect(screen.getByText('Current version: 3.1.0')).toBeInTheDocument();
+      expect(await screen.findByText('Latest version: 3.2.0')).toBeInTheDocument();
+      expect(await screen.findByText('Current version: 3.1.0')).toBeInTheDocument();
     } else {
+      expect(await screen.findByText('Up to date')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Update to v3.2.0' })).not.toBeInTheDocument();
     }
   });
@@ -34,8 +34,8 @@ for (const running of ['3.1.0', '3.2.0', '3.3.0']) {
 for (const running of ['3.2.0', '3.3.0']) {
   it(`prevents direct update to a release no newer than ${running}`, async () => {
     server.use(http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json', () => HttpResponse.json(manifest)));
-    const { queryClient } = renderWithProviders(<UpdateFreeSleepButton runningVersion={ running }/>);
-    await waitFor(() => expect(queryClient.getQueryData(['useReleases'])).toEqual(manifest));
-    expect(screen.getByRole('button', { name: 'Update to v3.2.0' })).toBeDisabled();
+    renderWithProviders(<UpdateFreeSleepButton runningVersion={ running }/>);
+    const button = await screen.findByRole('button', { name: 'Update to v3.2.0' });
+    await waitFor(() => expect(button).toBeDisabled());
   });
 }

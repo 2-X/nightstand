@@ -18,16 +18,22 @@ from presence.sensors import CAPSENSE, CAPSENSE2
 def cap_payload(side, means=(11.0, 10.0, 15.0), **extra):
     payload = {f'{side}_{channel}': {'mean': mean, 'std': 1} for channel, mean in zip(('out', 'cen', 'in'), means)}
     payload.update(extra)
+    payload.setdefault('provenance', {'format': 'capSense2', 'normalizationVersion': 1})
     return payload
 
 
-def profiles(left=None, right=None):
+def profiles(left=None, right=None, cap_format=CAPSENSE2):
     base = {
         'left': {'cap': cap_payload('left'), 'cap_occupied': None, 'piezo_floors': []},
         'right': {'cap': cap_payload('right'), 'cap_occupied': None, 'piezo_floors': []},
     }
     base['left'].update(left or {})
     base['right'].update(right or {})
+    for entry in base.values():
+        if isinstance(entry['cap'], dict) and 'provenance' in entry['cap']:
+            entry['cap']['provenance']['format'] = cap_format.name
+        if isinstance(entry['cap_occupied'], dict):
+            entry['cap_occupied'].setdefault('provenance', {'format': cap_format.name, 'normalizationVersion': 1})
     return base
 
 
@@ -150,7 +156,7 @@ class FormatUnitsTest(unittest.TestCase):
         self.assertEqual(side_params(1000.0, 80.0, unit=CAPSENSE.unit).enter_delta, 480.0)
 
     def test_the_format_reaches_both_sides(self):
-        params = params_from_calibration(profiles(), CAPSENSE)
+        params = params_from_calibration(profiles(cap_format=CAPSENSE), CAPSENSE)
         self.assertEqual(params.left.enter_delta, 300.0)
         self.assertEqual(params.right.offset_limit, 225.0)
         self.assertEqual(params_from_calibration(profiles()), params_from_calibration(profiles(), CAPSENSE2))
@@ -159,11 +165,52 @@ class FormatUnitsTest(unittest.TestCase):
         self.assertFalse(learned_levels(profiles()))
         learned = profiles(left={'cap_occupied': {'level': 900.0}})
         self.assertFalse(learned_levels(learned))
-        learned['right']['cap_occupied'] = {'level': 450.0}
+        learned['right']['cap_occupied'] = {'level': 450.0, 'provenance': {'format': 'capSense2', 'normalizationVersion': 1}}
         self.assertTrue(learned_levels(learned))
         learned['right']['cap_occupied'] = {'level': -1}
         self.assertFalse(learned_levels(learned))
         self.assertFalse(learned_levels(None))
+
+
+class ProvenanceParamsTest(unittest.TestCase):
+    def tagged(self, name='capSense2', version=1):
+        result = profiles()
+        for side in ('left', 'right'):
+            result[side]['cap']['provenance'] = {'format': name, 'normalizationVersion': version}
+        return result
+
+    def test_untagged_baselines_are_nightstand_calibrations(self):
+        unknown = profiles()
+        for entry in unknown.values():
+            entry['cap'].pop('provenance')
+        self.assertIsNotNone(params_from_calibration(unknown, CAPSENSE2))
+        self.assertEqual(baselines_from_calibration(unknown),
+                         {side: CapBaseline(mean=(11.0, 10.0, 15.0), noise=0.0) for side in ('left', 'right')})
+
+    def test_explicitly_unknown_imports_are_not_used(self):
+        unknown = self.tagged(name='unknown', version=None)
+        self.assertIsNone(params_from_calibration(unknown, CAPSENSE2))
+        self.assertIsNone(baselines_from_calibration(unknown))
+
+    def test_recalibrating_one_side_keeps_the_other_untagged_baseline(self):
+        upgraded = self.tagged()
+        upgraded['right']['cap'].pop('provenance')
+        self.assertEqual(baselines_from_calibration(upgraded, CAPSENSE2),
+                         {side: CapBaseline(mean=(11.0, 10.0, 15.0), noise=0.0) for side in ('left', 'right')})
+        self.assertIsNotNone(params_from_calibration(upgraded, CAPSENSE2))
+
+    def test_matching_formats_work_and_mismatches_are_rejected(self):
+        self.assertIsNotNone(params_from_calibration(self.tagged(), CAPSENSE2))
+        self.assertIsNone(params_from_calibration(self.tagged(), CAPSENSE))
+        self.assertIsNone(params_from_calibration(self.tagged(version=2), CAPSENSE2))
+        self.assertIsNone(params_from_calibration(self.tagged(version=True), CAPSENSE2))
+
+    def test_occupied_levels_with_wrong_units_are_not_reused(self):
+        result = self.tagged()
+        for side in ('left', 'right'):
+            result[side]['cap_occupied'] = {'level': 900, 'provenance': {'format': 'capSense', 'normalizationVersion': 1}}
+        self.assertEqual(params_from_calibration(result, CAPSENSE2).left.enter_delta, 4)
+        self.assertFalse(learned_levels(result, CAPSENSE2))
 
 
 if __name__ == '__main__':

@@ -1,12 +1,24 @@
 import { describe, it, expect } from 'vitest';
+import targetFixtures from '../../../scripts/tests/fixtures/upstream_targets.json';
 import {
   ReleasesManifestSchema,
   latestForChannel,
   baseMismatch,
   podUpstreamBase,
+  selectUpstreamTarget,
   type Release,
   type ReleasesManifest,
 } from './releases.ts';
+
+describe('V2 upstream target selection', () => {
+  for (const fixture of targetFixtures) {
+    it(fixture.name, () => {
+      const parsed = ReleasesManifestSchema.parse(fixture.manifest);
+      expect(selectUpstreamTarget(parsed, fixture.confirmed)).toEqual(fixture.expected ?? undefined);
+      expect(parsed.upstreamSwitch?.commit).toBe('ca7dc543119ae964dd10815c8ae0c80ddb9a4f8f');
+    });
+  }
+});
 
 const agent: Release = { kind: 'agent', version: '3.0.0', channel: 'stable', date: '2026-07-16' };
 const bundle: Release = {

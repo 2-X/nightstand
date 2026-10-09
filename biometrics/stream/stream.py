@@ -55,9 +55,11 @@ from presence.model import on_this_pod
 from presence.params import baselines_from_calibration, learned_levels, params_from_calibration
 from presence.sensors import TYPE_NAME_LENGTH, printable_type, read_cap, unknown_cap_type
 from stream_processor import LatestCap, StreamProcessor
-from load_raw_files import load_piezo_row, _read_raw_record
+from load_raw_files import load_piezo_row, _read_raw_record, _find_next_raw_record
 from service_health import update_health, update_sensor_temps, update_pump_health
 from pump_speed import PumpSpeed
+from raw_decoder import decode_row
+from firmware_telemetry import firmware_delivery
 
 # Bound pending work when processing falls behind.
 piezo_record_queue = queue.Queue(maxsize=120)
@@ -66,6 +68,7 @@ latest_cap = LatestCap()
 # When the pump ran fast, from frzHealth frames, for the newer vitals.
 pump_speed = PumpSpeed()
 _pump_frame_warned = False
+_firmware_ingest_warning_at = None
 # A vitals switch that fails is retried every refresh; only the first failure is an error.
 _vitals_switch_failed = False
 # Capacitance presence runs only while capacitance records keep arriving, so a
@@ -127,13 +130,7 @@ def _mark_sequence_processed(sequence):
 
 
 def _decode_raw_row(row):
-    if not isinstance(row, dict):
-        return None
-
-    if row.get('data'):
-        return cbor2.loads(row['data'])
-
-    return row
+    return decode_row(row)
 
 
 def _queue_decoded_piezo_record(decoded_data) -> bool:
@@ -150,7 +147,9 @@ def _queue_decoded_piezo_record(decoded_data) -> bool:
     if datetime.now() - record_time > RECENT_RECORD_WINDOW:
         return False
 
-    sequence = decoded_data.get('seq')
+    metadata = decoded_data.get('_firmware')
+    sequence = ((metadata['sequence'], metadata['index']) if metadata and metadata['sequence'] is not None
+                else decoded_data.get('seq'))
     if sequence in processed_sequences:
         return False
 
@@ -217,7 +216,7 @@ def _presence_v2_inputs(stream_processor=None):
     cap_format = on_this_pod(cap_format, logger)
     profiles = calibration.load_presence_profiles()
     params = params_from_calibration(profiles, cap_format)
-    baselines = baselines_from_calibration(profiles)
+    baselines = baselines_from_calibration(profiles, cap_format)
     if params is None or baselines is None:
         return None
     if cap_format.validated:
@@ -228,7 +227,7 @@ def _presence_v2_inputs(stream_processor=None):
 
 
 def _experimental_ready(stream_processor, profiles, cap_format) -> bool:
-    if not learned_levels(profiles):
+    if not learned_levels(profiles, cap_format):
         reason = "until the nightly analysis has learned both sides' occupied levels"
     elif stream_processor is None or stream_processor.cadence.ok() is not True:
         reason = 'until piezo records are seen to come once a second'
@@ -304,14 +303,21 @@ def _put_latest(record):
         piezo_record_queue.put_nowait(record)
 
 
-def _ingest_live_record(record) -> bool:
+def _ingest_live_record(record, source='RAW') -> bool:
     """Hand a record on; True when it is a fresh sensor record."""
-    global _last_sensor_record
+    global _last_sensor_record, _firmware_ingest_warning_at
     if not isinstance(record, dict):
         return False
+    try:
+        firmware_delivery.ingest(record, source)
+    except Exception as error:
+        now = time.monotonic()
+        if _firmware_ingest_warning_at is None or now - _firmware_ingest_warning_at >= 60:
+            _firmware_ingest_warning_at = now
+            logger.warning(f'Could not ingest firmware telemetry: {error}')
     kind = record.get('type')
     timestamp = record.get('ts')
-    fresh = (kind in ('piezo-dual', 'capSense', 'capSense2', 'frzTemp', 'frzHealth', 'bedTemp', 'bedTemp2')
+    fresh = (kind in ('piezo-dual', 'capSense', 'capSense2', 'frzTemp', 'frzHealth', 'frzTherm', 'bedTemp', 'bedTemp2')
              and _is_number(timestamp) and math.isfinite(timestamp)
              and abs(time.time() - timestamp) <= RECENT_RECORD_WINDOW.total_seconds())
     if fresh:
@@ -396,29 +402,33 @@ class LatestRawFileHandler(FileSystemEventHandler):
                 # _read_raw_record in load_raw_files.py). last_pos advances
                 # past every parsed record, including skipped ones, so they
                 # aren't re-parsed on the next follow pass.
-                data_bytes = _read_raw_record(self.latest_file_obj)
+                data_bytes = _read_raw_record(self.latest_file_obj, with_sequence=True)
                 if data_bytes is None:
                     self.last_pos = self.latest_file_obj.tell()
                     continue  # empty placeholder record
 
-                decoded_data = cbor2.loads(data_bytes)
+                decoded_records = list(_decode_raw_row(data_bytes))
 
-                _ingest_live_record(decoded_data)
-
-                # Update last read position
-                self.last_pos = self.latest_file_obj.tell()
-
-            except EOFError:
-                # Mid-record EOF means a partially written record; last_pos
-                # still points at its start, so the next pass retries it once
-                # the firmware finishes writing.
+            except (EOFError, ValueError, cbor2.CBORDecodeError) as error:
+                next_pos = _find_next_raw_record(self.latest_file_obj, self.last_pos)
+                if next_pos is not None:
+                    logger.warning(f'Skipped {next_pos - self.last_pos} bytes in {self.latest_file} '
+                                   f'at offset {self.last_pos} after RAW decode failure: {error}')
+                    self.last_pos = next_pos
+                    continue
+                # No complete later record: retry this offset after an append.
+                if not isinstance(error, EOFError):
+                    logger.error(f'Error reading record: {error}')
                 break
-            except Exception as e:
-                logger.error(f"Error reading record: {e}")
-                # Seek back to the last known good position so a transient
-                # bad read doesn't cascade.
+
+            try:
+                for decoded_data in decoded_records:
+                    _ingest_live_record(decoded_data)
+            except Exception as error:
+                logger.error(f'Error processing record: {error}')
                 self.latest_file_obj.seek(self.last_pos)
                 break
+            self.last_pos = self.latest_file_obj.tell()
 
 
 def process_biometrics(stop_event=None):
@@ -633,12 +643,9 @@ async def _nats_session(processing_thread, raw_files=None):
                     _last_stream_message_at = time.monotonic()
                 try:
                     row = cbor2.loads(message.data)
-                    record = _decode_raw_row(row)
-                    if (isinstance(record, dict) and record.get('type') == 'piezo-dual'
-                            and isinstance(row, dict) and 'seq' in row):
-                        record.setdefault('seq', row['seq'])
-                    if _ingest_live_record(record):
-                        last_nats_record = time.monotonic()
+                    for record in _decode_raw_row(row):
+                        if _ingest_live_record(record, 'NATS'):
+                            last_nats_record = time.monotonic()
                 except Exception as error:
                     logger.warning(f'Error decoding NATS raw message, skipping: {error}')
     finally:

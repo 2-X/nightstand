@@ -1,11 +1,12 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
-import { act, screen } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
 import { server } from '@test/setup';
 import ReleaseRow from './ReleaseRow';
 import RollbackRow from './RollbackRow';
 import RevertToStockRow from './RevertToStockRow';
+import targetFixtures from '../../../../../scripts/tests/fixtures/upstream_targets.json';
 
 // A failure learned from the record the scripts leave is not a refused
 // request, so the dialog names the operation that did not finish.
@@ -49,8 +50,11 @@ describe('the dialog title after a recorded failure', () => {
   it('says the switch did not finish', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     serve('switch', '*/update/switch-to-upstream');
+    server.use(http.get('https://raw.githubusercontent.com/LTimothy/nightstand/main/releases.json',
+      () => HttpResponse.json(targetFixtures[1].manifest)));
     const { user } = renderWithProviders(<RevertToStockRow runningVersion="3.3.0"/>);
-    await user.click(screen.getByText('Switch to upstream free-sleep'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Switch to upstream free-sleep' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Switch to upstream free-sleep' }));
     await user.click(await screen.findByRole('button', { name: 'Switch to upstream free-sleep' }));
     await afterPoll();
     expect(await screen.findByText('Switch did not finish')).toBeVisible();

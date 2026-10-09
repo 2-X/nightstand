@@ -170,9 +170,12 @@ fi
 
 # Stage 5 copies these helpers to the pod, so check for them up front.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-for helper in pod-installer.sh restore-original-fork.sh; do
+for helper in pod-installer.sh restore-original-fork.sh fork-artifacts.sh; do
   [ -f "$SCRIPT_DIR/$helper" ] || fail "$helper was not found next to this script. Download it from scripts/migrate/ into $SCRIPT_DIR and run again."
 done
+RESTORE_HELPER_LOCAL="$SCRIPT_DIR/../restore_helpers.sh"
+[ -f "$RESTORE_HELPER_LOCAL" ] || RESTORE_HELPER_LOCAL="$SCRIPT_DIR/restore_helpers.sh"
+[ -f "$RESTORE_HELPER_LOCAL" ] || fail "Download scripts/restore_helpers.sh next to this script and run again."
 command -v python3 >/dev/null 2>&1 || fail "python3 is required on this computer."
 
 # ==============================================================================
@@ -452,6 +455,16 @@ DETECTED_MODEL_NOTE="Pod 5: fully supported."
 # ==============================================================================
 # Stage 3, Report and consent (still read-only)
 # ==============================================================================
+# The helper runs through stdin without installing files on the Pod.
+FOREIGN_REPORT=$(ssh_cmd "$SSH_PORT" 'bash -s -- inspect' < "$SCRIPT_DIR/fork-artifacts.sh") \
+  || fail "could not inspect root cron and fork-specific units; nothing was changed"
+if [ -n "$FOREIGN_REPORT" ]; then
+  say "Legacy fork artifacts found:"
+  printf '%s\n' "$FOREIGN_REPORT"
+  say "Unknown free-sleep units will be stopped before the database checkpoint."
+fi
+REMOVE_FOREIGN=no
+
 NEWEST_VERSION=$(curl -fsSL --max-time 20 "$RELEASES_URL" | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
@@ -500,6 +513,15 @@ fi
 
 read -r -p "Type 'switch' to proceed: " CONFIRM
 [ "$CONFIRM" = "switch" ] || fail "confirmation not given"
+
+if printf '%s\n' "$FOREIGN_REPORT" | grep -qE '^cron:|^unit: free-sleep-ambient-light[.]service$'; then
+  echo "Legacy root cron jobs can open the firewall after the switch."
+  echo "The ambient-light unit writes the database and is not used by Nightstand."
+  read -r -p "Type 'remove-legacy-artifacts' to back up and remove these cron jobs, the legacy time sync script and the ambient-light unit: " REMOVE_ACK
+  [ "$REMOVE_ACK" = remove-legacy-artifacts ] \
+    || fail "cleanup consent not given; refusing to switch with legacy firewall cron or ambient-light installed. Nothing was changed."
+  REMOVE_FOREIGN=yes
+fi
 
 # Clock correction requires confirmation and is skipped in dry-run mode.
 if [ "$SKEW" -gt 120 ]; then
@@ -582,6 +604,8 @@ say "Stage 5: pushing the installer and starting it (detached, safe if this lapt
 ssh_cmd "$SSH_PORT" "mkdir -p /home/dac/migrate"
 scp_to_pod "$SSH_PORT" "$SCRIPT_DIR/pod-installer.sh" "/home/dac/migrate/pod-installer.sh"
 scp_to_pod "$SSH_PORT" "$SCRIPT_DIR/restore-original-fork.sh" "/home/dac/migrate/restore-original-fork.sh"
+scp_to_pod "$SSH_PORT" "$SCRIPT_DIR/fork-artifacts.sh" "/home/dac/migrate/fork-artifacts.sh"
+scp_to_pod "$SSH_PORT" "$RESTORE_HELPER_LOCAL" "/home/dac/migrate/restore_helpers.sh"
 ssh_cmd "$SSH_PORT" "chmod +x /home/dac/migrate/pod-installer.sh /home/dac/migrate/restore-original-fork.sh"
 # Push the Stage 2 (pre-consent) iptables snapshot rather than letting
 # pod-installer.sh take a fresh one later, every abort path must restore
@@ -592,10 +616,12 @@ scp_to_pod "$SSH_PORT" "$IPTABLES_SNAPSHOT_LOCAL" "/home/dac/free-sleep-migrate-
 ssh_cmd "$SSH_PORT" "
   rm -f /persistent/free-sleep-data/migration-status.json
   if command -v systemd-run >/dev/null 2>&1; then
-    systemd-run --unit=free-sleep-migrate --collect bash /home/dac/migrate/pod-installer.sh
+    systemd-run --unit=free-sleep-migrate --collect --property=KillMode=control-group \
+      --property=ExecStopPost='-/bin/systemctl restart --no-block free-sleep-recover-switch.service' bash /home/dac/migrate/pod-installer.sh \"$REMOVE_FOREIGN\" \
+      || systemd-run --unit=free-sleep-migrate --collect bash /home/dac/migrate/pod-installer.sh \"$REMOVE_FOREIGN\"
   else
     command -v setsid >/dev/null || exit 1
-    nohup setsid bash /home/dac/migrate/pod-installer.sh >/home/dac/migrate/installer.out 2>&1 & disown
+    nohup setsid bash /home/dac/migrate/pod-installer.sh \"$REMOVE_FOREIGN\" >/home/dac/migrate/installer.out 2>&1 & disown
   fi
 " || fail "could not start the installer on the pod"
 

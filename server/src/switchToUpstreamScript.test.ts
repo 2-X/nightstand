@@ -169,3 +169,18 @@ describe('switch-to-upstream.sh', () => {
     assert.match(src, /NOPASSWD: \/bin\/systemctl start free-sleep-revert\.service --no-block/);
   });
 });
+
+it('uses the transaction only for a confirmed V2 artifact and retains recovery', () => {
+  const src = readFileSync(path.join(repoRoot, SCRIPT), 'utf8');
+  const start = src.indexOf('# Confirmed V2 targets use the durable transaction');
+  assert.ok(start >= 0);
+  const block = src.slice(start, src.indexOf('# Upstream imports', start));
+  assert.match(block, /\[ "\$TRANSACTIONAL_SWITCH" = yes \]/);
+  assert.match(block, /"\$\{SWITCH_ACTUAL:-\}" = "\$SWITCH_DIGEST"/);
+  assert.match(block, /forward --stage "\$STAGE"/);
+  assert.match(block, /--target-json "\$CONFIRMED_TARGET"/);
+  assert.match(block, /--recheck-in-use "\$RECHECK_IN_USE"/);
+  assert.doesNotMatch(block, /pip install|rm -rf.*recovery/);
+  assert.match(readFileSync(path.join(repoRoot, UNIT), 'utf8'),
+    /ExecStopPost=-\/bin\/systemctl restart --no-block free-sleep-recover-switch.service/);
+});

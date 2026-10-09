@@ -175,9 +175,9 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
         return int((time.time() - started_at) * 1000)
 
     run_id = None
-    # Off, the baseline and the legacy file stay exactly what they were.
+    # Channel calculations stay unchanged when new sleep tracking is off.
     presence_v2 = biometrics_v2_enabled()
-    cap_formats = Counter() if presence_v2 else None
+    cap_formats = Counter()
     try:
         data = load_raw_files(
             folder_path,
@@ -188,6 +188,7 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
             raw_data_types=['capSense', 'piezo-dual'],
             cap_formats=cap_formats,
         )
+        provenance = calibration.cap_provenance(cap_formats, calibration.source_hash(data['cap_senses']))
 
         # with_p2p=True adds the within-second p98-p2 range column. That is the
         # quantity both presence detectors threshold, so it is the only one
@@ -261,6 +262,7 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
                 f'record a stretch of empty bed.'
             )
         cap_baseline = create_cap_baseline_from_cap_df(merged_df, baseline_start_time, baseline_end_time, side)
+        cap_baseline['provenance'] = provenance
         if presence_v2:
             # The capacitance presence detector keeps its entry level clear of
             # this. Readers of the channel means ignore the extra key.
@@ -289,7 +291,7 @@ def calibrate_sensor_thresholds(side: Side, start_time: datetime, end_time: date
         run_id = calibration.record_run(
             side, 'cap', calibration.STATUS_SUCCESS, trigger,
             started_at=started_at, duration_ms=_elapsed_ms(), quality=quality,
-            payload=format_payload(cap_formats),
+            payload={**cap_baseline, **format_payload(cap_formats)},
         )
         calibration.save_profile(
             side, 'cap', cap_baseline, quality=quality,
@@ -456,4 +458,3 @@ if __name__ == "__main__":
             update_health(job_key, status, message)
         else:
             update_health_both_sides(status, message)
-

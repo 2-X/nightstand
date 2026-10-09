@@ -60,7 +60,7 @@ it('reads and saves times in UTC while the Pod has no time zone set', async () =
 });
 
 describe('pattern by Pod model', () => {
-  const note = 'Builds up works only on a Pod 5, so alarms on this Pod use Double pulse.';
+  const note = 'Builds up needs a Pod 5 hub and cover, so alarms on this Pod use Double pulse.';
 
   it('offers Builds up on a Pod 5', async () => {
     renderWithProviders(<OneOffAlarmSection/>);
@@ -70,8 +70,11 @@ describe('pattern by Pod model', () => {
     expect(screen.queryByText(note)).not.toBeInTheDocument();
   });
 
-  it.each(['Pod 3', 'Pod 4', 'Version not found'])('shows Double pulse and a disabled Builds up on %s', async (hubVersion) => {
-    server.use(http.get('*/deviceStatus', () => HttpResponse.json({ ...getDeviceStatus(), hubVersion })));
+  it.each([
+    ['Pod 3', 'Pod 5'], ['Pod 4', 'Pod 5'], ['Version not found', 'Pod 5'],
+    ['Pod 5', 'Pod 3'], ['Pod 5', 'Pod 4'], ['Pod 5', 'Version not found'],
+  ])('disables Builds up for hub %s and cover %s', async (hubVersion, coverVersion) => {
+    server.use(http.get('*/deviceStatus', () => HttpResponse.json({ ...getDeviceStatus(), hubVersion, coverVersion })));
     renderWithProviders(<OneOffAlarmSection/>);
     fireEvent.click(await screen.findByRole('switch', { name: 'Enable one-time alarm' }));
     expect(await screen.findByText(note)).toBeInTheDocument();

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@test/renderWithProviders';
 import ReleaseRow from './ReleaseRow';
 import RevertToStockRow from './RevertToStockRow';
@@ -16,6 +16,7 @@ it('explains downgrade behavior before installation', async () => {
 
 it('names backups, retained components, and upstream recovery hazards', async () => {
   const { user } = renderWithProviders(<RevertToStockRow runningVersion="3.4.0"/>);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Switch to upstream free-sleep' })).toBeEnabled());
   await user.click(screen.getByRole('button', { name: 'Switch to upstream free-sleep' }));
   expect(screen.getByText(/free-sleep-database-backups/)).toBeInTheDocument();
   expect(screen.getByText(/Do not follow/)).toBeInTheDocument();

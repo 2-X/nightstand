@@ -95,6 +95,175 @@ The app tests need the server's packages installed, because some screens
 use the server's data checks. The screenshot comparisons skip themselves
 off Linux. None of these commands contacts a Pod.
 
+## Upstream switch publication gate
+
+Before publishing any `upstreamSwitchV2` target, run the Linux VM checks
+below, then an explicitly authorized hardware round trip. This section is
+a procedure, not a test result. The VM interruption/reboot checks and the
+hardware round trip remain pending. Do not publish V2 or record a validation
+date until both stages pass. The publishing step is separate from an
+ordinary release, as described in
+[CONTRIBUTING.md](../CONTRIBUTING.md#publishing-an-upstream-switch-target).
+
+### Linux VM interruption and reboot checks
+
+Use a disposable Linux VM booted with systemd as PID 1, root access and a
+console that works after the network is disabled. Keep it isolated from
+Pods and the local device network. Take a VM snapshot before each case.
+Stage the exact candidate artifact, the Nightstand build and a subsequent
+upstream update locally, with their commits and digests recorded. Prepare
+Node and Python dependencies before disconnecting the VM's network.
+
+Start with the LowDB data in
+`scripts/tests/fixtures/switch_lowdb.json` and the cases in
+`scripts/tests/test_switch_installation.py`. Run the existing simulations
+from the repository root as a prerequisite:
+
+```bash
+python3 -B -m unittest discover -s scripts/tests -p test_switch_installation.py
+python3 -B -m unittest discover -s scripts/tests -p test_switch_startup.py
+python3 -B -m unittest discover -s scripts/tests -p test_switch_services.py
+```
+
+These commands mock systemd and other host operations, even on Linux. They
+do not test a real reboot or satisfy the VM gate. There is no real-systemd
+VM runner yet. Adapting the fixtures needs more than a wrapper around these
+commands:
+
+- Create a `dac` user and the real `/home/dac/` and `/persistent/` layout
+  inside the disposable guest. Replace the fixture's text-only code,
+  database and Python executables with runnable artifacts, a SQLite database
+  and separate permanent Python environments. Preserve absent-file cases.
+- Install the generated recovery unit and startup drop-ins with
+  `scripts/setup_services.sh`, using `--recovery-only` when installing only
+  recovery. Use real systemd operation units named
+  `free-sleep-revert.service`, `free-sleep-migrate.service` and
+  `free-sleep-rollback.service`. `System.operation()` requires their real
+  `InvocationID`, active state and maintenance lock. Running a transaction
+  from an ordinary shell or a differently named transient unit is not enough.
+- Replace `FixtureSystem` and `offline_recover()` mocks with real service
+  stops/starts, user permissions, dependency preparation, migrations,
+  effective unit inspection and both firewall families. Feed recorded sensor
+  input to a device-free stream and provide a loopback server for status and
+  handoff. Keep sustained readiness checks active; do not replace them with
+  immediate success. Record which sensor processing paths the replay covers.
+- Supply staged downloads through guest loopback or a guest-only download
+  adapter so the installed upstream updater guard runs without external
+  access. Do not substitute a successful return code for an upstream update.
+- Add guest-only pause hooks around journal publication and each destructive
+  mutation, based on the fixture's `--kill-fixture` hooks. Signal the VM
+  console after the hook is reached and block until termination or reboot.
+  Keep the hooks outside shipped code. Persist the case and boundary on disk
+  so the console can collect results after reboot.
+- Retain journals, snapshots, package hashes, unit definitions, service
+  identities, firewall rules and logs across reboot. Compare them against
+  the stopped source snapshot, including bytes, absence, ownership and modes.
+
+Once that runner is available, run this sequence by hand from the VM
+console. Repeat with Biometrics enabled and disabled, and with both baseline
+files present, unknown provenance and one baseline absent:
+
+1. Run an uninterrupted forward switch to the exact candidate. Check the
+   converted settings, isolated upstream environment, updater guard and
+   sustained readiness before accepting the committed journal.
+2. Restore the VM snapshot and repeat forward switching with a pause before
+   and after every journal publication and mutation. Include stopping
+   writers, baseline quarantine, settings conversion, both tree renames,
+   saving and publishing the venv, system reconciliation, validation startup,
+   readiness, retained-slot publication and durable commit.
+3. At each pause, test termination and reboot separately. For termination,
+   use `sudo systemctl kill --kill-whom=all --signal=SIGKILL <operation-unit>`,
+   then `sudo systemctl restart free-sleep-recover-switch.service` (the
+   recovery unit uses `RemainAfterExit=yes`). Also test killing only the main
+   process with `--kill-whom=main` so recovery must stop surviving descendants
+   that hold the lock. For reboot,
+   restore and rerun the case to that pause, then use `sudo systemctl reboot`;
+   let the installed boot recovery run without invoking it by hand. Also
+   reset the guest from the VM console at representative boundaries to test
+   recovery without orderly shutdown or shell traps.
+4. Before commit, require offline restoration of the complete source tree,
+   settings, calibration files, environment mapping and system configuration.
+   Incompatible writers must not start first. After commit, require only
+   cleanup of the validated target. Repeat recovery to check idempotence.
+   Check that a corrupt journal blocks writers, and that no journal permits
+   ordinary startup. Check enabled and active service states separately.
+5. From a successful forward switch, run the subsequent upstream update
+   through its installed update unit using the staged artifact. Exercise
+   interruption and reboot during that update, including replacement of its
+   rollback slot. Recalibrate using replayed empty-bed input, including
+   interruption/reboot while publishing baselines. Require a complete
+   calibration set or an explicit unknown provenance status, without silent
+   reuse of mixed or incompatible baselines. Edit the weekly schedule and add
+   sleep history. Record the newer calibration and updater.
+6. Return through the migration operation, then test cross-fork rollback in
+   both directions and an ordinary Nightstand rollback. Repeat the precommit
+   and postcommit interruption/reboot cases, including after activation of
+   companion state and venv publication. A failed return must restore the
+   current upstream installation and its newer calibration, updater and data.
+   A failed rollback must restore the installation that was running when it
+   began, with its companion state intact. Missing companion state must
+   refuse cross-fork rollback before stopping services.
+7. After a successful return, check intervening histories and weekly schedule
+   edits, both saved calibration sets and their provenance, Rhythms data and
+   fingerprint behavior, effective units and executable paths, firewall
+   closure and watchdog configuration. Confirm that the upstream updater's
+   `ExecStart` override is gone. A VM checks watchdog configuration only;
+   hardware behavior still needs the next stage.
+
+For each case, save the journal and `journalctl -b` output before resetting
+the snapshot. Use `systemctl cat` and `systemctl show` to capture effective
+units, `iptables-save` and `ip6tables-save` for active rules, and package
+hashes plus `/home/dac/venv`'s resolved path for environment comparisons.
+An HTTP response alone does not establish successful sensor processing.
+
+### Hardware round-trip checklist
+
+Run this only with explicit authorization, during the day on an unoccupied
+Pod. Finish the VM gate first. Read
+[EIGHT_SLEEP_PROTOCOL.md](EIGHT_SLEEP_PROTOCOL.md) before hardware work.
+
+1. Arrange console or SSH recovery access that will remain usable after an
+   upstream update. Copy the application, data, calibration and configuration
+   backups off the Pod and verify a restore before switching. Record the
+   starting Nightstand build, Pod model, firmware and observed sensor format.
+2. Exercise both sides' controls, scheduled power and temperature changes,
+   and alarm behavior on Nightstand. Record the schedules, histories,
+   calibration provenance, effective units, firewall and watchdog state for
+   comparison. Test Biometrics disabled and enabled as separate cases.
+3. Switch to the exact upstream 3.0.3 candidate artifact. Check both-side
+   controls, schedules and alarms, including the documented conversions.
+   Confirm disabled Biometrics stays disabled. With Biometrics enabled,
+   verify fresh successful sensor processing beyond startup, including the
+   readiness window (at least 90 seconds uninterrupted runtime within five
+   minutes), unchanged service identity and advancing processing records.
+4. Run a subsequent upstream update and record its exact artifact. Repeat
+   the controls and processing checks. Run empty-bed recalibration, then
+   controlled occupied/unoccupied presence checks on each side. Keep the
+   newer upstream calibration, add sleep history and make a weekly schedule
+   edit that can be checked after return.
+5. At representative precommit boundaries, test termination and controlled
+   reboot with recovery access ready. Include after venv publication on the
+   forward switch, and during return after upstream recalibration. Confirm
+   complete source restoration before writers restart. Repeat the case from
+   verified backups rather than continuing from an unexplained partial state.
+6. Return to Nightstand through the SSH migration tool. Recheck both-side
+   controls, scheduled power/temperature and alarms, disabled and enabled
+   Biometrics, fresh processing and presence. Verify the intervening histories
+   and schedule edits, both saved calibration sets and matching provenance,
+   effective units, firewall closure and watchdog state. Record any failed or
+   unexercised check; it does not count as a pass.
+
+Keep a test record with dates, exact commits and tree digests for every
+artifact, model, firmware, and the observed RAW or NATS format (or legacy
+`capSense` input). Determine format from actual records, not the model name.
+Include boundary names, termination/reboot method, calibration provenance,
+logs, before/after comparisons and results for each step. Record limitations
+and the actual validation date only after the complete gate passes.
+
+A Pod 5 RAW pass does not validate NATS or legacy `capSense`. Those need
+corresponding hardware coverage before claiming support. VM replay and
+simulated tests do not replace that coverage.
+
 ## Hardware checks
 
 CI can't test hardware. These tables record hardware checks and their limits.

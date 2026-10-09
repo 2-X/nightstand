@@ -80,6 +80,23 @@ allow_dns_to_configured_resolvers() {
   done
 }
 
+# Keep a terminal block even when the kernel cannot install REJECT rules.
+install_drop_tail() {
+  echo "WARNING: $1 REJECT tail unavailable; falling back to DROP" >&2
+  if "$1" -A OUTPUT -j DROP && "$1" -C OUTPUT -j DROP; then
+    return 0
+  fi
+  "$1" -P OUTPUT DROP || true
+  echo "ERROR: could not verify $1 OUTPUT tail; rules will not be saved" >&2
+  return 1
+}
+
+verify_output_tail() {
+  "$1" -C OUTPUT -j REJECT 2>/dev/null || "$1" -C OUTPUT -j DROP 2>/dev/null || install_drop_tail "$1"
+}
+
+FIREWALL_FAILED=no
+
 # IPv4 Rules
 echo "Configuring IPv4 rules..."
 
@@ -88,7 +105,7 @@ bash "$(dirname "$0")/record_stock.sh" firewall 2>/dev/null || true
 
 # Start from a clean slate so the saved ruleset is exactly what this script
 # writes. Otherwise every re-run stacks duplicates, and stale ACCEPT rules above
-# the final DROP survive and get saved at the bottom.
+# the final REJECT survive and get saved at the bottom.
 iptables -F INPUT
 iptables -F OUTPUT
 
@@ -149,8 +166,8 @@ iptables -A OUTPUT -d 224.0.0.251 -p udp --dport 5353 -j ACCEPT
 # Allow Tailscale (https://tailscale.com/kb/1082/firewall-ports)
 #
 # Tailscale gives us remote access to the pod from outside the LAN without
-# exposing it to the public internet. Without these rules, the OUTPUT DROP
-# below would block tailscaled from reaching its control plane and DERP relays.
+# exposing it to the public internet. Without these rules, the final OUTPUT
+# reject below would block tailscaled from reaching its control plane and DERP relays.
 #
 # (1) Anything on the tailscale interface: the VPN payload between the user's
 #     devices and this pod (e.g., phone browser -> https://eight-pod).
@@ -181,12 +198,15 @@ fi
 # blocks on a dropped connection, and an ICMP reject does not end one already open.
 iptables -A OUTPUT -p tcp --dport 1337 -j REJECT --reject-with tcp-reset
 
-# Block everything else
-iptables -A INPUT -j DROP
-iptables -A OUTPUT -j DROP
-
-# Save rules
-iptables-save > /etc/iptables/iptables.rules
+# Reject blocked outbound connections so firmware does not wait for timeouts.
+iptables -A INPUT -j DROP || FIREWALL_FAILED=yes
+if ! {
+  iptables -A OUTPUT -p tcp -j REJECT --reject-with tcp-reset &&
+  iptables -A OUTPUT -p udp -j REJECT --reject-with icmp-port-unreachable &&
+  iptables -A OUTPUT -j REJECT
+}; then
+  install_drop_tail iptables || FIREWALL_FAILED=yes
+fi
 
 echo "Configuring IPv6 rules..."
 ip6tables -F INPUT
@@ -201,6 +221,13 @@ ip6tables -A OUTPUT -d fe80::/10 -j ACCEPT
 ip6tables -A INPUT -s fd00::/8 -j ACCEPT
 ip6tables -A OUTPUT -d fd00::/8 -j ACCEPT
 
+# Discovery includes unicast replies and probes from :: during address checks.
+# Hop limit 255 keeps these four message types on the local link.
+for discovery_type in 133 134 135 136; do
+  ip6tables -A INPUT -p ipv6-icmp --icmpv6-type "$discovery_type" -m hl --hl-eq 255 -j ACCEPT
+  ip6tables -A OUTPUT -p ipv6-icmp --icmpv6-type "$discovery_type" -m hl --hl-eq 255 -j ACCEPT
+done
+
 allow_dns_to_configured_resolvers 6
 
 # Allow NTP traffic (IPv6)
@@ -210,9 +237,34 @@ ip6tables -I INPUT -p udp --sport 123 -j ACCEPT
 ip6tables -A OUTPUT -d ff02::fb -p udp --dport 5353 -j ACCEPT
 
 # Block everything else (IPv6)
-ip6tables -A INPUT -j DROP
-ip6tables -A OUTPUT -j DROP
-ip6tables-save > /etc/iptables/ip6tables.rules
+ip6tables -A INPUT -j DROP || FIREWALL_FAILED=yes
+if ! {
+  ip6tables -A OUTPUT -p tcp -j REJECT --reject-with tcp-reset &&
+  ip6tables -A OUTPUT -p udp -j REJECT --reject-with icmp6-port-unreachable &&
+  ip6tables -A OUTPUT -j REJECT
+}; then
+  install_drop_tail ip6tables || FIREWALL_FAILED=yes
+fi
+verify_output_tail iptables || FIREWALL_FAILED=yes
+verify_output_tail ip6tables || FIREWALL_FAILED=yes
+iptables -C INPUT -j DROP || FIREWALL_FAILED=yes
+ip6tables -C INPUT -j DROP || FIREWALL_FAILED=yes
+[ "$FIREWALL_FAILED" = no ] || exit 1
+
+# A verified tail keeps WAN blocked while clearing the emergency policy.
+iptables -P OUTPUT ACCEPT || FIREWALL_FAILED=yes
+ip6tables -P OUTPUT ACCEPT || FIREWALL_FAILED=yes
+if [ "$FIREWALL_FAILED" = yes ]; then
+  echo "ERROR: could not restore OUTPUT policies; rules will not be saved" >&2
+  exit 1
+fi
+
+# Save only after both families have verified terminal blocks.
+if ! iptables-save > /etc/iptables/iptables.rules ||
+   ! ip6tables-save > /etc/iptables/ip6tables.rules; then
+  echo "ERROR: could not save firewall rules" >&2
+  exit 1
+fi
 
 echo "Blocked WAN internet access successfully!"
 

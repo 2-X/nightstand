@@ -126,3 +126,14 @@ model water_level_events {
 
   @@index([timestamp])
 }
+
+// Retained before detail is pruned. Older readers ignore this table.
+model vitals_summaries {
+  id             Int    @id @default(autoincrement())
+  side           String
+  entered_bed_at Int
+  left_bed_at    Int
+  payload        String
+
+  @@unique([side, entered_bed_at, left_bed_at])
+}

@@ -24,10 +24,31 @@ NAME_RE='^([0-9]{8}-[0-9]{6}_v[A-Za-z0-9.+-]+_(update|switch)|[0-9]{8}T[0-9]{6}Z
 [ -d "$DIR" ] || exit 0
 DIR="${DIR%/}"
 [ -n "$DIR" ] || exit 0
+DIR=$(cd -- "$DIR" && pwd -P) || exit 1
+
+# A retained tree can still need its transaction's database backup after commit.
+# An unreadable journal blocks pruning so recovery evidence is not discarded.
+TRANSACTIONS="${NIGHTSTAND_TRANSACTION_ROOT:-/persistent/free-sleep-maintenance/nightstand-transactions}"
+PROTECTED=""
+if [ -e "$TRANSACTIONS" ] || [ -L "$TRANSACTIONS" ]; then
+  PROTECTED=$(python3 -B "$(dirname "${BASH_SOURCE[0]}")/switch_transaction.py" --root "$TRANSACTIONS" protected-backups) || {
+    echo "Could not read switch transactions; database snapshots were not pruned" >&2
+    exit 1
+  }
+fi
+protected() {
+  local backup
+  while IFS= read -r backup; do
+    [ -n "$backup" ] || continue
+    [ "$backup" != "$DIR/$1" ] || return 0
+  done <<< "$PROTECTED"
+  return 1
+}
 
 free_mb() { { df -kP "$1" 2>/dev/null || true; } | awk 'NR == 2 && $4 ~ /^[0-9]+$/ { print int($4 / 1024) }'; }
 mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null; }
 remove() {
+  protected "$1" && return 1
   if rm -f -- "$DIR/$1" 2>/dev/null && [ ! -e "$DIR/$1" ]; then
     echo "Removed old database snapshot $1"
   else

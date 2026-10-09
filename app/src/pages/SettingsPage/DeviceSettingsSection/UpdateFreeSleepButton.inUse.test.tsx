@@ -7,7 +7,7 @@ import { SIDE_ON, serveInUse } from '@test/inUse';
 import UpdateFreeSleepButton from './UpdateFreeSleepButton';
 
 const manifest = { channels: ['stable', 'beta'], releases: [{ kind: 'agent', version: '3.2.0', channel: 'stable', date: '2026-09-20' }] };
-const OPEN = { name: /^Update(?: to.*)?$/ };
+const OPEN = { name: 'Update to v3.2.0' };
 const IDLE = 'Nightstand restarts to finish, and schedules and alarms pause for up to five minutes.';
 const TIMED_OUT = 'Until this page loads again, schedules and alarms are not running.';
 
@@ -20,6 +20,7 @@ const openDialog = async () => {
   const view = renderWithProviders(<UpdateFreeSleepButton runningVersion="3.0.0"/>);
   await waitFor(() => expect(screen.getByRole('button', OPEN)).toBeEnabled());
   await view.user.click(screen.getByRole('button', OPEN));
+  await screen.findByRole('dialog', { name: 'Update to v3.2.0?' });
   return view;
 };
 
@@ -54,6 +55,6 @@ describe('UpdateFreeSleepButton when the bed may be in use', () => {
     const { user } = await openDialog();
     await user.click(await screen.findByRole('button', { name: 'Update now' }));
     await act(async () => { await vi.advanceTimersByTimeAsync(10 * 60 * 1000 + 10_000); });
-    expect(screen.getByRole('dialog', { name: 'Still not done' })).toHaveTextContent(TIMED_OUT);
+    expect(await screen.findByRole('dialog', { name: 'Still not done' })).toHaveTextContent(TIMED_OUT);
   });
 });

@@ -231,6 +231,6 @@ describe('beta on stable notice waits for the saved channel', () => {
     const { user } = renderWithProviders(<VersionsPage />);
     await user.click(await screen.findByRole('button', { name: 'Switch to Beta' }));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Switch to Beta' })).not.toBeInTheDocument());
-    expect(screen.getByRole('button', { name: /Update channel Beta/ })).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole('button', { name: /Update channel Beta/ })).toHaveFocus());
   });
 });

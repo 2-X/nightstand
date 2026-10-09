@@ -57,6 +57,28 @@ const envWith = (extra: Record<string, string>) => {
   return { ...env, ...extra };
 };
 
+describe('install.sh prebuilt-image credential check', () => {
+  for (const helperStatus of [null, 0, 1]) {
+    it(`continues with credential helper status ${helperStatus ?? 'absent'}`, t => {
+      const folder = mkdtempSync(path.join(tmpdir(), 'nightstand-image-check-'));
+      t.after(() => rmSync(folder, { recursive: true, force: true }));
+      mkdirSync(path.join(folder, 'scripts'));
+      if (helperStatus !== null) {
+        writeFileSync(path.join(folder, 'scripts/check_image_credentials.sh'),
+          `#!/bin/bash\necho checked\nexit ${helperStatus}\n`);
+      }
+      const section = between('# Optional on older releases', '# Finish');
+      const result = spawnSync('bash', ['-c', `set -euo pipefail\nREPO_DIR="$FIXTURE"\n${section}\necho continued`], {
+        encoding: 'utf8', env: envWith({ FIXTURE: folder }),
+      });
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /continued/);
+      assert.equal(result.stdout.includes('checked'), helperStatus !== null);
+      assert.equal(result.stdout.includes('WARNING'), helperStatus === 1);
+    });
+  }
+});
+
 interface Saved { old?: string; current?: string }
 
 function pick(env: Record<string, string> = {}, manifest = BETA_FIRST, curl = `printf '%s' '${manifest}'`, saved: Saved = {}) {

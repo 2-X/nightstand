@@ -70,7 +70,7 @@ export default function SchedulePage({ notice: noticeProp }: { notice?: Notice }
   } = useScheduleStore();
   const { data: settings, refetch: refetchSettings, isError: settingsError } = useSettings();
   const { data: deviceStatus } = useDeviceStatus();
-  const risePattern = supportsRisePattern(deviceStatus?.hubVersion);
+  const risePattern = supportsRisePattern(deviceStatus?.hubVersion, deviceStatus?.coverVersion);
   const format = settings?.temperatureFormat ?? 'fahrenheit';
   const [saveError, setSaveError] = useState('');
   const [pendingChange, setPendingChange] = useState<{ day: number } | { side: 'left' | 'right' } | { leave: () => void }>();

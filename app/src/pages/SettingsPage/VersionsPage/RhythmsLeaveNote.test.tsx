@@ -28,7 +28,8 @@ it('adds the line to the rollback and switch dialogs while Rhythms is on', async
   expect(await screen.findByText(NOTE)).toBeInTheDocument();
   rollback.unmount();
   const revert = renderWithProviders(<RevertToStockRow runningVersion="3.5.0"/>);
-  await revert.user.click(screen.getByText('Switch to upstream free-sleep'));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Switch to upstream free-sleep' })).toBeEnabled());
+  await revert.user.click(screen.getByRole('button', { name: 'Switch to upstream free-sleep' }));
   expect(await screen.findByText(NOTE)).toBeInTheDocument();
 });
 

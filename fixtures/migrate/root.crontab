@@ -1,0 +1,5 @@
+MAILTO=""
+# Keep this comment: /usr/local/bin/sync-time-with-internet.sh
+0 6,18 * * * /usr/local/bin/sync-time-with-internet.sh
+15 2 * * * /usr/local/bin/backup.sh
+0 6,18 * * * /home/dac/free-sleep/scripts/unblock_internet_access.sh; sleep 20; /home/dac/free-sleep/scripts/block_internet_access.sh

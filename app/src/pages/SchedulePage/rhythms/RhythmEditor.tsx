@@ -64,7 +64,7 @@ export default function RhythmEditor({
   }));
   const isUpdating = useAppStore(state => state.isUpdating);
   const { data: deviceStatus } = useDeviceStatus();
-  const risePattern = supportsRisePattern(deviceStatus?.hubVersion);
+  const risePattern = supportsRisePattern(deviceStatus?.hubVersion, deviceStatus?.coverVersion);
   const night = useScheduleStore(state => state.selectedSchedule);
   const nightBaseline = useScheduleStore(state => state.nightBaseline);
   const nightChanged = useScheduleStore(state => state.changesPresent);

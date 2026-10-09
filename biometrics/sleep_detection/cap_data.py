@@ -16,8 +16,11 @@ Usage:
 """
 
 import json
+import hashlib
 import math
+import os
 import sqlite3
+import tempfile
 import pandas as pd
 from datetime import datetime
 import calibration
@@ -120,19 +123,29 @@ def save_baseline(side: Side, cap_baseline: dict):
         file_path = LEFT_CAP_BASE_LINE_FILE_PATH
     logger.debug(f'Saving {side} side cap_baseline to {file_path}')
 
-    with open(file_path, "w") as json_file:
-        json.dump(cap_baseline, json_file, indent=4)
-        json_file.close()
+    descriptor, temporary = tempfile.mkstemp(dir=os.path.dirname(file_path))
+    try:
+        with os.fdopen(descriptor, 'w') as json_file:
+            json.dump(cap_baseline, json_file, indent=4, allow_nan=False)
+            json_file.flush()
+            os.fsync(json_file.fileno())
+        os.replace(temporary, file_path)
+        directory = os.open(os.path.dirname(file_path), os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
-def load_baseline(side: Side):
-    """The active capSense baseline, or None when nothing is calibrated yet.
+def load_baseline(side: Side, cap_formats=None):
+    """Read Nightstand baselines, checking format and normalization when tagged.
 
-    Reads the calibration store first and falls back to the legacy JSON file
-    for one release, so a pod rolled forward mid-cycle still finds its
-    baseline. Returns None rather than raising: never having calibrated is a
-    normal state on a fresh install, and callers skip capacitive presence and
-    use the piezo signal alone.
+    Untagged baselines keep the behavior of earlier Nightstand versions.
+    Incompatible provenance returns None, so analysis uses piezo.
+    A legacy file can be read while the calibration store is unavailable.
     """
     try:
         profile = calibration.get_profile(side, 'cap')
@@ -140,21 +153,36 @@ def load_baseline(side: Side):
         logger.warning(f'Calibration store read failed for the {side} side, falling back to the legacy file: {e}')
         profile = None
 
+    observed = calibration.observed_cap_format(cap_formats)
+
+    def usable(payload):
+        return calibration.provenance_matches(payload, observed) and calibration.valid_channels(payload, side)
+
     if profile is not None:
-        return profile['payload']
+        return profile['payload'] if usable(profile['payload']) else None
 
     file_path = RIGHT_CAP_BASELINE_FILE_PATH if side == 'right' else LEFT_CAP_BASE_LINE_FILE_PATH
     try:
         if calibration.import_legacy_baseline(side, file_path):
             imported = calibration.get_profile(side, 'cap')
             if imported is not None:
-                return imported['payload']
-    except sqlite3.Error as e:
-        logger.warning(f'Calibration store unavailable while importing the legacy {side} baseline: {e}')
+                return imported['payload'] if usable(imported['payload']) else None
+    except (sqlite3.Error, OSError, ValueError, TypeError) as e:
+        logger.warning(f'Could not import the legacy {side} baseline: {e}')
+
+    try:
+        with open(file_path, 'rb') as source:
+            data = source.read()
+        payload = calibration.baseline_payload(json.loads(data), hashlib.sha256(data).hexdigest())
+        if usable(payload):
+            return payload
+    except (OSError, ValueError, TypeError):
+        pass
 
     logger.warning(
         f'No capSense baseline for the {side} side yet. Calibration runs '
-        'automatically once the sensors record a stretch of empty bed.'
+        'automatically once the sensors record a stretch of empty bed. '
+        'Stored provenance must match the records being analyzed.'
     )
     return None
 

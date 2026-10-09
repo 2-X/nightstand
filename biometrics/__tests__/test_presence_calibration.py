@@ -248,7 +248,10 @@ class DeltaNoiseTest(unittest.TestCase):
         plain = self._window(rows)
         noisy = self._window(rows)
         detect_presence_cap(plain, baseline, 'left', occupancy_threshold=5, rolling_seconds=10, threshold_percent=0.9, clean=False)
-        detect_presence_cap(noisy, {**baseline, 'delta_noise': 0.05}, 'left', occupancy_threshold=5,
+        detect_presence_cap(noisy, {**baseline, 'delta_noise': 0.05,
+                                    'provenance': {'format': 'capSense2', 'normalizationVersion': 1,
+                                                   'origin': 'nightstand', 'sourceHash': 'a' * 64}},
+                            'left', occupancy_threshold=5,
                             rolling_seconds=10, threshold_percent=0.9, clean=False)
         pd.testing.assert_frame_equal(plain, noisy)
 
@@ -308,9 +311,21 @@ class CalibratorRunTest(unittest.TestCase):
                 legacy_bytes = handle.read()
         return calibration.get_profile('left', 'cap', conn=conn)['payload'], legacy_bytes
 
-    def test_switched_off_the_baseline_is_what_it_always_was(self):
+    def test_success_run_keeps_format_for_older_status_readers(self):
+        recorded = []
+        original = calibration.record_run
+        def capture(*args, **kwargs):
+            if args[1] == 'cap' and args[2] == calibration.STATUS_SUCCESS:
+                recorded.append(kwargs['payload'])
+            return original(*args, **kwargs)
+        with unittest.mock.patch.object(calibration, 'record_run', capture):
+            profile, _ = self._calibrate(enabled=True)
+        self.assertEqual(recorded[0]['format'], 'capSense2')
+        self.assertEqual(recorded[0]['provenance'], profile['provenance'])
+
+    def test_switched_off_channel_keys_remain_compatible(self):
         payload, legacy_bytes = self._calibrate(enabled=False)
-        self.assertEqual(sorted(payload), ['left_cen', 'left_in', 'left_out'])
+        self.assertEqual(sorted(key for key in payload if key != 'provenance'), ['left_cen', 'left_in', 'left_out'])
         self.assertEqual(legacy_bytes, json.dumps(payload, indent=4).encode())
 
     def test_switched_on_the_noise_is_added_and_the_channels_are_unchanged(self):
@@ -322,6 +337,43 @@ class CalibratorRunTest(unittest.TestCase):
         # The wobble alone; with the half-level rows left in it reads about 0.26.
         self.assertGreater(noise, 0.0)
         self.assertLess(noise, 0.1)
+
+    def test_calibrator_tags_profiles_and_legacy_files_with_tracking_off_and_on(self):
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled):
+                payload, legacy_bytes = self._calibrate(enabled)
+                provenance = payload['provenance']
+                self.assertEqual(provenance['format'], 'capSense2')
+                self.assertEqual(provenance['normalizationVersion'], 1)
+                self.assertEqual(provenance['origin'], 'nightstand')
+                self.assertRegex(provenance['sourceHash'], r'^[0-9a-f]{64}$')
+                self.assertEqual(json.loads(legacy_bytes)['provenance'], provenance)
+
+    def test_mixed_format_calibration_does_not_replace_baseline(self):
+        conn = sqlite3.connect(':memory:')
+        self.addCleanup(conn.close)
+        conn.executescript(SCHEMA + 'CREATE TABLE vitals (timestamp INTEGER NOT NULL);')
+        start = datetime.fromtimestamp(scenarios.T0, timezone.utc)
+        def mixed():
+            yield from empty_bed_records()
+            yield {'type': 'capSense', 'ts': scenarios.T0 + 10,
+                   'left': {'out': 500, 'cen': 500, 'in': 500, 'status': 'good'},
+                   'right': {'out': 500, 'cen': 500, 'in': 500, 'status': 'good'}}
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled), tempfile.TemporaryDirectory() as folder:
+                scenarios.write_raw_file(os.path.join(folder, 'empty.RAW'), mixed())
+                legacy = os.path.join(folder, 'left_cap_baseline.json')
+                with open(legacy, 'wb') as output:
+                    output.write(b'original baseline')
+                with unittest.mock.patch.object(load_raw_files.logger, 'folder_path', folder + '/'), \
+                        unittest.mock.patch.object(cap_data, 'LEFT_CAP_BASE_LINE_FILE_PATH', legacy), \
+                        unittest.mock.patch.object(calibration, '_connection', lambda conn_=None: conn_ or conn), \
+                        unittest.mock.patch.object(self.calibrator, 'biometrics_v2_enabled', return_value=enabled):
+                    with self.assertRaisesRegex(ValueError, 'format'):
+                        self.calibrator.calibrate_sensor_thresholds('left', start, start + timedelta(seconds=EMPTY_SECONDS), folder)
+                with open(legacy, 'rb') as saved:
+                    self.assertEqual(saved.read(), b'original baseline')
+                self.assertIsNone(calibration.get_profile('left', 'cap', conn=conn))
 
 
 if __name__ == '__main__':

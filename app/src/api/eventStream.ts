@@ -65,6 +65,7 @@ function applyEvent(env: EventEnvelope, qc: QueryClient): void {
     break;
   }
   case 'service-health':
+    void qc.invalidateQueries({ queryKey: ['firmware'] });
     // Partial server status patch: easiest path is to invalidate so the
     // next read fetches the canonical full snapshot.
     void qc.invalidateQueries({ queryKey: ['useServerStatus'] });

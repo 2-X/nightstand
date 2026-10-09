@@ -945,7 +945,8 @@ ${switchSettings}`, '1.0.0'],
 ]) {
   const revert = file === 'scripts/switch-to-upstream.sh';
   const script = `${revert ? `${revertSettings}\n` : ''}${withExitHandling(file, systemFiles(section(file, '# --- atomic swap')))}`;
-  const setup = (extra: string) => `${stubs}\n${statefulServices()}\n${lentModules}\nfw4() { :; }; sh() { :; }\n${staging}\n${extra}`;
+  const setup = (extra: string) =>
+    `${stubs}\n${statefulServices()}\n${lentModules}\nfw4() { :; }; fw6() { :; }; sh() { :; }\n${staging}\n${extra}`;
   const interruptions: [string, string][] = [
     ['after the dependencies move', 'mv() { command mv "$@" || return; [ "$1" != "$PREV/server/node_modules" ] || kill -TERM $$; }'],
     ['after the new server starts', `TERM_ON="start free-sleep"\n${answering(healthyVersion)}`],
@@ -1010,16 +1011,18 @@ TERM_ON_HEALTH=1`));
     });
 
     // A healthy version whose firewall cannot be applied is rolled back too.
-    it(`${file} interrupted while rolling back after a failed firewall still puts the previous tree back`, () => {
-      const result = run(script, setup(`${answering(healthyVersion)}\nfw4() { return 1; }
+    for (const [family, tool] of [['IPv4', 'fw4'], ['IPv6', 'fw6']]) {
+      it(`${file} interrupted while rolling back after a failed ${family} firewall still puts the previous tree back`, () => {
+        const result = run(script, setup(`${answering(healthyVersion)}\n${tool}() { return 1; }
 ${onSystemctl('stop free-sleep', 'staged', 'TERM_ON="stop free-sleep"')}`));
-      assert.equal(result.status, 143, result.stdout + result.stderr);
-      assert.match(result.stdout, /New firewall could not be applied/);
-      assert.equal(result.liveVersion.trim(), 'failed', result.stdout);
-      assert.equal(result.modules, 'deps\n', result.stdout);
-      assert.equal(result.serverState, 'active', result.services);
-      assert.equal(result.phase, 'restored');
-    });
+        assert.equal(result.status, 143, result.stdout + result.stderr);
+        assert.match(result.stdout, /New firewall could not be applied/);
+        assert.equal(result.liveVersion.trim(), 'failed', result.stdout);
+        assert.equal(result.modules, 'deps\n', result.stdout);
+        assert.equal(result.serverState, 'active', result.services);
+        assert.equal(result.phase, 'restored');
+      });
+    }
   }
 
   it(`${file} keeps the new version once it passes its health check`, () => {
@@ -1049,5 +1052,23 @@ it('serves_version refuses a requirement it does not know', () => {
     const result = run(`${fn}\nHBODY="$FIXTURE/health"; serves_version 3.2.0 '${requirement}'`, `${statefulServices()}
 curl() { printf '%s' '{"freeSleep":{"version":"3.2.0"},"left":{"currentTemperatureF":80}}' > "$FIXTURE/health"; printf 200; }`);
     assert.equal(result.status, status, `${requirement}: ${result.stdout}${result.stderr}`);
+  }
+});
+
+it('refuses cross-fork rollback without companion state before executing a transaction', () => {
+  const helper = section('scripts/restore_helpers.sh', 'restore_cross_fork_rollback() {');
+  for (const available of [false, true]) {
+    const result = run(helper + '\nrestore_cross_fork_rollback\n', `
+mkdir -p "$LIVE/scripts"
+touch "$LIVE/scripts/switch_installation.py"
+python3() {
+  printf '%s\\n' "$*" >> "$FIXTURE/marker"
+  if [ "$3" = companion ]; then return ${available ? 0 : 1}; fi
+  [ "$3" = rollback ]
+}
+`);
+    assert.equal(result.status, available ? 0 : 1, result.stderr);
+    assert.equal(result.marker.includes('rollback --stage'), available);
+    assert.match(result.marker, /companion --stage/);
   }
 });

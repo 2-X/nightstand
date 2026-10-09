@@ -94,6 +94,14 @@ describe('FEATURES_MANIFEST', () => {
     }
   });
 
+  it('describes the interrupted update outcome shown after recovery', () => {
+    const entry = FEATURES_MANIFEST.find((candidate) => candidate.id === 'update-recovery');
+    assert.ok(entry);
+    assert.match(entry.description, /records the outcome/);
+    assert.match(entry.description, /server or Biometrics restart failures/);
+    assert.doesNotMatch(entry.description, /records no new result/);
+  });
+
   it('points update, biometrics and alarm tap entries at files that exist', () => {
     for (const id of ['agent', 'biometrics', 'tap-alarm']) {
       const entry = FEATURES_MANIFEST.find((candidate) => candidate.id === id);

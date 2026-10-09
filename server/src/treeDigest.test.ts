@@ -157,6 +157,7 @@ cat "$FAKE_MANIFEST"
   const scriptDir = path.join(dir, 'scripts');
   mkdirSync(scriptDir);
   copyFileSync(path.join(repoRoot, 'scripts/write_result.py'), path.join(scriptDir, 'write_result.py'));
+  copyFileSync(path.join(repoRoot, 'scripts/restore_helpers.sh'), path.join(scriptDir, 'restore_helpers.sh'));
   const end = script.indexOf(marker);
   assert.ok(end > 0, `missing ${marker}`);
   const file = path.join(scriptDir, 'run.sh');

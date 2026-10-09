@@ -113,6 +113,12 @@ export const defaultFeatures = {
   nightstandTheme: true,
   rhythms: false,
   biometricsV2: false,
+  firmwareTargetReadout: false,
+  firmwareHealth: false,
+  tapDiagnostics: false,
+  coolingWarning: false,
+  metricsRetention: false,
+  metricsLowDiskProtection: true,
   // The buttons on a Pod 5 cover (buttonMonitor.ts). Off: no RAW file is read.
   coverButtons: false,
 } as const;
@@ -124,6 +130,12 @@ const FeaturesSchema = z.object({
   nightstandTheme: z.boolean(),
   rhythms: z.boolean(),
   biometricsV2: z.boolean(),
+  firmwareTargetReadout: z.boolean(),
+  firmwareHealth: z.boolean(),
+  tapDiagnostics: z.boolean(),
+  coolingWarning: z.boolean(),
+  metricsRetention: z.boolean(),
+  metricsLowDiskProtection: z.boolean(),
   coverButtons: z.boolean(),
 }).strict();
 

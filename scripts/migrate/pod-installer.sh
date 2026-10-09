@@ -30,6 +30,7 @@ PREV=/home/dac/free-sleep-prev
 # mere existence of $PREV, which could be the pod's own pre-existing slot.
 PREEXISTING_PREV=/home/dac/free-sleep-prev-preexisting
 SWAP_MARKER=/home/dac/free-sleep-migrate-swapped
+RESTORE_STATE=/home/dac/free-sleep-migrate-restore-state
 STAGE=/home/dac/free-sleep-migrate-staging
 ZIP=/home/dac/free-sleep-migrate.zip
 LOCK_FILE=/home/dac/free-sleep-migrate.lock
@@ -51,6 +52,10 @@ RELEASES_URL="https://raw.githubusercontent.com/LTimothy/nightstand/main/release
 # main only moves at a release, so its tip is always the newest release.
 MAIN_ZIP_URL="https://github.com/LTimothy/nightstand/archive/refs/heads/main.zip"
 
+# Recheck before staging. Standalone runs need the laptop's explicit cleanup consent.
+REMOVE_FOREIGN=${1:-no}
+ARTIFACT_HELPER="$REPO_DIR_SELF/migrate/fork-artifacts.sh"
+
 mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
 exec > >(tee -a "$LOG_FILE") 2>&1
 
@@ -63,10 +68,38 @@ write_status() {
     "$1" "$2" "$3" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATUS_FILE" 2>/dev/null || true
 }
 
+if [ ! -f "$ARTIFACT_HELPER" ]; then
+  say "Refusing switch: fork artifact helper is missing"
+  write_status preflight refused "fork artifact helper is missing"
+  exit 1
+fi
+if ! bash "$ARTIFACT_HELPER" check "$REMOVE_FOREIGN"; then
+  write_status preflight refused "fork artifact check refused the switch; see the migration log"
+  exit 1
+fi
+
+# Share admission with updates, rollback and the forward switch.
+if [ "${NIGHTSTAND_OPERATION_OWNER:-}" != "$$" ]; then
+  OPERATION_LOCK="${NIGHTSTAND_OPERATION_LOCK:-/run/lock/free-sleep-operation.lock}"
+  if [ -z "${NIGHTSTAND_OPERATION_LOCK:-}" ] && [ ! -d /run/lock ]; then
+    OPERATION_LOCK=/tmp/free-sleep-operation.lock
+  fi
+  if [ -e "$OPERATION_LOCK" ]; then exec 9<"$OPERATION_LOCK"; else exec 9>>"$OPERATION_LOCK"; fi \
+    || exit 1
+  python3 -c 'import fcntl; fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)' \
+    || { write_status preflight refused "another maintenance operation holds the lock"; exit 1; }
+  export NIGHTSTAND_OPERATION_OWNER="$$"
+fi
+
 # --- lock: refuse concurrent runs, refuse if any fork's updater is active ----
 if [ -e "$LOCK_FILE" ]; then
   say "FATAL: $LOCK_FILE exists, a migration is already in progress or a previous run left it behind."
   write_status "preflight" "refused" "lock file present; refusing to start a second migration"
+  exit 1
+fi
+if [ -e "$RESTORE_STATE" ]; then
+  say "FATAL: previous migration recovery is incomplete; run $RESTORE_SCRIPT_DEST before retrying."
+  write_status "preflight" "refused" "restore state present; refusing to start another migration"
   exit 1
 fi
 : > "$LOCK_FILE"
@@ -260,6 +293,28 @@ if [ -f "$DATABASE" ]; then
   say "Database snapshot retained at $DATABASE_BACKUP"
 fi
 
+# A transactional return preserves the current upstream calibration and updater.
+if [ -f "$STAGE/scripts/switch_installation.py" ]; then
+  RETURN_COMPANION=$(python3 -B "$STAGE/scripts/switch_installation.py" return-companion)
+  COMPANION_STATUS=$?
+  if [ "$COMPANION_STATUS" -eq 0 ]; then
+    write_status swap in_progress "returning with retained companion state"
+    NIGHTSTAND_MIGRATION_CLEANUP="$REMOVE_FOREIGN" python3 -B "$STAGE/scripts/switch_installation.py" return --stage "$STAGE" --retained "$RETURN_COMPANION"
+    RETURN_STATUS=$?
+    if [ "$RETURN_STATUS" -eq 0 ]; then
+      write_status install success "returned to Nightstand with companion state; upstream retained for rollback"
+      exit 0
+    fi
+    if [ "$RETURN_STATUS" -eq 3 ]; then
+      write_status install restored "return failed; current upstream installation restored"
+    else
+      write_status install restore_failed "return stopped; inspect the retained transaction journal"
+    fi
+    exit 1
+  fi
+  [ "$COMPANION_STATUS" -eq 2 ] || fail "retained companion state is unreadable; refusing return"
+fi
+
 # ==============================================================================
 # Dead-man sentinel, armed immediately before we touch their service.
 # ==============================================================================
@@ -314,6 +369,8 @@ restore_and_report() {
 # ==============================================================================
 write_status "swap" "in_progress" "stopping original service"
 say "Stopping their service (their tree is untouched up to this point)"
+bash "$ARTIFACT_HELPER" clean "$REMOVE_FOREIGN" \
+  || { restore_and_report "legacy fork artifact cleanup failed before checkpoint"; exit 1; }
 systemctl stop free-sleep >/dev/null 2>&1 \
   || { restore_and_report "could not stop original server"; exit 1; }
 STREAM_WAS_ACTIVE=no
@@ -495,8 +552,11 @@ disarm_sentinel
 # Their original tree now lives at $PREV as this fork's instant-rollback slot;
 # their older pre-existing slot (if any) is intentionally retired, and the swap
 # marker is cleared so a stray later restore run correctly no-ops.
+rm -f "$SWAP_MARKER" || { restore_and_report "could not clear the swap marker"; exit 1; }
+sync
+bash "$ARTIFACT_HELPER" finish \
+  || { restore_and_report "could not retire legacy artifact restore marker"; exit 1; }
 rm -rf "$IPTABLES_SNAPSHOT" "$BASELINE_FILE" "$RESTORE_SCRIPT_DEST" "$PREEXISTING_PREV"
-rm -f "$SWAP_MARKER"
 write_status "install" "success" "migrated to v$STAGED_VERSION; previous fork kept at $PREV (in-app instant rollback)"
 say "SUCCESS: migrated to v$STAGED_VERSION. Their original install is kept at $PREV; Settings > Software > Recovery in the app can go back to it."
 

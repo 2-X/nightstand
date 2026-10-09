@@ -2,22 +2,23 @@
 # Runs after the update and revert units stop, however they stopped. An
 # updater that was killed outright leaves its download rules in OUTPUT, at
 # the top unless another rule was inserted since; remove them wherever they
-# are and apply the block again. When the firewall has no final DROP,
+# are and apply the block again. When neither family has a final DROP or REJECT,
 # internet access was opened on purpose, so only the download rules go.
-# Does nothing when no download rules are left.
+# Saves recovered rules only when both families also have INPUT DROP.
 LIVE=/home/dac/free-sleep
 PREV=/home/dac/free-sleep-prev
 
-# iptables 1.6.0 added "-w SECONDS"; older builds take a bare -w or no flag.
-IPT_W=
-for IPT_W in "-w 5" "-w" ""; do
-  # shellcheck disable=SC2086
-  iptables $IPT_W -S OUTPUT >/dev/null 2>&1 && break
-done
-# shellcheck disable=SC2086
-fw4() { iptables $IPT_W "$@"; }
-# shellcheck disable=SC2086
-fw6() { ip6tables $IPT_W "$@"; }
+source "$(dirname "${BASH_SOURCE[0]}")/restore_helpers.sh" || exit 1
+init_update_firewall
+
+restore_closed_output_policy() {
+  if [ -n "$(left_open)" ] || output_rules fw6 | grep -Fxq -- "$WAN_RULE6"; then
+    restore_output_policy
+    echo "WARNING: download rules remain; recovered firewall rules will not be saved"
+  else
+    restore_output_policy save
+  fi
+}
 
 WAN_RULES=("-p tcp --dport 443 -j ACCEPT" "-p udp --dport 53 -j ACCEPT" "-p tcp --dport 53 -j ACCEPT")
 WAN_RULE6="-p tcp --dport 443 -j REJECT --reject-with tcp-reset"
@@ -62,11 +63,16 @@ while [ "$REMOVED" -lt 20 ] && output_rules fw6 | grep -Fxq -- "$WAN_RULE6"; do
   fw6 -D OUTPUT $WAN_RULE6 || break
   REMOVED=$((REMOVED + 1))
 done
-[ "$REMOVED" -gt 0 ] || exit 0
+if [ "$REMOVED" -eq 0 ]; then
+  restore_closed_output_policy
+  exit 0
+fi
 echo "Removed the download rules an interrupted update left open"
-if fw4 -C OUTPUT -j DROP 2>/dev/null; then
+if fw4 -C OUTPUT -j REJECT 2>/dev/null || fw4 -C OUTPUT -j DROP 2>/dev/null ||
+   fw6 -C OUTPUT -j REJECT 2>/dev/null || fw6 -C OUTPUT -j DROP 2>/dev/null; then
   sh "$LIVE/scripts/block_internet_access.sh" >/dev/null 2>&1 \
     || sh "$PREV/scripts/block_internet_access.sh" >/dev/null 2>&1 \
     || echo "WARNING: could not apply the block script again"
 fi
+restore_closed_output_policy
 exit 0

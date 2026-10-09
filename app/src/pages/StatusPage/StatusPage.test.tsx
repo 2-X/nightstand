@@ -341,3 +341,18 @@ it('names both pumps clearly and shows their shared impact once', async () => {
   expect(await screen.findByText('Left pump, Right pump need attention')).toBeVisible();
   expect(screen.getAllByText('A pump may be stalled. Temperature readings may be inaccurate.')).toHaveLength(1);
 });
+
+
+it('shows and clears a clock warning without expanding healthy details', async () => {
+  const data = getServerStatus();
+  const warning = 'The Pod clock is not synchronized with NTP. Schedules are armed, but may run at the wrong time.';
+  server.use(http.get('/api/serverStatus', () => HttpResponse.json({ ...data,
+    systemDate: { ...data.systemDate, message: warning },
+  })));
+  const { queryClient } = renderWithProviders(<StatusPage/>);
+  const alert = await screen.findByRole('alert', { name: 'Clock warning' });
+  expect(alert).toHaveTextContent(warning);
+  expect(alert).toBeVisible();
+  act(() => queryClient.setQueryData(['useServerStatus'], { status: data }));
+  await waitFor(() => expect(screen.queryByRole('alert', { name: 'Clock warning' })).not.toBeInTheDocument());
+});

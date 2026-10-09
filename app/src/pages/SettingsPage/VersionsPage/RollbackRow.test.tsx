@@ -48,7 +48,7 @@ describe('RollbackRow when the bed may be in use', () => {
     await user.click(await screen.findByRole('button', { name: 'Go back now' }));
     expect(await screen.findByText(SIDE_ON)).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent(SIDE_ON);
-    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus());
     expect(bodies).toEqual([undefined]);
     await user.click(screen.getByRole('button', { name: 'Continue anyway' }));
     await waitFor(() => expect(bodies).toEqual([undefined, { confirmInUse: true }]));
@@ -81,6 +81,6 @@ describe('RollbackRow when the bed may be in use', () => {
     await screen.findByRole('button', { name: 'Continue anyway' });
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(screen.getByRole('button', { name: 'Go back to v2.9.0 Instant, no download' })).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Go back to v2.9.0 Instant, no download' })).toHaveFocus());
   });
 });
