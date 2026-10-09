@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, mock, test } from 'node:test';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PrismaClient, type Prisma } from '@prisma/client';
 import type { Request, Response, RequestHandler } from 'express';
+import { applyMigration } from '../testing/migrations.js';
 
 type WriterResult = { ok: boolean; milliseconds: number; error?: string };
 const folder = mkdtempSync(path.join(tmpdir(), 'nightstand-metrics-wal-'));
@@ -57,8 +58,7 @@ const day = 86400;
 
 before(async () => {
   for (const name of readdirSync('prisma/migrations').filter(name => /^\d/.test(name)).sort()) {
-    const sql = readFileSync(path.join('prisma/migrations', name, 'migration.sql'), 'utf8');
-    for (const statement of sql.split(';').filter(part => part.trim())) await client.$executeRawUnsafe(statement);
+    await applyMigration(client, 'prisma/migrations', name);
   }
   const [journal] = await client.$queryRaw<{ journal_mode: string }[]>`PRAGMA journal_mode = WAL`;
   assert.equal(journal.journal_mode, 'wal');

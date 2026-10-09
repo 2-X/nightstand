@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { after, afterEach, before, beforeEach, test } from 'node:test';
-import { copyFileSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { collectVitalsStats, readVitalsSummary } from '../db/vitalsSummary.js';
 import { pruneMetrics, retentionCutoffs, reusableBytes, REUSABLE_TARGET_BYTES } from './metricsRetention.js';
+import { applyMigration } from '../testing/migrations.js';
 
 const folder = mkdtempSync(path.join(tmpdir(), 'nightstand-retention-'));
 mkdirSync(path.join(folder, 'lowdb'));
@@ -25,8 +26,7 @@ let client: ReturnType<typeof makeClient>;
 before(async () => {
   const base = makeClient('base');
   for (const name of readdirSync('prisma/migrations').filter(name => /^\d/.test(name)).sort()) {
-    const sql = readFileSync(path.join('prisma/migrations', name, 'migration.sql'), 'utf8');
-    for (const statement of sql.split(';').filter(part => part.trim())) await base.$executeRawUnsafe(statement);
+    await applyMigration(base, 'prisma/migrations', name);
   }
   await base.$disconnect();
 });
@@ -239,10 +239,7 @@ test('larger ranges combine saved nights by counts and do not double-count survi
 test('upgrading a populated legacy database keeps old-reader results and healthy-disk history', async () => {
   const legacy = makeClient('legacy');
   const migrations = readdirSync('prisma/migrations').filter(name => /^\d/.test(name)).sort();
-  const apply = async (name: string) => {
-    const sql = readFileSync(path.join('prisma/migrations', name, 'migration.sql'), 'utf8');
-    for (const statement of sql.split(';').filter(part => part.trim())) await legacy.$executeRawUnsafe(statement);
-  };
+  const apply = (name: string) => applyMigration(legacy, 'prisma/migrations', name);
   try {
     for (const name of migrations.slice(0, -1)) await apply(name);
     await legacy.$executeRawUnsafe(`INSERT INTO sleep_records

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { Request, Response, RequestHandler } from 'express';
+import { applyMigration } from '../../testing/migrations.js';
 
 const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'nightstand-vitals-'));
 fs.mkdirSync(path.join(folder, 'lowdb'));
@@ -13,8 +14,7 @@ process.env.DATABASE_URL = `file:${folder}/vitals.db`;
 const serverRoot = path.resolve(import.meta.dirname, '../../..');
 const { prisma } = await import('../../db/prisma.js');
 for (const name of fs.readdirSync(path.join(serverRoot, 'prisma/migrations')).filter(name => /^\d/.test(name)).sort()) {
-  const sql = fs.readFileSync(path.join(serverRoot, 'prisma/migrations', name, 'migration.sql'), 'utf8');
-  for (const statement of sql.split(';').filter(part => part.trim())) await prisma.$executeRawUnsafe(statement);
+  await applyMigration(prisma, path.join(serverRoot, 'prisma/migrations'), name);
 }
 const { default: settingsDB } = await import('../../db/settings.js');
 const { default: router } = await import('./vitals.js');
