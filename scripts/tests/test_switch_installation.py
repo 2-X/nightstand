@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import shlex
 import signal
@@ -306,8 +307,8 @@ restore_cross_fork_rollback() {
         self.assertEqual(recover_switch.journals(self.system.store), [])
 
         script = (SCRIPTS / 'rollback_pod.sh').read_text()
-        for original in ('/home/dac/', '/persistent/', '/etc/', '/tmp/'):
-            script = script.replace(original, str(self.system.root) + original)
+        # One pass, so a root under /tmp is not rewritten again.
+        script = re.sub(r'/(?:home/dac|persistent|etc|tmp)/', lambda match: str(self.system.root) + match.group(0), script)
         rollback = self.system.live / 'scripts/rollback_pod.sh'
         rollback.write_text(script)
         (self.system.root / 'tmp').mkdir()

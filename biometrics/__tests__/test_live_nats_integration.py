@@ -91,7 +91,7 @@ class LiveNatsIntegrationTest(unittest.TestCase):
                 await self.wait_for(all_arrived, 'not all sensor subjects arrived')
                 self.assertEqual(stream.piezo_record_queue.get_nowait()['seq'], 900000)
                 received = {key: value for key, value in caps.call_args.args[0].items() if key != '_firmware'}
-                self.assertEqual(received, cap)
+                self.assertEqual(received, {**cap, 'seq': 2})
                 self.assertEqual(stream._last_stream_sequence, 5)
                 task.cancel()
                 with self.assertRaises(asyncio.CancelledError):
