@@ -515,10 +515,10 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
   {
     id: 'cover-buttons',
     title: 'Cover buttons',
-    description: 'Acts only on cover clicks the firmware logged as ignored in the RAW files. The top button '
-      + 'raises that side\'s target by 1 F and the bottom lowers it by 1 F. It is inert on hubs whose firmware '
-      + 'handles the buttons, such as a Pod 5 hub. Presses can take 15 to 25 s to arrive because the firmware '
-      + 'batches its log records.',
+    description: 'For a Pod 4 hub with a Pod 5 cover, whose firmware ignores short clicks on the cover\'s '
+      + 'plus and minus buttons. Reads those clicks from RAW files and steps that side by 1 F per click, '
+      + '15 to 25 s later, because the firmware writes its log in batches. A Pod 5 hub handles its buttons '
+      + 'itself, so this does nothing there.',
     category: 'platform',
     version: '3.8.0',
     flag: 'coverButtons',
@@ -533,9 +533,9 @@ export const FEATURES_MANIFEST: ManifestEntry[] = [
       'server/src/8sleep/buttonMonitor.test.ts', 'server/src/8sleep/buttonEvents.test.ts',
     ],
     upstream_offer: false,
-    rationale: 'Off by default: only clicks logged as ignored are applied, and no RAW file is opened while off. '
-      + 'A Pod 4 hub with a Pod 5 cover was reported to ignore short clicks; a Pod 5 hub handles them itself '
-      + 'and this feature is inert there. Firmware batching can delay presses by 15 to 25 s.',
+    rationale: 'Off by default, for a Pod 4 hub with a Pod 5 cover that ignores short plus and minus clicks. '
+      + 'Reads no RAW files while off. Each ignored click steps that side by 1 F, with a 15 to 25 s delay '
+      + 'because the firmware writes its log in batches. A Pod 5 hub handles its buttons itself, so this does nothing there.',
   },
   {
     id: 'biometrics-v2',

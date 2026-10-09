@@ -258,13 +258,13 @@ generic message; the details go to the server log.
     Timestamp units remain unverified.
 - `features` are feature flags. `sleepScore` turns the sleep score and sleep
   stage routes on and off; the app no longer shows either.
-  `coverButtons` is Cover buttons, off by default: the server then opens no
-  RAW file. When on, it acts only on clicks the firmware logged as ignored
-  in `/persistent/*.RAW`: the top button raises that side's target by 1 F
-  and the bottom lowers it by 1 F, within 55 to 110 F. The logo button has
-  no action here. It is inert on hubs whose firmware handles the buttons,
-  such as a Pod 5 hub. Presses can take 15 to 25 s to arrive because the
-  firmware batches its log records.
+  `coverButtons` is Cover buttons, off by default. It is for a Pod 4 hub with
+  a Pod 5 cover, whose firmware ignores short clicks on the cover's plus and
+  minus buttons. With it on, Nightstand reads those ignored clicks from
+  `/persistent/*.RAW` and steps that side by 1 F per click, within 55 to
+  110 F. A click can take 15 to 25 s to apply, because the firmware writes
+  its log in batches. A Pod 5 hub handles its buttons itself, so the switch
+  does nothing there. While off, the server opens no RAW files for buttons.
   `nightstandTheme` is no longer read and stays so stored settings keep
   validating. `features.rhythms` is the Rhythms switch (see `/api/rhythms`
   below); it changes only through `POST /api/rhythms/enable` and
@@ -1313,7 +1313,7 @@ the biometrics service; `/api/deviceStatus` converts them.
   while `features.coverButtons` is off. On, it is `healthy` while the newest
   RAW file in `/persistent` was written in the last 15 seconds and `failed`
   with the reason otherwise: no RAW file, a file that stopped growing, or a
-  press that could not be applied.
+  click that could not be applied.
 
 #### Response
 
